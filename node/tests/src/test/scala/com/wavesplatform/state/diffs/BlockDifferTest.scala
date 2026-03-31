@@ -2,7 +2,7 @@ package com.wavesplatform.state.diffs
 
 import com.wavesplatform.TestValues
 import com.wavesplatform.account.KeyPair
-import com.wavesplatform.block.{Block, BlockSnapshot}
+import com.wavesplatform.block.BlockSnapshot
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.DigestLength
@@ -152,8 +152,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
             .resultE
             .explicitGet()
 
-          val correctBlock =
-            TestBlock.create(blockTs, genesis.id(), txs, signer, version = Block.ProtoBlockVersion, stateHash = Some(blockStateHash))
+          val correctBlock = TestBlock.create(blockTs, genesis.id(), txs, signer, stateHash = Some(blockStateHash))
           BlockDiffer
             .fromBlock(
               blockchain,
@@ -164,10 +163,9 @@ class BlockDifferTest extends FreeSpec with WithDomain {
               correctBlock.block.header.generationSignature
             ) should beRight
 
-          val incorrectBlock =
-            TestBlock
-              .create(blockTs, genesis.id(), txs, signer, version = Block.ProtoBlockVersion, stateHash = Some(ByteStr.fill(DigestLength)(1)))
-              .block
+          val incorrectBlock = TestBlock
+            .create(blockTs, genesis.id(), txs, signer, stateHash = Some(ByteStr.fill(DigestLength)(1)))
+            .block
           BlockDiffer.fromBlock(
             blockchain,
             Some(genesis),
@@ -223,25 +221,26 @@ class BlockDifferTest extends FreeSpec with WithDomain {
       val sender = TxHelpers.signer(1)
       withDomain(DomainPresets.TransactionStateSnapshot, AddrWithBalance.enoughBalances(sender)) { d =>
         (1 to 5).map { idx =>
-          val (refBlock, refSnapshot, carry, _, refStateHash, _) = d.liquidState.get.snapshotOf(d.lastBlock.id()).get
+          val liquid = d.liquidState.get.liquidBlockOf(d.lastBlock.id()).get
           val refBlockchain = SnapshotBlockchain(
             d.rocksDBWriter,
-            refSnapshot,
-            refBlock,
+            liquid.data.snapshot,
+            liquid.block,
             d.liquidState.get.hitSource,
-            carry,
+            liquid.data.carryFee,
             d.blockchain.computeNextReward,
-            Some(refStateHash)
+            Some(liquid.data.liquidStateHash)
           )
 
-          val block = d.createBlock(Block.ProtoBlockVersion, Seq(TxHelpers.transfer(sender, amount = idx.waves, fee = TestValues.fee * idx)))
-          val hs    = d.posSelector.validateGenerationSignature(block).explicitGet()
-          val txValidationResult = BlockDiffer.fromBlock(refBlockchain, Some(refBlock), block, None, MiningConstraint.Unlimited, hs)
+          val block              = d.createBlock(Seq(TxHelpers.transfer(sender, amount = idx.waves, fee = TestValues.fee * idx)))
+          val hs                 = d.posSelector.validateGenerationSignature(block).explicitGet()
+          val txValidationResult = BlockDiffer.fromBlock(refBlockchain, Some(liquid.block), block, None, MiningConstraint.Unlimited, hs)
 
           val txInfo        = txValidationResult.explicitGet().snapshot.transactions.head._2
           val blockSnapshot = BlockSnapshot(block.id(), Seq(txInfo.snapshot -> txInfo.status))
 
-          val snapshotApplyResult = BlockDiffer.fromBlock(refBlockchain, Some(refBlock), block, Some(blockSnapshot), MiningConstraint.Unlimited, hs)
+          val snapshotApplyResult =
+            BlockDiffer.fromBlock(refBlockchain, Some(liquid.block), block, Some(blockSnapshot), MiningConstraint.Unlimited, hs)
 
           // TODO: remove after NODE-2610 fix
           def clearAffected(r: Result): Result = {
@@ -266,23 +265,21 @@ class BlockDifferTest extends FreeSpec with WithDomain {
       val sender   = TxHelpers.signer(1)
       val minerAcc = TxHelpers.signer(2)
       val settings = DomainPresets.TransactionStateSnapshot
-      val time     = TestTime() // TODO: migrate to d.testTime
       withDomain(
         settings.copy(minerSettings = settings.minerSettings.copy(quorum = 0)),
         AddrWithBalance.enoughBalances(sender, minerAcc),
-        time = time
       ) { d =>
         d.appendBlock()
-        time.setTime(d.lastBlock.header.timestamp)
+        d.testTime.setTime(d.lastBlock.header.timestamp)
 
-        time.advance(d.settings.minerSettings.minMicroBlockAge)
+        d.testTime.advance(d.settings.minerSettings.minMicroBlockAge)
         val refId = d.appendMicroBlock(TxHelpers.transfer(sender, amount = 1))
 
-        time.advance(d.settings.minerSettings.minMicroBlockAge)
+        d.testTime.advance(d.settings.minerSettings.minMicroBlockAge)
         d.appendMicroBlock(TxHelpers.transfer(sender, amount = 2))
 
         d.appender.appendBlock(
-          d.createBlock(version = Block.ProtoBlockVersion, txs = Nil, ref = Some(refId), strictTime = true, generator = minerAcc)
+          d.createBlock(ref = Some(refId), strictTime = true, generator = minerAcc)
         )
       }
     }

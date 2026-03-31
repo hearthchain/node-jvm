@@ -1,3 +1,27 @@
+// Changes the document title
+const TitlePlugin = function(system) {
+  return {
+    statePlugins: {
+      spec: {
+        wrapSelectors: {
+          specJson: (oriSelector) => (...args) => {
+            const result = oriSelector(...args);
+
+            try {
+              const js = result?.toJS?.();
+              const title = js?.info?.title;
+
+              if (title) document.title = title;
+            } catch (e) { }
+
+            return result;
+          }
+        }
+      }
+    }
+  };
+};
+
 window.onload = function() {
   //<editor-fold desc="Changeable Configuration Block">
 
@@ -8,15 +32,18 @@ window.onload = function() {
     dom_id: '#swagger-ui',
     deepLinking: true,
     presets: [
-      SwaggerUIBundle.presets.apis,
-      SwaggerUIStandalonePreset
+      SwaggerUIBundle.presets.apis
     ],
     plugins: [
-      SwaggerUIBundle.plugins.DownloadUrl
+      SwaggerUIBundle.plugins.DownloadUrl,
+      TitlePlugin
     ],
-    layout: "StandaloneLayout",
+    // Hide "Explore" button and input field. StandaloneLayout shows them
+    // See https://github.com/swagger-api/swagger-ui/blob/master/src/standalone/presets/standalone/index.js
+    layout: "BaseLayout",
     tagsSorter: "alpha",
-    operationsSorter: "alpha"
+    operationsSorter: "alpha",
+    tryItOutEnabled: true // Always show "Execute" button
   });
 
   //</editor-fold>

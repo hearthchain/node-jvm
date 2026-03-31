@@ -14,3 +14,11 @@ body {
     margin: 0;
     background: #fafafa;
 }
+
+.try-out {
+  display: none !important;
+}
+
+.schemes-server-container div {
+    display: none;
+}

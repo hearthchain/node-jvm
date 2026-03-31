@@ -2,7 +2,6 @@ package com.wavesplatform.state.diffs
 
 import cats.syntax.either.*
 import com.wavesplatform.consensus.GeneratingBalanceProvider
-import com.wavesplatform.crypto.bls.BlsUtils
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.CommitToGenerationTransaction
@@ -16,11 +15,12 @@ object CommitToGenerationTransactionDiff {
       current <- blockchain.currentGenerationPeriod.toRight(ActivationError("DeterministicFinality is not yet activated"))
       next = current.next
       _ <- Either.raiseUnless(tx.generationPeriodStart == next.start) {
-        GenericError(s"Expected the next period start height (${next.start}), got ${tx.generationPeriodStart}")
+        GenericError(s"Expected the next period start height ${next.start}, got ${tx.generationPeriodStart}")
       }
-      _ <- Either.raiseUnless(
-        BlsUtils.verifyBasic(tx.commitmentSignature.arr, tx.endorserPublicKey.arr ++ tx.generationPeriodStart.toByteArray, tx.endorserPublicKey.arr)
-      )(GenericError("Invalid commitment signature"))
+      _ <- tx.endorserPublicKey.validated.leftMap(e => GenericError(s"Invalid endorser public key: $e"))
+      _ <- tx.commitmentSignature
+        .verifyBasic(tx.popMessage, tx.endorserPublicKey)
+        .leftMap(e => GenericError(s"Invalid commitment signature: $e"))
       _ <- blockchain.committedGenerators(next).foldLeft(Either.unit[GenericError]) {
         case (r @ Left(_), _) => r
         case (Right(_), (addr, blsPk)) =>
@@ -39,11 +39,10 @@ object CommitToGenerationTransactionDiff {
         nextCommittedGenerators = Seq(tx.sender -> tx.endorserPublicKey)
       )
       generatingBalanceAfterDeposit = SnapshotBlockchain(blockchain, snapshot).generatingBalance(sender)
-      _ <- Either.raiseUnless(generatingBalanceAfterDeposit >= GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2)(
-        GenericError(
-          s"Generating balance $generatingBalanceAfterDeposit is less than ${GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2} required for block generation"
-        )
-      )
+      minBalance                    = GeneratingBalanceProvider.minMiningBalance(blockchain, Height(blockchain.height))
+      _ <- Either.raiseWhen(generatingBalanceAfterDeposit < minBalance) {
+        GenericError(s"Generating balance $generatingBalanceAfterDeposit is less than $minBalance required for block generation")
+      }
     } yield snapshot
   }
 }
