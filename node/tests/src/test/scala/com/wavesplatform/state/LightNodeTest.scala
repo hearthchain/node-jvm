@@ -14,7 +14,7 @@ import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
 import com.wavesplatform.state.appender.{BlockAppender, ExtensionAppender}
 import com.wavesplatform.state.diffs.BlockDiffer
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.TxValidationError.InvalidStateHash
 import io.netty.channel.embedded.EmbeddedChannel
@@ -156,10 +156,10 @@ class LightNodeTest extends PropSpec with WithDomain {
             _
           )
 
-        appender(extensionBlocks).runSyncUnsafe() should beRight
+        appender(extensionBlocks).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")) should beRight
         d.lastBlock.header.stateHash shouldBe expectedStateHash
         d.blockchain.height shouldBe chainSize + 1
-        d.blocksApi.blocksRange(Height(2), Height(d.blockchain.height)).toListL.runSyncUnsafe().map(_._1.header) shouldBe
+        d.blocksApi.blocksRange(Height(2), Height(d.blockchain.height)).toListL.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")).map(_._1.header) shouldBe
           betterBlocks.map(_._1.header)
       }
     }
@@ -189,7 +189,7 @@ class LightNodeTest extends PropSpec with WithDomain {
       )
 
       val sr = BlockSnapshotResponse(challengingBlock.id(), txSnapshots.map { case (s, m) => PBSnapshots.toProtobuf(s, m) })
-      appender(challengingBlock, Some(sr)).runSyncUnsafe() shouldBe Right(
+      appender(challengingBlock, Some(sr)).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")) shouldBe Right(
         Applied(Seq.empty, d.blockchain.score, Seq.empty)
       )
       d.lastBlock shouldBe challengingBlock

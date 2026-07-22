@@ -1,16 +1,15 @@
 package com.wavesplatform.database
 
 import com.google.common.primitives.{Ints, Longs}
-import com.wavesplatform.account.{Address, Alias}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
-import com.wavesplatform.protobuf.snapshot.TransactionStateSnapshot
+import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.{ERC20Address, Transaction}
 import com.wavesplatform.utils.*
+import tech.hearth.crypto.Address
 
 case class CurrentBalance(balance: Long, height: Height, prevHeight: Height)
 object CurrentBalance {
@@ -55,13 +54,7 @@ object DataNode {
 
 object Keys {
   import KeyHelpers.*
-  import KeyTag.{
-    AddressId as AddressIdTag,
-    EthereumTransactionMeta as EthereumTransactionMetaTag,
-    InvokeScriptResult as InvokeScriptResultTag,
-    LeaseDetails as LeaseDetailsTag,
-    *
-  }
+  import KeyTag.{AddressId as AddressIdTag, EthereumTransactionMeta as EthereumTransactionMetaTag, LeaseDetails as LeaseDetailsTag, *}
 
   val version: Key[Int]   = intKey(Version, default = 1)
   val height: Key[Height] = heightKey(Height)
@@ -116,16 +109,10 @@ object Keys {
 
   def changedBalancesAtPrefix(height: Height): Array[Byte] = KeyTag.ChangedAssetBalances.prefixBytes ++ h(height)
 
-  def addressIdOfAlias(alias: Alias): Key[Option[AddressId]] = Key.opt(AddressIdOfAlias, alias.bytes, AddressId.fromByteArray, _.toByteArray)
-
   val lastAddressId: Key[Option[Long]] = Key.opt(LastAddressId, Array.emptyByteArray, Longs.fromByteArray, _.toByteArray)
 
-  def addressId(address: Address): Key[Option[AddressId]] = Key.opt(AddressIdTag, address.bytes, AddressId.fromByteArray, _.toByteArray)
-  def idToAddress(addressId: AddressId): Key[Address]     = Key(IdToAddress, addressId.toByteArray, Address.fromBytes(_).explicitGet(), _.bytes)
-
-  def addressScriptHistory(addressId: AddressId): Key[Seq[Height]] = historyKey(AddressScriptHistory, addressId.toByteArray)
-  def addressScript(addressId: AddressId)(height: Height): Key[Option[AccountScriptInfo]] =
-    Key.opt(AddressScript, hAddr(height, addressId), readAccountScriptInfo, writeAccountScriptInfo)
+  def addressId(address: Address): Key[Option[AddressId]] = Key.opt(AddressIdTag, address.toBytes, AddressId.fromByteArray, _.toByteArray)
+  def idToAddress(addressId: AddressId): Key[Address]     = Key(IdToAddress, addressId.toByteArray, Address.fromBytes(_).get(), _.toBytes)
 
   val approvedFeatures: Key[Map[Short, Height]]  = Key(ApprovedFeatures, Array.emptyByteArray, readFeatureMap, writeFeatureMap)
   val activatedFeatures: Key[Map[Short, Height]] = Key(ActivatedFeatures, Array.emptyByteArray, readFeatureMap, writeFeatureMap)
@@ -136,17 +123,7 @@ object Keys {
   def dataAt(addressId: AddressId, key: String)(height: Height): Key[DataNode] =
     Key(DataHistory, hBytes(addressId.toByteArray ++ key.utf8Bytes, height), readDataNode(key), writeDataNode)
 
-  def sponsorshipHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(SponsorshipHistory, asset.id.arr)
-  def sponsorship(asset: IssuedAsset)(height: Height): Key[SponsorshipValue] =
-    Key(Sponsorship, hBytes(asset.id.arr, height), readSponsorship, writeSponsorship)
-
   def carryFee(height: Height): Key[Long] = Key(CarryFee, h(height), Option(_).fold(0L)(Longs.fromByteArray), Longs.toByteArray)
-
-  def assetScriptHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(AssetScriptHistory, asset.id.arr)
-  def assetScript(asset: IssuedAsset)(height: Height): Key[Option[AssetScriptInfo]] =
-    Key.opt(AssetScript, hBytes(asset.id.arr, height), readAssetScript, writeAssetScript)
-  def assetScriptPresent(asset: IssuedAsset)(height: Height): Key[Option[Unit]] =
-    Key.opt(AssetScript, hBytes(asset.id.arr, height), _ => (), _ => Array[Byte]())
 
   val safeRollbackHeight: Key[Height] = heightKey(SafeRollbackHeight)
   val lastCleanupHeight: Key[Height]  = heightKey(LastCleanupHeight)
@@ -216,16 +193,6 @@ object Keys {
       Some(cfh.handle)
     )
 
-  def invokeScriptResult(height: Height, txNum: TxNum, cfh: RDB.ApiHandle): Key[Option[InvokeScriptResult]] =
-    Key.opt(InvokeScriptResultTag, hNum(height, txNum), InvokeScriptResult.fromBytes, InvokeScriptResult.toBytes, Some(cfh.handle))
-
-  val disabledAliases: Key[Set[Alias]] = Key(
-    DisabledAliases,
-    Array.emptyByteArray,
-    b => readStrings(b).map(s => Alias.create(s).explicitGet()).toSet,
-    as => writeStrings(as.map(_.name).toSeq)
-  )
-
   def assetStaticInfo(asset: IssuedAsset): Key[Option[StaticAssetInfo]] =
     Key.opt(AssetStaticInfo, asset.id.arr.take(20), StaticAssetInfo.parseFrom, _.toByteArray)
 
@@ -272,7 +239,7 @@ object Keys {
     * @note
     *   committedPeriod.start >= commitmentHeight, because a generator can commit only for a next period
     */
-  def committedGenerators(committedPeriod: GenerationPeriod, commitmentHeight: Height): Key[Option[Seq[(AddressId, BlsPublicKey)]]] =
+  def committedGenerators(committedPeriod: GenerationPeriod, commitmentHeight: Height): Key[Option[Seq[(AddressId, BlsPublicKey, ByteStr)]]] =
     Key.opt(
       CommittedGenerators,
       h(committedPeriod.start) ++ h(commitmentHeight),

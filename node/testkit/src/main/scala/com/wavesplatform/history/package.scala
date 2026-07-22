@@ -1,14 +1,16 @@
 package com.wavesplatform
 
 import com.typesafe.config.ConfigFactory
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.{Block, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
+import com.wavesplatform.db.WithState
 import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatures}
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.settings.*
 import com.wavesplatform.transaction.Transaction
+import com.wavesplatform.transaction.TxHelpers
+import tech.hearth.crypto.SigningKey
 
 package object history {
   val MaxTransactionsPerBlockDiff = 10
@@ -17,7 +19,12 @@ package object history {
   val DefaultBlockchainSettings = BlockchainSettings(
     addressSchemeCharacter = 'N',
     functionalitySettings = TestFunctionalitySettings.Enabled,
-    genesisSettings = GenesisSettings.TESTNET,
+    // Genesis balances are part of the genesis snapshot built from these settings, and tests declare their own,
+    // so start from an empty genesis rather than TESTNET's.
+    // The timestamp starts at 0 because the generators driving these tests produce transactions near the epoch, and
+    // blocks are timestamped from their transactions (see buildBlockOfTxs) - a 2016 genesis would put every one of
+    // those transactions hours "in the past" relative to it.
+    genesisSettings = GenesisSettings.TESTNET.copy(balances = Seq.empty, timestamp = 0L),
     rewardsSettings = RewardsSettings.TESTNET
   )
 
@@ -41,6 +48,7 @@ package object history {
   )
 
   val defaultSigner          = TestValues.keyPair
+  val defaultVrfKey          = TxHelpers.defaultVrfKey
   val generationSignature    = ByteStr(new Array[Byte](Block.GenerationSignatureLength))
   val generationVRFSignature = ByteStr(new Array[Byte](Block.GenerationVRFSignatureLength))
 
@@ -55,7 +63,7 @@ package object history {
   def customBuildBlockOfTxs(
       refTo: ByteStr,
       txs: Seq[Transaction],
-      signer: KeyPair,
+      signer: SigningKey,
       version: Byte,
       timestamp: Long,
       bTarget: Long = DefaultBaseTarget
@@ -81,7 +89,7 @@ package object history {
       totalRefTo: ByteStr,
       prevTotal: Block,
       txs: Seq[Transaction],
-      signer: KeyPair,
+      signer: SigningKey,
       version: Byte,
       ts: Long
   ): (Block, MicroBlockWithTotalId) = {
@@ -100,7 +108,7 @@ package object history {
     (newTotalBlock, new MicroBlockWithTotalId(nonSigned, newTotalBlock.id()))
   }
 
-  def buildMicroBlockOfTxs(totalRefTo: ByteStr, prevTotal: Block, txs: Seq[Transaction], signer: KeyPair): (Block, MicroBlockWithTotalId) = {
+  def buildMicroBlockOfTxs(totalRefTo: ByteStr, prevTotal: Block, txs: Seq[Transaction], signer: SigningKey): (Block, MicroBlockWithTotalId) = {
     val newTotalBlock = buildBlockOfTxs(totalRefTo, prevTotal.transactionData ++ txs)
     val nonSigned = MicroBlock
       .buildAndSign(
@@ -118,7 +126,10 @@ package object history {
 
   def randomSig: ByteStr = TestBlock.randomOfLength(Block.BlockIdLength)
 
-  def chainBlocks(txs: Seq[Seq[Transaction]]): Seq[Block] = {
+  def chainBlocks(txs: Seq[Seq[Transaction]]): Seq[Block] = chainBlocksFrom(randomSig, txs)
+
+  /** Chains blocks onto an existing block, e.g. the domain's genesis block. */
+  def chainBlocksFrom(refTo: ByteStr, txs: Seq[Seq[Transaction]]): Seq[Block] = {
     def chainBlocksR(refTo: ByteStr, txs: Seq[Seq[Transaction]]): Seq[Block] = txs match {
       case (x :: xs) =>
         val block = buildBlockOfTxs(refTo, x)
@@ -126,7 +137,7 @@ package object history {
       case _ => Seq.empty
     }
 
-    chainBlocksR(randomSig, txs)
+    chainBlocksR(refTo, txs)
   }
 
   def chainBaseAndMicro(totalRefTo: ByteStr, base: Transaction, micros: Seq[Seq[Transaction]]): (Block, Seq[MicroBlockWithTotalId]) =
@@ -136,7 +147,7 @@ package object history {
       totalRefTo: ByteStr,
       base: Seq[Transaction],
       micros: Seq[Seq[Transaction]],
-      signer: KeyPair,
+      signer: SigningKey,
       version: Byte,
       timestamp: Long
   ): (Block, Seq[MicroBlockWithTotalId]) = {

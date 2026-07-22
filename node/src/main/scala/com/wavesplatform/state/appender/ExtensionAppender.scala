@@ -2,7 +2,6 @@ package com.wavesplatform.state.appender
 
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.PoSSelector
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.metrics.{BlockStats, Metrics}
 import com.wavesplatform.network.{ExtensionBlocks, InvalidBlockStorage, PeerDatabase, formatBlocks, id}
@@ -55,9 +54,9 @@ object ExtensionAppender extends ScorexLogging {
                 } yield (commonBlockHeight, droppedBlocks)
 
                 droppedBlocksEi.flatMap { case (commonBlockHeight, droppedBlocks) =>
-                  newBlocks.zipWithIndex.foreach { case (block, idx) =>
-                    val rideV6Activated = blockchainUpdater.isFeatureActivated(BlockchainFeatures.RideV6, commonBlockHeight + idx + 1)
-                    ParSignatureChecker.checkTxSignatures(block.transactionData, rideV6Activated)
+                  newBlocks.foreach { block =>
+                    // RideV6 is active
+                    ParSignatureChecker.checkTxSignatures(block.transactionData, rideV6Activated = true)
                   }
 
                   val forkApplicationResultEi = {

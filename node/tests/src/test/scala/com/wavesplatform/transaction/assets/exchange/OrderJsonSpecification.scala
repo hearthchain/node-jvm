@@ -1,22 +1,22 @@
 package com.wavesplatform.transaction.assets.exchange
 
-import com.wavesplatform.account.{KeyPair, PublicKey}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.PropSpec
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.assets.exchange.OrderJson.*
-import com.wavesplatform.transaction.smart.Verifier
 import com.wavesplatform.transaction.Proofs
-import com.wavesplatform.utils.{EthEncoding, EthHelpers, JsonMatchers}
+import com.wavesplatform.utils.JsonMatchers
 import play.api.libs.json.*
+import tech.hearth.crypto.SigningKey
 
-class OrderJsonSpecification extends PropSpec with JsonMatchers with EthHelpers {
+class OrderJsonSpecification extends PropSpec with JsonMatchers {
 
   property("Read Order from json") {
-    val keyPair   = KeyPair("123".getBytes("UTF-8"))
-    val pubKeyStr = keyPair.publicKey.toString
+    val keyPair   = SigningKey.fromSeed("123".getBytes("UTF-8"))
+    val pubKeyStr = PublicKey(keyPair.publicKey).toString
 
     val json = Json.parse(s"""
         {
@@ -39,7 +39,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers with EthHelpers 
       case JsError(e) =>
         fail("Error: " + e.toString())
       case JsSuccess(o, _) =>
-        o.senderPublicKey shouldBe keyPair.publicKey
+        o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
         o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
         o.assetPair.amountAsset.compatId.get shouldBe ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get
         o.assetPair.priceAsset.compatId.get shouldBe ByteStr.decodeBase58("GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44").get
@@ -74,7 +74,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers with EthHelpers 
       case JsError(e) =>
         fail("Error: " + e.toString())
       case JsSuccess(o, _) =>
-        o.senderPublicKey shouldBe keyPair.publicKey
+        o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
         o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
         o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
         o.assetPair.priceAsset shouldBe IssuedAsset(ByteStr.decodeBase58("GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44").get)
@@ -111,7 +111,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers with EthHelpers 
         fail("Error: " + e.toString())
       case JsSuccess(o, _) =>
         o.id().toString shouldBe "BVJs4ip16nbh2vmuZkQmg8TMbN4vhnRAiACAfffQxSr7"
-        o.senderPublicKey shouldBe keyPair.publicKey
+        o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
         o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
         o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
         o.assetPair.priceAsset shouldBe IssuedAsset(ByteStr.decodeBase58("GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44").get)
@@ -124,52 +124,6 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers with EthHelpers 
         o.matcherFeeAssetId shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
     }
 
-    val jsonOV4WithEthSig = Json.parse(s"""
-        {
-          "version": 4,
-          "matcherPublicKey": "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ",
-          "assetPair": {
-            "amountAsset": "29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b",
-            "priceAsset": "GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44"
-          },
-          "orderType": "buy",
-          "amount": 1,
-          "matcherFee": 2,
-          "price": 3,
-          "timestamp": 4,
-          "expiration": 5,
-          "signature": "signature",
-          "matcherFeeAssetId": "29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b",
-          "eip712Signature": "0x40dd06c9f80215612a0397948a10dd82d6a58dda8a256544971e236a95a395ad6b87e75fb58789ece4f2ff7ed380849d120faefce135b6f7ddec9e11df169f971b"
-        } """)
-
-    jsonOV4WithEthSig.validate[Order] match {
-      case JsError(e) =>
-        fail("Error: " + e.toString())
-      case JsSuccess(o, _) =>
-        o.id().toString shouldBe "FU8kLN9rRXCYjUDVUg914L3rdKNbgqpcfPmzXV7kLSJZ"
-        o.withProofs(Proofs.empty).id() shouldNot be(o.id())
-        o.senderPublicKey shouldBe PublicKey(
-          ByteStr.decodeBase58("4LySXRvAsKTfhvabypvFUwYT3cvUFyZBhzFhq9UUDfzDmM4wDEmu3m5xPSD7iZrm7Zg4mmUXAkEQmodGgrdCAic7").get
-        )
-        o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
-        o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
-        o.assetPair.priceAsset shouldBe IssuedAsset(ByteStr.decodeBase58("GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44").get)
-        o.price.value shouldBe 3
-        o.amount.value shouldBe 1
-        o.matcherFee.value shouldBe 2
-        o.timestamp shouldBe 4
-        o.expiration shouldBe 5
-        o.signature shouldBe ByteStr.empty
-        o.matcherFeeAssetId shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
-        o.eip712Signature shouldBe Some(
-          ByteStr(
-            EthEncoding.toBytes(
-              "0x40dd06c9f80215612a0397948a10dd82d6a58dda8a256544971e236a95a395ad6b87e75fb58789ece4f2ff7ed380849d120faefce135b6f7ddec9e11df169f971b"
-            )
-          )
-        )
-    }
   }
 
   property("Read Order without sender and matcher PublicKey") {
@@ -233,7 +187,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers with EthHelpers 
 
         case JsSuccess(o: Order, _) =>
           o.json() should matchJson(json)
-          Verifier.verifyAsEllipticCurveSignature(o, isRideV6Activated = false).explicitGet()
+          o.firstProofIsValidSignatureBeforeV6.explicitGet()
       }
     }
   }
@@ -242,7 +196,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers with EthHelpers 
     def mkJson(priceAsset: String): String =
       s"""
         {
-          "senderPublicKey": "${KeyPair("123".getBytes("UTF-8")).publicKey.toString}",
+          "senderPublicKey": "${PublicKey(SigningKey.fromSeed("123".getBytes("UTF-8")).publicKey).toString}",
           "matcherPublicKey": "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ",
            "assetPair": {
              "amountAsset": "",

@@ -5,21 +5,20 @@ import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto
 import com.wavesplatform.crypto.bls.BlsPublicKey
-import com.wavesplatform.lang.script.Script
-import com.wavesplatform.state.StateHash.SectionId
+import com.wavesplatform.state.StateHash.Section
 import com.wavesplatform.state.StateHashBuilder.Result
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import org.bouncycastle.crypto.digests.Blake2bDigest
+import tech.hearth.crypto.Hex
 
-import java.nio.charset.StandardCharsets
 import scala.collection.mutable
 
 object StateHashBuilder {
   val EmptySectionHash: ByteStr = createSectionHash(Nil)
 
-  final case class Result(hashes: Map[SectionId.Value, ByteStr]) {
-    def createStateHash(prevHash: ByteStr, deterministicFinalityActivated: Boolean): StateHash = {
-      val sortedHashes = StateHash.sections(deterministicFinalityActivated).map(hashes.getOrElse(_, EmptySectionHash))
+  final case class Result(hashes: Map[Section, ByteStr]) {
+    def createStateHash(prevHash: ByteStr): StateHash = {
+      val sortedHashes = StateHash.Section.values.map(hashes.getOrElse(_, EmptySectionHash))
       val payload      = prevHash +: sortedHashes
       StateHash(createSectionHash(payload), hashes)
     }
@@ -37,84 +36,60 @@ object StateHashBuilder {
 
 class StateHashBuilder {
   import com.wavesplatform.utils.byteStrOrdering
-  private val maps = Vector.fill(SectionId.maxId)(mutable.TreeMap.empty[ByteStr, Array[Byte]])
+  private val maps = Vector.fill(Section.values.length)(mutable.TreeMap.empty[ByteStr, Array[Byte]])
 
-  private def addEntry(section: SectionId.Value, key: Array[Byte]*)(value: Array[Byte]*): Unit = {
+  private def addEntry(section: Section, key: Array[Byte]*)(value: Array[Byte]*): Unit = {
     val solidKey   = ByteStr(key.foldLeft(Array.emptyByteArray)(_ ++ _))
     val solidValue = value.foldLeft(Array.emptyByteArray)(_ ++ _)
-    maps(section.id)(solidKey) = solidValue
+    maps(section.ordinal)(solidKey) = solidValue
   }
 
   def addWavesBalance(address: Address, balance: Long): Unit = {
-    addEntry(SectionId.WavesBalance, address.bytes)(Longs.toByteArray(balance))
+    addEntry(Section.WavesBalance, address.toBytes)(Longs.toByteArray(balance))
   }
 
   def addAssetBalance(address: Address, asset: IssuedAsset, balance: Long): Unit = {
-    addEntry(SectionId.AssetBalance, address.bytes, asset.id.arr)(
+    addEntry(Section.AssetBalance, address.toBytes, asset.id.arr)(
       Longs.toByteArray(balance)
     )
   }
 
-  def addDataEntry(address: Address, dataEntry: DataEntry[?]): Unit = {
-    addEntry(SectionId.DataEntry, address.bytes, dataEntry.key.getBytes(StandardCharsets.UTF_8))(
-      dataEntry.valueBytes
-    )
-  }
-
-  def addAlias(address: Address, alias: String): Unit = {
-    addEntry(SectionId.Alias, address.bytes, alias.getBytes(StandardCharsets.UTF_8))()
-  }
-
-  def addAccountScript(address: Address, script: Option[Script]): Unit = {
-    addEntry(SectionId.AccountScript, address.bytes)(
-      script.fold(Array.emptyByteArray)(_.bytes().arr)
-    )
-  }
-
-  def addAssetScript(asset: IssuedAsset, script: Option[Script]): Unit = {
-    addEntry(SectionId.AssetScript, asset.id.arr)(
-      script.fold(Array.emptyByteArray)(_.bytes().arr)
-    )
-  }
+  def addDataEntry(address: Address, dataEntry: DataEntry[?]): Unit = {}
 
   def addLeaseBalance(address: Address, leaseIn: Long, leaseOut: Long): Unit = {
-    addEntry(SectionId.LeaseBalance, address.bytes)(
+    addEntry(Section.LeaseBalance, address.toBytes)(
       Longs.toByteArray(leaseIn),
       Longs.toByteArray(leaseOut)
     )
   }
 
   def addLeaseStatus(leaseId: ByteStr, isActive: Boolean): Unit = {
-    addEntry(SectionId.LeaseStatus, leaseId.arr)(
+    addEntry(Section.LeaseStatus, leaseId.arr)(
       if (isActive) Array(1: Byte) else Array(0: Byte)
     )
   }
 
-  def addSponsorship(asset: IssuedAsset, minSponsoredFee: Long): Unit = {
-    addEntry(SectionId.Sponsorship, asset.id.arr)(
-      Longs.toByteArray(minSponsoredFee)
-    )
-  }
-
   def addCommittedGeneratorBalances(balances: Seq[Long]): Unit = {
-    addEntry(SectionId.CommittedGeneratorBalances)(
+    addEntry(Section.CommittedGeneratorBalances)(
       balances.map(Longs.toByteArray)*
     )
   }
 
-  def addNextCommittedGenerator(publicKey: PublicKey, blsPublicKey: BlsPublicKey): Unit = {
-    addEntry(SectionId.NextCommittedGenerators, publicKey.arr)(
-      blsPublicKey.arr
+  def addNextCommittedGenerator(commitment: GenerationCommitment): Unit = {
+    addEntry(Section.NextCommittedGenerators, commitment.sender.arr)(
+      commitment.endorserPublicKey.arr,
+      commitment.vrfPublicKey.arr
     )
   }
 
-  def result(): Result = {
-    val digestInstance = StateHashBuilder.newDigestInstance()
-    val sectHashes =
-      for {
-        (section, id) <- this.maps.zipWithIndex if section.nonEmpty
-      } yield SectionId(id) -> StateHashBuilder.createSectionHash(section.flatMap { case (k, v) => Seq(k, ByteStr(v)) }, digestInstance)
-
-    Result(sectHashes.toMap)
-  }
+  def result(): Result =
+    Result(
+      maps
+        .zip(Section.values)
+        .collect {
+          case (hs, s) if hs.nonEmpty =>
+            s -> StateHashBuilder.createSectionHash(hs.flatMap { case (k, v) => Seq(k, ByteStr(v)) }, StateHashBuilder.newDigestInstance())
+        }
+        .toMap
+    )
 }

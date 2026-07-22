@@ -2,7 +2,7 @@ package com.wavesplatform.mining
 
 import cats.data.EitherT
 import cats.syntax.traverse.*
-import com.wavesplatform.account.{Address, SeedKeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.block.{Block, ChallengedHeader, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.PoSSelector
@@ -20,10 +20,10 @@ import com.wavesplatform.state.{Blockchain, SnapshotBlockchain, StateSnapshot, T
 import com.wavesplatform.transaction.TxValidationError.GenericError
 import com.wavesplatform.transaction.{BlockchainUpdater, Transaction}
 import com.wavesplatform.utils.{ScorexLogging, Time}
-import com.wavesplatform.wallet.Wallet
 import io.netty.channel.Channel
 import io.netty.channel.group.ChannelGroup
 import monix.eval.Task
+import tech.hearth.crypto.*
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration.*
@@ -32,8 +32,8 @@ import scala.jdk.CollectionConverters.*
 trait BlockChallenger {
   def challengeBlock(block: Block, ch: Channel): Task[Unit]
   def challengeMicroblock(md: MicroblockData, ch: Channel): Task[Unit]
-  def pickBestAccount(accounts: Seq[(SeedKeyPair, Long)]): Either[GenericError, (SeedKeyPair, Long)]
-  def getChallengingAccounts(challengedMiner: Address): Either[ValidationError, Seq[(SeedKeyPair, Long)]]
+  def pickBestAccount(accounts: Seq[((SigningKey, VrfKey), Long)]): Either[GenericError, ((SigningKey, VrfKey), Long)]
+  def getChallengingAccounts(challengedMiner: Address): Either[ValidationError, Seq[((SigningKey, VrfKey), Long)]]
   def getProcessingTx(id: ByteStr): Option[Transaction]
   def allProcessingTxs: Seq[Transaction]
 }
@@ -41,7 +41,7 @@ trait BlockChallenger {
 class BlockChallengerImpl(
     blockchainUpdater: BlockchainUpdater & Blockchain,
     allChannels: ChannelGroup,
-    wallet: Wallet,
+    keys: Seq[(SigningKey, VrfKey)],
     settings: WavesSettings,
     timeService: Time,
     pos: PoSSelector,
@@ -121,17 +121,17 @@ class BlockChallengerImpl(
     )
   }
 
-  override def pickBestAccount(accounts: Seq[(SeedKeyPair, Long)]): Either[GenericError, (SeedKeyPair, Long)] =
+  override def pickBestAccount(accounts: Seq[((SigningKey, VrfKey), Long)]): Either[GenericError, ((SigningKey, VrfKey), Long)] =
     accounts.minByOption(_._2).toRight(GenericError("No suitable account in wallet"))
 
-  override def getChallengingAccounts(challengedMiner: Address): Either[ValidationError, Seq[(SeedKeyPair, Long)]] = {
+  override def getChallengingAccounts(challengedMiner: Address): Either[ValidationError, Seq[((SigningKey, VrfKey), Long)]] = {
     lazy val challengedBalance = blockchainUpdater.generatingBalance(challengedMiner)
-    wallet.privateKeyAccounts.traverse { acc =>
-      val ownBalance = blockchainUpdater.generatingBalance(acc.toAddress)
+    keys.traverse { case acc @ (sk, vk) =>
+      val ownBalance = blockchainUpdater.generatingBalance(sk.toAddress)
       pos
         .getValidBlockDelay(
           blockchainUpdater.height,
-          acc,
+          vk,
           blockchainUpdater.lastBlockHeader.get.header.baseTarget,
           ownBalance + challengedBalance
         )
@@ -162,8 +162,8 @@ class BlockChallengerImpl(
       .getOrElse(blockchainUpdater.lastBlockHeader.get.header)
 
     for {
-      allAccounts               <- getChallengingAccounts(challengedBlock.sender.toAddress)
-      (bestMinerAccount, delay) <- pickBestAccount(allAccounts)
+      allAccounts       <- getChallengingAccounts(challengedBlock.sender.toAddress)
+      ((sk, vk), delay) <- pickBestAccount(allAccounts)
       blockTime = prevBlockHeader.timestamp + delay
       _ <- Either.cond(
         blockTime < challengedBlock.header.timestamp,
@@ -171,7 +171,7 @@ class BlockChallengerImpl(
         GenericError(s"Challenging block timestamp ($blockTime) is not better than challenged block timestamp (${challengedBlock.header.timestamp})")
       )
       consensusData <- pos.consensusData(
-        bestMinerAccount,
+        vk,
         blockchainUpdater.height,
         blockchainUpdater.settings.genesisSettings.averageBlockDelay,
         prevBlockHeader.baseTarget,
@@ -186,7 +186,7 @@ class BlockChallengerImpl(
         consensusData.baseTarget,
         consensusData.generationSignature,
         txs,
-        bestMinerAccount,
+        sk,
         blockFeatures(blockchainUpdater, settings),
         blockRewardVote(settings),
         stateHash = None,
@@ -203,13 +203,13 @@ class BlockChallengerImpl(
         blockchainUpdater.computeNextReward,
         None
       )
-      initialBlockSnapshot <- BlockDiffer.createInitialBlockSnapshot(blockchainUpdater, challengedBlock.header.reference, bestMinerAccount.toAddress)
+      initialBlockSnapshot <- BlockDiffer.createInitialBlockSnapshot(blockchainUpdater, challengedBlock.header.reference, sk.toAddress)
       stateHash <- TxStateSnapshotHashBuilder
         .computeStateHash(
           txs,
           TxStateSnapshotHashBuilder.createHashFromSnapshot(initialBlockSnapshot, None).createHash(prevStateHash),
           initialBlockSnapshot,
-          bestMinerAccount,
+          sk,
           Some(prevBlockHeader.timestamp),
           blockTime,
           isChallenging = true,
@@ -223,7 +223,7 @@ class BlockChallengerImpl(
         consensusData.baseTarget,
         consensusData.generationSignature,
         txs,
-        bestMinerAccount,
+        sk,
         blockFeatures(blockchainUpdater, settings),
         blockRewardVote(settings),
         Some(stateHash),

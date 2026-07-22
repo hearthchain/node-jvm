@@ -6,8 +6,6 @@ import com.wavesplatform.block.{Block, MicroBlock}
 import com.wavesplatform.crypto
 import com.wavesplatform.crypto.{DigestLength, KeyLength}
 import com.wavesplatform.mining.Miner.MaxTransactionsPerMicroblock
-import com.wavesplatform.settings.GenesisSettings
-import com.wavesplatform.transaction.GenesisTransaction
 import com.wavesplatform.transaction.TxValidationError.GenericError
 
 object Validators {
@@ -30,23 +28,18 @@ object Validators {
       _ <- Either.cond(b.header.stateHash.forall(_.size == DigestLength), (), "Incorrect block state hash")
     } yield b).leftMap(GenericError(_))
 
-  def validateGenesisBlock(block: Block, genesisSettings: GenesisSettings, rideV6Activated: Boolean): Validation[Block] =
+  def validateGenesisBlock(block: Block): Validation[Block] =
     for {
       // Common validation
       _ <- validateBlock(block)
       // Verify signature
       _ <- Either.cond(
-        crypto.verify(block.signature, block.bodyBytes(), block.header.generator, rideV6Activated),
+        crypto.verify(block.signature, block.bodyBytes(), block.header.generator),
         (),
         GenericError("Passed genesis signature is not valid")
       )
-      // Verify initial balance
-      txsSum = block.transactionData.collect { case tx: GenesisTransaction => tx.amount.value }.reduce(Math.addExact(_: Long, _: Long))
-      _ <- Either.cond(
-        txsSum == genesisSettings.initialBalance,
-        (),
-        GenericError(s"Initial balance ${genesisSettings.initialBalance} did not match the distributions sum $txsSum")
-      )
+      // The genesis block carries a predefined snapshot instead of transactions
+      _ <- Either.cond(block.transactionData.isEmpty, (), GenericError("Genesis block must not contain transactions"))
     } yield block
 
   def validateMicroBlock(mb: MicroBlock): Validation[MicroBlock] =

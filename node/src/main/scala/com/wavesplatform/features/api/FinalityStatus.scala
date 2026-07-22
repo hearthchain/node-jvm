@@ -29,5 +29,5 @@ object FinalityStatus {
   private def generationPeriodReads(activationHeight: Height): Reads[GenerationPeriod] =
     (
       (__ \ "start").read[Height] and (__ \ "end").read[Height]
-    )((start, end) => GenerationPeriod(activationHeight, start, end - start))
+    )((start, end) => GenerationPeriod(start, end - start))
 }

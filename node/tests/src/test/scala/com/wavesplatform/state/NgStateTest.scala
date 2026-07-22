@@ -5,17 +5,18 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.history.*
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.transfer.*
-import com.wavesplatform.transaction.{GenesisTransaction, TxHelpers}
+import com.wavesplatform.transaction.TxHelpers
 
 class NgStateTest extends PropSpec {
-  private def preconditionsAndPayments(amt: Int): (GenesisTransaction, Seq[TransferTransaction]) = {
+  // NgState is not validated against any state here, so the base block just needs some transaction in it
+  private def preconditionsAndPayments(amt: Int): (TransferTransaction, Seq[TransferTransaction]) = {
     val master    = TxHelpers.signer(1)
     val recipient = TxHelpers.signer(2)
 
-    val genesis  = TxHelpers.genesis(master.toAddress)
+    val baseTx   = TxHelpers.transfer(master, recipient.toAddress, 1)
     val payments = (1 to amt).map(idx => TxHelpers.transfer(master, recipient.toAddress, idx))
 
-    (genesis, payments)
+    (baseTx, payments)
   }
 
   private def mkNgState(block: Block): NgState = NgState(
@@ -32,8 +33,8 @@ class NgStateTest extends PropSpec {
   )
 
   property("can forge correctly signed blocks") {
-    val (genesis, payments)  = preconditionsAndPayments(10)
-    val (block, microBlocks) = chainBaseAndMicro(randomSig, genesis, payments.map(t => Seq(t)))
+    val (baseTx, payments)   = preconditionsAndPayments(10)
+    val (block, microBlocks) = chainBaseAndMicro(randomSig, baseTx, payments.map(t => Seq(t)))
 
     var ng = mkNgState(block)
     microBlocks.foreach(m => ng = ng.append(m, StateSnapshot.empty, 0L, 0L, 0L, ByteStr.empty, None, Seq.empty))
@@ -49,8 +50,8 @@ class NgStateTest extends PropSpec {
   }
 
   property("can resolve best liquid block") {
-    val (genesis, payments)  = preconditionsAndPayments(5)
-    val (block, microBlocks) = chainBaseAndMicro(randomSig, genesis, payments.map(t => Seq(t)))
+    val (baseTx, payments)   = preconditionsAndPayments(5)
+    val (block, microBlocks) = chainBaseAndMicro(randomSig, baseTx, payments.map(t => Seq(t)))
 
     var ng = mkNgState(block)
     microBlocks.foreach(m => ng = ng.append(m, StateSnapshot.empty, 0L, 0L, 0L, ByteStr.empty, None, Seq.empty))
@@ -60,8 +61,8 @@ class NgStateTest extends PropSpec {
   }
 
   property("can resolve best last block") {
-    val (genesis, payments)  = preconditionsAndPayments(5)
-    val (block, microBlocks) = chainBaseAndMicro(randomSig, genesis, payments.map(t => Seq(t)))
+    val (baseTx, payments)   = preconditionsAndPayments(5)
+    val (block, microBlocks) = chainBaseAndMicro(randomSig, baseTx, payments.map(t => Seq(t)))
 
     var ng = mkNgState(block)
 
@@ -79,8 +80,8 @@ class NgStateTest extends PropSpec {
   }
 
   property("calculates carry fee correctly") {
-    val (genesis, payments)  = preconditionsAndPayments(5)
-    val (block, microBlocks) = chainBaseAndMicro(randomSig, genesis, payments.map(t => Seq(t)))
+    val (baseTx, payments)   = preconditionsAndPayments(5)
+    val (block, microBlocks) = chainBaseAndMicro(randomSig, baseTx, payments.map(t => Seq(t)))
 
     var ng = mkNgState(block)
     microBlocks.foreach(m => ng = ng.append(m, StateSnapshot.empty, 1L, 0L, 0L, ByteStr.empty, None, Seq.empty))

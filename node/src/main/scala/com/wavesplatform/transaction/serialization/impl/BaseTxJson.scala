@@ -1,6 +1,6 @@
 package com.wavesplatform.transaction.serialization.impl
 
-import com.wavesplatform.transaction.{EthereumTransaction, PBSince, ProvenTransaction, HasSignature, Transaction, Versioned}
+import com.wavesplatform.transaction.{ProvenTransaction, Transaction}
 import play.api.libs.json.{JsArray, JsObject, JsString, Json}
 
 object BaseTxJson {
@@ -10,26 +10,15 @@ object BaseTxJson {
       "id"         -> tx.id().toString,
       "fee"        -> tx.assetFee._2,
       "feeAssetId" -> tx.assetFee._1.maybeBase58Repr,
-      "timestamp"  -> tx.timestamp
+      "timestamp"  -> tx.timestamp,
+      "chainId"    -> tx.chainId
     ) ++ (tx match {
-      case v: Versioned           => Json.obj("version" -> v.version)
-      case _: EthereumTransaction => Json.obj("version" -> 1)
-      case _                      => Json.obj()
-    }) ++ (tx match {
-      case pbs: (PBSince & Versioned) if PBSince.affects(pbs) => Json.obj("chainId" -> tx.chainId)
-      case e: EthereumTransaction                             => Json.obj("chainId" -> e.chainId)
-      case _                                                  => Json.obj()
-    }) ++ (tx match {
       case p: ProvenTransaction =>
         Json.obj(
-          "sender"          -> p.sender.toAddress(p.chainId),
+          "sender"          -> p.sender.toAddress(p.chainId).toBech32,
           "senderPublicKey" -> p.sender,
           "proofs"          -> JsArray(p.proofs.proofs.map(p => JsString(p.toString)))
-        ) ++ (tx match {
-          // Compatibility
-          case s: HasSignature if s.usesLegacySignature => Json.obj("signature" -> s.signature.toString)
-          case _                                        => Json.obj()
-        })
+        )
       case _ => JsObject.empty
     })
   }

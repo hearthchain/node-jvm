@@ -3,14 +3,11 @@ package com.wavesplatform.transaction.validation
 import cats.data.Validated
 import cats.data.Validated.{Invalid, Valid}
 import cats.syntax.validated.*
-import com.google.protobuf.ByteString
-import com.wavesplatform.account.AddressOrAlias
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.transaction.assets.IssueTransaction
 import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{Asset, TxValidationError, TxVersion, Versioned}
+import com.wavesplatform.transaction.{Asset, TxValidationError}
 
 import scala.util.Try
 
@@ -28,16 +25,6 @@ object TxConstraints {
   def cond(cond: => Boolean, err: => ValidationError): ValidatedNV =
     if (cond) Valid(())
     else Invalid(err).toValidatedNel
-
-  def byVersionSet[T <: Versioned](tx: T)(f: (Set[TxVersion], () => ValidatedV[Any])*): ValidatedV[T] = {
-    seq(tx)(f.collect {
-      case (v, func) if v.contains(tx.version) =>
-        func()
-    }*)
-  }
-
-  def byVersion[T <: Versioned](tx: T)(f: (TxVersion, () => ValidatedV[Any])*): ValidatedV[T] =
-    byVersionSet(tx)(f.map { case (v, f) => (Set(v), f) }*)
 
   def fee(fee: Long): ValidatedV[Long] = {
     Validated
@@ -80,14 +67,6 @@ object TxConstraints {
     else GenericError(s"One of chain ids not match: $ids").invalidNel
   }
 
-  def addressChainId(addr: AddressOrAlias, chainId: Byte): ValidatedV[AddressOrAlias] =
-    Validated
-      .condNel(
-        addr.chainId == chainId,
-        addr,
-        GenericError("Address or alias from other network")
-      )
-
   // Transaction specific
   def transferAttachment(attachment: ByteStr): ValidatedV[ByteStr] = {
     this.seq(attachment)(
@@ -110,20 +89,4 @@ object TxConstraints {
         )
     }
   }
-
-  def assetName(name: ByteString): ValidatedV[ByteString] =
-    Validated
-      .condNel(
-        name.size >= IssueTransaction.MinAssetNameLength && name.size <= IssueTransaction.MaxAssetNameLength,
-        name,
-        TxValidationError.InvalidName
-      )
-
-  def assetDescription(description: ByteString): ValidatedV[ByteString] =
-    Validated
-      .condNel(
-        description.size <= IssueTransaction.MaxAssetDescriptionLength,
-        description,
-        TxValidationError.TooBigArray
-      )
 }

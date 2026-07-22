@@ -1,14 +1,15 @@
 package com.wavesplatform.api.http.requests
 
-import com.wavesplatform.account.KeyPair
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.FreeSpec
 import org.scalacheck.Gen
 import org.scalatest.OptionValues
 import play.api.libs.json.*
+import tech.hearth.crypto.SigningKey
 
 class RequestsSpec extends FreeSpec with OptionValues {
-  private def transferRequestGen(version: Int): Gen[(KeyPair, JsObject)] =
+  private def transferRequestGen(version: Int): Gen[(SigningKey, JsObject)] =
     (for {
       sender    <- accountGen
       recipient <- accountGen
@@ -18,14 +19,14 @@ class RequestsSpec extends FreeSpec with OptionValues {
       Json.obj(
         "type"            -> 4,
         "version"         -> version,
-        "senderPublicKey" -> sender.publicKey.toString,
+        "senderPublicKey" -> PublicKey(sender.publicKey).toString,
         "assetId"         -> JsNull,
         "attachment"      -> "",
         "feeAssetId"      -> JsNull,
         "timestamp"       -> System.currentTimeMillis(),
         "fee"             -> 100000,
         "amount"          -> 10000,
-        "recipient"       -> recipient.publicKey.toAddress.toString,
+        "recipient"       -> recipient.toAddress.toBech32,
         "proofs"          -> JsArray(proofs.proofs.map(p => JsString(p.toString)))
       )
     )).label(s"Transfer Request v$version")

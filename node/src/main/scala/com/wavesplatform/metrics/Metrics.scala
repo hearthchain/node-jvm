@@ -7,7 +7,6 @@ import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import com.wavesplatform.ResponsivenessLogs
 import com.wavesplatform.utils.{Schedulers, ScorexLogging, Time}
 import monix.eval.Task
 import monix.execution.schedulers.SchedulerService
@@ -29,10 +28,7 @@ object Metrics extends ScorexLogging {
   case class Settings(
       enable: Boolean,
       nodeId: Int,
-      influxDb: InfluxDbSettings,
-      collectResponsivenessMetrics: Boolean,
-      createResponsivenessCsv: Boolean,
-      responsivenessMetricsRetentionPolicy: String
+      influxDb: InfluxDbSettings
   ) derives ConfigReader
 
   private implicit val scheduler: SchedulerService = Schedulers.singleThread("metrics")
@@ -108,10 +104,6 @@ object Metrics extends ScorexLogging {
         case NonFatal(e) => log.warn(s"Failed to connect to InfluxDB (${e.getMessage})")
       }
     }
-
-    ResponsivenessLogs.enableMetrics = config.collectResponsivenessMetrics
-    ResponsivenessLogs.enableCsv = config.createResponsivenessCsv
-    ResponsivenessLogs.retentionPolicy = config.responsivenessMetricsRetentionPolicy
 
     db.nonEmpty
   }

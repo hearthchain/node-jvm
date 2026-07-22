@@ -4,6 +4,7 @@ import cats.syntax.either.*
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.state.{Blockchain, LeaseBalance, StateSnapshot}
+import com.wavesplatform.transaction.Asset
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.CommitToGenerationTransaction.DepositInWavelets
 import com.wavesplatform.transaction.TxValidationError.AccountBalanceError
@@ -11,12 +12,38 @@ import com.wavesplatform.transaction.TxValidationError.AccountBalanceError
 import scala.util.{Left, Right}
 
 object BalanceDiffValidation {
+  trait BalanceProvider {
+    def balance(address: Address, mayBeAssetId: Asset = Waves): Long
+    def leaseBalance(address: Address): LeaseBalance
+    def generationDeposit(address: Address): Long
+  }
+
+  object BalanceProvider {
+    def apply(blockchain: Blockchain): BalanceProvider = new BalanceProvider {
+      override def balance(address: Address, mayBeAssetId: Asset): Long = blockchain.balance(address, mayBeAssetId)
+      override def leaseBalance(address: Address): LeaseBalance         = blockchain.leaseBalance(address)
+      override def generationDeposit(address: Address): Long            = blockchain.generationDeposit(address)
+    }
+
+    val Empty: BalanceProvider = new BalanceProvider {
+      override def balance(address: Address, mayBeAssetId: Asset): Long = 0
+      override def leaseBalance(address: Address): LeaseBalance         = LeaseBalance.empty
+      override def generationDeposit(address: Address): Long            = 0
+    }
+  }
+
   def cond(b: Blockchain, cond: Blockchain => Boolean)(s: StateSnapshot): Either[AccountBalanceError, StateSnapshot] = {
     if (cond(b)) apply(b)(s)
     else Right(s)
   }
 
-  def apply(b: Blockchain)(snapshot: StateSnapshot): Either[AccountBalanceError, StateSnapshot] = {
+  def apply(snapshot: StateSnapshot): Either[AccountBalanceError, StateSnapshot] =
+    apply(BalanceProvider.Empty, snapshot)
+
+  def apply(b: Blockchain)(snapshot: StateSnapshot): Either[AccountBalanceError, StateSnapshot] =
+    apply(BalanceProvider(b), snapshot)
+
+  def apply(b: BalanceProvider, snapshot: StateSnapshot): Either[AccountBalanceError, StateSnapshot] = {
     def checkWaves(
         acc: Address,
         wavesAfter: Long,
@@ -44,7 +71,7 @@ object BalanceDiffValidation {
         else if (wavesWithoutDepositAfter < 0) {
           if (depositAfter > depositBefore) s"not enough funds for deposit, $stateChanges".asLeft
           else s"trying to spend a deposit, $stateChanges".asLeft
-        } else if (wavesWithoutDepositAfter < leaseAfter.out && b.height > b.settings.functionalitySettings.allowLeasedBalanceTransferUntilHeight) {
+        } else if (wavesWithoutDepositAfter < leaseAfter.out) {
           if (wavesWithoutDepositAfter + leaseAfter.in - leaseAfter.out < 0) s"negative effective balance, $stateChanges".asLeft
           else if (leaseOutDiff == 0) s"trying to spend leased money, $stateChanges".asLeft
           else s"leased being more than own, $stateChanges".asLeft
@@ -61,7 +88,7 @@ object BalanceDiffValidation {
           case ((address, Waves), balance) =>
             val currentLeaseBalance = snapshot.leaseBalances.getOrElse(address, b.leaseBalance(address))
             val depositedOnNext = DepositInWavelets *
-              snapshot.nextCommittedGenerators.find { case (pk, _) => pk.toAddress == address }.size
+              snapshot.nextCommittedGenerators.find(_.sender.toAddress == address).size
             checkWaves(address, balance, currentLeaseBalance, depositedOnNext).fold(error => List(error), _ => Nil)
           case _ =>
             Nil

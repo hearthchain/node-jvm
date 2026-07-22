@@ -42,7 +42,7 @@ inConfig(Compile)(
     PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value,
     PB.protoSources += PB.externalIncludePath.value,
     PB.generate / includeFilter := { (f: File) =>
-      (** / "waves" / "*.proto").matches(f.toPath)
+      (** / "hearth" / "*.proto").matches(f.toPath)
     },
     PB.deleteTargetDirectory := false
   )

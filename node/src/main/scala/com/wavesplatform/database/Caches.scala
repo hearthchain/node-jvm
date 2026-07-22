@@ -4,10 +4,9 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.ArrayListMultimap
 import com.google.protobuf.ByteString
 import com.typesafe.scalalogging.StrictLogging
-import com.wavesplatform.account.{Address, Alias, PublicKey}
+import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.block.{Block, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database.protobuf.{BlockMetaExt, BlockMeta as PBBlockMeta}
 import com.wavesplatform.protobuf.block.PBBlocks
@@ -138,33 +137,6 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
   protected val memMeter = MemoryMeter.builder().build()
 
-  private val scriptCache: LoadingCache[Address, Option[AccountScriptInfo]] =
-    CacheBuilder
-      .newBuilder()
-      .maximumWeight(128 << 20)
-      .weigher((_: Address, asi: Option[AccountScriptInfo]) => asi.map(s => memMeter.measureDeep(s).toInt).getOrElse(0))
-      .recordStats()
-      .build(new CacheLoader[Address, Option[AccountScriptInfo]] {
-        override def load(key: Address): Option[AccountScriptInfo] = loadScript(key)
-        override def loadAll(keys: lang.Iterable[? <: Address]): util.Map[Address, Option[AccountScriptInfo]] =
-          new util.HashMap[Address, Option[AccountScriptInfo]]()
-      })
-  protected def loadScript(address: Address): Option[AccountScriptInfo]
-  protected def hasScriptBytes(address: Address): Boolean
-  protected def discardScript(address: Address): Unit = scriptCache.invalidate(address)
-
-  override def accountScript(address: Address): Option[AccountScriptInfo] = scriptCache.get(address)
-  override def hasAccountScript(address: Address): Boolean =
-    Option(scriptCache.getIfPresent(address)).fold(hasScriptBytes(address))(_.nonEmpty)
-
-  private val assetScriptCache: LoadingCache[IssuedAsset, Option[AssetScriptInfo]] =
-    cache(dbSettings.maxCacheSize, loadAssetScript)
-  protected def loadAssetScript(asset: IssuedAsset): Option[AssetScriptInfo]
-  protected def hasAssetScriptBytes(asset: IssuedAsset): Boolean
-  protected def discardAssetScript(asset: IssuedAsset): Unit = assetScriptCache.invalidate(asset)
-
-  override def assetScript(asset: IssuedAsset): Option[AssetScriptInfo] = assetScriptCache.get(asset)
-
   private var lastAddressId = loadMaxAddressId()
   protected def loadMaxAddressId(): Long
 
@@ -176,30 +148,9 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
   protected def addressIdWithFallback(address: Address, newAddresses: Map[Address, AddressId]): AddressId =
     newAddresses.getOrElse(address, addressIdCache.get(address).get)
 
-  private val accountDataCache: LoadingCache[(Address, String), CurrentData] = cache(
-    dbSettings.maxCacheSize,
-    { case (k, v) =>
-      loadAccountData(k, v)
-    }
-  )
-
-  override def accountData(acc: Address, key: String): Option[DataEntry[?]] =
-    accountDataCache.get((acc, key)).entry match {
-      case _: EmptyDataEntry => None
-      case other             => Some(other)
-    }
-
-  protected def discardAccountData(addressWithKey: (Address, String)): Unit = accountDataCache.invalidate(addressWithKey)
-  protected def loadAccountData(acc: Address, key: String): CurrentData
-  protected def loadEntryHeights(keys: Seq[(Address, String)], addressIdOf: Address => AddressId): Map[(Address, String), Height]
-
   private[database] def addressId(address: Address): Option[AddressId] = addressIdCache.get(address)
   private[database] def addressIds(addresses: Seq[Address]): Map[Address, Option[AddressId]] =
     addressIdCache.getAll(addresses.asJava).asScala.toMap
-
-  protected val aliasCache: LoadingCache[Alias, Option[Address]] = cache(dbSettings.maxCacheSize, loadAlias)
-  protected def loadAlias(alias: Alias): Option[Address]
-  protected def discardAlias(alias: Alias): Unit = aliasCache.invalidate(alias)
 
   protected val blockHeightCache: LoadingCache[ByteStr, Option[Int]] = cache(dbSettings.maxRollbackDepth + 1000, loadBlockHeight)
   protected def loadBlockHeight(blockId: ByteStr): Option[Int]
@@ -217,8 +168,8 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
   override def activatedFeatures: Map[Short, Height] = activatedFeaturesCache
 
   @volatile
-  private var committedGeneratorsCache = Map.empty[GenerationPeriod, IndexedSeq[(Address, BlsPublicKey)]] // Only this and next periods
-  override def committedGenerators(at: GenerationPeriod): IndexedSeq[(Address, BlsPublicKey)] =
+  private var committedGeneratorsCache = Map.empty[GenerationPeriod, IndexedSeq[CommittedGenerator]] // Only this and next periods
+  override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] =
     this.currentGenerationPeriod.fold(Vector.empty) { curr =>
       if (at == curr || at == curr.next) {
         committedGeneratorsCache.getOrElse(
@@ -230,7 +181,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
         )
       } else loadCommittedGenerators(at)
     }
-  protected def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[(Address, BlsPublicKey)]
+  protected def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
   @volatile
   private var conflictGeneratorsCache = Map.empty[GenerationPeriod, ConflictGenerators]
@@ -257,12 +208,11 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       balances: Map[(AddressId, Asset), (CurrentBalance, BalanceNode)],
       leaseBalances: Map[AddressId, (CurrentLeaseBalance, LeaseBalanceNode)],
       filledQuantity: Map[ByteStr, (CurrentVolumeAndFee, VolumeAndFeeNode)],
-      data: Map[(Address, String), (CurrentData, DataNode)],
       addressTransactions: util.Map[AddressId, util.Collection[TransactionId]],
-      accountScripts: Map[AddressId, Option[AccountScriptInfo]],
       newFinalizedHeight: Height,
       generatorSet: GeneratorSet,
-      nextCommittedGenerators: Seq[(AddressId, BlsPublicKey)],
+      committedGenerators: Seq[(AddressId, BlsPublicKey, ByteStr)],
+      committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
@@ -315,6 +265,10 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     for (address <- snapshot.transactions.flatMap(_._2.affected) if addressIdCache.get(address).isEmpty)
       newAddresses += address
 
+    // A genesis generator may have no balance entry of its own
+    for (gc <- snapshot.nextCommittedGenerators; address = gc.sender.toAddress if addressIdCache.get(address).isEmpty)
+      newAddresses += address
+
     val newAddressIds = (for {
       (address, offset) <- newAddresses.zipWithIndex
     } yield address -> AddressId(lastAddressId + offset + 1)).toMap
@@ -338,23 +292,23 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       (address, balance)
     }
 
-    val addressTransactions             = ArrayListMultimap.create[AddressId, TransactionId]()
-    var nextCommittedGeneratorsWithAddr = Vector.empty[(Address, BlsPublicKey)]
-    var nextCommittedGenerators         = Vector.empty[(AddressId, BlsPublicKey)]
-    var commitmentTransactionIds        = Vector.empty[TransactionId]
+    val addressTransactions      = ArrayListMultimap.create[AddressId, TransactionId]()
+    var commitmentTransactionIds = Vector.empty[TransactionId]
     for ((_, nti) <- snapshot.transactions) {
       for (addr <- nti.affected)
         addressTransactions.put(addressIdWithFallback(addr, newAddressIds), TransactionId(nti.transaction.id()))
 
       nti.transaction match {
-        case txn: CommitToGenerationTransaction =>
-          val address   = txn.sender.toAddress
-          val addressId = addressIdWithFallback(address, newAddressIds)
-          nextCommittedGeneratorsWithAddr = nextCommittedGeneratorsWithAddr.appended(address -> txn.endorserPublicKey)
-          nextCommittedGenerators = nextCommittedGenerators.appended(addressId -> txn.endorserPublicKey)
-          commitmentTransactionIds = commitmentTransactionIds.appended(TransactionId(txn.id()))
-        case _ =>
+        case txn: CommitToGenerationTransaction => commitmentTransactionIds = commitmentTransactionIds.appended(TransactionId(txn.id()))
+        case _                                  =>
       }
+    }
+
+    // Taken from the snapshot rather than from the transactions, because the genesis block commits generators without any:
+    // for a regular block CommitToGenerationTransactionDiff puts the very same commitments there, in the same order.
+    val committedGeneratorsWithAddr = snapshot.nextCommittedGenerators.map(_.toCommittedGenerator).toVector
+    val committedGenerators = committedGeneratorsWithAddr.map { cg =>
+      (addressIdWithFallback(cg.address, newAddressIds), cg.endorserPublicKey, cg.vrfPublicKey)
     }
 
     val conflictGenerators = for {
@@ -362,23 +316,29 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       e <- v.conflict
     } yield e.endorserIndex
 
-    this.generationPeriodOf(current.height) match {
+    val committedPeriod = this.generationPeriodOf(current.height) match {
       case None =>
         require(
-          nextCommittedGenerators.isEmpty && conflictGenerators.isEmpty,
-          s"Expected empty conflict and next committed generators, got: nextCommittedGenerators=$nextCommittedGenerators, conflictGenerators=$conflictGenerators"
+          committedGenerators.isEmpty && conflictGenerators.isEmpty,
+          s"Expected empty conflict and next committed generators, got: committedGenerators=$committedGenerators, conflictGenerators=$conflictGenerators"
         )
+        None
 
       case Some(currPeriod) =>
-        if (nextCommittedGenerators.nonEmpty)
-          committedGeneratorsCache = committedGeneratorsCache.updatedWith(currPeriod.next) { orig =>
-            Some(orig.getOrElse(Vector.empty) ++ nextCommittedGeneratorsWithAddr)
+        // Generators committed in the genesis block generate from the very first period, everyone else from the next one
+        val committedPeriod = if (current.height == GenesisBlockHeight) currPeriod else currPeriod.next
+
+        if (committedGenerators.nonEmpty)
+          committedGeneratorsCache = committedGeneratorsCache.updatedWith(committedPeriod) { orig =>
+            Some(orig.getOrElse(Vector.empty) ++ committedGeneratorsWithAddr)
           }
 
         if (conflictGenerators.nonEmpty)
           conflictGeneratorsCache = conflictGeneratorsCache.updatedWith(currPeriod) { orig =>
             Some(orig.getOrElse(ConflictGenerators.empty).appendAll(current.height, conflictGenerators*))
           }
+
+        Some(committedPeriod)
     }
 
     val updatedBalanceNodes = for {
@@ -389,22 +349,6 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       CurrentBalance(amount, Height(height), prevBalance.height),
       BalanceNode(amount, prevBalance.height)
     )
-
-    val newEntries = for {
-      (address, entries) <- snapshot.accountData
-      (key, entry)       <- entries
-    } yield ((address, key), entry)
-
-    val cachedEntries          = accountDataCache.getAllPresent(newEntries.keys.asJava).asScala
-    val loadedPrevEntryHeights = loadEntryHeights(newEntries.keys.filterNot(cachedEntries.contains).toSeq, addressIdWithFallback(_, newAddressIds))
-
-    val updatedDataWithNodes = (for {
-      (k, heightOfPreviousEntry) <- cachedEntries.view.mapValues(_.height) ++ loadedPrevEntryHeights
-      newEntry                   <- newEntries.get(k)
-    } yield k -> (
-      CurrentData(newEntry, Height(height), heightOfPreviousEntry),
-      DataNode(newEntry, heightOfPreviousEntry)
-    )).toMap
 
     val orderFillsWithNodes = for {
       (orderId, VolumeAndFee(volume, fee)) <- snapshot.orderFills
@@ -420,15 +364,9 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       case Waves              => stateHash.addWavesBalance(address, amount.balance)
       case asset: IssuedAsset => stateHash.addAssetBalance(address, asset, amount.balance)
     }
-    for (((address, _), (entry, _)) <- updatedDataWithNodes) stateHash.addDataEntry(address, entry.entry)
     for ((address, lease) <- leaseBalances) stateHash.addLeaseBalance(address, lease.in, lease.out)
-    for ((address, script) <- snapshot.accountScriptsByAddress) stateHash.addAccountScript(address, script.map(_.script))
-    for ((asset, script) <- snapshot.assetScripts) stateHash.addAssetScript(asset, Some(script.script))
-    for ((asset, _) <- snapshot.assetStatics) if (!snapshot.assetScripts.contains(asset)) stateHash.addAssetScript(asset, None)
     for (leaseId <- snapshot.newLeases.keys) if (!snapshot.cancelledLeases.contains(leaseId)) stateHash.addLeaseStatus(leaseId, isActive = true)
     for (leaseId <- snapshot.cancelledLeases.keys) stateHash.addLeaseStatus(leaseId, isActive = false)
-    for ((assetId, sponsorship) <- snapshot.sponsorships) stateHash.addSponsorship(assetId, sponsorship.minFee)
-    for ((alias, address) <- snapshot.aliases) stateHash.addAlias(address, alias.name)
     snapshot.nextCommittedGenerators.foreach(stateHash.addNextCommittedGenerator)
     stateHash.addCommittedGeneratorBalances(generatorSet.sortBy(_.index).map(_.balance))
 
@@ -441,12 +379,11 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       VectorMap() ++ updatedBalanceNodes.map { case ((address, asset), v) => (addressIdWithFallback(address, newAddressIds), asset) -> v },
       leaseBalancesWithNodes.map { case (address, balance) => addressIdWithFallback(address, newAddressIds) -> balance },
       orderFillsWithNodes,
-      updatedDataWithNodes,
       addressTransactions.asMap(),
-      snapshot.accountScriptsByAddress.map { case (address, s) => addressIdWithFallback(address, newAddressIds) -> s },
       newFinalizedHeight,
       generatorSet,
-      nextCommittedGenerators,
+      committedGenerators,
+      committedPeriod,
       commitmentTransactionIds,
       conflictGenerators,
       stateHash.result()
@@ -454,20 +391,14 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
     val assetsToInvalidate =
       snapshot.assetStatics.keySet ++
-        snapshot.assetScripts.keySet ++
         snapshot.assetNamesAndDescriptions.keySet ++
-        snapshot.assetVolumes.keySet ++
-        snapshot.sponsorships.keySet
+        snapshot.assetVolumes.keySet
 
     for ((address, id) <- newAddressIds) addressIdCache.put(address, Some(id))
     for ((orderId, (volumeAndFee, _)) <- orderFillsWithNodes) volumeAndFeeCache.put(orderId, volumeAndFee)
     for (((address, asset), (newBalance, _)) <- updatedBalanceNodes) balancesCache.put((address, asset), newBalance)
     for (id <- assetsToInvalidate) assetDescriptionCache.invalidate(id)
-    for ((alias, address) <- snapshot.aliases) aliasCache.put(Alias.create(alias.name).explicitGet(), Some(address))
     leaseBalanceCache.putAll(leaseBalances.asJava)
-    scriptCache.putAll(snapshot.accountScriptsByAddress.asJava)
-    assetScriptCache.putAll(snapshot.assetScripts.view.mapValues(Some(_)).toMap.asJava)
-    accountDataCache.putAll(updatedDataWithNodes.map { case (key, (value, _)) => (key, value) }.asJava)
 
     this.generationPeriodOf(current.height).foreach { currPeriod =>
       committedGeneratorsCache = committedGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap

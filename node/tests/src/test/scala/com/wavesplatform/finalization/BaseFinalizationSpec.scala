@@ -1,6 +1,5 @@
 package com.wavesplatform.finalization
 
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{BlockEndorsement, FinalizationVoting}
 import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsSignature}
@@ -11,6 +10,7 @@ import com.wavesplatform.test.{FreeSpec, WithResourceManager}
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import org.scalactic.source.Position
 import org.scalatest.EitherValues
+import tech.hearth.crypto.SigningKey
 
 trait BaseFinalizationSpec extends FreeSpec, WithDomain, WithResourceManager, EitherValues {
   protected def mkConflictGenerators(h: Int, idxs: Int*): ConflictGenerators =
@@ -23,13 +23,13 @@ trait BaseFinalizationSpec extends FreeSpec, WithDomain, WithResourceManager, Ei
   ): FinalizationVoting = FinalizationVoting(valid, finalizedHeight, aggregatedEndorsement = None, conflict)
 
   protected def mkConflictEndorsement(
-      wavesAcc: KeyPair,
+      wavesAcc: SigningKey,
       idx: GeneratorIndex,
       endorsedId: BlockId,
       finalizedHeight: Height = GenesisBlockHeight,
       finalizedId: BlockId = TxHelpers.randomBlockId
   ): BlockEndorsement = BlockEndorsement.signed(
-    BlsKeyPair(wavesAcc.privateKey),
+    TxHelpers.blsKeyOf(wavesAcc),
     idx,
     finalizedId,
     finalizedHeight = finalizedHeight,
@@ -41,18 +41,18 @@ trait BaseFinalizationSpec extends FreeSpec, WithDomain, WithResourceManager, Ei
 
   extension (self: FinalizationVoting) {
     def withConflict(
-        wavesAcc: KeyPair,
+        wavesAcc: SigningKey,
         idx: GeneratorIndex,
         endorsedId: BlockId,
         finalizedHeight: Height = GenesisBlockHeight,
         finalizedId: BlockId = TxHelpers.randomBlockId
     ): FinalizationVoting = self.copy(conflict = self.conflict :+ mkConflictEndorsement(wavesAcc, idx, endorsedId, finalizedHeight, finalizedId))
 
-    def signed(endorsedId: BlockId, finalizedId: BlockId, validEndorsers: KeyPair*): FinalizationVoting = {
+    def signed(endorsedId: BlockId, finalizedId: BlockId, validEndorsers: SigningKey*): FinalizationVoting = {
       val aggSig = validEndorsers
         .map { kp =>
           BlockEndorsement.sign(
-            BlsKeyPair(kp.privateKey),
+            TxHelpers.blsKeyOf(kp),
             finalizedId = finalizedId,
             finalizedHeight = GenesisBlockHeight,
             endorsedId = endorsedId

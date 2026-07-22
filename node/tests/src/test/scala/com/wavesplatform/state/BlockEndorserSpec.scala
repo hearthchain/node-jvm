@@ -7,7 +7,7 @@ import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.Domain
 import com.wavesplatform.network.{EndorseBlock, MessageCodec, PeerDatabase}
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{FreeSpec, NumericExt, WithResourceManager}
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import com.wavesplatform.utils.EmbeddedChannelOps

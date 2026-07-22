@@ -1,36 +1,21 @@
 package com.wavesplatform.api.http
 
-import cats.instances.option.*
-import cats.syntax.traverse.*
 import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.CommonAccountsApi
 import com.wavesplatform.api.http.ApiError.*
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
-import com.wavesplatform.crypto.bls.BlsKeyPair
-import com.wavesplatform.features.EstimatorProvider.*
-import com.wavesplatform.lang.contract.DApp
-import com.wavesplatform.lang.contract.meta.FunctionSignatures
-import com.wavesplatform.lang.script.ContractScript.ContractScriptImpl
-import com.wavesplatform.lang.{Global, ValidationError}
 import com.wavesplatform.network.TransactionPublisher
 import com.wavesplatform.settings.RestAPISettings
-import com.wavesplatform.state.diffs.FeeValidation
-import com.wavesplatform.state.{Blockchain, DataEntry}
+import com.wavesplatform.state.Blockchain
 import com.wavesplatform.transaction.Asset
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.GenericError
 import com.wavesplatform.utils.Time
 import com.wavesplatform.wallet.Wallet
 import monix.execution.Scheduler
-import org.apache.pekko.NotUsed
-import org.apache.pekko.http.scaladsl.marshalling.{ToResponseMarshallable, ToResponseMarshaller}
-import org.apache.pekko.http.scaladsl.model.HttpMethods
+import org.apache.pekko.http.scaladsl.marshalling.ToResponseMarshallable
 import org.apache.pekko.http.scaladsl.server.{Directive0, Route}
-import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.*
-
-import scala.util.Try
 
 case class AddressApiRoute(
     settings: RestAPISettings,
@@ -52,47 +37,12 @@ case class AddressApiRoute(
 
   override lazy val route: Route =
     pathPrefix("addresses") {
-      balanceDetails ~ validate ~ seed ~ balance ~ balances ~ balancesPost ~ balanceWithConfirmations ~ deleteAddress ~
-        seq ~ publicKey ~ blsKey ~ effectiveBalance ~ effectiveBalanceWithConfirmations ~ getData ~ scriptInfo ~ scriptMeta
+      balanceDetails ~ validate ~ balance ~ balances ~ balancesPost ~ balanceWithConfirmations ~ deleteAddress ~
+        seq ~ publicKey ~ effectiveBalance ~ effectiveBalanceWithConfirmations
     } ~ root ~ create
 
-  def scriptInfo: Route = (path("scriptInfo" / AddrSegment) & get) { address =>
-    completeLimited {
-      val scriptInfoOpt = blockchain.accountScript(address)
-      val callableComplexitiesOpt =
-        for {
-          scriptInfo <- scriptInfoOpt
-          verifierName = scriptInfo.script match {
-            case ContractScriptImpl(_, DApp(_, _, _, Some(vf))) => Some(vf.u.name)
-            case _                                              => None
-          }
-          complexities <- scriptInfo.complexitiesByEstimator.get(blockchain.estimator.version)
-        } yield verifierName.fold(complexities)(complexities - _)
-
-      val callableComplexities = callableComplexitiesOpt.getOrElse(Map[String, Long]())
-      val verifierComplexity   = scriptInfoOpt.fold(0L)(_.verifierComplexity)
-      val maxComplexity        = (callableComplexities.values.toSeq :+ verifierComplexity).max
-
-      Json.obj(
-        "address"              -> address,
-        "script"               -> scriptInfoOpt.map(_.script.bytes().base64),
-        "scriptText"           -> scriptInfoOpt.map(_.script.expr.toString),
-        "version"              -> scriptInfoOpt.map(_.script.stdLibVersion.id),
-        "complexity"           -> maxComplexity,
-        "verifierComplexity"   -> verifierComplexity,
-        "callableComplexities" -> callableComplexities,
-        "extraFee"             -> (if (blockchain.hasPaidVerifier(address)) FeeValidation.ScriptExtraFee else 0L),
-        "publicKey"            -> scriptInfoOpt.map(_.publicKey.toString)
-      )
-    }
-  }
-
-  def scriptMeta: Route = (path("scriptInfo" / AddrSegment / "meta") & get) { address =>
-    complete(scriptMetaJson(address))
-  }
-
   def deleteAddress: Route = (delete & withAuth & path(AddrSegment)) { address =>
-    val deleted = wallet.privateKeyAccount(address).exists(account => wallet.deleteAccount(account))
+    val deleted = wallet.signingKey(address).exists(account => wallet.deleteAccount(account))
     complete(Json.obj("deleted" -> deleted))
   }
 
@@ -159,49 +109,9 @@ case class AddressApiRoute(
     }
   }
 
-  def seed: Route = {
-    (path("seed" / Segment) & get & withAuth) { address =>
-      complete(for {
-        pk   <- wallet.findPrivateKey(address)
-        seed <- wallet.exportAccountSeed(pk.toAddress)
-      } yield Json.obj("address" -> address, "seed" -> Base58.encode(seed)))
-    }
-  }
-
   def validate: Route = (path("validate" / Segment) & get) { addressBytes =>
     complete(Json.obj("address" -> addressBytes, "valid" -> Address.fromString(addressBytes).isRight))
   }
-
-  def getData: Route =
-    pathPrefix("data" / AddrSegment) { address =>
-      implicit val jsonStreamingSupport: ToResponseMarshaller[Source[DataEntry[?], NotUsed]] =
-        jacksonStreamMarshaller()(using DataEntry.dataEntrySerializer)
-
-      (path(Segment) & get) { key =>
-        complete(accountDataEntry(address, key))
-      } ~ strictEntity {
-        (formField("matches") | parameter("matches")) { matches =>
-          Try(matches.r)
-            .fold(
-              { e =>
-                log.trace(s"Error compiling regex $matches: ${e.getMessage}")
-                complete(ApiError.fromValidationError(GenericError(s"Cannot compile regex")))
-              },
-              _ => accountData(address, matches)
-            )
-        } ~ anyParam("key", limit = settings.dataKeysRequestLimit) { keys =>
-          extractMethod.filter(_ != HttpMethods.GET || keys.nonEmpty) { _ =>
-            val result = Either
-              .cond(keys.nonEmpty, (), DataKeysNotSpecified)
-              .map(_ => accountDataList(address, keys.toSeq*))
-
-            complete(result)
-          }
-        } ~ get {
-          accountData(address)
-        }
-      }
-    }
 
   def root: Route = (path("addresses") & get) {
     complete(wallet.privateKeyAccounts.map(_.toAddress))
@@ -244,15 +154,6 @@ case class AddressApiRoute(
 
   private def balanceJson(acc: Address) = Balance(acc.toString, 0, commonAccountsApi.balance(acc))
 
-  private def scriptMetaJson(account: Address): Either[ValidationError.ScriptParseError, AccountScriptMeta] = {
-    val accountScript = blockchain.accountScript(account)
-
-    accountScript
-      .map(_.script)
-      .traverse(Global.dAppFuncTypes)
-      .map(AccountScriptMeta(account.toString, _))
-  }
-
   private def effectiveBalanceJson(acc: Address, confirmations: Int) = {
     Balance(acc.toString, confirmations, commonAccountsApi.effectiveBalance(acc, confirmations))
   }
@@ -264,41 +165,8 @@ case class AddressApiRoute(
       pass
   }
 
-  private def accountData(address: Address)(implicit m: ToResponseMarshaller[Source[DataEntry[?], NotUsed]]) = {
-    routeTimeout.executeFromObservable(
-      commonAccountsApi
-        .dataStream(address, None)
-    )
-  }
-
-  private def accountData(addr: Address, regex: String)(implicit m: ToResponseMarshaller[Source[DataEntry[?], NotUsed]]) =
-    routeTimeout.executeFromObservable(
-      commonAccountsApi
-        .dataStream(addr, Some(regex))
-    )
-
-  private def accountDataEntry(address: Address, key: String): ToResponseMarshallable =
-    commonAccountsApi
-      .data(address, key)
-      .toRight(DataKeyDoesNotExist)
-
-  private def accountDataList(address: Address, keys: String*) =
-    Source.fromIterator(() =>
-      keys
-        .flatMap(commonAccountsApi.data(address, _))
-        .iterator
-    )
-
   def publicKey: Route = (path("publicKey" / PublicKeySegment) & get) { publicKey =>
     complete(Json.obj("address" -> Address.fromPublicKey(publicKey).toString))
-  }
-
-  def blsKey: Route = (path("bls" / AddrSegment) & get) { address =>
-    complete {
-      wallet.privateKeyAccount(address).map { kp =>
-        Json.obj("blsPublicKey" -> BlsKeyPair(kp.privateKey).publicKey.base58)
-      }
-    }
   }
 }
 
@@ -322,11 +190,5 @@ object AddressApiRoute {
 
   object Balance {
     implicit val balanceFormat: Format[Balance] = Json.format
-  }
-
-  case class AccountScriptMeta(address: String, meta: Option[FunctionSignatures])
-
-  object AccountScriptMeta extends JsonFormats {
-    implicit lazy val accountScriptMetaWrites: Writes[AccountScriptMeta] = Json.writes[AccountScriptMeta]
   }
 }

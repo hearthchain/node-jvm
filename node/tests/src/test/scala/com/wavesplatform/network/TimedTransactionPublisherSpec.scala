@@ -1,12 +1,11 @@
 package com.wavesplatform.network
 import java.util.concurrent.CountDownLatch
 
-import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.test.FreeSpec
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
-import com.wavesplatform.transaction.{GenesisTransaction, Transaction}
+import com.wavesplatform.transaction.{Transaction, TxHelpers}
 import com.wavesplatform.utils.Schedulers
 import io.netty.channel.embedded.EmbeddedChannel
 import io.netty.util.HashedWheelTimer
@@ -39,7 +38,7 @@ class TimedTransactionPublisherSpec extends FreeSpec with BeforeAndAfterAll {
     "accepts only those transactions from network which can be validated quickly" in withUPS(_ => countTransactions()) { ups =>
       1 to 10 foreach { i =>
         ups.validateAndBroadcast(
-          GenesisTransaction.create(PublicKey(new Array[Byte](32)).toAddress, i * 10L, 0L).explicitGet(),
+          TxHelpers.transfer(amount = i * 10L),
           Some(new EmbeddedChannel)
         )
       }

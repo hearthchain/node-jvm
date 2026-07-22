@@ -2,7 +2,7 @@ package com.wavesplatform.history
 
 import cats.implicits.catsSyntaxOption
 import cats.syntax.traverse.*
-import com.wavesplatform.account.{Address, KeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.api.common.*
 import com.wavesplatform.block.Block.BlockId
@@ -14,11 +14,10 @@ import com.wavesplatform.consensus.{PoSCalculator, PoSSelector}
 import com.wavesplatform.database.{DBExt, Keys, RDB, RocksDBWriter}
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.features.BlockchainFeatures.{BlockV5, RideV6}
+import com.wavesplatform.features.BlockchainFeatures.BlockV5
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.lang.script.Script
-import com.wavesplatform.mining.{BlockChallenger, BlockChallengerImpl}
+import com.wavesplatform.mining.{BlockChallenger, BlockChallengerImpl, MiningAccount}
 import com.wavesplatform.network.{MessageCodec, PeerDatabase}
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.*
@@ -42,7 +41,7 @@ import monix.execution.ExecutionModel.SynchronousExecution
 import monix.execution.schedulers.SchedulerService
 import org.rocksdb.RocksDB
 import org.scalatest.matchers.should.Matchers.*
-import play.api.libs.json.{JsNull, JsValue, Json}
+import tech.hearth.crypto.{SigningKey, VrfKey}
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.Future
@@ -65,13 +64,14 @@ case class Domain(
   @volatile
   var triggers: Seq[BlockchainUpdateTriggers] = Nil
 
-  val posSelector: PoSSelector = PoSSelector(blockchainUpdater, None)
-  def nextBlockTime(generator: KeyPair): Long = {
+  val posSelector: PoSSelector                          = PoSSelector(blockchainUpdater, None)
+  def nextBlockTime(miningAccount: MiningAccount): Long = nextBlockTime(miningAccount.signingKey, miningAccount.vrfKey)
+  def nextBlockTime(generator: SigningKey, vrfKey: VrfKey): Long = {
     val parentHeight = blockchain.height
     val parent       = blockchain.blockHeader(parentHeight).map(_.header).getOrElse(lastBlock.header)
 
     posSelector
-      .getValidBlockDelay(parentHeight, generator, parent.baseTarget, blockchain.generatingBalance(generator.toAddress))
+      .getValidBlockDelay(parentHeight, vrfKey, parent.baseTarget, blockchain.generatingBalance(generator.toAddress))
       .map(_ + parent.timestamp)
       .explicitGet()
   }
@@ -80,7 +80,7 @@ case class Domain(
     TransactionDiffer(blockchain.lastBlockTimestamp, System.currentTimeMillis())(blockchain, _)
 
   val transactionDifferWithLog: Transaction => TracedResult[ValidationError, StateSnapshot] =
-    TransactionDiffer(blockchain.lastBlockTimestamp, System.currentTimeMillis(), enableExecutionLog = true)(blockchain, _)
+    TransactionDiffer(blockchain.lastBlockTimestamp, System.currentTimeMillis())(blockchain, _)
 
   def createDiffE(tx: Transaction): Either[ValidationError, StateSnapshot] = transactionDiffer(tx).resultE
   def createDiff(tx: Transaction): StateSnapshot                           = createDiffE(tx).explicitGet()
@@ -102,7 +102,7 @@ case class Domain(
         new BlockChallengerImpl(
           blockchain,
           new DefaultChannelGroup(GlobalEventExecutor.INSTANCE),
-          wallet,
+          Seq.empty,
           settings,
           testTime,
           posSelector,
@@ -131,14 +131,8 @@ case class Domain(
         .transactionById(transactionId)
         .getOrElse(throw new NoSuchElementException(s"No meta for $transactionId"))
 
-    def invokeScriptResult(transactionId: ByteStr): InvokeScriptResult =
-      transactionMeta(transactionId) match {
-        case hsc: TransactionMeta.HasStateChanges => hsc.invokeScriptResult.get
-        case _                                    => ???
-      }
-
     def addressTransactions(address: Address): Seq[TransactionMeta] =
-      transactions.transactionsByAddress(address, None, Set.empty, None).toListL.runSyncUnsafe()
+      transactions.transactionsByAddress(address, None, Set.empty, None).toListL.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
 
     def commonTransactionsApi(challenger: Option[BlockChallenger]): CommonTransactionsApi =
       CommonTransactionsApi(
@@ -240,24 +234,23 @@ case class Domain(
       )
       .map { case (m, tx, _) => m.height -> tx }
       .toListL
-      .runSyncUnsafe()
+      .runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
 
   def portfolio(address: Address): Seq[(IssuedAsset, Long)] = Domain.portfolio(address, rdb.db, blockchainUpdater)
 
   def appendAndAssertSucceed(txs: Transaction*): Block = {
-    val block = createBlock(txs, version = Block.PlainBlockVersion)
+    val block = createBlock(txs, version = Block.ProtoBlockVersion)
     appendBlock(block)
     txs.foreach { tx =>
       if (!blockchain.transactionSucceeded(tx.id())) {
-        val stateChanges = Try(commonApi.invokeScriptResult(tx.id())).toOption.flatMap(_.error).fold(JsNull: JsValue)(Json.toJson(_))
-        throw new AssertionError(s"Should succeed: ${tx.id()}, script error: ${Json.prettyPrint(stateChanges)}")
+        throw new AssertionError(s"Should succeed: ${tx.id()}")
       }
     }
     lastBlock
   }
 
   def appendAndCatchError(txs: Transaction*): ValidationError = {
-    val block  = createBlock(txs, version = Block.PlainBlockVersion)
+    val block  = createBlock(txs, version = Block.ProtoBlockVersion)
     val result = appendBlockE(block)
     txs.foreach { tx =>
       assert(blockchain.transactionInfo(tx.id()).isEmpty, s"should not pass: $tx")
@@ -266,7 +259,7 @@ case class Domain(
   }
 
   def appendAndAssertFailed(txs: Transaction*): Block = {
-    val block = createBlock(txs, version = Block.PlainBlockVersion)
+    val block = createBlock(txs, version = Block.ProtoBlockVersion)
     appendBlockE(block) match {
       case Left(err) =>
         throw new RuntimeException(s"Should be success: $err")
@@ -277,15 +270,14 @@ case class Domain(
     }
   }
 
-  def appendAndAssertFailed(tx: Transaction, message: String): Block = {
+  def appendAndAssertFailed(tx: Transaction): Block = {
     appendBlock(tx)
     assert(!blockchain.transactionSucceeded(tx.id()), s"should fail: $tx")
-    liquidSnapshot.errorMessage(tx.id()).get.text should include(message)
     lastBlock
   }
 
   def appendBlockE(txs: Transaction*): Either[ValidationError, BlockApplyResult] =
-    createBlockE(Block.PlainBlockVersion, txs).flatMap(appendBlockE(_))
+    createBlockE(Block.ProtoBlockVersion, txs).flatMap(appendBlockE(_))
 
   def appendBlock(version: Byte, txs: Transaction*): Block = {
     val block = createBlock(txs, version = version)
@@ -294,13 +286,13 @@ case class Domain(
   }
 
   def appendBlock(txs: Transaction*): Block =
-    appendBlock(Block.PlainBlockVersion, txs*)
+    appendBlock(Block.ProtoBlockVersion, txs*)
 
-  def appendKeyBlock(signer: KeyPair = defaultSigner, ref: Option[ByteStr] = None): Block = {
+  def appendKeyBlock(signer: SigningKey = defaultSigner, ref: Option[ByteStr] = None): Block = {
     val block = createBlock(
       ref = ref.orElse(Some(lastBlockId)),
       generator = signer,
-      version = Block.NgBlockVersion
+      version = Block.ProtoBlockVersion
     )
     appendBlock(block) match {
       case Applied(discardedDiffs = discardedSnapshots) =>
@@ -317,7 +309,7 @@ case class Domain(
 
   def createMicroBlockE(
       stateHash: Option[ByteStr] = None,
-      signer: Option[KeyPair] = None,
+      signer: Option[SigningKey] = None,
       ref: Option[ByteStr] = None,
       finalizationVoting: Option[FinalizationVoting] = None
   )(txs: Transaction*): Either[ValidationError, MicroBlock] = {
@@ -373,7 +365,7 @@ case class Domain(
 
   def createMicroBlock(
       stateHash: Option[ByteStr] = None,
-      signer: Option[KeyPair] = None,
+      signer: Option[SigningKey] = None,
       ref: Option[ByteStr] = None,
       finalizationVoting: Option[FinalizationVoting] = None
   )(txs: Transaction*): MicroBlock = createMicroBlockE(stateHash, signer, ref, finalizationVoting)(txs*).explicitGet()
@@ -402,7 +394,10 @@ case class Domain(
       txs: Seq[Transaction] = Nil,
       ref: Option[ByteStr] = blockchainUpdater.lastBlockId,
       strictTime: Boolean = false,
-      generator: KeyPair = defaultSigner,
+      generator: SigningKey = defaultSigner,
+      // Defaults to the key this generator committed - see TxHelpers.vrfKeyOf - because a block only verifies
+      // against the VRF key registered for its generator
+      vrfKey: Option[VrfKey] = None,
       stateHash: Option[Option[ByteStr]] = None,
       challengedHeader: Option[ChallengedHeader] = None,
       rewardVote: Long = -1L,
@@ -410,20 +405,23 @@ case class Domain(
       finalizationVoting: Option[FinalizationVoting] = None,
       version: Byte = Block.ProtoBlockVersion
   ): Block =
-    createBlockE(version, txs, ref, strictTime, generator, stateHash, challengedHeader, rewardVote, timestamp, finalizationVoting).explicitGet()
+    createBlockE(version, txs, ref, strictTime, generator, vrfKey, stateHash, challengedHeader, rewardVote, timestamp, finalizationVoting)
+      .explicitGet()
 
   def createBlockE(
       version: Byte,
       txs: Seq[Transaction],
       ref: Option[ByteStr] = blockchainUpdater.lastBlockId,
       strictTime: Boolean = false,
-      generator: KeyPair = defaultSigner,
+      generator: SigningKey = defaultSigner,
+      vrfKeyOpt: Option[VrfKey] = None,
       stateHash: Option[Option[ByteStr]] = None,
       challengedHeader: Option[ChallengedHeader] = None,
       rewardVote: Long = -1L,
       timestamp: Option[Long] = None,
       finalizationVoting: Option[FinalizationVoting] = None
   ): Either[ValidationError, Block] = {
+    val vrfKey    = vrfKeyOpt.getOrElse(TxHelpers.vrfKeyOf(generator))
     val reference = ref.getOrElse(randomSig)
 
     val parentHeight     = ref.flatMap(blockchain.heightOf).getOrElse(blockchain.height)
@@ -439,10 +437,9 @@ case class Domain(
               posSelector
                 .getValidBlockDelay(
                   blockchain.height,
-                  generator,
+                  vrfKey,
                   parent.baseTarget,
-                  // HACK: 1e11 some generators in tests have less than minimum
-                  blockchain.generatingBalance(generator.toAddress).max(1e11.toLong)
+                  blockchain.generatingBalance(generator.toAddress)
                 )
                 .map(_ + parent.timestamp)
             )
@@ -452,7 +449,7 @@ case class Domain(
         if (blockchain.height > 0)
           posSelector
             .consensusData(
-              generator,
+              vrfKey,
               parentHeight,
               settings.blockchainSettings.genesisSettings.averageBlockDelay,
               parent.baseTarget,
@@ -468,7 +465,7 @@ case class Domain(
         else consensus.baseTarget.max(PoSCalculator.MinBaseTarget)
       blockWithoutStateHash <- Block
         .buildAndSign(
-          if (consensus.generationSignature.size == 96) Block.ProtoBlockVersion else version,
+          if (consensus.generationSignature.size == Block.GenerationVRFSignatureLength) Block.ProtoBlockVersion else version,
           if (strictTime) resultTimestamp else testTime.getTimestamp(),
           reference,
           resultBt,
@@ -491,7 +488,7 @@ case class Domain(
           BlockDiffer
             .createInitialBlockSnapshot(blockchain, blockWithoutStateHash.header.reference, generator.toAddress)
             .flatMap { initSnapshot =>
-              val initStateHash = BlockDiffer.computeInitialStateHash(blockchainWithNewBlock, initSnapshot, prevStateHash)
+              val initStateHash = BlockDiffer.computeInitialStateHash(initSnapshot, prevStateHash)
 
               TxStateSnapshotHashBuilder
                 .computeStateHash(
@@ -511,7 +508,7 @@ case class Domain(
       }
       resultBlock <- Block
         .buildAndSign(
-          if (consensus.generationSignature.size == 96) Block.ProtoBlockVersion else version,
+          if (consensus.generationSignature.size == Block.GenerationVRFSignatureLength) Block.ProtoBlockVersion else version,
           if (strictTime) resultTimestamp else testTime.getTimestamp(),
           reference,
           resultBt,
@@ -528,7 +525,7 @@ case class Domain(
   }
 
   def createChallengingBlock(
-      challengingMiner: KeyPair,
+      challengingMiner: SigningKey,
       challengedBlock: Block,
       strictTime: Boolean = false,
       stateHash: Option[Option[ByteStr]] = None,
@@ -582,34 +579,15 @@ case class Domain(
 
   // noinspection ScalaStyle
   object helpers {
-    def creditWavesToDefaultSigner(amount: Long = 10_0000_0000): Unit = {
-      import com.wavesplatform.transaction.utils.EthConverters.*
-      appendBlock(TxHelpers.genesis(TxHelpers.defaultAddress, amount), TxHelpers.genesis(TxHelpers.defaultSigner.toEthWavesAddress, amount))
-    }
-
     def creditWavesFromDefaultSigner(to: Address, amount: Long = 1_0000_0000): Unit = {
       appendBlock(TxHelpers.transfer(to = to, amount = amount))
     }
 
-    def issueAsset(issuer: KeyPair = defaultSigner, script: Script = null, amount: Long = 1000): IssuedAsset = {
-      val transaction = TxHelpers.issue(issuer, script = Option(script), amount = amount)
-      appendBlock(transaction)
-      IssuedAsset(transaction.id())
-    }
-
-    def setScript(account: KeyPair, script: Script): Unit = {
-      appendBlock(TxHelpers.setScript(account, script))
-    }
-
-    def setData(account: KeyPair, entries: DataEntry[?]*): Unit = {
-      appendBlock(entries.map(TxHelpers.dataEntry(account, _))*)
-    }
-
-    def transfer(account: KeyPair, to: Address, amount: Long, asset: Asset): Unit = {
+    def transfer(account: SigningKey, to: Address, amount: Long, asset: Asset): Unit = {
       appendBlock(TxHelpers.transfer(account, to, amount, asset))
     }
 
-    def transferAll(account: KeyPair, to: Address, asset: Asset): Unit = {
+    def transferAll(account: SigningKey, to: Address, asset: Asset): Unit = {
       val balanceMinusFee = {
         val balance = blockchain.balance(account.toAddress, asset)
         if (asset == Waves) balance - TestValues.fee else balance
@@ -661,11 +639,15 @@ object Domain {
               bcu.hitSource(parentHeight - 100).get
             else bcu.hitSource(parentHeight).get
 
+          // A generator's VRF key is whatever it registered when committing, see Blockchain.vrfPublicKeyOf
+          def vrfKeyOf(generator: com.wavesplatform.account.PublicKey): Either[ValidationError, ByteStr] =
+            bcu.vrfPublicKeyOf(generator, Height(parentHeight)).left.map(TxValidationError.GenericError(_))
+
           for {
-            hs <- crypto
-              .verifyVRF(block.header.generationSignature, prevHs.arr, block.header.generator, bcu.isFeatureActivated(RideV6, parentHeight))
+            vrfPK <- vrfKeyOf(block.header.generator)
+            hs    <- crypto.verifyVRF(block.header.generationSignature, prevHs.arr, vrfPK)
             challengedHs <- block.header.challengedHeader.traverse(ch =>
-              crypto.verifyVRF(ch.generationSignature, prevHs.arr, ch.generator, bcu.isFeatureActivated(RideV6, parentHeight))
+              vrfKeyOf(ch.generator).flatMap(crypto.verifyVRF(ch.generationSignature, prevHs.arr, _))
             )
             data <- findBlockAndGetGenerators(bcu, block)
           } yield (hs, challengedHs, data.generatorSet)
@@ -696,7 +678,7 @@ class DefaultAppender(d: Domain)(implicit appenderScheduler: SchedulerService) {
   private val blockChallenger = new BlockChallengerImpl(
     d.blockchain,
     allChannelGroup,
-    d.wallet,
+    Seq.empty,
     d.settings,
     d.testTime,
     d.posSelector,
@@ -729,13 +711,13 @@ class DefaultAppender(d: Domain)(implicit appenderScheduler: SchedulerService) {
 
   def appendBlock(b: Block, requireAppended: Boolean = true, adjustTestTime: Boolean = true): Unit = {
     if (adjustTestTime) adjustTime(b)
-    appenderWithCatching(b).runSyncUnsafe()
+    appenderWithCatching(b).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
     if (requireAppended && d.lastBlockId != b.id()) fail(s"Can't apply block $b, see logs")
   }
 
   def appendBlockWithoutFallback(b: Block, adjustTestTime: Boolean = true): Either[ValidationError, BlockApplyResult] = {
     if (adjustTestTime) adjustTime(b)
-    appenderWithoutCatching(b).runSyncUnsafe()
+    appenderWithoutCatching(b).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
   }
 
   def adjustTime(b: Block): Unit = {

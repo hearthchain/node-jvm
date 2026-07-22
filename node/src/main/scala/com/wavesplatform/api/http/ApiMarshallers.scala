@@ -38,12 +38,12 @@ trait ApiMarshallers extends JsonFormats {
   implicit lazy val ValidationErrorMarshaller: ToResponseMarshaller[ValidationError] =
     ApiErrorMarshaller.compose(ve => ApiError.fromValidationError(ve))
 
-  def tracedResultMarshaller[A](includeTrace: Boolean)(implicit writes: OWrites[A]): ToResponseMarshaller[TracedResult[ApiError, A]] =
+  def tracedResultMarshaller[A](implicit writes: OWrites[A]): ToResponseMarshaller[TracedResult[ApiError, A]] =
     fromStatusCodeAndValue[StatusCode, JsValue]
       .compose(ae =>
         (
           ae.resultE.fold(_.code, _ => StatusCodes.OK),
-          ae.resultE.fold(_.json, writes.writes) ++ (if (includeTrace) Json.obj("trace" -> ae.trace.map(_.loggedJson)) else Json.obj())
+          ae.resultE.fold(_.json, writes.writes)
         )
       )
 

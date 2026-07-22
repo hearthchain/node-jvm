@@ -2,7 +2,6 @@ package com.wavesplatform.utx
 
 import cats.implicits.catsSyntaxSemigroup
 import com.typesafe.scalalogging.Logger
-import com.wavesplatform.ResponsivenessLogs
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.TransactionsOrdering
@@ -11,7 +10,6 @@ import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.metrics.*
 import com.wavesplatform.mining.MultiDimensionalMiningConstraint
 import com.wavesplatform.settings.UtxSettings
-import com.wavesplatform.state.InvokeScriptResult.ErrorMessage
 import com.wavesplatform.state.TxStateSnapshotHashBuilder.TxStatusInfo
 import com.wavesplatform.state.diffs.BlockDiffer.CurrentBlockFeePart
 import com.wavesplatform.state.diffs.TransactionDiffer.TransactionValidationError
@@ -19,9 +17,7 @@ import com.wavesplatform.state.diffs.{BlockDiffer, TransactionDiffer}
 import com.wavesplatform.state.SnapshotBlockchain
 import com.wavesplatform.state.{Blockchain, Portfolio, StateSnapshot, TxStateSnapshotHashBuilder}
 import com.wavesplatform.transaction.*
-import com.wavesplatform.transaction.TxValidationError.{AlreadyInTheState, GenericError, SenderIsBlacklisted, WithLog}
-import com.wavesplatform.transaction.assets.exchange.ExchangeTransaction
-import com.wavesplatform.transaction.smart.InvokeScriptTransaction
+import com.wavesplatform.transaction.TxValidationError.{AlreadyInTheState, GenericError, SenderIsBlacklisted}
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
 import com.wavesplatform.transaction.transfer.*
 import com.wavesplatform.utils.{Schedulers, ScorexLogging, Time}
@@ -159,8 +155,7 @@ case class UtxPoolImpl(
       case Left(err) =>
         log.debug(s"putIfNew(${tx.id()}) failed with ${extractErrorMessage(err)}")
         traceLogger.trace(err match {
-          case w: WithLog => w.toStringWithLog(maxTxErrorLogSize)
-          case err        => err.toString
+          case err => err.toString
         })
     }
     tracedIsNew
@@ -196,7 +191,7 @@ case class UtxPoolImpl(
     val diffEi = {
       def calculateSnapshot(): TracedResult[ValidationError, StateSnapshot] = {
         if (forceValidate)
-          TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime(), enableExecutionLog = true)(
+          TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime())(
             blockchain,
             tx
           )
@@ -204,9 +199,7 @@ case class UtxPoolImpl(
           TransactionDiffer.limitedExecution(
             blockchain.lastBlockTimestamp,
             time.correctedTime(),
-            utxSettings.alwaysUnlimitedExecution,
-            verify,
-            enableExecutionLog = true
+            verify
           )(
             blockchain,
             tx
@@ -238,12 +231,7 @@ case class UtxPoolImpl(
 
   private def scriptedAddresses(tx: Transaction): Set[Address] = tx match {
     case t if inUTXPoolOrdering.isWhitelisted(t) => Set.empty
-    case i: InvokeScriptTransaction =>
-      Set(i.senderAddress).filter(blockchain.hasAccountScript) ++ blockchain.resolveAlias(i.dApp).toOption
-    case e: ExchangeTransaction =>
-      Set(e.sender.toAddress, e.buyOrder.sender.toAddress, e.sellOrder.sender.toAddress).filter(blockchain.hasAccountScript)
-    case a: Authorized if blockchain.hasAccountScript(a.sender.toAddress) => Set(a.sender.toAddress)
-    case _                                                                => Set.empty
+    case _                                       => Set.empty
   }
 
   private case class TxEntry(tx: Transaction, priority: Boolean)
@@ -258,7 +246,7 @@ case class UtxPoolImpl(
       strategy: PackStrategy,
       cancelled: () => Boolean
   ): (Option[Seq[Transaction]], MultiDimensionalMiningConstraint, Option[ByteStr]) =
-    pack(TransactionDiffer(blockchain.lastBlockTimestamp, time.correctedTime(), enableExecutionLog = true))(
+    pack(TransactionDiffer(blockchain.lastBlockTimestamp, time.correctedTime()))(
       initialConstraint,
       strategy,
       prevStateHash,
@@ -276,16 +264,14 @@ case class UtxPoolImpl(
           TxStateActions.removeExpired(tx)
         } else {
           val differ = if (!isMiningEnabled && utxSettings.forceValidateInCleanup) {
-            TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime(), enableExecutionLog = true)(
+            TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime())(
               blockchain,
               _
             )
           } else {
             TransactionDiffer.limitedExecution(
               blockchain.lastBlockTimestamp,
-              time.correctedTime(),
-              utxSettings.alwaysUnlimitedExecution,
-              enableExecutionLog = true
+              time.correctedTime()
             )(
               blockchain,
               _
@@ -338,7 +324,7 @@ case class UtxPoolImpl(
 
       def minerFeePortfolio(currBlockchain: Blockchain, tx: Transaction): Map[Address, Portfolio] = {
         val (feeAsset, feeAmount) = BlockDiffer.maybeApplySponsorship(currBlockchain, blockchain.isSponsorshipActive, tx.assetFee)
-        val minerPortfolio = if (!blockchain.isNGActive) Portfolio.empty else Portfolio.build(feeAsset, feeAmount).multiply(CurrentBlockFeePart)
+        val minerPortfolio        = Portfolio.build(feeAsset, feeAmount).multiply(CurrentBlockFeePart) // NG is active
 
         Map(currBlockchain.lastBlockHeader.get.header.generator.toAddress -> minerPortfolio)
       }
@@ -377,13 +363,7 @@ case class UtxPoolImpl(
                         validatedTransactions = r.validatedTransactions + tx.id()
                       )
                     } else {
-                      newSnapshot.errorMessage(tx.id()) match {
-                        case Some(ErrorMessage(code, text)) =>
-                          log.trace(s"Packing transaction ${tx.id()} as failed due to $code: $text")
-
-                        case None =>
-                          log.trace(s"Packing transaction ${tx.id()}")
-                      }
+                      log.trace(s"Packing transaction ${tx.id()}")
 
                       (for {
                         resultSnapshot <- (r.totalSnapshot |+| newSnapshot)
@@ -482,17 +462,9 @@ case class UtxPoolImpl(
   traceLogger.trace("Validation trace reporting is enabled")
 
   @scala.annotation.tailrec
-  private def extractErrorClass(error: ValidationError): ValidationError = error match {
-    case TransactionValidationError(cause, _) => extractErrorClass(cause)
-    case other                                => other
-  }
-
-  @scala.annotation.tailrec
   private def extractErrorMessage(error: ValidationError): String = error match {
-    case see: TxValidationError.ScriptExecutionError        => s"ScriptExecutionError(${see.message})"
-    case _: TxValidationError.TransactionNotAllowedByScript => "TransactionNotAllowedByScript"
-    case TransactionValidationError(cause, _)               => extractErrorMessage(cause)
-    case other                                              => other.toString
+    case TransactionValidationError(cause, _) => extractErrorMessage(cause)
+    case other                                => other.toString
   }
 
   private object TxStateActions {
@@ -500,11 +472,9 @@ case class UtxPoolImpl(
       if (transactions.putIfAbsent(tx.id(), tx) == null) {
         snapshot.foreach(s => onEvent(UtxEvent.TxAdded(tx, s)))
         PoolMetrics.addTransaction(tx)
-        ResponsivenessLogs.writeEvent(blockchain.height, tx, ResponsivenessLogs.TxEvent.Received)
       }
 
     def removeMined(tx: Transaction): Unit = {
-      ResponsivenessLogs.writeEvent(blockchain.height, tx, ResponsivenessLogs.TxEvent.Mined)
       onEvent(UtxEvent.TxRemoved(tx, None))
     }
 
@@ -513,14 +483,12 @@ case class UtxPoolImpl(
         log.debug(s"$cause: Transaction ${tx.id()} removed due to ${extractErrorMessage(error)}")
         traceLogger.trace(error.toString)
 
-        ResponsivenessLogs.writeEvent(blockchain.height, tx, ResponsivenessLogs.TxEvent.Invalidated, Some(extractErrorClass(error)))
         onEvent(UtxEvent.TxRemoved(tx, Some(error)))
       }
 
     def removeExpired(tx: Transaction): Unit = {
       log.debug(s"Transaction ${tx.id()} expired")
 
-      ResponsivenessLogs.writeEvent(blockchain.height, tx, ResponsivenessLogs.TxEvent.Expired)
       onEvent(UtxEvent.TxRemoved(tx, Some(GenericError("Expired"))))
 
       UtxPoolImpl.this.removeFromOrdPool(tx.id())
@@ -534,13 +502,7 @@ case class UtxPoolImpl(
     def isExpired(transaction: Transaction): Boolean =
       (time.correctedTime() - transaction.timestamp) > ExpirationTime
 
-    def isScripted(transaction: Transaction): Boolean =
-      transaction match {
-        case _: InvokeScriptTransaction => true
-        case _: ExchangeTransaction     => false
-        case a: AuthorizedTransaction   => blockchain.hasAccountScript(a.sender.toAddress)
-        case _                          => false
-      }
+    def isScripted(transaction: Transaction): Boolean = false
   }
 
   // noinspection NameBooleanParameters
@@ -580,9 +542,8 @@ case class UtxPoolImpl(
   private object PoolMetrics {
     private val SampleInterval: Duration = Duration.of(500, ChronoUnit.MILLIS)
 
-    private val sizeStats         = Kamon.rangeSampler("utx.pool-size", MeasurementUnit.none, SampleInterval).withoutTags()
-    private val neutrinoSizeStats = Kamon.rangeSampler("neutrino.utx-pool-size", MeasurementUnit.none, SampleInterval).withoutTags()
-    private val bytesStats        = Kamon.rangeSampler("utx.pool-bytes", MeasurementUnit.information.bytes, SampleInterval).withoutTags()
+    private val sizeStats  = Kamon.rangeSampler("utx.pool-size", MeasurementUnit.none, SampleInterval).withoutTags()
+    private val bytesStats = Kamon.rangeSampler("utx.pool-bytes", MeasurementUnit.information.bytes, SampleInterval).withoutTags()
 
     val putTimeStats    = Kamon.timer("utx.put-if-new").withoutTags()
     val putRequestStats = Kamon.counter("utx.put-if-new.requests").withoutTags()
@@ -596,13 +557,11 @@ case class UtxPoolImpl(
     def addTransaction(tx: Transaction): Unit = {
       sizeStats.increment()
       bytesStats.increment(tx.bytesSize)
-      if (ResponsivenessLogs.isNeutrino(tx)) neutrinoSizeStats.increment()
     }
 
     def removeTransaction(tx: Transaction): Unit = {
       sizeStats.decrement()
       bytesStats.decrement(tx.bytesSize)
-      if (ResponsivenessLogs.isNeutrino(tx)) neutrinoSizeStats.decrement()
     }
   }
 }

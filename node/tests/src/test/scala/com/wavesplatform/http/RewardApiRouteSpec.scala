@@ -16,28 +16,14 @@ import play.api.libs.json.{JsObject, JsValue}
 
 class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
 
-  val daoAddress: Address        = TxHelpers.address(100)
-  val xtnBuybackAddress: Address = TxHelpers.address(101)
+  val daoAddress: Address = TxHelpers.address(100)
 
   val settingsWithoutAddresses: WavesSettings = RideV6.copy(blockchainSettings =
-    RideV6.blockchainSettings.copy(functionalitySettings =
-      RideV6.blockchainSettings.functionalitySettings.copy(daoAddress = None, xtnBuybackAddress = None)
-    )
+    RideV6.blockchainSettings.copy(functionalitySettings = RideV6.blockchainSettings.functionalitySettings.copy(daoAddress = None))
   )
-  val settingsWithOnlyDaoAddress: WavesSettings = RideV6.copy(blockchainSettings =
+  val settingsWithDaoAddress: WavesSettings = RideV6.copy(blockchainSettings =
     RideV6.blockchainSettings.copy(functionalitySettings =
-      RideV6.blockchainSettings.functionalitySettings.copy(daoAddress = Some(daoAddress.toString), xtnBuybackAddress = None)
-    )
-  )
-  val settingsWithOnlyXtnBuybackAddress: WavesSettings = RideV6.copy(blockchainSettings =
-    RideV6.blockchainSettings.copy(functionalitySettings =
-      RideV6.blockchainSettings.functionalitySettings.copy(xtnBuybackAddress = Some(xtnBuybackAddress.toString), daoAddress = None)
-    )
-  )
-  val settingsWithBothAddresses: WavesSettings = RideV6.copy(blockchainSettings =
-    RideV6.blockchainSettings.copy(functionalitySettings =
-      RideV6.blockchainSettings.functionalitySettings
-        .copy(daoAddress = Some(daoAddress.toString), xtnBuybackAddress = Some(xtnBuybackAddress.toString))
+      RideV6.blockchainSettings.functionalitySettings.copy(daoAddress = Some(daoAddress.toString))
     )
   )
 
@@ -53,9 +39,7 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
 
   routePath("/rewards (NODE-855)") in {
     checkWithSettings(settingsWithoutAddresses)
-    checkWithSettings(settingsWithOnlyDaoAddress)
-    checkWithSettings(settingsWithOnlyXtnBuybackAddress)
-    checkWithSettings(settingsWithBothAddresses)
+    checkWithSettings(settingsWithDaoAddress)
 
     withDomain(settingsWithVoteParams) { d =>
       d.appendBlock()
@@ -88,9 +72,7 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
 
   routePath("/rewards/{height} (NODE-856)") in {
     checkWithSettings(settingsWithoutAddresses, Some(1))
-    checkWithSettings(settingsWithOnlyDaoAddress, Some(1))
-    checkWithSettings(settingsWithOnlyXtnBuybackAddress, Some(1))
-    checkWithSettings(settingsWithBothAddresses, Some(1))
+    checkWithSettings(settingsWithDaoAddress, Some(1))
 
     withDomain(settingsWithVoteParams) { d =>
       d.appendBlock()
@@ -154,8 +136,7 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
        |    "increase" : 0,
        |    "decrease" : 0
        |  },
-       |  "daoAddress" : ${d.blockchain.settings.functionalitySettings.daoAddress.fold("null")(addr => s"\"$addr\"")},
-       |  "xtnBuybackAddress" : ${d.blockchain.settings.functionalitySettings.xtnBuybackAddress.fold("null")(addr => s"\"$addr\"")}
+       |  "daoAddress" : ${d.blockchain.settings.functionalitySettings.daoAddress.fold("null")(addr => s"\"$addr\"")}
        |}
        |""".stripMargin
 
@@ -171,26 +152,17 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
     }
   }
 
-  "Boost block reward feature changes API response" in {
+  "block reward is never boosted" in {
     val miner      = TxHelpers.signer(3001)
     val daoAddress = TxHelpers.address(3002)
-    val xtnAddress = TxHelpers.address(3003)
 
     val settings = DomainPresets.ConsensusImprovements
       .setFeaturesHeight(
         BlockchainFeatures.BlockRewardDistribution -> 0,
         BlockchainFeatures.CappedReward            -> 0,
-        BlockchainFeatures.BoostBlockReward        -> 5,
-        BlockchainFeatures.CeaseXtnBuyback         -> 0
+        BlockchainFeatures.BoostBlockReward        -> 5
       )
-      .configure(fs =>
-        fs.copy(
-          xtnBuybackRewardPeriod = 10,
-          blockRewardBoostPeriod = 10,
-          xtnBuybackAddress = Some(xtnAddress.toString),
-          daoAddress = Some(daoAddress.toString)
-        )
-      )
+      .configure(fs => fs.copy(blockRewardBoostPeriod = 10, daoAddress = Some(daoAddress.toString)))
 
     withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves))) { d =>
       val route = new RewardApiRoute(d.blockchain).route
@@ -210,27 +182,10 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
         }
       }
 
-      (1 to 3).foreach(_ => d.appendKeyBlock(miner))
-      d.blockchain.height shouldBe 4
-      (1 to 3).foreach { h =>
-        checkRewardAndShares(h + 1, 6.waves)
-      }
-
-      // reward boost activation
-      (1 to 5).foreach(_ => d.appendKeyBlock(miner))
-      (1 to 5).foreach { h =>
-        checkRewardAndShares(h + 4, 60.waves)
-      }
-
-      // cease XTN buyback
-      (1 to 5).foreach(_ => d.appendKeyBlock(miner))
-      (1 to 5).foreach { h =>
-        checkRewardAndShares(h + 9, 60.waves)
-      }
-
-      d.appendKeyBlock(miner)
+      // The reward stays flat across the BoostBlockReward activation height: boosting was dropped
+      (1 to 14).foreach(_ => d.appendKeyBlock(miner))
       d.blockchain.height shouldBe 15
-      checkRewardAndShares(15, 6.waves)
+      (2 to 15).foreach(h => checkRewardAndShares(h, 6.waves))
     }
   }
 }

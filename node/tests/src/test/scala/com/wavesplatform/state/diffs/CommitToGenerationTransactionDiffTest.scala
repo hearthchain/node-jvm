@@ -1,6 +1,6 @@
 package com.wavesplatform.state.diffs
 
-import com.wavesplatform.account.KeyPair
+import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.GeneratingBalanceProvider
 import com.wavesplatform.crypto
 import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsPublicKey}
@@ -9,8 +9,10 @@ import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.{DeterministicFinality, WavesSettingsOps}
+import com.wavesplatform.test.DomainPresets.*
+import com.wavesplatform.test.DomainPresets.{DeterministicFinality}
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, Proofs, TxHelpers}
+import tech.hearth.crypto.SigningKey
 
 class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
   private val sender                 = TxHelpers.defaultSigner
@@ -72,14 +74,14 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
       val unsignedTx = TxHelpers
         .commitToGeneration(Height(3001), sender)
         .copy(endorserPublicKey = BlsPublicKey(Array.fill[Byte](BlsPublicKey.SizeInBytes)(0)).value)
-      val signedTx = unsignedTx.copy(proofs = Proofs(crypto.sign(sender.privateKey, unsignedTx.bodyBytes())))
+      val signedTx = unsignedTx.copy(proofs = Proofs(ByteStr(sender.sign(unsignedTx.bodyBytes()))))
 
       d.appendBlockE(signedTx) should produce("Invalid endorser public key")
     }
 
     "with invalid commitment signature" in {
       val newGenerator     = TxHelpers.signer(1006)
-      val otherGeneratorKp = BlsKeyPair(TxHelpers.signer(1007).privateKey)
+      val otherGeneratorKp = TxHelpers.defaultBlsKey
       withDomain(
         DeterministicFinality,
         Seq(
@@ -91,7 +93,7 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
         val unsignedTx = TxHelpers
           .commitToGeneration(periodStart, newGenerator)
           .copy(commitmentSignature = CommitToGenerationTransaction.mkPopSignature(otherGeneratorKp, periodStart))
-        val signedTx = unsignedTx.copy(proofs = Proofs(crypto.sign(newGenerator.privateKey, unsignedTx.bodyBytes())))
+        val signedTx = unsignedTx.copy(proofs = Proofs(ByteStr(newGenerator.sign(unsignedTx.bodyBytes()))))
 
         d.appendBlockE(unsignedTx) should produce("Proof doesn't validate as signature")
         d.appendBlockE(signedTx) should produce("Invalid commitment signature")
@@ -107,18 +109,18 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
     }
 
     "public BLS key twice" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender, TxHelpers.secondSigner)) { d =>
-      def mkTx(sender: KeyPair, blsKp: BlsKeyPair): CommitToGenerationTransaction = {
+      def mkTx(sender: SigningKey, blsKp: BlsKeyPair): CommitToGenerationTransaction = {
         val baseTx = TxHelpers.commitToGeneration(Height(3001), sender)
         val withPop = baseTx.copy(
           endorserPublicKey = blsKp.publicKey,
           commitmentSignature = CommitToGenerationTransaction.mkPopSignature(blsKp, baseTx.generationPeriodStart)
         )
 
-        withPop.copy(proofs = Proofs(crypto.sign(sender.privateKey, withPop.bodyBytes())))
+        withPop.copy(proofs = Proofs(ByteStr(sender.sign(withPop.bodyBytes()))))
       }
 
       log.debug("First")
-      val blsKP = BlsKeyPair(sender.privateKey)
+      val blsKP = TxHelpers.defaultBlsKey
       d.appendBlock(mkTx(sender, blsKP))
 
       log.debug("Second")

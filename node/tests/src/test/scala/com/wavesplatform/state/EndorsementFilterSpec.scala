@@ -90,6 +90,7 @@ class EndorsementFilterSpec extends FreeSpec {
 
   private def mkItem(i: Int, balance: Long): (Address, BlsPublicKey, Long) = {
     val kp = TxHelpers.signer(i)
-    (kp.toAddress, BlsKeyPair(kp.privateKey).publicKey, balance)
+
+    (kp.toAddress, BlsKeyPair.fromSeed(kp.publicKey()).publicKey, balance)
   }
 }

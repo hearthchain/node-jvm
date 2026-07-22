@@ -1,6 +1,5 @@
 package com.wavesplatform.mining.microblocks
 
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block
 import com.wavesplatform.mining.{MinerDebugInfo, MiningConstraint}
 import com.wavesplatform.settings.MinerSettings
@@ -11,10 +10,11 @@ import io.netty.channel.group.ChannelGroup
 import monix.eval.Task
 import monix.execution.Scheduler
 import monix.reactive.Observable
+import tech.hearth.crypto.SigningKey
 
 trait MicroBlockMiner {
   def generateMicroBlockSequence(
-      account: KeyPair,
+      signingKey: SigningKey,
       accumulatedBlock: Block,
       restTotalConstraint: MiningConstraint,
       lastMicroBlock: Long

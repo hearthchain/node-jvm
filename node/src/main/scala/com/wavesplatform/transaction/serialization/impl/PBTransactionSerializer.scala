@@ -1,6 +1,7 @@
 package com.wavesplatform.transaction.serialization.impl
 
 import cats.syntax.applicativeError.*
+import com.wavesplatform.common.utils.EitherExt2.explicitGet
 import com.wavesplatform.protobuf.transaction.{PBTransactions, SignedTransaction as PBSignedTransaction}
 import com.wavesplatform.protobuf.utils.PBUtils
 import com.wavesplatform.transaction.{PBParsingError, Transaction}
@@ -18,5 +19,5 @@ object PBTransactionSerializer {
     PBSignedTransaction
       .validate(bytes)
       .adaptErr { case err => PBParsingError(err) }
-      .flatMap(PBTransactions.tryToVanilla)
+      .flatMap(x => Try(PBTransactions.vanilla(x).explicitGet()))
 }

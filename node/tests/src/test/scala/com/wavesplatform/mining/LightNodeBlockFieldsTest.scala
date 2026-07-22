@@ -1,6 +1,5 @@
 package com.wavesplatform.mining
 
-import com.wavesplatform.account.SeedKeyPair
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.DigestLength
@@ -19,6 +18,7 @@ import io.netty.util.concurrent.GlobalEventExecutor
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
 import monix.reactive.Observable
+import tech.hearth.crypto.{SigningKey, VrfKey}
 
 import scala.concurrent.duration.DurationInt
 
@@ -51,24 +51,25 @@ class LightNodeBlockFieldsTest extends PropSpec with WithMiner {
       val challenger = new BlockChallengerImpl(
         d.blockchain,
         new DefaultChannelGroup(GlobalEventExecutor.INSTANCE),
-        d.wallet,
+        Seq.empty,
         d.settings,
         d.testTime,
         d.posSelector,
         b => Task.now(append(b)),
         timeDrift = Int.MaxValue
       ) {
-        override def pickBestAccount(accounts: Seq[(SeedKeyPair, Long)]): Either[GenericError, (SeedKeyPair, Long)] = Right((defaultSigner, 0))
+        override def pickBestAccount(accounts: Seq[((SigningKey, VrfKey), Long)]): Either[GenericError, ((SigningKey, VrfKey), Long)] =
+          Right(((defaultSigner, ???), 0))
       }
       def block(height: Int) = d.blocksApi.blockAtHeight(Height(height)).get._1.header
-      def appendBlock()      = append(miner.forgeBlock(defaultSigner).toEither.explicitGet().newBlock).explicitGet()
+      def appendBlock()      = append(miner.forgeBlock(defaultSigner, TxHelpers.vrfKeyOf(defaultSigner)).toEither.explicitGet().newBlock).explicitGet()
       def appendMicro() = {
         d.utxPool.putIfNew(transfer()).resultE.explicitGet()
-        microBlockMiner.generateOneMicroBlockTask(defaultSigner, d.lastBlock, Unlimited, 0).runSyncUnsafe()
+        microBlockMiner.generateOneMicroBlockTask(defaultSigner, d.lastBlock, Unlimited, 0).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
       }
       def challengeBlock() = {
         val invalidBlock = d.createBlock(strictTime = true, stateHash = invalidStateHash)
-        challenger.challengeBlock(invalidBlock, null).runSyncUnsafe()
+        challenger.challengeBlock(invalidBlock, null).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
       }
 
       log.debug("LightNode activation")
@@ -139,10 +140,10 @@ class LightNodeBlockFieldsTest extends PropSpec with WithMiner {
         miner.appenderScheduler,
         Observable.empty
       )
-      def appendBlock(ref: Option[ByteStr]) = append(miner.forgeBlock(signer, ref).toEither.explicitGet().newBlock).explicitGet()
+      def appendBlock(ref: Option[ByteStr]) = append(miner.forgeBlock(signer, ???, ref).toEither.explicitGet().newBlock).explicitGet()
       def appendMicro() = {
         d.utxPool.putIfNew(transfer(from = signer)).resultE.explicitGet()
-        microBlockMiner.generateOneMicroBlockTask(signer, d.lastBlock, Unlimited, 0).runSyncUnsafe()
+        microBlockMiner.generateOneMicroBlockTask(signer, d.lastBlock, Unlimited, 0).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
       }
 
       withClue("Discard the latest micro block and referencing to a key block: ") {

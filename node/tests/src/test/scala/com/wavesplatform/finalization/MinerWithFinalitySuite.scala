@@ -6,11 +6,11 @@ import com.wavesplatform.consensus.GeneratingBalanceProvider.MinimalEffectiveBal
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.history.Domain
+import com.wavesplatform.history.{Domain, defaultVrfKey}
 import com.wavesplatform.mining.{Miner, MinerImpl}
 import com.wavesplatform.network.EndorseBlock
 import com.wavesplatform.state.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{CatchLogs, NumericExt, TestSchedulerOps, TestTime}
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import com.wavesplatform.wallet.Wallet
@@ -59,7 +59,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           d.utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          d.wallet,
+          Seq.empty,
           d.posSelector,
           minerScheduler,
           appenderScheduler,
@@ -74,7 +74,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         d.utxPool.cleanUnconfirmed()
 
         log.debug("Trigger thisNode forging")
-        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc))
+        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc, defaultVrfKey))
         appenderScheduler.tickNext("appender-1")
         minerScheduler.tickNext("miner-1")
         appenderScheduler.tickNext("appender-2")
@@ -110,7 +110,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           d.utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          d.wallet,
+          Seq.empty,
           d.posSelector,
           minerScheduler,
           appenderScheduler,
@@ -136,7 +136,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         val block5Id = d.lastBlockId
 
         log.debug("Trigger thisNode forging")
-        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc))
+        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc, defaultVrfKey))
         appenderScheduler.tickNext("appender-1")
         minerScheduler.tickNext("miner-1")
         appenderScheduler.tickNext("appender-2")
@@ -168,7 +168,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           d.utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          d.wallet,
+          Seq.empty,
           d.posSelector,
           minerScheduler,
           appenderScheduler,
@@ -188,7 +188,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         makeGeneratorSetEmptyF(d)
 
         log.debug("Trigger thisNode forging")
-        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc))
+        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc, defaultVrfKey))
         appenderScheduler.tickNext("appender-1")
         minerScheduler.tickNext("miner-1")
         appenderScheduler.tickNext("appender-2")
@@ -261,7 +261,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           d.utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          d.wallet,
+          Seq.empty,
           d.posSelector,
           minerScheduler,
           appenderScheduler,
@@ -283,7 +283,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         d.appender.appendBlock(block3WithVotes)
 
         log.debug("Trigger thisNode forging")
-        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc))
+        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc, ???))
         appenderScheduler.tickNext("appender-1")
         minerScheduler.tickNext("miner-1")
         appenderScheduler.tickNext("appender-2")
@@ -319,7 +319,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           d.utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          d.wallet,
+          Seq.empty,
           d.posSelector,
           minerScheduler,
           appenderScheduler,
@@ -333,7 +333,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         val lastBlockId = d.appendMicroBlock(TxHelpers.commitToGeneration(Height(3), sender = otherNodeAcc))
 
         log.debug("Trigger thisNode forging")
-        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc))
+        d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc, ???))
         appenderScheduler.tickNext("appender-1")
         minerScheduler.tickNext("miner-1")
         appenderScheduler.tickNext("appender-2")
@@ -380,7 +380,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         d.utxPool,
         blockEndorser,
         endorsementStorage,
-        d.wallet,
+        Seq.empty,
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -396,7 +396,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
       d.appender.appendBlock(block2WithCommitments)
 
       log.debug(s"Trigger forging block 3")
-      time.setTimeIfGreater(d.nextBlockTime(generator1))
+      time.setTimeIfGreater(d.nextBlockTime(generator1, ???))
       appenderScheduler.tickNext("appender-1")
       minerScheduler.tickNext("miner-1")
       appenderScheduler.tickNext("appender-2")
@@ -408,7 +408,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           finalizedId = genesisBlockId,
           finalizedHeight = GenesisBlockHeight,
           endorsedId = block2WithCommitments.id(),
-          signature = BlockEndorsement.sign(BlsKeyPair(generator3.privateKey), genesisBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
+          signature = BlockEndorsement.sign(BlsKeyPair(???), genesisBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
         )
       ) should beRight
 
@@ -462,7 +462,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         d.utxPool,
         blockEndorser,
         endorsementStorage,
-        d.wallet,
+        Seq.empty,
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -478,7 +478,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
       d.appender.appendBlock(block2WithCommitments)
 
       log.debug(s"Trigger forging block 3")
-      time.setTimeIfGreater(d.nextBlockTime(thisNodeAcc))
+      time.setTimeIfGreater(d.nextBlockTime(thisNodeAcc, ???))
       appenderScheduler.tickNext("appender-1")
       minerScheduler.tickNext("miner-1")
       appenderScheduler.tickNext("appender-2")
@@ -490,7 +490,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           finalizedId = genesisBlockId,
           finalizedHeight = GenesisBlockHeight,
           endorsedId = block2WithCommitments.id(),
-          signature = BlockEndorsement.sign(BlsKeyPair(generator1.privateKey), genesisBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
+          signature = BlockEndorsement.sign(BlsKeyPair(???), genesisBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
         )
       ) should beRight
       d.utxPool.putIfNew(TxHelpers.transfer(generator1, generator2Addr))
@@ -508,7 +508,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           finalizedHeight = GenesisBlockHeight,
           endorsedId = block2WithCommitments.id(),
           signature =
-            BlockEndorsement.sign(BlsKeyPair(generator1.privateKey), otherFinalizedBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
+            BlockEndorsement.sign(BlsKeyPair(???), otherFinalizedBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
         )
       ) should beRight
       d.utxPool.putIfNew(TxHelpers.transfer(generator1, generator2Addr))
@@ -525,7 +525,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           finalizedId = genesisBlockId,
           finalizedHeight = GenesisBlockHeight,
           endorsedId = block2WithCommitments.id(),
-          signature = BlockEndorsement.sign(BlsKeyPair(generator3.privateKey), genesisBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
+          signature = BlockEndorsement.sign(BlsKeyPair(???), genesisBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
         )
       ) should beRight
       d.utxPool.putIfNew(TxHelpers.transfer(generator1, generator2Addr))

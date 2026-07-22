@@ -7,7 +7,7 @@ import com.wavesplatform.finalization.BaseFinalizationSpec
 import com.wavesplatform.history.Domain
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.state.{BalanceSnapshot, GeneratorIndex, Height, Portfolio}
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.NumericExt
 import com.wavesplatform.transaction.CommitToGenerationTransaction.DepositInWavelets
 import com.wavesplatform.transaction.TxHelpers

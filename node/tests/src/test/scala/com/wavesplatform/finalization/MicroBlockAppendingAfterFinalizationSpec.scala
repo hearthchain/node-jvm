@@ -3,7 +3,7 @@ package com.wavesplatform.finalization
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.state.{GeneratorIndex, GenesisBlockHeight, Height}
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{NumericExt, produce}
 import com.wavesplatform.transaction.TxHelpers
 

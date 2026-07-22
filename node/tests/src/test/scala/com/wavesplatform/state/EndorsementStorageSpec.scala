@@ -1,6 +1,7 @@
 package com.wavesplatform.state
 
 import cats.syntax.traverse.*
+import com.google.common.primitives.Ints
 import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.BlockEndorsement
@@ -11,13 +12,16 @@ import com.wavesplatform.test.{FreeSpec, NumericExt, produce}
 import com.wavesplatform.transaction.TxHelpers
 import org.scalactic.source.Position
 import org.scalatest.EitherValues
+import tech.hearth.crypto.Crypto
 
 class EndorsementStorageSpec extends FreeSpec with EitherValues {
   private type TestGenerator = (addr: Address, blsKp: BlsKeyPair, balance: Long)
+  
+  private def mkBlsKeyPairFromSignerId(index: Int) = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(index)))
 
-  private val committedGenerator = BlsKeyPair(TxHelpers.signer(0).privateKey) // GeneratorIndex(0)
+  private val committedGenerator = mkBlsKeyPairFromSignerId(0) // GeneratorIndex(0)
 
-  private val activeGenerator      = BlsKeyPair(TxHelpers.signer(1).privateKey)
+  private val activeGenerator      = mkBlsKeyPairFromSignerId(1)
   private val activeGeneratorIndex = GeneratorIndex(1)
 
   private val expectedFinalizedHeight = Height(5)
@@ -30,7 +34,7 @@ class EndorsementStorageSpec extends FreeSpec with EitherValues {
 
   private def mkGenerator(i: Int, initBalance: Long): TestGenerator = {
     val wavesKp = TxHelpers.signer(i)
-    val blsKp   = BlsKeyPair(wavesKp.privateKey)
+    val blsKp   = mkBlsKeyPairFromSignerId(i)
     (wavesKp.toAddress, blsKp, initBalance)
   }
 

@@ -13,17 +13,14 @@ import scala.concurrent.Future
 trait BroadcastRoute { apiRoute: ApiRoute =>
   def transactionPublisher: TransactionPublisher
 
-  private def broadcastTransaction(tx: Transaction, includeTrace: Boolean): Future[ToResponseMarshallable] = {
+  private def broadcastTransaction(tx: Transaction): Future[ToResponseMarshallable] = {
     import scala.concurrent.ExecutionContext.Implicits.global
-    implicit val trw: ToResponseMarshaller[TracedResult[ApiError, Transaction]] = tracedResultMarshaller(includeTrace)
+    implicit val trw: ToResponseMarshaller[TracedResult[ApiError, Transaction]] = tracedResultMarshaller
     transactionPublisher.validateAndBroadcast(tx, None).map(_.leftMap(ApiError.fromValidationError).map(_ => tx))
   }
 
   private def extractTraceParameter(tx: Transaction): Directive1[ToResponseMarshallable] =
-    parameter("trace".as[Boolean].?(false))
-      .flatMap { includeTrace =>
-        provide(broadcastTransaction(tx, includeTrace))
-      }
+    provide(broadcastTransaction(tx))
 
   def broadcast[A: Reads](f: A => Either[ValidationError, Transaction]): Route = {
     val directive = jsonPostD[A].flatMap { a =>

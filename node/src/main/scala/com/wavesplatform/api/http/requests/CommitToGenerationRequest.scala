@@ -17,10 +17,12 @@ case class CommitToGenerationRequest(
     version: Option[TxVersion] = None,
     senderPublicKey: String,
     endorserPublicKey: ByteStr,
+    vrfPublicKey: ByteStr,
     generationPeriodStart: Height,
     timestamp: Option[Long] = None,
     fee: Option[Long] = None,
     commitmentSignature: ByteStr,
+    vrfCommitmentSignature: ByteStr,
     chainId: Byte = AddressScheme.current.chainId,
     proofs: Proofs = Proofs.empty
 ) extends TxBroadcastRequest[CommitToGenerationTransaction] {
@@ -33,10 +35,12 @@ case class CommitToGenerationRequest(
         version.getOrElse(1.toByte),
         senderPk,
         blsPk,
+        vrfPublicKey,
         generationPeriodStart,
         timestamp.getOrElse(defaultTimestamp),
         fee.getOrElse(FeeConstants(TransactionType.CommitToGeneration) * FeeUnit),
         blsSignature,
+        vrfCommitmentSignature,
         proofs,
         chainId
       )

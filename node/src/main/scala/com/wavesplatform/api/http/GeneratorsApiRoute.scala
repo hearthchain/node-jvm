@@ -36,8 +36,9 @@ object GeneratorsApiRoute {
   def mkGeneratorEntryJson(x: CommonGeneratorsApi.GeneratorEntry, formatNumbersAsStrings: Boolean): JsObject = {
     val builder = Json.newBuilder
     builder ++= Seq(
-      "address"       -> x.address.toString,
-      "transactionId" -> x.commitTxnId.toString
+      "address" -> x.address.toBech32,
+      // null for a generator committed by the genesis snapshot, which has no commitment transaction
+      "transactionId" -> x.commitTxnId.map(_.toString)
     )
 
     x.balance.foreach { b =>

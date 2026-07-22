@@ -4,9 +4,8 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.CommonAssetsApi.AssetInfo
 import com.wavesplatform.crypto
 import com.wavesplatform.database.{AddressId, KeyTag}
-import com.wavesplatform.state.{AssetDescription, Blockchain, StateSnapshot, TxMeta}
+import com.wavesplatform.state.{AssetDescription, Blockchain, StateSnapshot}
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.assets.IssueTransaction
 import monix.reactive.Observable
 import org.rocksdb.RocksDB
 
@@ -23,7 +22,7 @@ trait CommonAssetsApi {
 }
 
 object CommonAssetsApi {
-  final case class AssetInfo(description: AssetDescription, issueTransaction: Option[IssueTransaction], sponsorBalance: Option[Long])
+  final case class AssetInfo(description: AssetDescription)
 
   def apply(snapshot: () => StateSnapshot, db: RocksDB, blockchain: Blockchain): CommonAssetsApi = new CommonAssetsApi {
     def description(assetId: IssuedAsset): Option[AssetDescription] =
@@ -32,26 +31,15 @@ object CommonAssetsApi {
     def fullInfo(assetId: IssuedAsset): Option[AssetInfo] =
       for {
         assetInfo <- blockchain.assetDescription(assetId)
-        sponsorBalance = if (assetInfo.sponsorship != 0) Some(blockchain.wavesPortfolio(assetInfo.issuer.toAddress).spendableBalance) else None
-      } yield AssetInfo(
-        assetInfo,
-        blockchain.transactionInfo(assetId.id).collect { case (tm, it: IssueTransaction) if tm.status == TxMeta.Status.Succeeded => it },
-        sponsorBalance
-      )
+      } yield AssetInfo(assetInfo)
 
     override def fullInfos(assetIds: Seq[IssuedAsset]): Seq[Option[AssetInfo]] = {
       blockchain
         .transactionInfos(assetIds.map(_.id))
         .view
         .zip(assetIds)
-        .map { case (tx, assetId) =>
-          blockchain.assetDescription(assetId).map { desc =>
-            AssetInfo(
-              desc,
-              tx.collect { case (tm, it: IssueTransaction) if tm.status == TxMeta.Status.Succeeded => it },
-              if (desc.sponsorship != 0) Some(blockchain.wavesPortfolio(desc.issuer.toAddress).spendableBalance) else None
-            )
-          }
+        .map { case (_, assetId) =>
+          blockchain.assetDescription(assetId).map { desc => AssetInfo(desc) }
         }
         .toSeq
     }

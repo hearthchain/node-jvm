@@ -1,23 +1,23 @@
 package com.wavesplatform
 
-import scala.util.Try
 import cats.syntax.either.*
-import com.wavesplatform.account.PrivateKey
 import com.wavesplatform.block.Block.{TransactionProof, TransactionsMerkleTree}
 import com.wavesplatform.block.validation.Validators.*
 import com.wavesplatform.common.merkle.Merkle.*
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.protobuf.transaction.PBTransactions
-import com.wavesplatform.settings.GenesisSettings
 import com.wavesplatform.transaction.Transaction
+import tech.hearth.crypto.SigningKey
+
+import scala.util.Try
 
 package object block {
 
   // Validation
   private[block] implicit class BlockValidationOps(val block: Block) extends AnyVal {
-    def validate: Validation[Block]                                                       = validateBlock(block)
-    def validateToTry: Try[Block]                                                         = toTry(validateBlock(block))
-    def validateGenesis(gs: GenesisSettings, rideV6Activated: Boolean): Validation[Block] = validateGenesisBlock(block, gs, rideV6Activated)
+    def validate: Validation[Block]        = validateBlock(block)
+    def validateToTry: Try[Block]          = toTry(validateBlock(block))
+    def validateGenesis: Validation[Block] = validateGenesisBlock(block)
   }
 
   private[block] implicit class MicroBlockValidationOps(val microBlock: MicroBlock) extends AnyVal {
@@ -29,11 +29,11 @@ package object block {
 
   // Sign
   private[block] implicit class BlockSignOps(val block: Block) extends AnyVal {
-    def sign(signer: PrivateKey): Block = block.copy(signature = crypto.sign(signer, block.bodyBytes()))
+    def sign(signer: SigningKey): Block = block.copy(signature = ByteStr(signer.sign(block.bodyBytes())))
   }
 
   private[block] implicit class MicroBlockSignOps(val microBlock: MicroBlock) extends AnyVal {
-    def sign(signer: PrivateKey): MicroBlock = microBlock.copy(signature = crypto.sign(signer, microBlock.bytesWithoutSignature()))
+    def sign(signer: SigningKey): MicroBlock = microBlock.copy(signature = ByteStr(signer.sign(microBlock.bytesWithoutSignature())))
   }
 
   def transactionProof(transaction: Transaction, transactionData: Seq[Transaction]): Option[TransactionProof] =

@@ -1,9 +1,8 @@
 package com.wavesplatform.network
 
 import java.nio.charset.StandardCharsets
-
 import com.wavesplatform.test.FreeSpec
-import com.wavesplatform.transaction.assets.IssueTransaction
+import com.wavesplatform.transaction.transfer.TransferTransaction
 import com.wavesplatform.transaction.{ProvenTransaction, Transaction}
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.embedded.EmbeddedChannel
@@ -14,8 +13,8 @@ class MessageCodecSpec extends FreeSpec {
     val codec = new SpyingMessageCodec
     val ch    = new EmbeddedChannel(codec)
 
-    ch.writeInbound(RawBytes(TransactionSpec.messageCode, "foo".getBytes(StandardCharsets.UTF_8)))
-    ch.readInbound[IssueTransaction]()
+    ch.writeInbound(RawBytes(PBTransactionSpec.messageCode, "foo".getBytes(StandardCharsets.UTF_8)))
+    ch.readInbound[TransferTransaction]()
 
     codec.blockCalls shouldBe 1
   }

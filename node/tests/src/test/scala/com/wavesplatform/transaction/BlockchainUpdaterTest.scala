@@ -3,7 +3,7 @@ package com.wavesplatform.transaction
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
-import com.wavesplatform.features.BlockchainFeatureStatus
+import com.wavesplatform.features.{BlockchainFeatureStatus, BlockchainFeatures}
 import com.wavesplatform.history
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.state.*
@@ -31,7 +31,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
   private val WavesSettingsWithDoubling = WavesSettings.copy(
     blockchainSettings = WavesSettings.blockchainSettings.copy(
       functionalitySettings =
-        WavesSettings.blockchainSettings.functionalitySettings.copy(preActivatedFeatures = Map.empty, doubleFeaturesPeriodsAfterHeight = 300)
+        WavesSettings.blockchainSettings.functionalitySettings.copy(preActivatedFeatures = Map.empty)
     )
   )
 
@@ -144,11 +144,14 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
         activatedFeatures: Map[Short, Height] = Map.empty
     )(implicit pos: Position): Unit = {
       b.height shouldBe height
+      // The test harness pre-activates DeterministicFinality so that it can commit a generator; these tests are about
+      // voting on features 1..4, so it is not part of what they assert.
+      def underTest(fs: Map[Short, Height]): Map[Short, Height] = fs - BlockchainFeatures.DeterministicFinality.id
       withClue("approved:") {
-        b.approvedFeatures shouldBe approvedFeatures
+        underTest(b.approvedFeatures) shouldBe approvedFeatures
       }
       withClue("activated:") {
-        b.activatedFeatures shouldBe activatedFeatures
+        underTest(b.activatedFeatures) shouldBe activatedFeatures
       }
     }
 

@@ -116,8 +116,7 @@ package object http {
 
   val AddrSegment: PathMatcher1[Address] = Segment.map { str =>
     (for {
-      bytes <- Try(Base58.decode(str)).fold(e => Left(GenericError(e)), Right(_))
-      addr  <- Address.fromBytes(bytes)
+      addr <- Address.fromString(str)
     } yield addr).fold(ae => throw ApiException(ApiError.fromValidationError(ae)), identity)
   }
 

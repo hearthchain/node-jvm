@@ -2,7 +2,6 @@ package com.wavesplatform.mining
 
 import com.typesafe.config.ConfigFactory
 import com.wavesplatform.WithNewDBForEachTest
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.PoSSelector
@@ -11,12 +10,13 @@ import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.BlockWithMaxBaseTargetTest.Env
 import com.wavesplatform.settings.*
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.state.*
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.state.utils.TestRocksDB
 import com.wavesplatform.test.{FreeSpec, HasSecurityManager}
-import com.wavesplatform.transaction.{BlockchainUpdater, GenesisTransaction}
+import com.wavesplatform.transaction.BlockchainUpdater
 import com.wavesplatform.utils.BaseTargetReachedMaximum
 import com.wavesplatform.utx.UtxPoolImpl
 import com.wavesplatform.wallet.Wallet
@@ -27,10 +27,16 @@ import monix.execution.Scheduler
 import monix.execution.schedulers.SchedulerService
 import monix.reactive.Observable
 import org.scalacheck.{Arbitrary, Gen}
+import tech.hearth.crypto.SigningKey
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.duration.*
+import com.wavesplatform.test.DomainPresets.*
+import com.wavesplatform.database.TestStorageFactory
+import com.wavesplatform.utils.SystemTime
+import com.wavesplatform.events.BlockchainUpdateTriggers
+import com.wavesplatform.db.WithState.AddrWithBalance
 
 class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with DBCacheSettings with HasSecurityManager {
   "base target limit" - {
@@ -46,7 +52,7 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
           utxPoolStub,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          wallet,
+          Seq.empty,
           pos,
           scheduler,
           scheduler,
@@ -55,7 +61,7 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
 
         withSecurityManager(BaseTargetReachedMaximum) { signal =>
           try {
-            miner.forgeBlock(account)
+            miner.forgeBlock(account, TxHelpers.vrfKeyOf(account))
           } catch {
             case _: SecurityException => // NOP
           }
@@ -79,7 +85,22 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
   }
 
   def withEnv(f: Env => Unit): Unit = {
-    val defaultWriter = TestRocksDB.withFunctionalitySettings(db, TestFunctionalitySettings.Stub)
+    // The account has to exist before the state does: it is credited by the genesis snapshot, which is built from
+    // the settings the state is created with
+    val account = Gen
+      .containerOfN[Array, Byte](32, Arbitrary.arbitrary[Byte])
+      .map(bs => SigningKey.fromSeed(bs))
+      .sample
+      .get
+
+    val defaultWriter = TestStorageFactory(
+      TestSettings.Default
+        .withFunctionalitySettings(TestFunctionalitySettings.Stub)
+        .withGenesisBalances(AddrWithBalance(account.toAddress, ENOUGH_AMT)),
+      db,
+      SystemTime,
+      BlockchainUpdateTriggers.noop
+    )._2
 
     val settings0     = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
     val minerSettings = settings0.minerSettings.copy(quorum = 0)
@@ -104,25 +125,16 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
     try {
 
       val ts = ntpTime.correctedTime() - 60000
-      val (account, firstBlock, secondBlock) =
-        Gen
-          .containerOfN[Array, Byte](32, Arbitrary.arbitrary[Byte])
-          .map(bs => KeyPair(bs))
-          .map { account =>
-            val tx           = GenesisTransaction.create(account.toAddress, ENOUGH_AMT, ts + 1).explicitGet()
-            val genesisBlock = TestBlock.create(ts + 2, List(tx)).block
-            val secondBlock = TestBlock
-              .create(
-                ts + 3,
-                genesisBlock.id(),
-                Seq.empty,
-                account
-              )
-              .block
-            (account, genesisBlock, secondBlock)
-          }
-          .sample
-          .get
+      // The block at height 1 is empty: it carries the genesis snapshot that credits the account
+      val firstBlock = TestBlock.create(ts + 2, Seq.empty).block
+      val secondBlock = TestBlock
+        .create(
+          ts + 3,
+          firstBlock.id(),
+          Seq.empty,
+          account
+        )
+        .block
 
       bcu.processBlock(firstBlock, firstBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty).explicitGet()
 
@@ -144,7 +156,7 @@ object BlockWithMaxBaseTargetTest {
       bcu: Blockchain & BlockchainUpdater & NG,
       utxPool: UtxPoolImpl,
       schedulerService: SchedulerService,
-      miner: KeyPair,
+      miner: SigningKey,
       lastBlock: Block
   )
 }

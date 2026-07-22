@@ -34,6 +34,7 @@ object BaseTargetChecker {
         Block
           .genesis(
             settings.blockchainSettings.genesisSettings,
+            settings.blockchainSettings.functionalitySettings,
             blockchainUpdater.isFeatureActivated(BlockchainFeatures.RideV6),
             blockchainUpdater.isFeatureActivated(BlockchainFeatures.LightNode)
           )

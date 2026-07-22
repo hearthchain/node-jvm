@@ -1,64 +1,64 @@
 package com.wavesplatform.state
 
-import com.google.common.primitives.Longs
-import com.wavesplatform.account.{Address, KeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
-import com.wavesplatform.common.utils.EitherExt2.*
+import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{DBCacheSettings, WithDomain}
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.history.{chainBaseAndMicro, randomSig}
 import com.wavesplatform.lagonaki.mocks.TestBlock
-import com.wavesplatform.lang.v1.estimator.v2.ScriptEstimatorV2
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxValidationError.BlockAppendError
-import com.wavesplatform.transaction.smart.script.ScriptCompiler
 import com.wavesplatform.transaction.transfer.TransferTransaction
 import com.wavesplatform.transaction.{Transaction, TxHelpers, TxVersion}
 import com.wavesplatform.utils.{Schedulers, SystemTime, Time}
 import com.wavesplatform.{EitherMatchers, NTPTime}
 import monix.execution.Scheduler.Implicits.global
 import org.scalamock.scalatest.MockFactory
+import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.duration.DurationInt
-import scala.util.Random
 
 class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDomain with NTPTime with DBCacheSettings with MockFactory {
   import DomainPresets.*
 
   private val FEE_AMT = 1000000L
 
-  def baseTest(setup: Time => (KeyPair, Seq[Block]), enableNg: Boolean = false, triggers: BlockchainUpdateTriggers = BlockchainUpdateTriggers.noop)(
-      f: (CompleteBlockchainUpdater, KeyPair) => Unit
-  ): Unit = withDomain(if (enableNg) NG else SettingsFromDefaultConfig) { d =>
-    d.triggers = d.triggers :+ triggers
+  // The master is credited by the genesis snapshot, so withDomain appends the genesis block itself and the triggers
+  // see it as the block at height 1
+  def baseTest(setup: (Time, ByteStr) => (SigningKey, Seq[Block]), enableNg: Boolean = false, triggers: BlockchainUpdateTriggers = BlockchainUpdateTriggers.noop)(
+      f: (CompleteBlockchainUpdater, SigningKey) => Unit
+  ): Unit = {
+    val master = TxHelpers.signer(1)
+    withDomain(if (enableNg) NG else SettingsFromDefaultConfig, Seq(AddrWithBalance(master.toAddress))) { d =>
+      d.triggers = d.triggers :+ triggers
 
-    val (account, blocks) = setup(ntpTime)
+      val (account, blocks) = setup(ntpTime, d.lastBlockId)
 
-    blocks.foreach { block =>
-      d.appendBlock(block)
+      blocks.foreach { block =>
+        d.appendBlock(block)
+      }
+
+      f(d.blockchainUpdater, account)
     }
-
-    f(d.blockchainUpdater, account)
   }
 
-  def createTransfer(master: KeyPair, recipient: Address, ts: Long): TransferTransaction =
+  def createTransfer(master: SigningKey, recipient: Address, ts: Long): TransferTransaction =
     TxHelpers.transfer(master, recipient, ENOUGH_AMT / 5, fee = 1000000, timestamp = ts, version = TxVersion.V1)
 
-  def commonPreconditions(ts: Long): (KeyPair, List[Block]) = {
+  def commonPreconditions(ts: Long, genesisBlockId: ByteStr): (SigningKey, List[Block]) = {
     val master    = TxHelpers.signer(1)
     val recipient = TxHelpers.signer(2)
 
-    val genesis      = TxHelpers.genesis(master.toAddress, timestamp = ts)
-    val genesisBlock = TestBlock.create(ts, Seq(genesis)).block
     val b1 = TestBlock
       .create(
         ts + 10,
-        genesisBlock.id(),
+        genesisBlockId,
         Seq(
           createTransfer(master, recipient.toAddress, ts + 1),
           createTransfer(master, recipient.toAddress, ts + 2),
@@ -81,7 +81,7 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
       )
       .block
 
-    (master, List(genesisBlock, b1, b2))
+    (master, List(b1, b2))
   }
 
   "blockchain update events sending" - {
@@ -92,10 +92,11 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
         inSequence {
           (triggersMock.onProcessBlock)
             .expects(where { (block, snapshot, _, _, bc) =>
+              // The genesis block: no transactions, the balances come from the predefined snapshot
               bc.height == 0 &&
-              block.transactionData.length == 1 &&
-              snapshot.balances.isEmpty &&
-              snapshot.transactions.head._2.snapshot.balances.head._2 == ENOUGH_AMT
+              block.transactionData.isEmpty &&
+              snapshot.transactions.isEmpty &&
+              snapshot.balances.head._2 == ENOUGH_AMT
             })
             .once()
 
@@ -118,7 +119,7 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
           (triggersMock.onProcessBlock).expects(*, *, *, *, *).once()
         }
 
-        baseTest(time => commonPreconditions(time.correctedTime()), enableNg = false, triggersMock)((_, _) => ())
+        baseTest((time, genesisId) => commonPreconditions(time.correctedTime(), genesisId), enableNg = false, triggersMock)((_, _) => ())
       }
     }
 
@@ -129,10 +130,11 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
         inSequence {
           (triggersMock.onProcessBlock)
             .expects(where { (block, snapshot, _, _, bc) =>
+              // The genesis block: no transactions, the balances come from the predefined snapshot
               bc.height == 0 &&
-              block.transactionData.length == 1 &&
-              snapshot.balances.isEmpty &&
-              snapshot.transactions.head._2.snapshot.balances.head._2 == ENOUGH_AMT
+              block.transactionData.isEmpty &&
+              snapshot.transactions.isEmpty &&
+              snapshot.balances.head._2 == ENOUGH_AMT
             })
             .once()
 
@@ -154,15 +156,15 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
             .once()
         }
 
-        baseTest(time => commonPreconditions(time.correctedTime()), enableNg = true, triggersMock)((_, _) => ())
+        baseTest((time, genesisId) => commonPreconditions(time.correctedTime(), genesisId), enableNg = true, triggersMock)((_, _) => ())
       }
 
-      "block, then 2 microblocks, then block referencing previous microblock" in withDomain(NG) { d =>
-        def preconditions(ts: Long): (Transaction, Seq[Transaction]) = {
+      "block, then 2 microblocks, then block referencing previous microblock" in
+        withDomain(NG, Seq(AddrWithBalance(TxHelpers.signer(1).toAddress))) { d =>
+        def preconditions(ts: Long): Seq[Transaction] = {
           val master    = TxHelpers.signer(1)
           val recipient = TxHelpers.signer(2)
 
-          val genesis = TxHelpers.genesis(master.toAddress, timestamp = ts)
           val transfers = Seq(
             createTransfer(master, recipient.toAddress, ts + 1),
             createTransfer(master, recipient.toAddress, ts + 2),
@@ -171,28 +173,19 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
             createTransfer(master, recipient.toAddress, ts + 5)
           )
 
-          (genesis, transfers)
+          transfers
         }
 
         val triggersMock = mock[BlockchainUpdateTriggers]
 
+        // The genesis block is applied by withDomain before the mock is attached, so only the blocks below are seen
         d.triggers = d.triggers :+ triggersMock
 
-        val (genesis, transfers)       = preconditions(0)
-        val (block1, microBlocks1And2) = chainBaseAndMicro(randomSig, genesis, Seq(transfers.take(2), Seq(transfers(2))))
+        val transfers                  = preconditions(0)
+        val (block1, microBlocks1And2) = chainBaseAndMicro(d.lastBlockId, transfers.head, Seq(Seq(transfers(1)), Seq(transfers(2))))
         val (block2, microBlock3)      = chainBaseAndMicro(microBlocks1And2.head.totalResBlockSig, transfers(3), Seq(Seq(transfers(4))))
 
         inSequence {
-          // genesis
-          (triggersMock.onProcessBlock)
-            .expects(where { (block, snapshot, _, _, bc) =>
-              bc.height == 0 &&
-              block.transactionData.length == 1 &&
-              snapshot.balances.isEmpty &&
-              snapshot.transactions.head._2.snapshot.balances.head._2 == ENOUGH_AMT
-            })
-            .once()
-
           // microblock 1
           (triggersMock.onProcessMicroBlock)
             .expects(where { (microBlock, snapshot, bc, _, _) =>
@@ -243,44 +236,6 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
       }
     }
 
-    "VRF" in {
-      val dapp   = KeyPair(Longs.toByteArray(Random.nextLong()))
-      val sender = KeyPair(Longs.toByteArray(Random.nextLong()))
-
-      withDomain(
-        RideV4,
-        balances = Seq(AddrWithBalance(dapp.toAddress, 10_00000000), AddrWithBalance(sender.toAddress, 10_00000000))
-      ) { d =>
-        val script = ScriptCompiler
-          .compile(
-            """
-              |
-              |{-# STDLIB_VERSION 4 #-}
-              |{-# SCRIPT_TYPE ACCOUNT #-}
-              |{-# CONTENT_TYPE DAPP #-}
-              |
-              |@Callable(i)
-              |func default() = {
-              |  [
-              |    BinaryEntry("vrf", value(value(blockInfoByHeight(height)).vrf))
-              |  ]
-              |}
-              |""".stripMargin,
-            ScriptEstimatorV2
-          )
-          .explicitGet()
-          ._1
-
-        d.appendBlock(
-          TxHelpers.setScript(acc = dapp, script = script, fee = 500_0000L, version = 2.toByte)
-        )
-
-        val invoke =
-          TxHelpers.invoke(dApp = dapp.toAddress, invoker = sender, fee = 50_0000L, version = 3.toByte)
-
-        d.appendBlock(d.createBlock(Seq(invoke)))
-      }
-    }
   }
 
   "BlockchainUpdater should replace current liquid block with better one" in {

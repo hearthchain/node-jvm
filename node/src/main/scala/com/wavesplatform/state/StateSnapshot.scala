@@ -3,14 +3,12 @@ package com.wavesplatform.state
 import cats.data.Ior
 import cats.implicits.{catsSyntaxEitherId, catsSyntaxSemigroup, toBifunctorOps, toTraverseOps}
 import cats.kernel.Monoid
-import com.wavesplatform.account.{Address, Alias, PublicKey}
+import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.crypto.bls.BlsPublicKey
-import com.wavesplatform.database.protobuf.EthereumTransactionMeta
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.transaction.{Asset, ERC20Address, Transaction}
+import com.wavesplatform.transaction.{Asset, Transaction}
 
 import scala.collection.immutable.VectorMap
 
@@ -21,19 +19,10 @@ case class StateSnapshot(
     assetStatics: Map[IssuedAsset, (AssetStaticInfo, Int)] = Map(),
     assetVolumes: Map[IssuedAsset, AssetVolumeInfo] = Map(),
     assetNamesAndDescriptions: Map[IssuedAsset, AssetInfo] = Map(),
-    assetScripts: Map[IssuedAsset, AssetScriptInfo] = Map(),
-    sponsorships: Map[IssuedAsset, SponsorshipValue] = Map(),
     newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
     cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
-    aliases: Map[Alias, Address] = Map(),
     orderFills: Map[ByteStr, VolumeAndFee] = Map(),
-    accountScripts: Map[PublicKey, Option[AccountScriptInfo]] = Map(),
-    accountData: Map[Address, Map[String, DataEntry[?]]] = Map(),
-    scriptResults: Map[ByteStr, InvokeScriptResult] = Map(),
-    ethereumTransactionMeta: Map[ByteStr, EthereumTransactionMeta] = Map(),
-    scriptsComplexity: Long = 0,
-    erc20Addresses: Map[ERC20Address, IssuedAsset] = Map(),
-    nextCommittedGenerators: Seq[(PublicKey, BlsPublicKey)] = Seq.empty
+    nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty
 ) {
 
   // ignores lease balances from portfolios
@@ -45,25 +34,10 @@ case class StateSnapshot(
   def withTransaction(tx: NewTransactionInfo): StateSnapshot =
     copy(transactions + (tx.transaction.id() -> tx))
 
-  def addScriptsComplexity(scriptsComplexity: Long): StateSnapshot =
-    copy(scriptsComplexity = this.scriptsComplexity + scriptsComplexity)
-
-  def setScriptsComplexity(newScriptsComplexity: Long): StateSnapshot =
-    copy(scriptsComplexity = newScriptsComplexity)
-
-  def setScriptResults(newScriptResults: Map[ByteStr, InvokeScriptResult]): StateSnapshot =
-    copy(scriptResults = newScriptResults)
-
-  def errorMessage(txId: ByteStr): Option[InvokeScriptResult.ErrorMessage] =
-    scriptResults.get(txId).flatMap(_.error)
-
   def bindElidedTransaction(blockchain: Blockchain, tx: Transaction): StateSnapshot =
     copy(
       transactions = transactions + (tx.id() -> NewTransactionInfo.create(tx, TxMeta.Status.Elided, StateSnapshot.empty, blockchain))
     )
-
-  lazy val accountScriptsByAddress: Map[Address, Option[AccountScriptInfo]] =
-    accountScripts.map { case (pk, script) => (pk.toAddress, script) }
 
   lazy val hashString: String =
     Integer.toHexString(hashCode())
@@ -77,18 +51,10 @@ object StateSnapshot {
       orderFills: Map[ByteStr, VolumeAndFee] = Map(),
       issuedAssets: Seq[(IssuedAsset, NewAssetInfo)] = Seq(),
       updatedAssets: Map[IssuedAsset, Ior[AssetInfo, AssetVolumeInfo]] = Map(),
-      assetScripts: Map[IssuedAsset, AssetScriptInfo] = Map(),
-      sponsorships: Map[IssuedAsset, Sponsorship] = Map(),
       newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
       cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
-      aliases: Map[Alias, Address] = Map(),
-      accountData: Map[Address, Map[String, DataEntry[?]]] = Map(),
-      accountScripts: Map[PublicKey, Option[AccountScriptInfo]] = Map(),
-      scriptResults: Map[ByteStr, InvokeScriptResult] = Map(),
-      ethereumTransactionMeta: Map[ByteStr, EthereumTransactionMeta] = Map(),
-      scriptsComplexity: Long = 0,
       transactions: VectorMap[ByteStr, NewTransactionInfo] = VectorMap(),
-      nextCommittedGenerators: Seq[(PublicKey, BlsPublicKey)] = Seq.empty
+      nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -102,18 +68,9 @@ object StateSnapshot {
         assetStatics(issuedAssets),
         assetVolumes(blockchain, issuedAssets, updatedAssets),
         assetNamesAndDescriptions(issuedAssets, updatedAssets),
-        assetScripts,
-        sponsorships.collect { case (asset, value: SponsorshipValue) => (asset, value) },
         newLeases,
         cancelledLeases,
-        aliases,
         of,
-        accountScripts,
-        accountData,
-        scriptResults,
-        ethereumTransactionMeta,
-        scriptsComplexity,
-        issuedAssets.view.map { case (id, _) => ERC20Address(id) -> id }.toMap,
         nextCommittedGenerators
       )
     r.leftMap(GenericError(_))
@@ -221,32 +178,12 @@ object StateSnapshot {
         s1.assetStatics ++ s2.assetStatics.map { case (id, (asi, idx)) => (id, (asi, idx + s1.assetStatics.size)) },
         s1.assetVolumes ++ s2.assetVolumes,
         s1.assetNamesAndDescriptions ++ s2.assetNamesAndDescriptions,
-        s1.assetScripts ++ s2.assetScripts,
-        s1.sponsorships ++ s2.sponsorships,
         s1.newLeases ++ s2.newLeases,
         s1.cancelledLeases ++ s2.cancelledLeases,
-        s1.aliases ++ s2.aliases,
         s1.orderFills ++ s2.orderFills,
-        s1.accountScripts ++ s2.accountScripts,
-        combineDataEntries(s1.accountData, s2.accountData),
-        s1.scriptResults |+| s2.scriptResults,
-        s1.ethereumTransactionMeta ++ s2.ethereumTransactionMeta,
-        s1.scriptsComplexity + s2.scriptsComplexity,
-        s1.erc20Addresses ++ s2.erc20Addresses,
         s1.nextCommittedGenerators ++ s2.nextCommittedGenerators
       )
 
-    private def combineDataEntries(
-        entries1: Map[Address, Map[String, DataEntry[?]]],
-        entries2: Map[Address, Map[String, DataEntry[?]]]
-    ): Map[Address, Map[String, DataEntry[?]]] =
-      entries2.foldLeft(entries1) { case (result, (address, addressEntries2)) =>
-        val resultAddressEntries =
-          result
-            .get(address)
-            .fold(address -> addressEntries2)(addressEntries1 => address -> (addressEntries1 ++ addressEntries2))
-        result + resultAddressEntries
-      }
   }
 
   val empty: StateSnapshot = StateSnapshot()

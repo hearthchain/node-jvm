@@ -4,7 +4,6 @@ import com.wavesplatform.account.*
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.*
-import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.serialization.impl.TransferTxSerializer
 import com.wavesplatform.transaction.validation.*
 import com.wavesplatform.transaction.validation.impl.TransferTxValidator
@@ -12,12 +11,10 @@ import com.wavesplatform.utils.base58Length
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-import scala.util.Try
-
 case class TransferTransaction(
     version: TxVersion,
     sender: PublicKey,
-    recipient: AddressOrAlias,
+    recipient: Address,
     assetId: Asset,
     amount: TxPositiveAmount,
     feeAssetId: Asset,
@@ -26,38 +23,18 @@ case class TransferTransaction(
     timestamp: TxTimestamp,
     proofs: Proofs,
     chainId: Byte
-) extends Transaction(
-      TransactionType.Transfer,
-      assetId match {
-        case Waves          => Seq()
-        case a: IssuedAsset => Seq(a)
-      }
-    ),
+) extends Transaction(TransactionType.Transfer),
       ProvenTransaction,
-      TransferTransactionLike,
-      Versioned.ToV3,
       FastHashId,
-      HasSignature,
-      TxWithFee.InCustomAsset,
-      PBSince.V3 {
+      TxWithFee.InCustomAsset {
   override type T = TransferTransaction
 
-  val bodyBytes: Coeval[TxByteArray] = Coeval.evalOnce(TransferTxSerializer.bodyBytes(this))
-  val bytes: Coeval[TxByteArray]     = Coeval.evalOnce(TransferTxSerializer.toBytes(this))
-  final val json: Coeval[JsObject]   = Coeval.evalOnce(TransferTxSerializer.toJson(this))
+  final val json: Coeval[JsObject] = Coeval.evalOnce(TransferTxSerializer.toJson(this))
 
   override def addProof(proof: ByteStr): TransferTransaction = copy(proofs = this.proofs.add(proof))
 }
 
-trait TransferTransactionLike extends TransactionBase with Authorized {
-  val sender: PublicKey
-  val recipient: AddressOrAlias
-  val assetId: Asset
-  val amount: TxPositiveAmount
-  val attachment: ByteStr
-}
-
-object TransferTransaction extends TransactionParser {
+object TransferTransaction {
   type TransactionT = TransferTransaction
 
   val MaxAttachmentSize            = 140
@@ -67,12 +44,10 @@ object TransferTransaction extends TransactionParser {
 
   implicit val validator: TxValidator[TransferTransaction] = TransferTxValidator
 
-  override def parseBytes(bytes: TxByteArray): Try[TransferTransaction] = TransferTxSerializer.parseBytes(bytes)
-
   def create(
       version: TxVersion,
       sender: PublicKey,
-      recipient: AddressOrAlias,
+      recipient: Address,
       asset: Asset,
       amount: Long,
       feeAsset: Asset,

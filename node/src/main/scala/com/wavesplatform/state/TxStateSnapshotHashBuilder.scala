@@ -3,7 +3,6 @@ package com.wavesplatform.state
 import cats.implicits.catsSyntaxSemigroup
 import cats.syntax.either.*
 import com.google.common.primitives.{Ints, Longs, UnsignedBytes}
-import com.wavesplatform.account.{Address, KeyPair}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
@@ -13,10 +12,10 @@ import com.wavesplatform.state.diffs.BlockDiffer.{CurrentBlockFeePart, maybeAppl
 import com.wavesplatform.state.diffs.TransactionDiffer
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
-import com.wavesplatform.transaction.{GenesisTransaction, Transaction}
+import com.wavesplatform.transaction.Transaction
 import org.bouncycastle.crypto.digests.Blake2bDigest
+import tech.hearth.crypto.SigningKey
 
-import java.nio.charset.StandardCharsets
 import scala.collection.mutable
 
 object TxStateSnapshotHashBuilder {
@@ -36,46 +35,22 @@ object TxStateSnapshotHashBuilder {
 
     snapshot.balances.foreach { case ((address, asset), balance) =>
       asset match {
-        case Waves              => changedKeys += address.bytes ++ Longs.toByteArray(balance)
-        case asset: IssuedAsset => changedKeys += address.bytes ++ asset.id.arr ++ Longs.toByteArray(balance)
+        case Waves              => changedKeys += address.toBytes ++ Longs.toByteArray(balance)
+        case asset: IssuedAsset => changedKeys += address.toBytes ++ asset.id.arr ++ Longs.toByteArray(balance)
       }
     }
 
     snapshot.leaseBalances.foreach { case (address, balance) =>
-      changedKeys += address.bytes ++ Longs.toByteArray(balance.in) ++ Longs.toByteArray(balance.out)
+      changedKeys += address.toBytes ++ Longs.toByteArray(balance.in) ++ Longs.toByteArray(balance.out)
     }
-
-    for {
-      (address, data) <- snapshot.accountData
-      entry           <- data.values
-    } changedKeys += address.bytes ++ entry.key.getBytes(StandardCharsets.UTF_8) ++ entry.valueBytes
-
-    snapshot.aliases.foreach { case (alias, address) =>
-      changedKeys += address.bytes ++ alias.name.getBytes(StandardCharsets.UTF_8)
-    }
-
-    snapshot.accountScripts.foreach { case (pk, sv) =>
-      changedKeys += pk.arr ++ (sv match {
-        case Some(s) => s.script.bytes().arr ++ Longs.toByteArray(s.verifierComplexity)
-        case None    => Array.emptyByteArray
-      })
-    }
-
-    for {
-      (asset, scriptInfo) <- snapshot.assetScripts
-    } changedKeys += asset.id.arr ++ scriptInfo.script.bytes().arr
 
     snapshot.newLeases.foreach { case (leaseId, details) =>
       changedKeys += leaseId.arr ++ booleanToBytes(true)
-      changedKeys += leaseId.arr ++ details.sender.arr ++ details.recipientAddress.bytes ++ Longs.toByteArray(details.amount.value)
+      changedKeys += leaseId.arr ++ details.sender.arr ++ details.recipientAddress.toBytes ++ Longs.toByteArray(details.amount.value)
     }
 
     snapshot.cancelledLeases.keys.foreach { leaseId =>
       changedKeys += leaseId.arr ++ booleanToBytes(false)
-    }
-
-    snapshot.sponsorships.foreach { case (asset, sponsorship) =>
-      changedKeys += asset.id.arr ++ Longs.toByteArray(sponsorship.minFee)
     }
 
     snapshot.orderFills.foreach { case (orderId, fillInfo) =>
@@ -97,8 +72,8 @@ object TxStateSnapshotHashBuilder {
         Ints.toByteArray(assetInfo.lastUpdatedAt.toInt)
     }
 
-    snapshot.nextCommittedGenerators.foreach { case (publicKey, blsPublicKey) =>
-      changedKeys += publicKey.arr ++ blsPublicKey.arr
+    snapshot.nextCommittedGenerators.foreach { gc =>
+      changedKeys += gc.sender.arr ++ gc.endorserPublicKey.arr ++ gc.vrfPublicKey.arr
     }
 
     txStatusOpt.foreach(txInfo =>
@@ -112,24 +87,15 @@ object TxStateSnapshotHashBuilder {
     Result(createHash(changedKeys))
   }
 
-  def createGenesisStateHash(txs: Seq[GenesisTransaction]): ByteStr =
-    ByteStr(
-      txs
-        .foldLeft(InitStateHash.arr -> Map.empty[Address, Long]) { case ((prevStateHash, balances), tx) =>
-          val newBalance = balances.getOrElse(tx.recipient, 0L) + tx.amount.value
-          val tsh =
-            crypto.fastHash(tx.recipient.bytes ++ Longs.toByteArray(newBalance))
-          val newStateHash = crypto.fastHash(prevStateHash ++ tsh)
-          newStateHash -> balances.updated(tx.recipient, newBalance)
-        }
-        ._1
-    )
+  /** The genesis block carries no transactions, so its state hash covers the predefined snapshot as a whole. */
+  def createGenesisStateHash(snapshot: StateSnapshot): ByteStr =
+    createHashFromSnapshot(snapshot, None).createHash(InitStateHash)
 
   def computeStateHash(
       txs: Seq[Transaction],
       initStateHash: ByteStr,
       initSnapshot: StateSnapshot,
-      signer: KeyPair,
+      signer: SigningKey,
       prevBlockTimestamp: Option[Long],
       currentBlockTimestamp: Long,
       isChallenging: Boolean,

@@ -10,8 +10,6 @@ import com.wavesplatform.transaction.validation.impl.LeaseCancelTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-import scala.util.Try
-
 final case class LeaseCancelTransaction(
     version: TxVersion,
     sender: PublicKey,
@@ -22,29 +20,21 @@ final case class LeaseCancelTransaction(
     chainId: Byte
 ) extends Transaction(TransactionType.LeaseCancel),
       ProvenTransaction,
-      HasSignature,
-      Versioned.ToV3,
       TxWithFee.InWaves,
-      FastHashId,
-      PBSince.V3 {
+      FastHashId {
   override type T = LeaseCancelTransaction
 
-  override val bodyBytes: Coeval[Array[TxVersion]] = Coeval.evalOnce(LeaseCancelTxSerializer.bodyBytes(this))
-  override val bytes: Coeval[Array[TxVersion]]     = Coeval.evalOnce(LeaseCancelTxSerializer.toBytes(this))
-  override val json: Coeval[JsObject]              = Coeval.evalOnce(LeaseCancelTxSerializer.toJson(this))
+  override val json: Coeval[JsObject] = Coeval.evalOnce(LeaseCancelTxSerializer.toJson(this))
 
   override def addProof(proof: ByteStr): LeaseCancelTransaction = copy(proofs = this.proofs.add(proof))
 }
 
-object LeaseCancelTransaction extends TransactionParser {
+object LeaseCancelTransaction {
   type TransactionT = LeaseCancelTransaction
 
   val typeId: TxType = 9: Byte
 
   implicit val validator: TxValidator[LeaseCancelTransaction] = LeaseCancelTxValidator
-
-  override def parseBytes(bytes: Array[Byte]): Try[LeaseCancelTransaction] =
-    LeaseCancelTxSerializer.parseBytes(bytes)
 
   def create(
       version: TxVersion,

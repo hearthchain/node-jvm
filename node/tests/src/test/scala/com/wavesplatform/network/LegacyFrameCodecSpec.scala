@@ -4,9 +4,7 @@ import java.net.InetSocketAddress
 
 import com.wavesplatform.network.message.{MessageSpec, Message as ScorexMessage}
 import com.wavesplatform.test.FreeSpec
-import com.wavesplatform.transaction.Asset.Waves
-import com.wavesplatform.transaction.TxHelpers
-import com.wavesplatform.{TestValues, crypto}
+import com.wavesplatform.crypto
 import io.netty.buffer.Unpooled.wrappedBuffer
 import io.netty.buffer.{ByteBuf, Unpooled}
 import io.netty.channel.embedded.EmbeddedChannel
@@ -16,26 +14,26 @@ import scala.concurrent.duration.DurationInt
 
 class LegacyFrameCodecSpec extends FreeSpec {
 
-  "should handle one message" in forAll(issueGen) { origTx =>
+  "should handle one message" in forAll(transferV1Gen) { origTx =>
     val codec = new LegacyFrameCodecL1(PeerDatabase.NoOp, 3.minutes)
 
     val buff = Unpooled.buffer
-    write(buff, origTx, TransactionSpec)
+    write(buff, origTx, PBTransactionSpec)
 
     val ch = new EmbeddedChannel(codec)
     ch.writeInbound(buff)
 
     val decodedBytes = ch.readInbound[RawBytes]()
 
-    decodedBytes.code shouldBe TransactionSpec.messageCode
+    decodedBytes.code shouldBe PBTransactionSpec.messageCode
     decodedBytes.data shouldEqual origTx.bytes()
   }
 
-  "should handle multiple messages" in forAll(Gen.nonEmptyListOf(issueGen)) { origTxs =>
+  "should handle multiple messages" in forAll(Gen.nonEmptyListOf(transferV1Gen)) { origTxs =>
     val codec = new LegacyFrameCodecL1(PeerDatabase.NoOp, 3.minutes)
 
     val buff = Unpooled.buffer
-    origTxs.foreach(write(buff, _, TransactionSpec))
+    origTxs.foreach(write(buff, _, PBTransactionSpec))
 
     val ch = new EmbeddedChannel(codec)
     ch.writeInbound(buff)
@@ -45,23 +43,23 @@ class LegacyFrameCodecSpec extends FreeSpec {
     }
 
     val decodedTxs = decoded.map { x =>
-      TransactionSpec.deserializeData(x.data).get
+      PBTransactionSpec.deserializeData(x.data).get
     }
 
     decodedTxs shouldEqual origTxs
   }
 
   "should reject an already received transaction" in {
-    val tx    = issueGen.sample.getOrElse(throw new RuntimeException("Can't generate a sample transaction"))
+    val tx    = transferV1Gen.sample.getOrElse(throw new RuntimeException("Can't generate a sample transaction"))
     val codec = new LegacyFrameCodecL1(PeerDatabase.NoOp, 3.minutes)
     val ch    = new EmbeddedChannel(codec)
 
     val buff1 = Unpooled.buffer
-    write(buff1, tx, TransactionSpec)
+    write(buff1, tx, PBTransactionSpec)
     ch.writeInbound(buff1)
 
     val buff2 = Unpooled.buffer
-    write(buff2, tx, TransactionSpec)
+    write(buff2, tx, PBTransactionSpec)
     ch.writeInbound(buff2)
 
     ch.inboundMessages().size() shouldEqual 1
@@ -81,11 +79,6 @@ class LegacyFrameCodecSpec extends FreeSpec {
     ch.writeInbound(buff2)
 
     ch.inboundMessages().size() shouldEqual 2
-  }
-
-  "should pack update asset info in PB message" in {
-    val tx = TxHelpers.updateAssetInfo(TestValues.asset.id, "bomz", "", TestValues.keyPair, TestValues.fee, Waves)
-    RawBytes.fromTransaction(tx) shouldBe RawBytes(PBTransactionSpec.messageCode, PBTransactionSpec.serializeData(tx))
   }
 
   private def write[T <: AnyRef](buff: ByteBuf, msg: T, spec: MessageSpec[T]): Unit = {

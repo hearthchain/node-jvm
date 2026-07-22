@@ -23,7 +23,7 @@ class RouteTimeoutTest extends PropSpec with ApiMarshallers with ScalatestRouteT
     val routeTimeout = new RouteTimeout(timeout)
 
     val routes = Seq(
-      routeTimeout.execute(task)((t, _) => t.runSyncUnsafe()),
+      routeTimeout.execute(task)((t, _) => t.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))),
       routeTimeout.executeToFuture(task),
       routeTimeout.executeStreamed(task)(identity)
     )

@@ -83,7 +83,7 @@ package object network {
     }
 
     private def logBroadcast(message: AnyRef, except: Set[Channel]): Unit = message match {
-      case RawBytes(TransactionSpec.messageCode | PBTransactionSpec.messageCode, _) =>
+      case RawBytes(PBTransactionSpec.messageCode, _) =>
       case _ =>
         logger.trace {
           val exceptMsg = if (except.isEmpty) "" else s" (except ${except.map(id(_)).mkString(", ")})"

@@ -2,7 +2,7 @@ package com.wavesplatform.api.http
 
 import com.typesafe.config.{ConfigObject, ConfigRenderOptions}
 import com.wavesplatform.Version
-import com.wavesplatform.account.{Address, PKKeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.{CommonAccountsApi, CommonAssetsApi, CommonTransactionsApi, TransactionMeta}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database.RocksDBWriter
@@ -13,12 +13,9 @@ import com.wavesplatform.settings.{RestAPISettings, WavesSettings}
 import com.wavesplatform.state.diffs.TransactionDiffer
 import com.wavesplatform.state.{Blockchain, Height, LeaseBalance, NG, SnapshotBlockchain, StateHash, TxMeta}
 import com.wavesplatform.transaction.*
-import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.transaction.smart.InvokeScriptTransaction
-import com.wavesplatform.transaction.smart.script.trace.{InvokeScriptTrace, TracedResult}
+import com.wavesplatform.transaction.smart.script.trace.TracedResult
 import com.wavesplatform.utils.{ScorexLogging, Time, byteStrFormat}
 import com.wavesplatform.utx.UtxPool
-import com.wavesplatform.wallet.Wallet
 import io.netty.channel.Channel
 import monix.eval.{Coeval, Task}
 import monix.execution.Scheduler
@@ -39,7 +36,6 @@ case class DebugApiRoute(
     ws: WavesSettings,
     time: Time,
     blockchain: Blockchain & NG,
-    wallet: Wallet,
     accountsApi: CommonAccountsApi,
     transactionsApi: CommonTransactionsApi,
     assetsApi: CommonAssetsApi,
@@ -143,28 +139,17 @@ case class DebugApiRoute(
 
   def minerInfo: Route = (path("minerInfo") & get) {
     complete {
-      val accounts = if (ws.minerSettings.privateKeys.nonEmpty) {
-        ws.minerSettings.privateKeys.map(PKKeyPair(_))
-      } else {
-        wallet.privateKeyAccounts
+      miner.nextBlockGenerationOffsets.collect { case (address, Right(offset)) =>
+        AccountMiningInfo(
+          address.toString,
+          blockchain.effectiveBalance(
+            address,
+            ws.blockchainSettings.functionalitySettings.generatingBalanceDepth(blockchain.height),
+            blockchain.microblockIds.lastOption
+          ),
+          System.currentTimeMillis() + offset.toMillis
+        )
       }
-
-      accounts
-        .filterNot(account => blockchain.hasAccountScript(account.toAddress))
-        .map { account =>
-          (account.toAddress, miner.getNextBlockGenerationOffset(account))
-        }
-        .collect { case (address, Right(offset)) =>
-          AccountMiningInfo(
-            address.toString,
-            blockchain.effectiveBalance(
-              address,
-              ws.blockchainSettings.functionalitySettings.generatingBalanceDepth(blockchain.height),
-              blockchain.microblockIds.lastOption
-            ),
-            System.currentTimeMillis() + offset.toMillis
-          )
-        }
 
     }
   }
@@ -201,12 +186,12 @@ case class DebugApiRoute(
 
       val tracedSnapshot = for {
         tx   <- TracedResult(parsedTransaction)
-        diff <- TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime(), enableExecutionLog = true)(blockchain, tx)
+        diff <- TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime())(blockchain, tx)
       } yield (tx, diff)
 
       val error = tracedSnapshot.resultE match {
-        case Right((tx, diff)) => diff.errorMessage(tx.id()).map(em => GenericError(em.text))
-        case Left(err)         => Some(err)
+        case Right(_)  => None
+        case Left(err) => Some(err)
       }
 
       val transactionJson = parsedTransaction.fold(_ => jsv, _.json())
@@ -223,12 +208,9 @@ case class DebugApiRoute(
       val extendedJson = tracedSnapshot.resultE
         .fold(
           _ => jsv,
-          { case (tx, diff) =>
+          { case (tx, _) =>
             val meta = tx match {
-              case ist: InvokeScriptTransaction =>
-                val result = diff.scriptResults.get(ist.id())
-                TransactionMeta.Invoke(Height(blockchain.height), ist, TxMeta.Status.Succeeded, diff.scriptsComplexity, result)
-              case tx => TransactionMeta.Default(Height(blockchain.height), tx, TxMeta.Status.Succeeded, diff.scriptsComplexity)
+              case tx => TransactionMeta.Default(Height(blockchain.height), tx, TxMeta.Status.Succeeded, 0)
             }
             serializer.transactionWithMetaJson(meta)
           }
@@ -237,11 +219,7 @@ case class DebugApiRoute(
       val response = Json.obj(
         "valid"          -> error.isEmpty,
         "validationTime" -> (System.nanoTime() - startTime).nanos.toMillis,
-        "trace" -> tracedSnapshot.trace.map {
-          case ist: InvokeScriptTrace => ist.maybeLoggedJson(logged = true)(using serializer.invokeScriptResultWrites)
-          case trace                  => trace.loggedJson
-        },
-        "height" -> blockchain.height
+        "height"         -> blockchain.height
       )
 
       error.fold(response ++ extendedJson)(err =>
@@ -260,7 +238,7 @@ case class DebugApiRoute(
     } yield {
       val deterministicFinalityActivated =
         blockchain.isFeatureActivated(com.wavesplatform.features.BlockchainFeatures.DeterministicFinality, height)
-      val stateHashJson = StateHash.toJson(sh, deterministicFinalityActivated)
+      val stateHashJson = StateHash.toJson(sh)
       stateHashJson ++ Json.obj(
         "snapshotHash" -> db.snapshotStateHash(height),
         "blockId"      -> h.id().toString,
@@ -303,7 +281,7 @@ object DebugApiRoute {
 
   implicit val accountMiningBalanceFormat: Format[AccountMiningInfo] = Json.format
 
-  implicit val addressWrites: Writes[Address] = Writes((a: Address) => JsString(a.toString))
+  implicit val addressWrites: Writes[Address] = Writes((a: Address) => JsString(a.toBech32))
 
   implicit val hrCacheSizesFormat: Format[HistoryReplier.CacheSizes]          = Json.format
   implicit val mbsCacheSizesFormat: Format[MicroBlockSynchronizer.CacheSizes] = Json.format

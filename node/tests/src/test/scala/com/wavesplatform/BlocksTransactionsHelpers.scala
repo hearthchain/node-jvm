@@ -1,28 +1,25 @@
 package com.wavesplatform
 
-import com.wavesplatform.account.{AddressOrAlias, KeyPair}
+import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.block.{Block, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.history.DefaultBaseTarget
-import com.wavesplatform.lang.script.Script
-import com.wavesplatform.lang.v1.compiler.Terms.FUNCTION_CALL
 import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.state.StringDataEntry
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.assets.IssueTransaction
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import com.wavesplatform.transaction.smart.{InvokeScriptTransaction, SetScriptTransaction}
-import com.wavesplatform.transaction.{DataTransaction, Transaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Transaction, TxHelpers, TxVersion}
 import org.scalacheck.Gen
+import tech.hearth.crypto.SigningKey
 
 trait BlocksTransactionsHelpers { self: TransactionGen =>
   object QuickTX {
     val FeeAmount = 400000
 
     def transfer(
-        from: KeyPair,
-        to: AddressOrAlias = accountGen.sample.get.toAddress,
+        from: SigningKey,
+        to: Address = accountGen.sample.get.toAddress,
         amount: Long = smallFeeGen.sample.get,
         timestamp: Gen[Long] = timestampGen
     ): Gen[Transaction] =
@@ -31,8 +28,8 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
       } yield TxHelpers.transfer(from, to, amount, Waves, FeeAmount, Waves, ByteStr.empty, timestamp, 1.toByte)
 
     def transferV2(
-        from: KeyPair,
-        to: AddressOrAlias = accountGen.sample.get.toAddress,
+        from: SigningKey,
+        to: Address = accountGen.sample.get.toAddress,
         amount: Long = smallFeeGen.sample.get,
         timestamp: Gen[Long] = timestampGen
     ): Gen[Transaction] =
@@ -42,8 +39,8 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
 
     def transferAsset(
         asset: IssuedAsset,
-        from: KeyPair,
-        to: AddressOrAlias = accountGen.sample.get.toAddress,
+        from: SigningKey,
+        to: Address = accountGen.sample.get.toAddress,
         amount: Long = smallFeeGen.sample.get,
         timestamp: Gen[Long] = timestampGen
     ): Gen[Transaction] =
@@ -52,8 +49,8 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
       } yield TxHelpers.transfer(from, to, amount, asset, FeeAmount, Waves, ByteStr.empty, timestamp, 1.toByte)
 
     def lease(
-        from: KeyPair,
-        to: AddressOrAlias = accountGen.sample.get.toAddress,
+        from: SigningKey,
+        to: Address = accountGen.sample.get.toAddress,
         amount: Long = smallFeeGen.sample.get,
         timestamp: Gen[Long] = timestampGen
     ): Gen[LeaseTransaction] =
@@ -61,48 +58,10 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
         timestamp <- timestamp
       } yield TxHelpers.lease(from, to, amount, FeeAmount, timestamp, 1.toByte)
 
-    def leaseCancel(from: KeyPair, leaseId: ByteStr, timestamp: Gen[Long] = timestampGen): Gen[LeaseCancelTransaction] =
+    def leaseCancel(from: SigningKey, leaseId: ByteStr, timestamp: Gen[Long] = timestampGen): Gen[LeaseCancelTransaction] =
       for {
         timestamp <- timestamp
       } yield TxHelpers.leaseCancel(leaseId, from, FeeAmount, timestamp, 1.toByte)
-
-    def data(from: KeyPair, dataKey: String, timestamp: Gen[Long] = timestampGen): Gen[DataTransaction] =
-      for {
-        timestamp <- timestamp
-      } yield TxHelpers.data(from, List(StringDataEntry(dataKey, Gen.numStr.sample.get)), FeeAmount, timestamp = timestamp)
-
-    def nftIssue(from: KeyPair, timestamp: Gen[Long] = timestampGen): Gen[IssueTransaction] =
-      for {
-        timestamp <- timestamp
-      } yield TxHelpers
-        .issue(
-          from,
-          1,
-          0.toByte,
-          "test",
-          "",
-          100000000L,
-          None,
-          false,
-          timestamp,
-          TxVersion.V1
-        )
-
-    def setScript(from: KeyPair, script: Script, timestamp: Gen[Long] = timestampGen): Gen[SetScriptTransaction] =
-      for {
-        timestamp <- timestamp
-      } yield TxHelpers.setScript(from, script, FeeAmount, 1.toByte, timestamp = timestamp)
-
-    def invokeScript(
-        from: KeyPair,
-        dapp: AddressOrAlias,
-        call: FUNCTION_CALL,
-        payments: Seq[InvokeScriptTransaction.Payment] = Nil,
-        timestamp: Gen[Long] = timestampGen
-    ): Gen[InvokeScriptTransaction] =
-      for {
-        timestamp <- timestamp
-      } yield TxHelpers.invoke(dapp, Some(call.function.funcName), call.args, payments, from, FeeAmount * 2, Waves, 1.toByte, timestamp)
   }
 
   object UnsafeBlocks {
@@ -110,7 +69,7 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
         totalRefTo: ByteStr,
         base: Seq[Transaction],
         micros: Seq[Seq[Transaction]],
-        signer: KeyPair,
+        signer: SigningKey,
         version: Byte,
         timestamp: Long
     ): (Block, Seq[MicroBlock]) = {
@@ -128,7 +87,7 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
         totalRefTo: ByteStr,
         prevTotal: Block,
         txs: Seq[Transaction],
-        signer: KeyPair,
+        signer: SigningKey,
         version: TxVersion,
         ts: Long
     ): (Block, MicroBlock) = {
@@ -139,7 +98,7 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
     def unsafeBlock(
         reference: ByteStr,
         txs: Seq[Transaction],
-        signer: KeyPair,
+        signer: SigningKey,
         version: Byte,
         timestamp: Long,
         bTarget: Long = DefaultBaseTarget
@@ -150,7 +109,7 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
         reference = reference,
         baseTarget = bTarget,
         generationSignature = com.wavesplatform.history.generationSignature,
-        generator = signer.publicKey,
+        generator = PublicKey(signer.publicKey),
         featureVotes = Seq.empty,
         rewardVote = -1L,
         transactionData = txs,
@@ -161,7 +120,7 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
       val toSign =
         if (version < Block.ProtoBlockVersion) unsigned.bytes()
         else PBBlocks.protobuf(unsigned).header.get.toByteArray
-      unsigned.copy(signature = crypto.sign(signer.privateKey, toSign))
+      unsigned.copy(signature = ByteStr(signer.sign(toSign)))
     }
   }
 }

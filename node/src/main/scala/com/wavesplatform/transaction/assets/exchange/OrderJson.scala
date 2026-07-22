@@ -7,7 +7,7 @@ import com.wavesplatform.crypto.SignatureLength
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals}
 import com.wavesplatform.transaction.{Asset, Proofs, TxExchangeAmount, TxMatcherFee, TxOrderPrice, TxVersion}
-import com.wavesplatform.utils.{EthEncoding, byteStrFormat}
+import com.wavesplatform.utils.byteStrFormat
 import play.api.libs.json.*
 
 import scala.util.{Failure, Success}
@@ -95,24 +95,19 @@ object OrderJson {
       proofs: Option[Array[Array[Byte]]],
       version: TxVersion,
       matcherFeeAssetId: Asset,
-      eip712Signature: Option[Array[Byte]],
       priceMode: OrderPriceMode,
       attachment: Option[ByteStr]
   ): Order = {
-    val senderCredentials = eip712Signature match {
-      case Some(value) =>
-        OrderAuthentication.Eip712Signature(ByteStr(value))
+    val senderCredentials = {
+      val proofsValue = proofs
+        .map(p => Proofs(p.map(ByteStr.apply).toIndexedSeq))
+        .orElse(signature.map(s => Proofs(ByteStr(s))))
+        .getOrElse(Proofs.empty)
 
-      case None =>
-        val proofsValue = proofs
-          .map(p => Proofs(p.map(ByteStr.apply).toIndexedSeq))
-          .orElse(signature.map(s => Proofs(ByteStr(s))))
-          .getOrElse(Proofs.empty)
-
-        OrderAuthentication.OrderProofs(
-          sender.getOrElse(throw new IllegalArgumentException("Either senderPublicKey or eip712Signature should be provided")),
-          proofsValue
-        )
+      OrderAuthentication.OrderProofs(
+        sender.getOrElse(throw new IllegalArgumentException("senderPublicKey should be provided")),
+        proofsValue
+      )
     }
 
     Order(
@@ -198,9 +193,6 @@ object OrderJson {
       (JsPath \ "proofs").readNullable[Array[Array[Byte]]] and
       (JsPath \ "version").read[Byte] and
       (JsPath \ "matcherFeeAssetId").readNullable[Asset].map(_.getOrElse(Waves)) and
-      (JsPath \ "eip712Signature")
-        .readNullable[String]
-        .map(_.map(EthEncoding.toBytes)) and
       (JsPath \ "priceMode")
         .readWithDefault[OrderPriceMode](OrderPriceMode.Default) and
       (JsPath \ "attachment").readNullable[ByteStr]

@@ -1,119 +1,95 @@
 package com.wavesplatform.history
 
-import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.history.Domain.BlockchainUpdaterExt
-import com.wavesplatform.state.diffs.*
+import com.wavesplatform.db.WithDomain
+import com.wavesplatform.db.WithState.AddrWithBalance
+import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.test.*
-import com.wavesplatform.transaction.GenesisTransaction
-import com.wavesplatform.transaction.transfer.*
-import org.scalacheck.Gen
+import com.wavesplatform.transaction.TxHelpers
+import com.wavesplatform.transaction.transfer.TransferTransaction
+import tech.hearth.crypto.SigningKey
 
-class BlockchainUpdaterBadReferencesTest extends PropSpec with DomainScenarioDrivenPropertyCheck {
+class BlockchainUpdaterBadReferencesTest extends PropSpec, WithDomain {
 
-  val preconditionsAndPayments: Gen[(GenesisTransaction, TransferTransaction, TransferTransaction, TransferTransaction)] = for {
-    master    <- accountGen
-    recipient <- accountGen
-    ts        <- positiveIntGen
-    genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-    payment: TransferTransaction  <- wavesTransferGeneratorP(ts, master, recipient.toAddress)
-    payment2: TransferTransaction <- wavesTransferGeneratorP(ts, master, recipient.toAddress)
-    payment3: TransferTransaction <- wavesTransferGeneratorP(ts, master, recipient.toAddress)
-  } yield (genesis, payment, payment2, payment3)
+  private val master: SigningKey             = TxHelpers.signer(200)
+  private def balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(master.toAddress, ENOUGH_AMT))
+  // Fresh each call, so repeated uses within a test do not collide on transaction id
+  private def payment: TransferTransaction = TxHelpers.transfer(master)
 
   property("microBlock: referenced (micro)block doesn't exist") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, payment3)) =>
-      val block0                 = buildBlockOfTxs(randomSig, Seq(genesis))
-      val (block1, microblocks1) = chainBaseAndMicro(block0.id(), payment, Seq(payment2, payment3).map(Seq(_)))
-      val goodMicro              = microblocks1(0)
-      val badMicroRef            = microblocks1(1).copy(reference = randomSig)
-
-      domain.blockchainUpdater.processBlock(block0) should beRight
-      domain.blockchainUpdater.processBlock(block1) should beRight
-      domain.blockchainUpdater.processMicroBlock(goodMicro, None) should beRight
-      domain.blockchainUpdater.processMicroBlock(badMicroRef, None) should produce("doesn't reference last known microBlock")
+    withDomain(balances = balances) { d =>
+      d.appendBlock(payment)          // liquid base block
+      d.appendMicroBlock(payment)     // good micro
+      val badMicroRef = d.createMicroBlock()(payment).copy(reference = randomSig)
+      d.appendMicroBlockE(badMicroRef) should produce("doesn't reference last known microBlock")
     }
   }
 
-  property("microblock: first micro doesn't reference base block(references nothing)") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, _)) =>
-      val blocks = chainBlocks(Seq(Seq(genesis), Seq(payment)))
-      val block0 = blocks(0)
-      val block1 = blocks(1)
-      val badMicroRef = buildMicroBlockOfTxs(block0.id(), block1, Seq(payment2), defaultSigner)._2
-        .copy(reference = randomSig)
-      domain.blockchainUpdater.processBlock(block0) should beRight
-      domain.blockchainUpdater.processBlock(block1) should beRight
-      domain.blockchainUpdater.processMicroBlock(badMicroRef, None) should produce("doesn't reference base block")
+  property("microblock: first micro doesn't reference base block (references nothing)") {
+    withDomain(balances = balances) { d =>
+      d.appendBlock(payment)
+      val badMicroRef = d.createMicroBlock()(payment).copy(reference = randomSig)
+      d.appendMicroBlockE(badMicroRef) should produce("doesn't reference base block")
     }
   }
 
-  property("microblock: first micro doesn't reference base block(references firm block)") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, _)) =>
-      val blocks = chainBlocks(Seq(Seq(genesis), Seq(payment)))
-      val block0 = blocks(0)
-      val block1 = blocks(1)
-      val badMicroRef = buildMicroBlockOfTxs(block0.id(), block1, Seq(payment2), defaultSigner)._2
-        .copy(reference = randomSig)
-      domain.blockchainUpdater.processBlock(block0) should beRight
-      domain.blockchainUpdater.processBlock(block1) should beRight
-      domain.blockchainUpdater.processMicroBlock(badMicroRef, None) should produce("doesn't reference base block")
+  property("microblock: first micro doesn't reference base block (references firm block)") {
+    withDomain(balances = balances) { d =>
+      val genesisId = d.lastBlockId
+      d.appendBlock(payment)
+      // The first micro on a liquid block has to reference that block, not the firm one below it
+      val badMicroRef = d.createMicroBlock()(payment).copy(reference = genesisId)
+      d.appendMicroBlockE(badMicroRef) should produce("doesn't reference base block")
     }
   }
 
   property("microblock: no base block at all") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, _)) =>
-      val block0                 = buildBlockOfTxs(randomSig, Seq(genesis))
-      val (block1, microblocks1) = chainBaseAndMicro(block0.id(), payment, Seq(payment2).map(Seq(_)))
-      domain.blockchainUpdater.processBlock(block0) should beRight
-      domain.blockchainUpdater.processBlock(block1) should beRight
-      domain.blockchainUpdater.removeAfter(block0.id()) should beRight
-      domain.blockchainUpdater.processMicroBlock(microblocks1.head, None) should produce("No base block exists")
+    withDomain(balances = balances) { d =>
+      val genesisId = d.lastBlockId
+      d.appendBlock(payment)
+      val micro = d.createMicroBlock()(payment)
+      d.blockchainUpdater.removeAfter(genesisId) should beRight // drop the base block the micro extends
+      d.appendMicroBlockE(micro) should produce("No base block exists")
     }
   }
 
   property("microblock: follow-up micro doesn't reference last known micro") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, payment3)) =>
-      val block0                 = buildBlockOfTxs(randomSig, Seq(genesis))
-      val (block1, microblocks1) = chainBaseAndMicro(block0.id(), payment, Seq(payment2, payment3).map(Seq(_)))
-      val goodMicro              = microblocks1(0)
-      val badRefMicro            = microblocks1(1).copy(reference = block1.id())
-      domain.blockchainUpdater.processBlock(block0) should beRight
-      domain.blockchainUpdater.processBlock(block1) should beRight
-      domain.blockchainUpdater.processMicroBlock(goodMicro, None) should beRight
-      domain.blockchainUpdater.processMicroBlock(badRefMicro, None) should produce("doesn't reference last known microBlock")
+    withDomain(balances = balances) { d =>
+      d.appendBlock(payment)
+      val baseId = d.lastBlockId
+      d.appendMicroBlock(payment) // good micro
+      // The follow-up micro references the base block instead of the previous micro
+      val badRefMicro = d.createMicroBlock()(payment).copy(reference = baseId)
+      d.appendMicroBlockE(badRefMicro) should produce("doesn't reference last known microBlock")
     }
   }
 
-  property("block: second 'genesis' block") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, _)) =>
-      val block0 = buildBlockOfTxs(randomSig, Seq(genesis, payment))
-      val block1 = buildBlockOfTxs(randomSig, Seq(genesis, payment2))
-      domain.blockchainUpdater.processBlock(block0) should beRight
-      domain.blockchainUpdater.processBlock(block1) should produce("References incorrect or non-existing block")
+  property("block: doesn't reference the last block") {
+    withDomain(balances = balances) { d =>
+      d.appendBlock(payment)
+      val badBlock = d.createBlock(Seq(payment), ref = Some(randomSig))
+      d.appendBlockE(badBlock) should produce("References incorrect or non-existing block")
     }
   }
 
   property("block: incorrect or non-existing block when liquid is empty") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, payment3)) =>
-      val blocks = chainBlocks(Seq(Seq(genesis), Seq(payment), Seq(payment2)))
-      domain.blockchainUpdater.processBlock(blocks.head) should beRight
-      domain.blockchainUpdater.processBlock(blocks(1)) should beRight
-      domain.blockchainUpdater.removeAfter(blocks.head.id()) should beRight
-      val block2 = buildBlockOfTxs(randomSig, Seq(payment3))
-      domain.blockchainUpdater.processBlock(block2) should produce("References incorrect or non-existing block")
+    withDomain(balances = balances) { d =>
+      d.appendBlock()
+      val block0Id = d.lastBlockId
+      d.appendBlock()
+      d.blockchainUpdater.removeAfter(block0Id) should beRight // hardens block0, drops the liquid block
+      val badBlock = d.createBlock(Seq(payment), ref = Some(randomSig))
+      d.appendBlockE(badBlock) should produce("References incorrect or non-existing block")
     }
   }
 
   property("block: incorrect or non-existing block when liquid exists") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (genesis, payment, payment2, payment3)) =>
-      val blocks   = chainBlocks(Seq(Seq(genesis), Seq(payment), Seq(payment2)))
-      val block1v2 = buildBlockOfTxs(blocks(0).id(), Seq(payment3))
-      domain.blockchainUpdater.processBlock(blocks(0)) should beRight
-      domain.blockchainUpdater.processBlock(blocks(1)) should beRight
-      domain.blockchainUpdater.processBlock(blocks(2)) should beRight
-      domain.blockchainUpdater.processBlock(block1v2) should produce("References incorrect or non-existing block")
+    withDomain(balances = balances) { d =>
+      val genesisId = d.lastBlockId
+      d.appendBlock()
+      d.appendBlock()
+      // References the genesis block, i.e. two blocks back, so it is neither the liquid block's parent nor known
+      val badBlock = d.createBlock(Seq(payment), ref = Some(genesisId))
+      d.appendBlockE(badBlock) should produce("References incorrect or non-existing block")
     }
   }
 }

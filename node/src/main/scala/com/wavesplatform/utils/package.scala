@@ -3,13 +3,13 @@ package com.wavesplatform
 import com.google.common.primitives.UnsignedBytes
 import com.google.protobuf.ByteString
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.{Base58, Base64}
-import com.wavesplatform.lang.v1.compiler.Terms.*
+import com.wavesplatform.common.utils.Base58
 import play.api.libs.json.*
 
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import scala.annotation.tailrec
+import scala.util.{Failure, Success}
 
 package object utils {
 
@@ -47,24 +47,17 @@ package object utils {
     f"${bytes / divisor}%.1f $unitString"
   }
 
-  implicit class Tap[A](a: A) {
-    def tap(g: A => Unit): A = {
-      g(a)
-      a
-    }
-  }
-
   def randomBytes(howMany: Int = 32): Array[Byte] = {
     val r = new Array[Byte](howMany)
     new SecureRandom().nextBytes(r) // overrides r
     r
   }
 
-  def byteArrayFromString[T](v: String, onSuccess: Array[Byte] => T, onFailure: String => T): T = {
-    if (v.startsWith("base64:")) Base64.tryDecode(v.substring(7)).fold(e => onFailure(s"Error parsing base64: ${e.getMessage}"), onSuccess)
-    else if (v.length > Base58.defaultDecodeLimit) onFailure(s"base58-encoded string length (${v.length}) exceeds maximum length of 192")
-    else Base58.tryDecodeWithLimit(v).fold(e => onFailure(s"Error parsing base58: ${e.getMessage}"), onSuccess)
-  }
+  def byteArrayFromString[T](v: String, onSuccess: Array[Byte] => T, onFailure: String => T): T =
+    Base58.tryDecodeWithLimit(v) match {
+      case Success(bytes) => onSuccess(bytes)
+      case Failure(_)     => onFailure(s"Can't parse '$v' as base58 encoded byte array")
+    }
 
   val arrayReads: Reads[Array[Byte]] = Reads {
     case JsString(v) => byteArrayFromString(v, JsSuccess(_), JsError(_))
@@ -83,20 +76,6 @@ package object utils {
     def utf8Bytes: Array[Byte]   = s.getBytes(StandardCharsets.UTF_8)
     def toByteString: ByteString = ByteString.copyFromUtf8(s)
   }
-
-  import com.wavesplatform.api.http.ApiError
-
-  implicit val evaluatedWrites: Writes[EVALUATED] = (o: EVALUATED) =>
-    (o: @unchecked) match {
-      case CONST_LONG(num)   => Json.obj("type" -> "Int", "value" -> num)
-      case CONST_BYTESTR(bs) => Json.obj("type" -> "ByteVector", "value" -> bs.toString)
-      case CONST_STRING(str) => Json.obj("type" -> "String", "value" -> str)
-      case CONST_BOOLEAN(b)  => Json.obj("type" -> "Boolean", "value" -> b)
-      case CaseObj(caseType, fields) =>
-        Json.obj("type" -> caseType.name, "value" -> JsObject(fields.view.mapValues(evaluatedWrites.writes).toSeq))
-      case ARR(xs)      => Json.obj("type" -> "Array", "value" -> xs.map(evaluatedWrites.writes))
-      case FAIL(reason) => Json.obj("error" -> ApiError.ScriptExecutionError.Id, "error" -> reason)
-    }
 
   implicit val byteStrOrdering: Ordering[ByteStr] = (x, y) => UnsignedBytes.lexicographicalComparator().compare(x.arr, y.arr)
 }

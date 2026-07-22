@@ -2,7 +2,6 @@ package com.wavesplatform.http
 
 import cats.syntax.option.*
 import com.wavesplatform.TestValues.commitToGenerationFee
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.api.http.{GeneratorsApiRoute, RouteTimeout}
 import com.wavesplatform.block.{BlockEndorsement, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
@@ -13,12 +12,13 @@ import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.{GenerationPeriod, GeneratorIndex, Height, diffs}
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import monix.execution.Scheduler.global
 import org.apache.pekko.http.scaladsl.model.StatusCodes.{NotFound, OK}
 import org.scalactic.source.Position
 import play.api.libs.json.{JsArray, JsObject, Json}
+import tech.hearth.crypto.SigningKey
 
 import scala.annotation.targetName
 import scala.concurrent.duration.*
@@ -53,11 +53,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
 
   private val defaultInitBalances: Seq[WithState.AddrWithBalance] = generators.map(x => AddrWithBalance(x.toAddress, initBalance))
 
-  private val period1 = GenerationPeriod(
-    start = Height(activationHeight.toInt + 1 + generationPeriodLength),
-    activation = activationHeight,
-    length = generationPeriodLength
-  )
+  private val period1 = GenerationPeriod(Height(activationHeight.toInt + 1 + generationPeriodLength), generationPeriodLength)
   private val period2 = period1.next
   private val period3 = period2.next
 
@@ -329,7 +325,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
   }
 
   extension (d: Domain) {
-    def commit(generators: KeyPair*): Seq[ByteStr] = {
+    def commit(generators: SigningKey*): Seq[ByteStr] = {
       val generationPeriod = {
         val p = d.blockchain.currentGenerationPeriod.value.next
         if (p.start == Height(d.blockchain.height + 1)) p.next
@@ -350,7 +346,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           aggregatedEndorsement = None,
           conflict = Vector(
             BlockEndorsement.signed(
-              BlsKeyPair(conflictingGenerator.privateKey),
+              BlsKeyPair(???),
               GeneratorIndex(1),
               finalizedId = TxHelpers.randomBlockId,
               finalizedHeight = Height(1),

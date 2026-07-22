@@ -40,19 +40,19 @@ class UtxPriorityPoolSpecification extends FreeSpec with SharedDomain {
     "tx from last microblock is placed on next height ahead of new txs after appending key block" in {
       domain.utxPool.removeAll(domain.utxPool.nonPriorityTransactions)
       val blockId = domain.appendKeyBlock().id()
-      val issue   = TxHelpers.issue(alice)
+      val tx      = TxHelpers.transfer(alice)
 
-      domain.appendMicroBlock(issue)
-      domain.blockchain.transactionInfo(issue.id()) shouldBe defined
+      domain.appendMicroBlock(tx)
+      domain.blockchain.transactionInfo(tx.id()) shouldBe defined
       domain.utxPool.all shouldBe Nil
 
       domain.appendKeyBlock(ref = Some(blockId))
-      domain.blockchain.transactionInfo(issue.id()) shouldBe None
-      domain.utxPool.all shouldBe Seq(issue)
+      domain.blockchain.transactionInfo(tx.id()) shouldBe None
+      domain.utxPool.all shouldBe Seq(tx)
 
-      val secondIssue = TxHelpers.issue(alice, fee = 2.waves)
-      domain.utxPool.putIfNew(secondIssue)
-      pack() shouldBe Some(List(issue, secondIssue))
+      val secondTx = TxHelpers.transfer(alice, fee = 2.waves)
+      domain.utxPool.putIfNew(secondTx)
+      pack() shouldBe Some(List(tx, secondTx))
     }
   }
 }

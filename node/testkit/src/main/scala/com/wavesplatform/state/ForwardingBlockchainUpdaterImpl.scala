@@ -21,30 +21,22 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
     blockReward,
     blockRewardVotes,
     wavesAmount,
-    transferById,
     transactionInfo,
     transactionInfos,
     transactionMeta,
     transactionSnapshot,
     containsTransaction,
     assetDescription,
-    resolveAlias,
     leaseDetails,
     filledVolumeAndFee,
     balanceAtHeight,
     balanceSnapshots,
-    accountScript,
-    hasAccountScript,
-    assetScript,
-    accountData,
-    hasData,
     leaseBalance,
     leaseBalances,
     balance,
     balances,
     wavesBalances,
     effectiveBalanceBanHeights,
-    resolveERC20Address,
     lastStateHash,
     processBlock,
     processMicroBlock,
@@ -69,5 +61,5 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
     conflictGenerators
   }
 
-  override def committedGenerators(at: GenerationPeriod): IndexedSeq[(Address, BlsPublicKey)] = delegate.committedGenerators(at)
+  override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = delegate.committedGenerators(at)
 }

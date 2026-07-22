@@ -8,44 +8,48 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.crypto.{DigestLength, SignatureLength}
-import com.wavesplatform.lang.directives.values.*
-import com.wavesplatform.lang.script.ContractScript.ContractScriptImpl
-import com.wavesplatform.lang.script.Script
-import com.wavesplatform.lang.script.v1.ExprScript
-import com.wavesplatform.lang.script.v1.ExprScript.ExprScriptImpl
-import com.wavesplatform.lang.v1.FunctionHeader
-import com.wavesplatform.lang.v1.compiler.Terms.{EXPR, FUNCTION_CALL}
-import com.wavesplatform.lang.v1.compiler.TestCompiler
-import com.wavesplatform.lang.v1.estimator.v3.ScriptEstimatorV3
+import com.wavesplatform.lang.ValidationError
+import com.wavesplatform.mining.MiningAccount
 import com.wavesplatform.state.diffs.ENOUGH_AMT
-import com.wavesplatform.state.diffs.FeeValidation.{FeeConstants, FeeUnit, ScriptExtraFee}
-import com.wavesplatform.state.{DataEntry, Height, StringDataEntry, TransactionId}
+import com.wavesplatform.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
+import com.wavesplatform.state.{Height, TransactionId}
 import com.wavesplatform.test.*
-import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.assets.*
+import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.transaction.TxValidationError.GenericError
 import com.wavesplatform.transaction.assets.exchange.*
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import com.wavesplatform.transaction.smart.InvokeScriptTransaction.Payment
-import com.wavesplatform.transaction.smart.script.ScriptCompiler
-import com.wavesplatform.transaction.smart.{InvokeExpressionTransaction, InvokeScriptTransaction, SetScriptTransaction}
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.ParsedTransfer
 import com.wavesplatform.transaction.transfer.{MassTransferTransaction, TransferTransaction}
-import com.wavesplatform.transaction.utils.EthConverters.*
 import monix.execution.atomic.AtomicLong
-import org.web3j.crypto.ECKeyPair
+import tech.hearth.crypto.{Crypto, KeyTree, SigningKey, VrfKey}
 
 import java.util.concurrent.ThreadLocalRandom
 
 object TxHelpers {
-  def signer(i: Int): SeedKeyPair = KeyPair(Ints.toByteArray(i))
-  def address(i: Int): Address    = signer(i).toAddress
+  def signer(i: Int): SigningKey = SigningKey.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(i)))
+  def address(i: Int): Address   = signer(i).toAddress
+  def miningAccount(i: Int): MiningAccount = {
+    val hash = Crypto.defaultBackend().sha256(Ints.toByteArray(i))
+    MiningAccount(SigningKey.fromSeed(hash), VrfKey.fromSeed(hash))
+  }
 
-  val defaultSigner: SeedKeyPair = signer(0)
-  val defaultAddress: Address    = defaultSigner.toAddress
-  val secondSigner: SeedKeyPair  = signer(1)
-  val secondAddress: Address     = secondSigner.toAddress
+  val defaultSigner: SigningKey = signer(0)
+  val defaultAddress: Address   = defaultSigner.toAddress
+  val secondSigner: SigningKey  = signer(1)
+  val secondAddress: Address    = secondSigner.toAddress
 
-  val defaultEthSigner: ECKeyPair = defaultSigner.toEthKeyPair
+  // BlsKeyPair.fromSeed yields a zero key (a point at infinity) for a seed shorter than 32 bytes
+  val defaultBlsKey: BlsKeyPair = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(1)))
+
+  /** A generator's VRF key, derived from its public key. A VRF key can only be committed once, so deriving it per
+    * sender keeps two generators from colliding on the same key.
+    */
+  def vrfKeyOf(sender: SigningKey): VrfKey = VrfKey.fromSeed(Crypto.defaultBackend().sha256(sender.publicKey()))
+
+  /** The VRF key blocks are generated with by default, see history.defaultVrfKey. A generator has to commit to this one
+    * for its blocks to verify, which is why it is the key [[vrfKeyOf]] derives for the default signer.
+    */
+  val defaultVrfKey: VrfKey = vrfKeyOf(defaultSigner)
 
   def accountSeqGenerator(numberAccounts: Int, amount: Long): Seq[ParsedTransfer] = {
     val firstAccountNum = 100
@@ -57,7 +61,7 @@ object TxHelpers {
     accountsSeq
   }
 
-  val matcher: SeedKeyPair = defaultSigner
+  val matcher: SigningKey = defaultSigner
 
   private val lastTimestamp = AtomicLong(System.currentTimeMillis())
   def timestamp: Long       = lastTimestamp.getAndIncrement()
@@ -66,15 +70,9 @@ object TxHelpers {
   def signature(sig: String): Proofs =
     Proofs(ByteStr.decodeBase58(sig).get)
 
-  def genesis(address: Address, amount: Long = ENOUGH_AMT, timestamp: TxTimestamp = timestamp): GenesisTransaction =
-    GenesisTransaction.create(address, amount, timestamp).explicitGet()
-
-  def payment(from: KeyPair = defaultSigner, to: Address = secondAddress, amount: Long = 1.waves): PaymentTransaction =
-    PaymentTransaction.create(from, to, amount, TestValues.fee, timestamp).explicitGet()
-
   def transfer(
-      from: KeyPair = defaultSigner,
-      to: AddressOrAlias = secondAddress,
+      from: SigningKey = defaultSigner,
+      to: Address = secondAddress,
       amount: Long = 1.waves,
       asset: Asset = Waves,
       fee: Long = TestValues.fee,
@@ -85,22 +83,23 @@ object TxHelpers {
       chainId: Byte = AddressScheme.current.chainId
   ): TransferTransaction =
     TransferTransaction
-      .create(version, from.publicKey, to, asset, amount, feeAsset, fee, attachment, timestamp, Proofs.empty, chainId)
-      .map(_.signWith(from.privateKey))
+      .create(version, PublicKey(from.publicKey), to, asset, amount, feeAsset, fee, attachment, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(from))
       .explicitGet()
 
   def transferUnsigned(
-      from: KeyPair = defaultSigner,
-      to: AddressOrAlias = secondAddress,
+      from: SigningKey = defaultSigner,
+      to: Address = secondAddress,
       amount: Long = 1.waves,
       asset: Asset = Waves,
       fee: Long = TestValues.fee,
       feeAsset: Asset = Waves,
-      version: Byte = TxVersion.V2
+      version: Byte = TxVersion.V2,
+      chainId: Byte = AddressScheme.current.chainId
   ): TransferTransaction =
     TransferTransaction(
       version,
-      from.publicKey,
+      PublicKey(from.publicKey),
       to,
       asset,
       TxPositiveAmount.unsafeFrom(amount),
@@ -109,12 +108,12 @@ object TxHelpers {
       ByteStr.empty,
       timestamp,
       Proofs.empty,
-      to.chainId
+      chainId
     )
 
   def massTransfer(
-      from: KeyPair = defaultSigner,
-      to: Seq[(AddressOrAlias, Long)] = Seq(secondAddress -> 1.waves),
+      from: SigningKey = defaultSigner,
+      to: Seq[(Address, Long)] = Seq(secondAddress -> 1.waves),
       asset: Asset = Waves,
       fee: Long = FeeConstants(TransactionType.MassTransfer) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
@@ -124,7 +123,7 @@ object TxHelpers {
     MassTransferTransaction
       .create(
         version,
-        from.publicKey,
+        PublicKey(from.publicKey),
         asset,
         to.map { case (r, a) => MassTransferTransaction.ParsedTransfer(r, TxNonNegativeAmount.unsafeFrom(a)) },
         fee,
@@ -133,106 +132,110 @@ object TxHelpers {
         Proofs.empty,
         chainId
       )
-      .map(_.signWith(from.privateKey))
-      .explicitGet()
-
-  def issue(
-      issuer: KeyPair = defaultSigner,
-      amount: Long = Long.MaxValue / 100,
-      decimals: Byte = 0,
-      name: String = "test",
-      description: String = "description",
-      fee: Long = 1.waves,
-      script: Option[Script] = None,
-      reissuable: Boolean = true,
-      timestamp: TxTimestamp = timestamp,
-      version: TxVersion = TxVersion.V2,
-      chainId: Byte = AddressScheme.current.chainId
-  ): IssueTransaction =
-    IssueTransaction
-      .create(version, issuer.publicKey, name, description, amount, decimals, reissuable, script, fee, timestamp, chainId = chainId)
-      .map(_.signWith(issuer.privateKey))
-      .explicitGet()
-
-  def reissue(
-      asset: IssuedAsset,
-      sender: KeyPair = defaultSigner,
-      amount: Long = 1000,
-      reissuable: Boolean = true,
-      fee: Long = TestValues.fee,
-      version: TxVersion = TxVersion.V2,
-      chainId: Byte = AddressScheme.current.chainId,
-      timestamp: TxTimestamp = timestamp
-  ): ReissueTransaction =
-    ReissueTransaction
-      .create(version, sender.publicKey, asset, amount, reissuable = reissuable, fee, timestamp, chainId = chainId)
-      .map(_.signWith(sender.privateKey))
-      .explicitGet()
-
-  def dataEntry(account: KeyPair, value: DataEntry[?]): DataTransaction =
-    DataTransaction
-      .create(TxVersion.V1, account.publicKey, Seq(value), TestValues.fee * 3, timestamp)
-      .map(_.signWith(account.privateKey))
-      .explicitGet()
-
-  def dataSingle(account: KeyPair = defaultSigner, key: String = "test", value: String = "test", fee: Long = TestValues.fee): DataTransaction =
-    data(account, Seq(StringDataEntry(key, value)), fee)
-
-  def data(
-      account: KeyPair,
-      entries: Seq[DataEntry[?]],
-      fee: Long = TestValues.fee * 3,
-      version: TxVersion = TxVersion.V1,
-      timestamp: TxTimestamp = timestamp
-  ): DataTransaction =
-    DataTransaction.create(version, account.publicKey, entries, fee, timestamp).map(_.signWith(account.privateKey)).explicitGet()
-
-  def dataV2(
-      account: KeyPair,
-      entries: Seq[DataEntry[?]],
-      fee: Long = TestValues.fee * 3,
-      chainId: Byte = AddressScheme.current.chainId
-  ): DataTransaction =
-    DataTransaction
-      .create(TxVersion.V2, account.publicKey, entries, fee, timestamp, chainId = chainId)
-      .map(_.signWith(account.privateKey))
-      .explicitGet()
-
-  def dataWithMultipleEntries(account: KeyPair, entries: Seq[DataEntry[?]]): DataTransaction =
-    DataTransaction.create(TxVersion.V1, account.publicKey, entries, TestValues.fee * 3, timestamp).map(_.signWith(account.privateKey)).explicitGet()
-
-  def burn(
-      asset: IssuedAsset,
-      amount: Long = 1,
-      sender: KeyPair = defaultSigner,
-      fee: Long = TestValues.fee,
-      version: TxVersion = TxVersion.V3,
-      chainId: Byte = AddressScheme.current.chainId,
-      timestamp: TxTimestamp = timestamp
-  ): BurnTransaction =
-    BurnTransaction
-      .create(version, sender.publicKey, asset, amount, fee, timestamp, chainId = chainId)
-      .map(_.signWith(sender.privateKey))
-      .explicitGet()
-
-  def updateAssetInfo(
-      assetId: ByteStr,
-      name: String = "updated_name",
-      desc: String = "updated_desc",
-      sender: KeyPair = defaultSigner,
-      fee: Long = TestValues.fee,
-      feeAsset: Asset = Waves,
-      version: TxVersion = TxVersion.V1,
-      chainId: Byte = AddressScheme.current.chainId
-  ): UpdateAssetInfoTransaction =
-    UpdateAssetInfoTransaction
-      .create(version, sender.publicKey, IssuedAsset(assetId), name, desc, timestamp, fee, feeAsset, Proofs.empty, chainId)
-      .map(_.signWith(sender.privateKey))
+      .map(_.signWith(from))
       .explicitGet()
 
   def orderV3(orderType: OrderType, asset: Asset, feeAsset: Asset = Waves): Order = {
     order(orderType, asset, Waves, feeAsset)
   }
+
+  def selfSigned(
+      version: TxVersion,
+      sender: SigningKey,
+      matcher: PublicKey,
+      assetPair: AssetPair,
+      orderType: OrderType,
+      amount: Long,
+      price: Long,
+      timestamp: TxTimestamp,
+      expiration: TxTimestamp,
+      matcherFee: Long,
+      matcherFeeAssetId: Asset = Asset.Waves,
+      priceMode: OrderPriceMode = OrderPriceMode.Default,
+      attachment: Option[ByteStr] = None
+  ): Either[ValidationError, Order] =
+    for {
+      amount     <- TxExchangeAmount(amount)(GenericError(s"Order validation error: ${TxExchangeAmount.errMsg}"))
+      price      <- TxOrderPrice(price)(GenericError(s"Order validation error: ${TxOrderPrice.errMsg}"))
+      matcherFee <- TxMatcherFee(matcherFee)(GenericError(s"Order validation error: ${TxMatcherFee.errMsg}"))
+    } yield {
+      val o = Order(
+        version,
+        OrderAuthentication(PublicKey(sender.publicKey)),
+        matcher,
+        assetPair,
+        orderType,
+        amount,
+        price,
+        timestamp,
+        expiration,
+        matcherFee,
+        matcherFeeAssetId,
+        priceMode = priceMode,
+        attachment = attachment
+      )
+      o.withProofs(Proofs(ByteStr(sender.sign(o.bodyBytes()))))
+    }
+
+  def buy(
+      version: TxVersion,
+      sender: SigningKey,
+      matcher: PublicKey,
+      pair: AssetPair,
+      amount: Long,
+      price: Long,
+      timestamp: TxTimestamp,
+      expiration: TxTimestamp,
+      matcherFee: Long,
+      matcherFeeAssetId: Asset = Waves,
+      priceMode: OrderPriceMode = OrderPriceMode.Default,
+      attachment: Option[ByteStr] = None
+  ): Either[ValidationError, Order] =
+    selfSigned(
+      version,
+      sender,
+      matcher,
+      pair,
+      OrderType.BUY,
+      amount,
+      price,
+      timestamp,
+      expiration,
+      matcherFee,
+      matcherFeeAssetId,
+      priceMode,
+      attachment
+    )
+
+  def sell(
+      version: TxVersion,
+      sender: SigningKey,
+      matcher: PublicKey,
+      pair: AssetPair,
+      amount: Long,
+      price: Long,
+      timestamp: TxTimestamp,
+      expiration: TxTimestamp,
+      matcherFee: Long,
+      matcherFeeAssetId: Asset = Waves,
+      priceMode: OrderPriceMode = OrderPriceMode.Default,
+      attachment: Option[ByteStr] = None
+  ): Either[ValidationError, Order] =
+    selfSigned(
+      version,
+      sender,
+      matcher,
+      pair,
+      OrderType.SELL,
+      amount,
+      price,
+      timestamp,
+      expiration,
+      matcherFee,
+      matcherFeeAssetId,
+      priceMode,
+      attachment
+    )
 
   def order(
       orderType: OrderType,
@@ -243,36 +246,36 @@ object TxHelpers {
       price: Long = 1L,
       priceMode: OrderPriceMode = OrderPriceMode.Default,
       fee: Long = 1L,
-      sender: KeyPair = defaultSigner,
-      matcher: KeyPair = defaultSigner,
+      sender: SigningKey = defaultSigner,
+      matcher: SigningKey = defaultSigner,
       timestamp: TxTimestamp = timestamp,
       expiration: TxTimestamp = timestamp + 100000,
       version: TxVersion = Order.V3,
       attachment: Option[ByteStr] = None
   ): Order = {
-    Order
-      .selfSigned(
-        version,
-        sender,
-        matcher.publicKey,
-        AssetPair(amountAsset, priceAsset),
-        orderType,
-        amount,
-        price,
-        timestamp,
-        expiration,
-        fee,
-        feeAsset,
-        priceMode,
-        attachment
-      )
+
+    selfSigned(
+      version,
+      sender,
+      PublicKey(matcher.publicKey),
+      AssetPair(amountAsset, priceAsset),
+      orderType,
+      amount,
+      price,
+      timestamp,
+      expiration,
+      fee,
+      feeAsset,
+      priceMode,
+      attachment
+    )
       .explicitGet()
   }
 
   def exchangeFromOrders(
       order1: Order,
       order2: Order,
-      matcher: KeyPair = defaultSigner,
+      matcher: SigningKey = defaultSigner,
       fee: Long = TestValues.fee,
       version: TxVersion = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
@@ -282,7 +285,7 @@ object TxHelpers {
       order1: Order,
       order2: Order,
       price: Long,
-      matcher: KeyPair,
+      matcher: SigningKey,
       fee: Long,
       version: TxVersion,
       chainId: Byte
@@ -300,13 +303,13 @@ object TxHelpers {
         timestamp,
         chainId = chainId
       )
-      .map(_.signWith(matcher.privateKey))
+      .map(_.signWith(matcher))
       .explicitGet()
 
   def exchange(
       order1: Order,
       order2: Order,
-      matcher: KeyPair = defaultSigner,
+      matcher: SigningKey = defaultSigner,
       amount: Long = 1L,
       price: Long = 1L,
       buyMatcherFee: Long = 1L,
@@ -329,240 +332,84 @@ object TxHelpers {
         timestamp = timestamp,
         chainId = chainId
       )
-      .map(_.signWith(matcher.privateKey))
+      .map(_.signWith(matcher))
       .explicitGet()
-
-  def script(scriptText: String): Script = {
-    val (script, _) = ScriptCompiler.compile(scriptText, ScriptEstimatorV3.latest).explicitGet()
-    script
-  }
-
-  def exprScript(version: StdLibVersion)(scriptText: String): ExprScriptImpl =
-    script(s"""
-              |{-# STDLIB_VERSION ${version.id} #-}
-              |{-# CONTENT_TYPE EXPRESSION #-}
-              |
-              |$scriptText
-              |""".stripMargin) match {
-      case es: ExprScriptImpl => es
-      case other              => throw new IllegalStateException(s"Not an expression: $other")
-    }
-
-  def freeCallScript(scriptText: String, version: StdLibVersion = V6): ExprScriptImpl =
-    TestCompiler(version).compileFreeCall(scriptText) match {
-      case es: ExprScriptImpl => es
-      case other              => throw new IllegalStateException(s"Not an expression: $other")
-    }
-
-  def scriptV5(scriptText: String): ContractScriptImpl =
-    script(s"""
-              |{-# STDLIB_VERSION 5 #-}
-              |{-# CONTENT_TYPE DAPP #-}
-              |
-              |$scriptText
-              |""".stripMargin) match {
-      case cs: ContractScriptImpl => cs
-      case other                  => throw new IllegalStateException(s"Not a contract: $other")
-    }
-
-  def scriptV6(scriptText: String): ContractScriptImpl =
-    script(s"""
-              |{-# STDLIB_VERSION 6 #-}
-              |{-# CONTENT_TYPE DAPP #-}
-              |
-              |$scriptText
-              |""".stripMargin) match {
-      case cs: ContractScriptImpl => cs
-      case other                  => throw new IllegalStateException(s"Not a contract: $other")
-    }
-
-  def estimate(script: Script): Int =
-    math.toIntExact(
-      Script
-        .estimate(
-          script,
-          ScriptEstimatorV3.latest,
-          fixEstimateOfVerifier = true,
-          useContractVerifierLimit = false
-        )
-        .explicitGet()
-    )
-
-  def setScript(
-      acc: KeyPair,
-      script: Script,
-      fee: Long = FeeConstants(TransactionType.SetScript) * FeeUnit,
-      version: TxVersion = TxVersion.V1,
-      chainId: Byte = AddressScheme.current.chainId,
-      timestamp: TxTimestamp = timestamp
-  ): SetScriptTransaction = {
-    SetScriptTransaction
-      .create(version, acc.publicKey, Some(script), fee, timestamp, Proofs.empty, chainId)
-      .map(_.signWith(acc.privateKey))
-      .explicitGet()
-  }
-
-  def removeScript(
-      acc: KeyPair,
-      fee: Long = FeeConstants(TransactionType.SetScript) * FeeUnit,
-      version: TxVersion = TxVersion.V1,
-      chainId: Byte = AddressScheme.current.chainId,
-      timestamp: TxTimestamp = timestamp
-  ): SetScriptTransaction = {
-    SetScriptTransaction.create(version, acc.publicKey, None, fee, timestamp, Proofs.empty, chainId).map(_.signWith(acc.privateKey)).explicitGet()
-  }
-
-  def setAssetScript(
-      acc: KeyPair,
-      asset: IssuedAsset,
-      script: Script,
-      fee: Long = FeeConstants(TransactionType.SetAssetScript) * FeeUnit + ScriptExtraFee,
-      timestamp: TxTimestamp = timestamp,
-      version: TxVersion = TxVersion.V1,
-      chainId: Byte = AddressScheme.current.chainId
-  ): SetAssetScriptTransaction = {
-    SetAssetScriptTransaction
-      .create(version, acc.publicKey, asset, Some(script), fee, timestamp, Proofs.empty, chainId)
-      .map(_.signWith(acc.privateKey))
-      .explicitGet()
-  }
-
-  def invoke(
-      dApp: AddressOrAlias = secondAddress,
-      func: Option[String] = None,
-      args: Seq[EXPR] = Nil,
-      payments: Seq[Payment] = Nil,
-      invoker: KeyPair = defaultSigner,
-      fee: Long = FeeConstants(TransactionType.InvokeScript) * FeeUnit,
-      feeAssetId: Asset = Waves,
-      version: TxVersion = TxVersion.V2,
-      timestamp: TxTimestamp = timestamp
-  ): InvokeScriptTransaction =
-    InvokeScriptTransaction
-      .create(
-        version,
-        invoker.publicKey,
-        dApp,
-        func.map(name => functionCall(name, args*)),
-        payments,
-        fee,
-        feeAssetId,
-        timestamp,
-        chainId = dApp.chainId
-      )
-      .map(_.signWith(invoker.privateKey))
-      .explicitGet()
-
-  def invokeExpression(
-      expression: ExprScript,
-      sender: KeyPair = defaultSigner,
-      fee: Long = TestValues.fee,
-      feeAssetId: Asset = Waves,
-      version: TxVersion = TxVersion.V1
-  ): InvokeExpressionTransaction =
-    InvokeExpressionTransaction
-      .create(version, sender.publicKey, expression, fee, feeAssetId, timestamp, Proofs.empty)
-      .map(_.signWith(sender.privateKey))
-      .explicitGet()
-
-  def functionCall(func: String, args: EXPR*): FUNCTION_CALL = {
-    FUNCTION_CALL(FunctionHeader.User(func), args.toList)
-  }
 
   def lease(
-      sender: KeyPair = defaultSigner,
-      recipient: AddressOrAlias = secondAddress,
+      sender: SigningKey = defaultSigner,
+      recipient: Address = secondAddress,
       amount: Long = 10.waves,
       fee: Long = FeeConstants(TransactionType.Lease) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      version: TxVersion = TxVersion.V2
+      // LeaseTransaction.Version is refined to 1: the migration collapsed leases to a single version
+      version: TxVersion = TxVersion.V1,
+      chainId: Byte = AddressScheme.current.chainId
   ): LeaseTransaction = {
     LeaseTransaction
-      .create(version, sender.publicKey, recipient, amount, fee, timestamp, Proofs.empty)
-      .map(_.signWith(sender.privateKey))
+      .create(version, chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
+      .map(_.signWith(sender))
       .explicitGet()
   }
 
   def leaseCancel(
       leaseId: ByteStr,
-      sender: KeyPair = defaultSigner,
+      sender: SigningKey = defaultSigner,
       fee: Long = FeeConstants(TransactionType.LeaseCancel) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
       version: TxVersion = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
   ): LeaseCancelTransaction = {
     LeaseCancelTransaction
-      .create(version, sender.publicKey, leaseId, fee, timestamp, Proofs.empty, chainId)
-      .map(_.signWith(sender.privateKey))
+      .create(version, PublicKey(sender.publicKey), leaseId, fee, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(sender))
       .explicitGet()
   }
 
-  def sponsor(
-      asset: IssuedAsset,
-      minSponsoredAssetFee: Option[Long] = Some(TestValues.fee),
-      sender: KeyPair = defaultSigner,
-      fee: Long = 1.waves,
-      version: TxVersion = TxVersion.V1,
-      chainId: Byte = AddressScheme.current.chainId,
-      timestamp: TxTimestamp = timestamp
-  ): SponsorFeeTransaction = {
-    SponsorFeeTransaction
-      .create(version, sender.publicKey, asset, minSponsoredAssetFee, fee, timestamp, Proofs.empty, chainId)
-      .map(_.signWith(sender.privateKey))
-      .explicitGet()
-  }
-
-  def createAlias(
-      name: String = "alias",
-      sender: KeyPair = defaultSigner,
-      fee: Long = TestValues.fee,
-      version: TxVersion = TxVersion.V2,
-      chainId: Byte = AddressScheme.current.chainId,
-      timestamp: TxTimestamp = timestamp
-  ): CreateAliasTransaction = {
-    CreateAliasTransaction.create(version, sender.publicKey, name, fee, timestamp, chainId = chainId).map(_.signWith(sender.privateKey)).explicitGet()
-  }
-
+  /** The endorser key defaults to one derived from the sender, so that every sender commits a distinct BLS key. */
   def commitToGeneration(
       generationPeriodStart: Height,
-      sender: KeyPair = defaultSigner,
+      sender: SigningKey = defaultSigner,
       timestamp: TxTimestamp = timestamp,
       fee: Long = TestValues.commitToGenerationFee,
       chainId: Byte = AddressScheme.current.chainId,
-      version: TxVersion = TxVersion.V1
+      version: TxVersion = TxVersion.V1,
+      // Defaults to the sender's own derived key, see vrfKeyOf
+      vrfKey: Option[VrfKey] = None
   ): CommitToGenerationTransaction =
-    commitToGenerationWithEndorserKey(generationPeriodStart, BlsKeyPair(sender.privateKey), sender, timestamp, fee, chainId, version)
+    commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, chainId, version, vrfKey)
+
+  def blsKeyOf(sender: SigningKey): BlsKeyPair = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(sender.publicKey()))
 
   def commitToGenerationWithEndorserKey(
       generationPeriodStart: Height,
       endorserKp: BlsKeyPair,
-      sender: KeyPair = defaultSigner,
+      sender: SigningKey = defaultSigner,
       timestamp: TxTimestamp = timestamp,
       fee: Long = TestValues.commitToGenerationFee,
       chainId: Byte = AddressScheme.current.chainId,
-      version: TxVersion = TxVersion.V1
-  ): CommitToGenerationTransaction = CommitToGenerationTransaction
-    .selfSigned(
-      version,
-      sender,
-      endorserKp.publicKey,
-      generationPeriodStart,
-      timestamp,
-      fee,
-      CommitToGenerationTransaction.mkPopSignature(endorserKp, generationPeriodStart),
-      chainId
-    )
-    .explicitGet()
-
-  def ciFee(sc: Int = 0, nonNftIssue: Int = 0, freeCall: Boolean = false): Long =
-    invokeFee(freeCall) + (sc + 1) * ScriptExtraFee - 1 + nonNftIssue * FeeConstants(TransactionType.Issue) * FeeUnit
+      version: TxVersion = TxVersion.V1,
+      // Defaults to the sender's own derived key, see vrfKeyOf
+      vrfKeyOpt: Option[VrfKey] = None
+  ): CommitToGenerationTransaction = {
+    val vrfKey = vrfKeyOpt.getOrElse(vrfKeyOf(sender))
+    CommitToGenerationTransaction
+      .create(
+        version,
+        PublicKey(sender.publicKey()),
+        endorserKp.publicKey,
+        ByteStr(vrfKey.publicKey()),
+        generationPeriodStart,
+        timestamp,
+        fee,
+        CommitToGenerationTransaction.mkPopSignature(endorserKp, generationPeriodStart),
+        CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, generationPeriodStart),
+        Proofs.empty,
+        chainId
+      )
+      .map(_.signWith(sender))
+      .explicitGet()
+  }
 
   def randomId: TransactionId = TransactionId(ByteStr(Array.fill(DigestLength)(ThreadLocalRandom.current().nextInt(Byte.MaxValue).toByte)))
   def randomBlockId: BlockId  = ByteStr(Array.fill(SignatureLength)(ThreadLocalRandom.current().nextInt(Byte.MaxValue).toByte))
-
-  private def invokeFee(freeCall: Boolean) =
-    if (freeCall)
-      FeeUnit * FeeConstants(TransactionType.InvokeExpression)
-    else
-      FeeUnit * FeeConstants(TransactionType.InvokeScript)
 }

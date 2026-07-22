@@ -1,20 +1,20 @@
 package com.wavesplatform
 
 import com.typesafe.config.{Config, ConfigFactory}
-import com.wavesplatform.account.*
+import com.wavesplatform.account.AddressScheme
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.consensus.PoSCalculator.{generationSignature, hit}
+import com.wavesplatform.consensus.PoSCalculator.hit
 import com.wavesplatform.consensus.{FairPoSCalculator, NxtPoSCalculator}
 import com.wavesplatform.crypto.*
+import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatures}
 import com.wavesplatform.settings.*
-import com.wavesplatform.transaction.{GenesisTransaction, TxNonNegativeAmount}
 import com.wavesplatform.utils.*
-import com.wavesplatform.wallet.Wallet
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
+import tech.hearth.crypto.*
 
 import java.io.{File, FileNotFoundException}
 import java.nio.file.Files
@@ -25,8 +25,7 @@ import scala.concurrent.{Await, Future}
 
 object GenesisBlockGenerator {
 
-  private type SeedText = String
-  private type Share    = Long
+  private type Share = Long
 
   case class DistributionItem(seedText: String, amount: Share, nonce: Int = 0, miner: Boolean = true)
 
@@ -62,7 +61,6 @@ object GenesisBlockGenerator {
       Int.MaxValue,
       Int.MaxValue,
       preActivatedFeatures = features,
-      doubleFeaturesPeriodsAfterHeight = Int.MaxValue,
       minBlockTime = minBlockTime.getOrElse(15.seconds),
       delayDelta = delayDelta.getOrElse(8)
     )
@@ -71,28 +69,21 @@ object GenesisBlockGenerator {
   }
 
   case class FullAddressInfo(
-      seedText: SeedText,
-      seed: ByteStr,
-      accountSeed: ByteStr,
-      accountPrivateKey: PrivateKey,
-      accountPublicKey: PublicKey,
-      accountAddress: Address,
-      account: SeedKeyPair,
+      mnemonic: String,
+      signingKey: SigningKey,
+      vrfKey: VrfKey,
+      blsKey: BlsKeyPair,
       miner: Boolean
   )
 
   def toFullAddressInfo(item: DistributionItem): FullAddressInfo = {
-    val seedHash = item.seedText.utf8Bytes
-    val acc      = Wallet.generateNewAccount(seedHash, item.nonce)
+    val seedHash = Bip39.toSeed(item.seedText)
 
     FullAddressInfo(
-      seedText = item.seedText,
-      seed = ByteStr(seedHash),
-      accountSeed = ByteStr(acc.seed),
-      accountPrivateKey = acc.privateKey,
-      accountPublicKey = acc.publicKey,
-      accountAddress = acc.toAddress,
-      acc,
+      item.seedText,
+      KeyTree.signingKey(seedHash, item.nonce),
+      KeyTree.vrfKey(seedHash, item.nonce),
+      BlsKeyPair.fromScalar(KeyTree.blsSecretKey(seedHash, item.nonce)),
       item.miner
     )
   }
@@ -121,28 +112,30 @@ object GenesisBlockGenerator {
       output.append("Addresses:\n")
       addrInfos.foreach { acc =>
         output.append(s"""
-                         | Seed text:           ${acc.seedText}
-                         | Seed:                ${acc.seed}
-                         | Account seed:        ${acc.accountSeed}
-                         | Private account key: ${acc.accountPrivateKey}
-                         | Public account key:  ${acc.accountPublicKey}
-                         | Account address:     ${acc.accountAddress}
+                         | Seed text:           ${acc.mnemonic}
+                         | Public account key:  ${Hex.encode(acc.signingKey.publicKey())}
+                         | Account address:     ${acc.signingKey.toAddress.toBech32}
                          | ===
                          |""".stripMargin)
       }
 
-      val confBody = s"""genesis {
-                        |  average-block-delay = ${settings.averageBlockDelay.toMillis}ms
-                        |  initial-base-target = ${settings.initialBaseTarget}
-                        |  timestamp = ${settings.timestamp}
-                        |  block-timestamp = ${settings.blockTimestamp}
-                        |  signature = "${settings.signature.get}"
-                        |  initial-balance = ${settings.initialBalance}
-                        |  transactions = [
-                        |    ${settings.transactions.map(x => s"""{recipient = "${x.recipient}", amount = ${x.amount}}""").mkString(",\n    ")}
-                        |  ]
-                        |}
-                        |""".stripMargin
+      val confBody =
+        s"""genesis {
+           |  average-block-delay = ${settings.averageBlockDelay.toMillis}ms
+           |  initial-base-target = ${settings.initialBaseTarget}
+           |  timestamp = ${settings.timestamp}
+           |  block-timestamp = ${settings.blockTimestamp}
+           |  signature = "${settings.signature.get}"
+           |  generators = [
+           |    ${settings.generators
+            .map(x => s"""{public-key = "${x.publicKey}", endorser-public-key = "${x.endorserPublicKey}", vrf-public-key = "${x.vrfPublicKey}"}""")
+            .mkString(",\n    ")}
+           |  ]
+           |  balances = [
+           |    ${settings.balances.map(x => s"""{recipient = "${x.recipient}", waves = ${x.waves}}""").mkString(",\n    ")}
+           |  ]
+           |}
+           |""".stripMargin
 
       output.append("Settings:\n")
       output.append(confBody)
@@ -161,11 +154,16 @@ object GenesisBlockGenerator {
 
     val timestamp = settings.timestamp.getOrElse(System.currentTimeMillis())
 
-    val genesisTxs: Seq[GenesisTransaction] = shares.flatMap { case (addrInfo, part) =>
-      TxNonNegativeAmount
-        .from(part)
-        .toOption
-        .map(amount => GenesisTransaction(addrInfo.accountAddress, amount, timestamp, ByteStr.empty, settings.chainId))
+    val genesisBalances: Seq[GenesisBalanceSettings] = shares.map { case (addrInfo, amount) =>
+      GenesisBalanceSettings(addrInfo.signingKey.toAddress.toBech32, amount)
+    }
+
+    val genesisGenerators: Seq[GenesisGeneratorSettings] = minerShares.map { case (addrInfo, _) =>
+      GenesisGeneratorSettings(
+        ByteStr(addrInfo.signingKey.publicKey()).toString,
+        addrInfo.blsKey.publicKey.base58,
+        ByteStr(addrInfo.vrfKey.publicKey()).toString
+      )
     }
 
     def genesisSettings(predefined: Option[Long]): GenesisSettings =
@@ -175,8 +173,9 @@ object GenesisBlockGenerator {
 
     def mkGenesisSettings(baseTarget: Long): GenesisSettings = {
       val reference     = ByteStr(Array.fill(SignatureLength)(-1: Byte))
-      val genesisSigner = KeyPair(ByteStr.empty)
+      val genesisSigner = Block.GenesisGenerator
 
+      // The genesis block carries no transactions, so its signature covers the header only
       val genesis = Block
         .buildAndSign(
           version = 1,
@@ -184,7 +183,7 @@ object GenesisBlockGenerator {
           reference = reference,
           baseTarget,
           ByteStr(Array.fill(crypto.DigestLength)(0: Byte)),
-          txs = genesisTxs,
+          txs = Seq.empty,
           signer = genesisSigner,
           featureVotes = Seq.empty,
           rewardVote = -1L,
@@ -195,15 +194,12 @@ object GenesisBlockGenerator {
         .explicitGet()
 
       GenesisSettings(
-        genesis.header.timestamp,
         timestamp,
-        settings.initialBalance,
         Some(genesis.signature),
-        genesisTxs.map { tx =>
-          GenesisTransactionSettings(tx.recipient.toString, tx.amount.value)
-        },
         genesis.header.baseTarget,
-        settings.averageBlockDelay
+        settings.averageBlockDelay,
+        generators = genesisGenerators,
+        balances = genesisBalances
       )
     }
 
@@ -214,19 +210,12 @@ object GenesisBlockGenerator {
           else FairPoSCalculator.V1
         else NxtPoSCalculator
 
-      val hitSourceCache = TrieMap[(KeyPair, ByteStr), (BigInt, ByteStr)]()
+      val hitSourceCache = TrieMap[(VrfKey, ByteStr), (BigInt, ByteStr)]()
 
-      def getHitWithSource(account: KeyPair, hitSource: ByteStr): (BigInt, ByteStr) =
+      def getHitWithSource(account: VrfKey, hitSource: ByteStr): (BigInt, ByteStr) =
         hitSourceCache.getOrElseUpdate(
           (account, hitSource), {
-            val gs =
-              if (settings.preActivated(BlockchainFeatures.BlockV5)) {
-                val vrfProof = crypto.signVRF(account.privateKey, hitSource.arr)
-                crypto
-                  .verifyVRF(vrfProof, hitSource.arr, account.publicKey, settings.preActivated(BlockchainFeatures.RideV6))
-                  .map(_.arr)
-                  .explicitGet()
-              } else generationSignature(hitSource, account.publicKey)
+            val gs = Ecvrf.prove(account, hitSource.arr).beta()
 
             (hit(gs), ByteStr(gs))
           }
@@ -270,7 +259,7 @@ object GenesisBlockGenerator {
           val (delay, newHitSource) = parallelMapMin[(FullAddressInfo, Share), (Long, ByteStr), Long](
             minerShares,
             { case (miner, balance) =>
-              val (hit, newHitSource) = getHitWithSource(miner.account, currentHitSource)
+              val (hit, newHitSource) = getHitWithSource(miner.vrfKey, currentHitSource)
               val delay1              = posCalculator.calculateDelay(hit, baseTargets.head, balance)
               (delay1, newHitSource)
             },

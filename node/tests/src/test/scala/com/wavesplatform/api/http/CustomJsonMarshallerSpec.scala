@@ -97,10 +97,4 @@ class CustomJsonMarshallerSpec
   property("/assets/{assetId}/distribution/{height}/limit/{limit}") {
     pending // todo: fix when distributions/portfolio become testable
   }
-
-  property("/assets/balance/{address}/{assetId}") {
-    val issue = TxHelpers.issue(richAccount, 100000_00, 2.toByte)
-    domain.appendBlock(issue)
-    checkRoute(Get(s"/assets/balance/${richAccount.toAddress}/${issue.id()}"), assetsRoute, "balance")
-  }
 }

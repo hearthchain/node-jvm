@@ -6,7 +6,6 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.{GeneratorSet, StateSnapshot}
 import com.wavesplatform.transaction.Asset.IssuedAsset
-import com.wavesplatform.transaction.assets.IssueTransaction
 import com.wavesplatform.transaction.assets.exchange.Order
 import com.wavesplatform.transaction.validation.TxValidator
 import com.wavesplatform.utils.{EthEncoding, base58Length}
@@ -66,9 +65,9 @@ package object transaction {
     }
   }
 
-  type TxDecimals = Byte Refined Interval.Closed[0, IssueTransaction.MaxAssetDecimals.type]
+  type TxDecimals = Byte Refined Interval.Closed[0, 8]
   object TxDecimals extends RefinedTypeOps[TxDecimals, Byte] {
-    val errMsg = s"decimals should be in interval [0; ${IssueTransaction.MaxAssetDecimals}]"
+    val errMsg = s"decimals should be in interval [0; 8]"
   }
 
   type TxOrderPrice = Long Refined Positive

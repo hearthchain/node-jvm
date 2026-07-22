@@ -1,6 +1,7 @@
 package com.wavesplatform.http
 
 import com.wavesplatform.TestWallet
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.api.common.CommonBlocksApi
 import com.wavesplatform.api.http.ApiError.TooBigArrayAllocation
@@ -290,17 +291,17 @@ class BlocksApiRouteSpec
   routePath("/delay/{blockId}/{number}") in {
     val blocks = Vector(
       Block(
-        BlockHeader(1, 0, ByteStr.empty, 0, ByteStr.empty, TxHelpers.defaultSigner.publicKey, Nil, 0, ByteStr.empty, None, None, None),
+        BlockHeader(1, 0, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, 0, ByteStr.empty, None, None, None),
         ByteStr(Random.nextBytes(64)),
         Nil
       ),
       Block(
-        BlockHeader(1, 1000, ByteStr.empty, 0, ByteStr.empty, TxHelpers.defaultSigner.publicKey, Nil, 0, ByteStr.empty, None, None, None),
+        BlockHeader(1, 1000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, 0, ByteStr.empty, None, None, None),
         ByteStr(Random.nextBytes(64)),
         Nil
       ),
       Block(
-        BlockHeader(1, 2000, ByteStr.empty, 0, ByteStr.empty, TxHelpers.defaultSigner.publicKey, Nil, 0, ByteStr.empty, None, None, None),
+        BlockHeader(1, 2000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, 0, ByteStr.empty, None, None, None),
         ByteStr(Random.nextBytes(64)),
         Nil
       )
@@ -428,15 +429,13 @@ class BlocksApiRouteSpec
     val issuer = TxHelpers.signer(2)
     withDomain(TransactionStateSnapshot, balances = AddrWithBalance.enoughBalances(sender, issuer)) { d =>
       val attachment = ByteStr.fill(32)(1)
-      val issue      = TxHelpers.issue(issuer)
       val exchange =
         TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, Waves, issue.asset, version = Order.V4, attachment = Some(attachment)),
-          TxHelpers.order(OrderType.SELL, Waves, issue.asset, version = Order.V4, sender = issuer),
+          TxHelpers.order(OrderType.BUY, Waves, ???, version = Order.V4, attachment = Some(attachment)),
+          TxHelpers.order(OrderType.SELL, Waves, ???, version = Order.V4, sender = issuer),
           version = TxVersion.V3
         )
 
-      d.appendBlock(issue)
       val exchangeBlock = d.appendBlock(exchange)
 
       val route = new BlocksApiRoute(
@@ -471,22 +470,20 @@ class BlocksApiRouteSpec
   }
 
   "NODE-857. Block meta response should contain correct rewardShares field" in {
-    val daoAddress        = TxHelpers.address(3)
-    val xtnBuybackAddress = TxHelpers.address(4)
+    val daoAddress = TxHelpers.address(3)
 
     val settings = DomainPresets.ConsensusImprovements
     val settingsWithFeatures = settings
       .copy(blockchainSettings =
         settings.blockchainSettings.copy(
           functionalitySettings = settings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString), xtnBuybackAddress = Some(xtnBuybackAddress.toString), xtnBuybackRewardPeriod = 1),
+            .copy(daoAddress = Some(daoAddress.toString)),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
       )
       .setFeaturesHeight(
         BlockchainFeatures.BlockRewardDistribution -> 3,
-        BlockchainFeatures.CappedReward            -> 4,
-        BlockchainFeatures.CeaseXtnBuyback         -> 5
+        BlockchainFeatures.CappedReward            -> 4
       )
 
     withDomain(settingsWithFeatures) { d =>
@@ -494,23 +491,20 @@ class BlocksApiRouteSpec
 
       val miner = d.appendBlock().sender.toAddress
 
+      // Only the DAO takes a share of the reward: the XTN buy-back share was removed
       // BlockRewardDistribution activated
       val configAddrReward3 = d.blockchain.settings.rewardsSettings.initial / 3
-      val minerReward3      = d.blockchain.settings.rewardsSettings.initial - 2 * configAddrReward3
+      val minerReward3      = d.blockchain.settings.rewardsSettings.initial - configAddrReward3
 
       // CappedReward activated
       val configAddrReward4 = BlockRewardCalculator.MaxAddressReward
-      val minerReward4      = d.blockchain.settings.rewardsSettings.initial - 2 * configAddrReward4
-
-      // CeaseXTNBuyback activated with expired XTN buyback reward period
-      val configAddrReward5 = BlockRewardCalculator.MaxAddressReward
-      val minerReward5      = d.blockchain.settings.rewardsSettings.initial - configAddrReward5
+      val minerReward4      = d.blockchain.settings.rewardsSettings.initial - configAddrReward4
 
       val heightToResult = Map(
         2 -> Map(miner.toString -> d.blockchain.settings.rewardsSettings.initial),
-        3 -> Map(miner.toString -> minerReward3, daoAddress.toString -> configAddrReward3, xtnBuybackAddress.toString -> configAddrReward3),
-        4 -> Map(miner.toString -> minerReward4, daoAddress.toString -> configAddrReward4, xtnBuybackAddress.toString -> configAddrReward4),
-        5 -> Map(miner.toString -> minerReward5, daoAddress.toString -> configAddrReward5)
+        3 -> Map(miner.toString -> minerReward3, daoAddress.toString -> configAddrReward3),
+        4 -> Map(miner.toString -> minerReward4, daoAddress.toString -> configAddrReward4),
+        5 -> Map(miner.toString -> minerReward4, daoAddress.toString -> configAddrReward4)
       )
 
       val heightToBlock = (2 to 5).map { h =>
@@ -582,31 +576,22 @@ class BlocksApiRouteSpec
     }
   }
 
-  "Boost block reward feature changes API response" in {
+  "block reward is never boosted" in {
     val miner      = TxHelpers.signer(3001)
     val daoAddress = TxHelpers.address(3002)
-    val xtnAddress = TxHelpers.address(3003)
 
     val settings = DomainPresets.ConsensusImprovements
       .setFeaturesHeight(
         BlockchainFeatures.BlockRewardDistribution -> 0,
         BlockchainFeatures.CappedReward            -> 0,
-        BlockchainFeatures.BoostBlockReward        -> 5,
-        BlockchainFeatures.CeaseXtnBuyback         -> 0
+        BlockchainFeatures.BoostBlockReward        -> 5
       )
-      .configure(fs =>
-        fs.copy(
-          xtnBuybackRewardPeriod = 10,
-          blockRewardBoostPeriod = 10,
-          xtnBuybackAddress = Some(xtnAddress.toString),
-          daoAddress = Some(daoAddress.toString)
-        )
-      )
+      .configure(fs => fs.copy(blockRewardBoostPeriod = 10, daoAddress = Some(daoAddress.toString)))
 
     withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves))) { d =>
       val route = new BlocksApiRoute(d.settings.restAPISettings, d.blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler)).route
 
-      def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long, expectedXtnShare: Option[Long])(
+      def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(
           implicit pos: Position
       ): Unit = {
         Seq("/headers/at/", "/at/").foreach { prefix =>
@@ -624,35 +609,16 @@ class BlocksApiRouteSpec
               withClue(" dao share: ") {
                 (shares \ daoAddress.toString).as[Long] shouldBe expectedDaoShare
               }
-              withClue(" XTN share: ") {
-                (shares \ xtnAddress.toString).asOpt[Long] shouldBe expectedXtnShare
-              }
             }
           }
         }
       }
 
-      (1 to 3).foreach(_ => d.appendKeyBlock(miner))
-      d.blockchain.height shouldBe 4
-      (1 to 3).foreach { h =>
-        checkRewardAndShares(h + 1, 6.waves, 2.waves, 2.waves, Some(2.waves))
-      }
-
-      // reward boost activation
-      (1 to 5).foreach(_ => d.appendKeyBlock(miner))
-      (1 to 5).foreach { h =>
-        checkRewardAndShares(h + 4, 60.waves, 20.waves, 20.waves, Some(20.waves))
-      }
-
-      // cease XTN buyback
-      (1 to 5).foreach(_ => d.appendKeyBlock(miner))
-      (1 to 5).foreach { h =>
-        checkRewardAndShares(h + 9, 60.waves, 40.waves, 20.waves, None)
-      }
-
-      d.appendKeyBlock(miner)
+      // The reward and its shares stay flat across the BoostBlockReward activation height: boosting was dropped,
+      // and only the DAO takes a share now that XTN buy-back is gone
+      (1 to 14).foreach(_ => d.appendKeyBlock(miner))
       d.blockchain.height shouldBe 15
-      checkRewardAndShares(15, 6.waves, 4.waves, 2.waves, None)
+      (2 to 15).foreach(h => checkRewardAndShares(h, 6.waves, 4.waves, 2.waves))
     }
   }
 }

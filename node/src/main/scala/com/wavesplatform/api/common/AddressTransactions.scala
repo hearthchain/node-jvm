@@ -4,13 +4,11 @@ import com.google.common.collect.AbstractIterator
 import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.AddressTransactions.TxByAddressIterator.BatchSize
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.database.protobuf.EthereumTransactionMeta
 import com.wavesplatform.database.{AddressId, DBExt, DBResource, Key, Keys, RDB, readTransactionHNSeqAndType}
-import com.wavesplatform.state.{Height, InvokeScriptResult, StateSnapshot, TransactionId, TxMeta, TxNum}
-import com.wavesplatform.transaction.{Authorized, EthereumTransaction, GenesisTransaction, Transaction, TransactionType}
+import com.wavesplatform.state.{Height, StateSnapshot, TransactionId, TxMeta, TxNum}
+import com.wavesplatform.transaction.{Authorized, Transaction, TransactionType}
 import monix.eval.Task
 import monix.reactive.Observable
-import org.rocksdb.RocksDB
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
@@ -26,47 +24,17 @@ object AddressTransactions {
     db.multiGet(keys, sizes)
       .zip(nums)
       .flatMap {
-        case (Some((m, tx: Authorized)), txNum) if sender.forall(_ == tx.sender.toAddress)         => Some((m, tx, txNum))
-        case (Some((m, gt: GenesisTransaction)), txNum) if sender.isEmpty                          => Some((m, gt, txNum))
-        case (Some((m, et: EthereumTransaction)), txNum) if sender.forall(_ == et.senderAddress()) => Some((m, et, txNum))
-        case _                                                                                     => None
+        case (Some((m, tx: Authorized)), txNum) if sender.forall(_ == tx.sender.toAddress) => Some((m, tx, txNum))
+        case _                                                                             => None
       }
       .toSeq
-
-  private def loadInvokeScriptResult(
-      resource: DBResource,
-      txMetaHandle: RDB.TxMetaHandle,
-      apiHandle: RDB.ApiHandle,
-      txId: ByteStr
-  ): Option[InvokeScriptResult] =
-    for {
-      tm           <- resource.get(Keys.transactionMetaById(TransactionId(txId), txMetaHandle))
-      scriptResult <- resource.get(Keys.invokeScriptResult(Height(tm.height), TxNum(tm.num.toShort), apiHandle))
-    } yield scriptResult
-
-  def loadInvokeScriptResult(db: RocksDB, txMetaHandle: RDB.TxMetaHandle, apiHandle: RDB.ApiHandle, txId: ByteStr): Option[InvokeScriptResult] =
-    db.withResource(r => loadInvokeScriptResult(r, txMetaHandle, apiHandle, txId))
-
-  def loadInvokeScriptResult(db: RocksDB, apiHandle: RDB.ApiHandle, height: Height, txNum: TxNum): Option[InvokeScriptResult] =
-    db.get(Keys.invokeScriptResult(height, txNum, apiHandle))
-
-  def loadEthereumMetadata(db: RocksDB, txMetaHandle: RDB.TxMetaHandle, apiHandle: RDB.ApiHandle, txId: ByteStr): Option[EthereumTransactionMeta] =
-    db.withResource { resource =>
-      for {
-        tm <- resource.get(Keys.transactionMetaById(TransactionId(txId), txMetaHandle))
-        m  <- resource.get(Keys.ethereumTransactionMeta(Height(tm.height), TxNum(tm.num.toShort), apiHandle))
-      } yield m
-    }
-
-  def loadEthereumMetadata(db: RocksDB, apiHandle: RDB.ApiHandle, height: Height, txNum: TxNum): Option[EthereumTransactionMeta] =
-    db.get(Keys.ethereumTransactionMeta(height, txNum, apiHandle))
 
   def allAddressTransactions(
       rdb: RDB,
       maybeSnapshot: Option[(Height, StateSnapshot)],
       subject: Address,
       sender: Option[Address],
-      types: Set[Transaction.Type],
+      types: Set[TransactionType],
       fromId: Option[ByteStr]
   ): Observable[(TxMeta, Transaction, TxNum)] = {
     val diffTxs = transactionsFromSnapshot(maybeSnapshot, subject, sender, types, fromId)
@@ -89,7 +57,7 @@ object AddressTransactions {
       rdb: RDB,
       subject: Address,
       sender: Option[Address],
-      types: Set[Transaction.Type],
+      types: Set[TransactionType],
       fromId: Option[ByteStr]
   ): Observable[(TxMeta, Transaction, TxNum)] =
     rdb.db.resourceObservable(rdb.apiHandle.handle).flatMap { dbResource =>
@@ -115,7 +83,7 @@ object AddressTransactions {
       maybeSnapshot: Option[(Height, StateSnapshot)],
       subject: Address,
       sender: Option[Address],
-      types: Set[Transaction.Type],
+      types: Set[TransactionType],
       fromId: Option[ByteStr]
   ): Seq[(TxMeta, Transaction, TxNum)] =
     (for {
@@ -136,7 +104,7 @@ object AddressTransactions {
       maxHeight: Height,
       maxTxNum: TxNum,
       sender: Option[Address],
-      types: Set[Transaction.Type]
+      types: Set[TransactionType]
   ) extends AbstractIterator[Seq[(TxMeta, Transaction, TxNum)]] {
     private val seqNr = db.get(Keys.addressTransactionSeqNr(addressId, apiHandle))
     db.withSafePrefixIterator(_.seekForPrev(Keys.addressTransactionHN(addressId, seqNr, apiHandle).keyBytes))(())

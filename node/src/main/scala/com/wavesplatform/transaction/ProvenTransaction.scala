@@ -1,8 +1,7 @@
 package com.wavesplatform.transaction
 
-import com.wavesplatform.account.PrivateKey
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.crypto
+import tech.hearth.crypto.SigningKey
 
 trait ProvenTransaction extends Proven { this: Transaction =>
   type T <: Transaction
@@ -11,6 +10,6 @@ trait ProvenTransaction extends Proven { this: Transaction =>
 
 object ProvenTransaction {
   extension (p: ProvenTransaction) {
-    def signWith(privateKey: PrivateKey): p.T = p.addProof(crypto.sign(privateKey, p.bodyBytes()))
+    def signWith(privateKey: SigningKey): p.T = p.addProof(ByteStr(privateKey.sign(p.bodyBytes())))
   }
 }

@@ -4,7 +4,6 @@ import java.time.Instant
 
 import com.typesafe.scalalogging.Logger
 import com.wavesplatform.block.Block
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.mining.Miner
 import com.wavesplatform.settings.WavesSettings
@@ -37,8 +36,7 @@ package object wavesplatform {
     Block
       .genesis(
         settings.blockchainSettings.genesisSettings,
-        blockchainUpdater.isFeatureActivated(BlockchainFeatures.RideV6),
-        blockchainUpdater.isFeatureActivated(BlockchainFeatures.LightNode)
+        settings.blockchainSettings.functionalitySettings,
       )
       .flatMap { genesis =>
         logger.trace(s"Genesis block json: ${genesis.json()}")

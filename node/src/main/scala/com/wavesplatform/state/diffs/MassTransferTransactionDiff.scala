@@ -14,15 +14,17 @@ import com.wavesplatform.transaction.transfer.MassTransferTransaction.ParsedTran
 object MassTransferTransactionDiff {
 
   def apply(blockchain: Blockchain)(tx: MassTransferTransaction): Either[ValidationError, StateSnapshot] = {
-    def parseTransfer(xfer: ParsedTransfer): Validation[(Map[Address, Portfolio], Long)] = {
-      for {
-        recipientAddr <- blockchain.resolveAlias(xfer.address)
-        portfolio = tx.assetId
-          .fold(Map[Address, Portfolio](recipientAddr -> Portfolio(xfer.amount.value))) { asset =>
-            Map(recipientAddr -> Portfolio.build(asset, xfer.amount.value))
-          }
-      } yield (portfolio, xfer.amount.value)
-    }
+    def parseTransfer(xfer: ParsedTransfer): Validation[(Map[Address, Portfolio], Long)] =
+      Right(
+        (
+          tx.assetId
+            .fold(Map[Address, Portfolio](xfer.address -> Portfolio(xfer.amount.value))) { asset =>
+              Map(xfer.address -> Portfolio.build(asset, xfer.amount.value))
+            },
+          xfer.amount.value
+        )
+      )
+
     val portfoliosEi = tx.transfers.toList.traverse(parseTransfer)
 
     portfoliosEi.flatMap { (list: List[(Map[Address, Portfolio], Long)]) =>

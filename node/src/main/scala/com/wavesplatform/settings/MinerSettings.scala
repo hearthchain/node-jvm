@@ -15,7 +15,18 @@ case class MinerSettings(
     minimalBlockGenerationOffset: FiniteDuration,
     maxTransactionsInMicroBlock: Int,
     minMicroBlockAge: FiniteDuration,
-    privateKeys: Seq[PrivateKey]
+    privateKeys: Seq[PrivateKey],
+    accounts: Seq[MiningAccount]
 ) derives ConfigReader {
   require(maxTransactionsInMicroBlock <= Miner.MaxTransactionsPerMicroblock)
 }
+
+case class MiningAccount(
+    mnemonic: Option[String],
+    signingAccount: Int = 0,
+    vrfAccount: Int = 0,
+    blsAccount: Int = 0,
+    signingKey: Option[String],
+    vrfKey: Option[String],
+    blsKey: Option[String]
+) derives ConfigReader

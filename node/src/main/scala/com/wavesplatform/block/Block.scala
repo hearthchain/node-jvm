@@ -1,6 +1,6 @@
 package com.wavesplatform.block
 
-import com.wavesplatform.account.{Address, KeyPair, PublicKey}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.serialization.BlockSerializer
 import com.wavesplatform.common.merkle.Merkle.{hash, mkProofs, verify}
 import com.wavesplatform.common.state.ByteStr
@@ -9,14 +9,13 @@ import com.wavesplatform.crypto.*
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.protobuf.transaction.PBTransactions
-import com.wavesplatform.settings.GenesisSettings
+import com.wavesplatform.settings.{FunctionalitySettings, GenesisSettings}
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.TxValidationError.GenericError
 import monix.eval.Coeval
 import play.api.libs.json.*
-
-import scala.util.Try
+import tech.hearth.crypto.*
 
 case class BlockHeader(
     version: Byte,
@@ -92,14 +91,13 @@ case class Block(
     )
 
   val signatureValid: Coeval[Boolean] = Coeval.evalOnce {
-    crypto.verify(signature, bodyBytes(), header.generator, checkWeakPk = true) &&
+    crypto.verify(signature, bodyBytes(), header.generator) &&
     (header.version < Block.ProtoBlockVersion || transactionsMerkleTree().transactionsRoot == header.transactionsRoot) &&
     header.challengedHeader.forall { ch =>
       crypto.verify(
         ch.headerSignature,
         PBBlocks.protobuf(originalHeader()).toByteArray,
-        ch.generator,
-        checkWeakPk = true
+        ch.generator
       )
     }
   }
@@ -191,7 +189,7 @@ object Block {
       baseTarget: Long,
       generationSignature: ByteStr,
       txs: Seq[Transaction],
-      signer: KeyPair,
+      signer: SigningKey,
       featureVotes: Seq[Short],
       rewardVote: Long,
       stateHash: Option[ByteStr],
@@ -204,7 +202,7 @@ object Block {
       reference,
       baseTarget,
       generationSignature,
-      signer.publicKey,
+      PublicKey(signer.publicKey),
       featureVotes,
       rewardVote,
       txs,
@@ -212,51 +210,38 @@ object Block {
       challengedHeader,
       finalizationVoting
     ).validate
-      .map(_.sign(signer.privateKey))
+      .map(_.sign(signer))
 
-  def parseBytes(bytes: Array[Byte]): Try[Block] =
-    BlockSerializer
-      .parseBytes(bytes)
-      .flatMap(_.validateToTry)
-
-  def genesis(genesisSettings: GenesisSettings, rideV6Activated: Boolean, txStateSnapshotActivated: Boolean): Either[ValidationError, Block] = {
-    import cats.instances.either.*
-    import cats.instances.list.*
-    import cats.syntax.traverse.*
-
+  /** The genesis block has no transactions: its effect on the state is the predefined snapshot built from [[GenesisSettings]]. */
+  def genesis(
+      genesisSettings: GenesisSettings,
+      functionalitySettings: FunctionalitySettings,
+  ): Either[ValidationError, Block] =
     for {
-      txs <- genesisSettings.transactions.toList.map { gts =>
-        for {
-          address <- Address.fromString(gts.recipient)
-          tx      <- GenesisTransaction.create(address, gts.amount, genesisSettings.timestamp)
-        } yield tx
-      }.sequence
+      snapshot <- GenesisSnapshot.build(genesisSettings, functionalitySettings)
       baseTarget = genesisSettings.initialBaseTarget
       timestamp  = genesisSettings.blockTimestamp
+      // The state hash goes into the header before signing: the block is protobuf-serialized, so its body bytes cover it
       block = create(
         GenesisBlockVersion,
         timestamp,
         GenesisReference,
         baseTarget,
         GenesisGenerationSignature,
-        GenesisGenerator.publicKey,
+        PublicKey(GenesisGenerator.publicKey),
         featureVotes = Seq(),
         rewardVote = -1L,
-        txs,
-        stateHash = None,
+        transactionData = Seq.empty,
+        stateHash = Some(TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)),
         challengedHeader = None,
         finalizationVoting = None
       )
       signedBlock = genesisSettings.signature match {
-        case None             => block.sign(GenesisGenerator.privateKey)
+        case None             => block.sign(GenesisGenerator)
         case Some(predefined) => block.copy(signature = predefined)
       }
-      signedBlockWithStateHash = signedBlock.copy(header =
-        signedBlock.header.copy(stateHash = Option.when(txStateSnapshotActivated)(TxStateSnapshotHashBuilder.createGenesisStateHash(txs)))
-      )
-      validBlock <- signedBlockWithStateHash.validateGenesis(genesisSettings, rideV6Activated)
+      validBlock <- signedBlock.validateGenesis
     } yield validBlock
-  }
 
   type BlockId                = ByteStr
   type TransactionsMerkleTree = Seq[Seq[Array[Byte]]]
@@ -267,20 +252,24 @@ object Block {
   val MaxFeaturesInBlock: Int              = 64
   val BaseTargetLength: Int                = 8
   val GenerationSignatureLength: Int       = 32
-  val GenerationVRFSignatureLength: Int    = 96
-  val BlockIdLength: Int                   = SignatureLength
-  val TransactionSizeLength                = 4
-  val HitSourceLength                      = 32
+  // A hearth Ecvrf proof is Gamma(32) || c(16) || s(32); Waves' was 96
+  val GenerationVRFSignatureLength: Int = 80
+  val BlockIdLength: Int                = SignatureLength
+  val TransactionSizeLength             = 4
+  val HitSourceLength                   = 32
 
-  val GenesisReference: BlockId           = ByteStr(Array.fill(SignatureLength)(-1: Byte))
-  val GenesisGenerator: KeyPair           = KeyPair(ByteStr.empty)
-  val GenesisGenerationSignature: BlockId = ByteStr(new Array[Byte](crypto.DigestLength))
+  val GenesisReference: BlockId    = ByteStr(Array.fill(DigestLength)(-1: Byte))
+  val GenesisGenerator: SigningKey = SigningKey.fromSeed(Crypto.defaultBackend().sha256(new Array[Byte](32)))
 
-  val GenesisBlockVersion: Byte = 1
-  val PlainBlockVersion: Byte   = 2
-  val NgBlockVersion: Byte      = 3
-  val RewardBlockVersion: Byte  = 4
-  val ProtoBlockVersion: Byte   = 5
+  /** The initial random beacon: the next block's VRF proof is verified against it. */
+  val GenesisGenerationSignature: BlockId = ByteStr(new Array[Byte](GenerationVRFSignatureLength))
+
+  val ProtoBlockVersion: Byte  = 5
+
+  /** The genesis block is protobuf-serialized, so that its body bytes - and therefore its signature - cover the state
+    * hash and the consensus data, and so that its hit source is persisted for the next block to VRF sign against.
+    */
+  val GenesisBlockVersion: Byte = ProtoBlockVersion
 
   // Merkle
   implicit class BlockTransactionsRootOps(private val block: Block) extends AnyVal {

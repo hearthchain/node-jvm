@@ -1,7 +1,6 @@
 package com.wavesplatform.http
 import com.typesafe.config.ConfigObject
 import com.wavesplatform.*
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.api.http.{DebugApiRoute, RouteTimeout}
 import com.wavesplatform.block.Block
 import com.wavesplatform.db.WithState.AddrWithBalance
@@ -50,7 +49,6 @@ class DebugApiRouteStateHashGenesisSpec
       settings,
       ntpTime,
       domain.blockchain,
-      domain.wallet,
       domain.accountsApi,
       domain.transactionsApi,
       domain.assetsApi,

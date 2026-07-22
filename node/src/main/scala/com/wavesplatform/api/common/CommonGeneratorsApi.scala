@@ -27,21 +27,22 @@ object CommonGeneratorsApi {
 
         val addressIds = new mutable.ArrayBuffer[AddressId](approxGenerators)
         val blsPks     = new mutable.ArrayBuffer[BlsPublicKey](approxGenerators)
-        val txnIds     = new mutable.ArrayBuffer[TransactionId](approxGenerators)
+        val txnIds     = new mutable.ArrayBuffer[Option[TransactionId]](approxGenerators)
+        // Commitment transactions are read per commitment height alongside the generators committed at that height:
+        // generators committed by the genesis snapshot have no transaction at all, so a flat zip of the two would
+        // misalign them (and previously dropped the whole period)
         ro.iterateOver(committedKeyPrefix) { dbEntry =>
+          val commitmentHeight = Height(Ints.fromByteArray(dbEntry.getKey.takeRight(Ints.BYTES)))
+          val committedTxnIds  = ro.get(Keys.commitmentTransactions(period, commitmentHeight))
           committedKey
             .parse(dbEntry.getValue)
             .getOrElse(Seq.empty)
-            .foreach { (addressId, blsPk) =>
+            .zipWithIndex
+            .foreach { case ((addressId, blsPk, _), idx) =>
               addressIds.append(addressId)
               blsPks.append(blsPk)
+              txnIds.append(committedTxnIds.lift(idx))
             }
-        }
-
-        val txnsKey       = Keys.commitmentTransactions(period, at)
-        val txnsKeyPrefix = txnsKey.keyBytes.dropRight(Ints.BYTES) // Drop height
-        ro.iterateOver(txnsKeyPrefix) { dbEntry =>
-          txnIds.appendAll(txnsKey.parse(dbEntry.getValue))
         }
 
         val addresses = ArrayBuffer.from(ro.multiGet(addressIds.map(Keys.idToAddress), Address.AddressLength))
@@ -80,7 +81,7 @@ object CommonGeneratorsApi {
             case tx: CommitToGenerationTransaction =>
               addresses.append(Some(tx.sender.toAddress))
               blsPks.append(tx.endorserPublicKey)
-              txIds.append(TransactionId(tx.id()))
+              txIds.append(Some(TransactionId(tx.id())))
 
             case _ =>
           }
@@ -111,5 +112,8 @@ object CommonGeneratorsApi {
 
   /** @param balance None if unknown
     */
-  case class GeneratorEntry(address: Address, balance: Option[Long], commitTxnId: TransactionId, conflictHeight: Option[Height])
+  /** @param commitTxnId
+    *   None for a generator committed by the genesis snapshot, which has no commitment transaction
+    */
+  case class GeneratorEntry(address: Address, balance: Option[Long], commitTxnId: Option[TransactionId], conflictHeight: Option[Height])
 }

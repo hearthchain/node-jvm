@@ -1,7 +1,7 @@
 package com.wavesplatform.state
 
 import com.wavesplatform.BlockGen
-import com.wavesplatform.account.{Address, AddressOrAlias, KeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -9,13 +9,15 @@ import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{InterferableDB, WithDomain}
 import com.wavesplatform.history.Domain
 import com.wavesplatform.lagonaki.mocks.TestBlock
-import com.wavesplatform.settings.{Constants, GenesisSettings, GenesisTransactionSettings}
+import com.wavesplatform.settings.{Constants, GenesisBalanceSettings, GenesisSettings, WavesSettings}
+import com.wavesplatform.test.DomainPresets
 import com.wavesplatform.test.DomainPresets.RideV5
 import com.wavesplatform.test.FreeSpec
-import com.wavesplatform.transaction.TxHelpers.{defaultAddress, issue, secondSigner}
+import com.wavesplatform.transaction.TxHelpers.{defaultAddress, secondSigner}
 import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{GenesisTransaction, Transaction, TransactionType, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Transaction, TransactionType, TxHelpers, TxVersion}
 import org.scalactic.source.Position
+import tech.hearth.crypto.SigningKey
 
 import java.util.concurrent.locks.ReentrantLock
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -23,36 +25,42 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future}
 
 class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
-  def transfers(sender: KeyPair, rs: AddressOrAlias, amount: Long): Seq[TransferTransaction] =
+  def transfers(sender: SigningKey, rs: Address, amount: Long): Seq[TransferTransaction] =
     Seq(
       TxHelpers.transfer(sender, rs, amount),
       TxHelpers.transfer(sender, rs, amount, version = TxVersion.V1)
     )
 
-  def mkBlock(sender: KeyPair, reference: ByteStr, transactions: Seq[Transaction]): Block =
+  def mkBlock(sender: SigningKey, reference: ByteStr, transactions: Seq[Transaction]): Block =
     Block
       .buildAndSign(3.toByte, ntpNow, reference, 1000, ByteStr(new Array[Byte](32)), transactions, sender, Seq.empty, -1L, None, None, None)
       .explicitGet()
 
-  val setup: Seq[(KeyPair, KeyPair, KeyPair, Seq[Block])] = {
+  private val genesisTimestamp = ntpNow
+
+  private val genesisSettings: GenesisSettings = GenesisSettings(
+    genesisTimestamp,
+    None,
+    1000,
+    1.minute,
+    balances = Seq(GenesisBalanceSettings(TxHelpers.signer(1).toAddress.toBech32, Constants.TotalWaves))
+  )
+
+  // The genesis snapshot is built from the settings, so the domain has to run with the very same genesis settings
+  private val domainSettings: WavesSettings = {
+    val base = DomainPresets.SettingsFromDefaultConfig
+    base.copy(blockchainSettings = base.blockchainSettings.copy(genesisSettings = genesisSettings))
+  }
+
+  val setup: Seq[(SigningKey, SigningKey, SigningKey, Seq[Block])] = {
     val sender     = TxHelpers.signer(1)
     val recipient1 = TxHelpers.signer(2)
     val recipient2 = TxHelpers.signer(3)
 
-    val genesisTimestamp = ntpNow
     val genesisBlock = Block
       .genesis(
-        GenesisSettings(
-          genesisTimestamp,
-          genesisTimestamp,
-          Constants.TotalWaves,
-          None,
-          Seq(GenesisTransactionSettings(sender.toAddress.toString, Constants.TotalWaves)),
-          1000,
-          1.minute
-        ),
-        rideV6Activated = false,
-        txStateSnapshotActivated = false
+        genesisSettings,
+        domainSettings.blockchainSettings.functionalitySettings,
       )
       .explicitGet()
 
@@ -71,7 +79,7 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
 
   private def test(f: (Address, Seq[Block], Domain) => Unit): Unit = {
     setup.foreach { case (sender, r1, r2, blocks) =>
-      withDomain() { d =>
+      withDomain(domainSettings) { d =>
         for (b <- blocks) {
           d.blockchainUpdater.processBlock(b, b.header.generationSignature, snapshot = None, generatorSet = Seq.empty, verify = false)
         }
@@ -95,8 +103,8 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
     fromBlocks.zipWithIndex
       .flatMap { case (b, h) => b.transactionData.map(t => (h + 1, t)) }
       .collect {
+        // The genesis block has no transactions, so it contributes nothing to an address' history
         case (h, t: TransferTransaction) if t.sender.toAddress == forAddress || t.recipient == forAddress => (h, t.id())
-        case (h, g: GenesisTransaction) if g.recipient == forAddress                                      => (h, g.id())
       }
       .reverse
 
@@ -117,12 +125,12 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
       val startRead = new ReentrantLock()
       withDomain(RideV5, AddrWithBalance.enoughBalances(secondSigner), InterferableDB(_, startRead)) { d =>
         d.appendBlock()
-        d.appendMicroBlock(issue())
+        d.appendMicroBlock(TxHelpers.transfer())
         startRead.lock()
         val txs = Future { d.addressTransactions(defaultAddress).map(_._2.tpe) }
         d.blockchain.bestLiquidSnapshot.synchronized(d.appendKeyBlock())
         startRead.unlock()
-        Await.result(txs, 1.minute) shouldBe List(TransactionType.Issue)
+        Await.result(txs, 1.minute) shouldBe List(TransactionType.Transfer)
       }
     }
   }

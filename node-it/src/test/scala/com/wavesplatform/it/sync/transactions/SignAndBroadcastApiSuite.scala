@@ -227,7 +227,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
       val isProof = Option(v).nonEmpty
       val leaseId =
         signBroadcastAndCalcFee(
-          Json.obj("type" -> LeaseTransaction.typeId, "sender" -> sender.address, "amount" -> leasingAmount, "recipient" -> secondAddress),
+          Json.obj("type" -> TransactionType.Lease.id, "sender" -> sender.address, "amount" -> leasingAmount, "recipient" -> secondAddress),
           usesProofs = isProof,
           version = v
         )

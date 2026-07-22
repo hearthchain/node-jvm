@@ -52,12 +52,10 @@ class WalletSpecification extends FunSuite {
     val w1 = Wallet(WalletSettings(walletFile, "cookies".some, ByteStr.decodeBase58("FQgbSAm6swGbtqA3NE8PttijPhT4N3Ufh4bHFAkyVnQz").toOption))
     w1.generateNewAccounts(10)
     val w1PrivateKeys = w1.privateKeyAccounts
-    val w1nonce       = w1.nonce
 
     val w2 = Wallet(WalletSettings(walletFile, "cookies".some, None))
     w2.privateKeyAccounts.nonEmpty shouldBe true
     w2.privateKeyAccounts shouldEqual w1PrivateKeys
-    w2.nonce shouldBe w1nonce
 
     val seedError = intercept[IllegalArgumentException](Wallet(WalletSettings(walletFile, "cookies".some, ByteStr.decodeBase58("fake").toOption)))
     seedError.getMessage should include("Seed from config doesn't match the actual seed")

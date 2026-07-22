@@ -1,7 +1,6 @@
 package com.wavesplatform.block
 
 import com.wavesplatform.BlockGen
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block.TransactionProof
 import com.wavesplatform.common.merkle.Merkle.*
 import com.wavesplatform.crypto.Blake2b256
@@ -12,10 +11,11 @@ import com.wavesplatform.transaction.Transaction
 import com.wavesplatform.transaction.transfer.TransferTransaction
 import org.scalacheck.Gen
 import org.scalatest.OptionValues
+import tech.hearth.crypto.SigningKey
 
 class TransactionsRootSpec extends FreeSpec with OptionValues with BlockGen {
 
-  val commonGen: Gen[(KeyPair, List[TransferTransaction])] =
+  val commonGen: Gen[(SigningKey, List[TransferTransaction])] =
     for {
       signer    <- accountGen
       sender    <- accountGen

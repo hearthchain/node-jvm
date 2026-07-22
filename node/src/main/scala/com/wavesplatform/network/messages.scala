@@ -1,17 +1,18 @@
 package com.wavesplatform.network
 
-import com.wavesplatform.account.{KeyPair, PublicKey}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{Block, BlockEndorsement, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto
 import com.wavesplatform.network.message.MessageSpec
 import com.wavesplatform.protobuf.block.EndorseBlock as PBEndorseBlock
-import com.wavesplatform.protobuf.snapshot.{TransactionStateSnapshot, BlockSnapshot as PBBlockSnapshot, MicroBlockSnapshot as PBMicroBlockSnapshot}
+import tech.hearth.protobuf.snapshot.{TransactionStateSnapshot, BlockSnapshot as PBBlockSnapshot, MicroBlockSnapshot as PBMicroBlockSnapshot}
+import com.wavesplatform.protobuf.{toByteStr, toByteString}
 import com.wavesplatform.state.{GeneratorIndex, Height}
 import com.wavesplatform.transaction.{Signed, Transaction}
-import com.wavesplatform.protobuf.{toByteString, toByteStr}
 import monix.eval.Coeval
+import tech.hearth.crypto.SigningKey
 
 import java.net.InetSocketAddress
 import java.util
@@ -48,13 +49,10 @@ object RawBytes {
     RawBytes(PBTransactionSpec.messageCode, PBTransactionSpec.serializeData(tx))
 
   def fromBlock(b: Block): RawBytes =
-    if (b.header.version < Block.ProtoBlockVersion) RawBytes(BlockSpec.messageCode, BlockSpec.serializeData(b))
-    else RawBytes(PBBlockSpec.messageCode, PBBlockSpec.serializeData(b))
+    RawBytes(PBBlockSpec.messageCode, PBBlockSpec.serializeData(b))
 
   def fromMicroBlock(mb: MicroBlockResponse): RawBytes =
-    if (mb.microblock.version < Block.ProtoBlockVersion)
-      RawBytes(LegacyMicroBlockResponseSpec.messageCode, LegacyMicroBlockResponseSpec.serializeData(mb))
-    else RawBytes(PBMicroBlockSpec.messageCode, PBMicroBlockSpec.serializeData(mb))
+    RawBytes(PBMicroBlockSpec.messageCode, PBMicroBlockSpec.serializeData(mb))
 
   def from[T <: AnyRef](spec: MessageSpec[T], message: T): RawBytes = RawBytes(spec.messageCode, spec.serializeData(message))
 }
@@ -76,15 +74,15 @@ object MicroBlockResponse {
 
 case class MicroBlockInv(sender: PublicKey, totalBlockId: ByteStr, reference: ByteStr, signature: ByteStr) extends Message with Signed {
   override protected val signatureValid: Coeval[Boolean] =
-    Coeval.evalOnce(crypto.verify(signature, sender.toAddress.bytes ++ totalBlockId.arr ++ reference.arr, sender))
+    Coeval.evalOnce(crypto.verify(signature, sender.toAddress.toBytes ++ totalBlockId.arr ++ reference.arr, sender))
 
   override def toString: String = s"MicroBlockInv(${totalBlockId.trim} ~> ${reference.trim})"
 }
 
 object MicroBlockInv {
-  def apply(sender: KeyPair, totalBlockRef: ByteStr, prevBlockRef: ByteStr): MicroBlockInv = {
-    val signature = crypto.sign(sender.privateKey, sender.toAddress.bytes ++ totalBlockRef.arr ++ prevBlockRef.arr)
-    new MicroBlockInv(sender.publicKey, totalBlockRef, prevBlockRef, signature)
+  def apply(sender: SigningKey, totalBlockRef: ByteStr, prevBlockRef: ByteStr): MicroBlockInv = {
+    val signature = sender.sign(sender.toAddress.toBytes ++ totalBlockRef.arr ++ prevBlockRef.arr)
+    new MicroBlockInv(PublicKey(sender.publicKey), totalBlockRef, prevBlockRef, ByteStr(signature))
   }
 }
 

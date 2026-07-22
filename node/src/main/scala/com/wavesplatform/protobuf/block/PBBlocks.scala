@@ -7,7 +7,6 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.protobuf.block.Block.Header as PBHeader
 import com.wavesplatform.protobuf.transaction.PBTransactions
-import com.wavesplatform.protobuf.transaction.SignedTransaction.Transaction
 import com.wavesplatform.protobuf.{toByteStr, toByteString, toPublicKey}
 
 import scala.util.Try
@@ -41,9 +40,9 @@ object PBBlocks {
       header.finalizationVoting.map(PBFinalizationVotings.vanilla(_).get)
     )
 
-  def vanilla(block: PBBlock, unsafe: Boolean = false): Try[VanillaBlock] = Try {
+  def vanilla(block: PBBlock): Try[VanillaBlock] = Try {
     require(block.header.isDefined, "block header is missing")
-    VanillaBlock(vanilla(block.getHeader), block.signature.toByteStr, block.transactions.map(PBTransactions.vanilla(_, unsafe).explicitGet()))
+    VanillaBlock(vanilla(block.getHeader), block.signature.toByteStr, block.transactions.map(PBTransactions.vanilla(_).explicitGet()))
   }
 
   def protobuf(header: BlockHeader): PBHeader = PBBlock.Header.of(
@@ -84,13 +83,11 @@ object PBBlocks {
     )
   }
 
+  // SignedTransaction no longer wraps the transaction in a oneof, so the chain id is set on the field directly
   def clearChainId(block: PBBlock): PBBlock =
     block.update(
       _.header.chainId := 0,
-      _.transactions.foreach(_.transaction.modify {
-        case Transaction.WavesTransaction(value) => Transaction.WavesTransaction(value.update(_.chainId := 0))
-        case other                               => other
-      })
+      _.transactions.foreach(_.wavesTransaction.chainId := 0)
     )
 
   def addChainId(block: PBBlock): PBBlock = {
@@ -98,10 +95,7 @@ object PBBlocks {
 
     block.update(
       _.header.chainId := chainId,
-      _.transactions.foreach(_.transaction.modify {
-        case Transaction.WavesTransaction(value) => Transaction.WavesTransaction(value.update(_.chainId := chainId))
-        case other                               => other
-      })
+      _.transactions.foreach(_.wavesTransaction.chainId := chainId)
     )
   }
 }

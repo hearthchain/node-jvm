@@ -9,7 +9,7 @@ import com.wavesplatform.mining.BlockChallengerImpl
 import com.wavesplatform.network.{EndorseBlock, MessageCodec, PeerDatabase}
 import com.wavesplatform.state.*
 import com.wavesplatform.state.appender.BlockAppender
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.TestTime
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.{EmbeddedChannelOps, Schedulers}
@@ -44,7 +44,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         val blockChallenger = new BlockChallengerImpl(
           d.blockchain,
           new DefaultChannelGroup(GlobalEventExecutor.INSTANCE),
-          d.wallet,
+          Seq.empty,
           d.settings,
           testTime,
           d.posSelector,
@@ -71,7 +71,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         val block = d.createBlock(generator = sender, strictTime = true)
 
         testTime.setTime(block.header.timestamp)
-        appender(block).runSyncUnsafe()
+        appender(block).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
 
         channel1.sentEndorsements.length shouldBe 0
       }
@@ -99,19 +99,19 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
 
         val block2 = d.createBlock(generator = generator1, strictTime = true)
         testTime.setTime(block2.header.timestamp)
-        appender(block2).runSyncUnsafe()
+        appender(block2).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
         if (d.lastBlockId != block2.id()) fail(s"Can't apply endorsedBlock $block2, see logs")
         channel1.sentEndorsements.length shouldBe 0
 
         val block3 = d.createBlock(generator = generator2, strictTime = true)
         testTime.setTime(block3.header.timestamp)
-        appender(block3).runSyncUnsafe()
+        appender(block3).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
         if (d.lastBlockId != block3.id()) fail(s"Can't apply block3 $block3, see logs")
         channel1.sentEndorsements.length shouldBe 0
 
         val block4 = d.createBlock(generator = generator1, strictTime = true)
         testTime.setTime(block4.header.timestamp)
-        appender(block4).runSyncUnsafe()
+        appender(block4).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
         if (d.lastBlockId != block4.id()) fail(s"Can't apply block4 $block4, see logs")
         channel1.sentEndorsements.length shouldBe 0
       }
@@ -156,7 +156,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         def appendBlock(n: Int, finalizationVoting: Option[FinalizationVoting] = None): Block = {
           val r = d.createBlock(generator = otherGenerator, strictTime = true, finalizationVoting = finalizationVoting)
           testTime.setTime(r.header.timestamp)
-          appender(r).runSyncUnsafe()
+          appender(r).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
           if (d.lastBlockId != r.id()) fail(s"Can't apply block$n $r, see logs")
           r
         }
@@ -218,13 +218,13 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
 
       val endorsedBlock = d.createBlock(generator = generator1, strictTime = true)
       testTime.setTime(endorsedBlock.header.timestamp)
-      appender(endorsedBlock).runSyncUnsafe()
+      appender(endorsedBlock).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
       if (d.lastBlockId != endorsedBlock.id()) fail(s"Can't apply endorsedBlock $endorsedBlock, see logs")
       channel1.sentEndorsements.length shouldBe 0
 
       val nextBlock = d.createBlock(generator = otherGenerator, strictTime = true)
       testTime.setTime(nextBlock.header.timestamp)
-      appender(nextBlock).runSyncUnsafe()
+      appender(nextBlock).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
       if (d.lastBlockId != nextBlock.id()) fail(s"Can't apply nextBlock $nextBlock, see logs")
       channel1.sentEndorsements.length shouldBe 1
     }
@@ -267,7 +267,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         def appendBlock(n: Int): Block = {
           val r = d.createBlock(generator = otherGenerator, strictTime = true)
           testTime.setTime(r.header.timestamp)
-          appender(r).runSyncUnsafe()
+          appender(r).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
           if (d.lastBlockId != r.id()) fail(s"Can't apply block$n $r, see logs")
           r
         }
@@ -327,7 +327,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         def appendBlock(n: Int): Block = {
           val r = d.createBlock(generator = otherGenerator, strictTime = true)
           testTime.setTime(r.header.timestamp)
-          appender(r).runSyncUnsafe()
+          appender(r).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
           if (d.lastBlockId != r.id()) fail(s"Can't apply block$n $r, see logs")
           r
         }
@@ -388,7 +388,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         def appendBlock(n: Int, finalizationVoting: Option[FinalizationVoting] = None): Block = {
           val r = d.createBlock(generator = otherGenerator, strictTime = true, finalizationVoting = finalizationVoting)
           testTime.setTime(r.header.timestamp)
-          appender(r).runSyncUnsafe()
+          appender(r).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
           if (d.lastBlockId != r.id()) fail(s"Can't apply block$n $r, see logs")
           r
         }

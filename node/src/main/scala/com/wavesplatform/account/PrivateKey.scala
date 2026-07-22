@@ -1,14 +1,14 @@
 package com.wavesplatform.account
 
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.crypto.KeyLength
+import com.wavesplatform.crypto.PrivateKeyLength
 import play.api.libs.json.{Format, Writes}
 
 opaque type PrivateKey = ByteStr
 
 object PrivateKey {
   def apply(privateKey: ByteStr): PrivateKey = {
-    require(privateKey.arr.length == KeyLength, s"invalid private key length: ${privateKey.arr.length}")
+    require(privateKey.arr.length == PrivateKeyLength, s"invalid private key length: ${privateKey.arr.length}")
     privateKey
   }
 

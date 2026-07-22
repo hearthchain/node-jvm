@@ -1,27 +1,30 @@
 package com.wavesplatform.history
 
-import com.wavesplatform.account.KeyPair
+import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
+import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.state.diffs.*
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.transfer.*
 import org.scalacheck.Gen
+import tech.hearth.crypto.SigningKey
 
 class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends PropSpec with DomainScenarioDrivenPropertyCheck {
 
   import BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest.*
 
-  type Setup = (GenesisTransaction, TransferTransaction, TransferTransaction, TransferTransaction)
-
   property("resulting miner balance should not depend on tx distribution among blocks and microblocks") {
-    forAll(g(100, 5)) { case (gen, rest) =>
-      val finalMinerBalances = rest.map { case (bmb: BlockAndMicroblockSequence, last: Block) =>
-        withDomain(MicroblocksActivatedAt0WavesSettings) { d =>
-          d.blockchainUpdater.processBlock(gen) should beRight
+    // The accounts are credited by the genesis snapshot, so the sequences are chained onto the domain's genesis block
+    forAll(g(100, 5)) { case (balances, miner, payments, intSeqs, ts) =>
+      val version = 3: Byte
+      val finalMinerBalances = intSeqs.map { intSeq =>
+        withDomain(MicroblocksActivatedAt0WavesSettings, balances) { d =>
+          val bmb  = r(payments, intSeq, d.lastBlockId, miner, version, ts)
+          val last = customBuildBlockOfTxs(bestRef(bmb.last), Seq.empty, miner, version, ts)
           bmb.foreach { case (b, mbs) =>
             d.blockchainUpdater.processBlock(b) should beRight
             mbs.foreach(mb => d.blockchainUpdater.processMicroBlock(mb, None) should beRight)
@@ -35,50 +38,52 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
   }
 
   property("Miner fee from microblock [Genesis] <- [Empty] <~ (Micro with tx) <- [Empty]") {
-    val preconditionsAndPayments: Gen[(KeyPair, GenesisTransaction, TransferTransaction, Int)] = for {
+    val preconditionsAndPayments: Gen[(SigningKey, SigningKey, TransferTransaction, Int)] = for {
       master <- accountGen
       miner  <- accountGen
       ts     <- positiveIntGen
       fee    <- smallFeeGen
       amt    <- smallFeeGen
-      genesis: GenesisTransaction  = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
       payment: TransferTransaction = createWavesTransfer(master, master.toAddress, amt, fee, ts).explicitGet()
-    } yield (miner, genesis, payment, ts)
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (miner, genesis, payment, ts)) =>
-      val genBlock       = buildBlockOfTxs(randomSig, Seq(genesis))
-      val (base, micros) = chainBaseAndMicro(genBlock.id(), Seq.empty, Seq(Seq(payment)), miner, 3, ts)
+    } yield (master, miner, payment, ts)
+    scenario(
+      preconditionsAndPayments,
+      MicroblocksActivatedAt0WavesSettings,
+      s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
+    ) { case (domain, (master, miner, payment, ts)) =>
+      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, Seq(Seq(payment)), miner, 3, ts)
       val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, 3, ts)
-      domain.blockchainUpdater.processBlock(genBlock) should beRight
       domain.blockchainUpdater.processBlock(base) should beRight
       domain.blockchainUpdater.processMicroBlock(micros.head, None) should beRight
       domain.blockchainUpdater.processBlock(emptyBlock) should beRight
 
       domain.balance(miner.toAddress) shouldBe payment.fee.value
-      domain.balance(genesis.recipient) shouldBe (genesis.amount.value - payment.fee.value)
+      domain.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment.fee.value)
     }
   }
 
   property("Microblock tx sequence") {
     val txCount         = 10
     val microBlockCount = 10
-    val preconditionsAndPayments: Gen[(KeyPair, GenesisTransaction, Seq[Seq[TransferTransaction]], Int)] =
+    val preconditionsAndPayments: Gen[(SigningKey, SigningKey, Seq[Seq[TransferTransaction]], Int)] =
       for {
         master <- accountGen
         miner  <- accountGen
         ts     <- positiveIntGen
         fee    <- smallFeeGen
         amt    <- smallFeeGen
-        genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
         microBlockTxs = (1 to txCount * microBlockCount)
           .map(step => createWavesTransfer(master, master.toAddress, amt, fee, ts + step).explicitGet())
           .grouped(microBlockCount)
           .toSeq
-      } yield (miner, genesis, microBlockTxs, ts)
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings) { case (domain, (miner, genesis, microBlockTxs, ts)) =>
-      val genBlock       = buildBlockOfTxs(randomSig, Seq(genesis))
-      val (base, micros) = chainBaseAndMicro(genBlock.id(), Seq.empty, microBlockTxs, miner, 3, ts)
+      } yield (master, miner, microBlockTxs, ts)
+    scenario(
+      preconditionsAndPayments,
+      MicroblocksActivatedAt0WavesSettings,
+      s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
+    ) { case (domain, (_, miner, microBlockTxs, ts)) =>
+      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, microBlockTxs, miner, 3, ts)
       val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, 3, ts)
-      domain.blockchainUpdater.processBlock(genBlock) should beRight
       domain.blockchainUpdater.processBlock(base) should beRight
       micros.foreach(domain.blockchainUpdater.processMicroBlock(_, None) should beRight)
       domain.blockchainUpdater.processBlock(emptyBlock) should beRight
@@ -87,7 +92,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
     }
   }
 
-  def randomPayment(accs: Seq[KeyPair], ts: Long): Gen[TransferTransaction] =
+  def randomPayment(accs: Seq[SigningKey], ts: Long): Gen[TransferTransaction] =
     for {
       from <- Gen.oneOf(accs)
       to   <- Gen.oneOf(accs)
@@ -95,7 +100,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       amt  <- smallFeeGen
     } yield createWavesTransfer(from, to.toAddress, amt, fee, ts).explicitGet()
 
-  def randomPayments(accs: Seq[KeyPair], ts: Long, amt: Int): Gen[Seq[TransferTransaction]] =
+  def randomPayments(accs: Seq[SigningKey], ts: Long, amt: Int): Gen[Seq[TransferTransaction]] =
     if (amt == 0)
       Gen.const(Seq.empty)
     else
@@ -106,7 +111,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
 
   val TOTAL_WAVES = ENOUGH_AMT
 
-  def accsAndGenesis(): Gen[(Seq[KeyPair], KeyPair, Block, Int)] =
+  def accsAndGenesis(): Gen[(Seq[SigningKey], SigningKey, Seq[AddrWithBalance], Int)] =
     for {
       alice   <- accountGen
       bob     <- accountGen
@@ -114,32 +119,17 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       dave    <- accountGen
       miner   <- accountGen
       ts      <- positiveIntGen
-      genesis1: GenesisTransaction = GenesisTransaction.create(alice.toAddress, TOTAL_WAVES / 4, ts).explicitGet()
-      genesis2: GenesisTransaction = GenesisTransaction.create(bob.toAddress, TOTAL_WAVES / 4, ts + 1).explicitGet()
-      genesis3: GenesisTransaction = GenesisTransaction.create(charlie.toAddress, TOTAL_WAVES / 4, ts + 2).explicitGet()
-      genesis4: GenesisTransaction = GenesisTransaction.create(dave.toAddress, TOTAL_WAVES / 4, ts + 4).explicitGet()
-    } yield (
-      Seq(alice, bob, charlie, dave),
-      miner,
-      customBuildBlockOfTxs(randomSig, Seq(genesis1, genesis2, genesis3, genesis4), defaultSigner, 1, ts),
-      ts
-    )
+    } yield {
+      val accs = Seq(alice, bob, charlie, dave)
+      (accs, miner, accs.map(acc => AddrWithBalance(acc.toAddress, TOTAL_WAVES / 4)), ts)
+    }
 
-  def g(totalTxs: Int, totalScenarios: Int): Gen[(Block, Seq[(BlockAndMicroblockSequence, Block)])] =
+  def g(totalTxs: Int, totalScenarios: Int): Gen[(Seq[AddrWithBalance], SigningKey, Seq[TransferTransaction], Seq[BlockAndMicroblockSizes], Int)] =
     for {
-      (accs, miner, genesis, ts)            <- accsAndGenesis()
+      (accs, miner, balances, ts)           <- accsAndGenesis()
       payments: Seq[TransferTransaction]    <- randomPayments(accs, ts, totalTxs)
       intSeqs: Seq[BlockAndMicroblockSizes] <- randomSequences(totalTxs, totalScenarios)
-    } yield {
-      val version = 3: Byte
-      val blocksAndMicros = intSeqs.map { intSeq =>
-        val blockAndMicroblockSequence = r(payments, intSeq, genesis.id(), miner, version, ts)
-        val ref                        = bestRef(blockAndMicroblockSequence.last)
-        val lastBlock                  = customBuildBlockOfTxs(ref, Seq.empty, miner, version, ts)
-        (blockAndMicroblockSequence, lastBlock)
-      }
-      (genesis, blocksAndMicros)
-    }
+    } yield (balances, miner, payments, intSeqs, ts)
 }
 
 object BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest {
@@ -187,7 +177,7 @@ object BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest {
       txs: Seq[Transaction],
       sizes: BlockAndMicroblockSize,
       prev: ByteStr,
-      signer: KeyPair,
+      signer: SigningKey,
       version: TxVersion,
       timestamp: Long
   ): (BlockAndMicroblocks, Seq[Transaction]) = {
@@ -204,7 +194,7 @@ object BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest {
       txs: Seq[Transaction],
       sizes: BlockAndMicroblockSizes,
       initial: ByteStr,
-      signer: KeyPair,
+      signer: SigningKey,
       version: TxVersion,
       timestamp: Long
   ): BlockAndMicroblockSequence = {

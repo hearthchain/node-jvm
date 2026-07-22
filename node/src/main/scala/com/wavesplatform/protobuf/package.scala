@@ -11,13 +11,20 @@ import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import scala.annotation.targetName
 
 package object protobuf {
+  // The generated DTOs live in tech.hearth.protobuf; re-exported so this package's converters can name them directly
+  type Amount = tech.hearth.protobuf.Amount
+  val Amount = tech.hearth.protobuf.Amount
+
+  type RewardShare = tech.hearth.protobuf.RewardShare
+  val RewardShare = tech.hearth.protobuf.RewardShare
+
   extension (bs: ByteStr) def toByteString: ByteString = ByteString.copyFrom(bs.arr)
 
   extension (txId: TransactionId) {
     @targetName("txIdToByteString") def toByteString: ByteString = ByteString.copyFrom(txId.arr)
   }
 
-  extension (a: Address) def toByteString: ByteString = ByteString.copyFrom(a.bytes)
+  extension (a: Address) def toByteString: ByteString = ByteString.copyFrom(a.toBytes)
 
   extension (pk: PublicKey) {
     @targetName("publicKeyToByteString") def toByteString: ByteString = ByteString.copyFrom(pk.arr)

@@ -3,7 +3,6 @@ package com.wavesplatform.mining.microblocks
 import cats.syntax.applicativeError.*
 import cats.syntax.bifunctor.*
 import cats.syntax.either.*
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{Block, FinalizationVoting, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
@@ -23,6 +22,7 @@ import kamon.Kamon
 import monix.eval.Task
 import monix.execution.Scheduler
 import monix.reactive.Observable
+import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.duration.*
 
@@ -42,18 +42,18 @@ class MicroBlockMinerImpl(
   private val microBlockBuildTimeStats = Kamon.timer("miner.forge-microblock-time").withoutTags()
 
   def generateMicroBlockSequence(
-      account: KeyPair,
+      signingKey: SigningKey,
       accumulatedBlock: Block,
       restTotalConstraint: MiningConstraint,
       lastMicroBlock: Long
   ): Task[Unit] =
-    generateOneMicroBlockTask(account, accumulatedBlock, restTotalConstraint, lastMicroBlock)
+    generateOneMicroBlockTask(signingKey, accumulatedBlock, restTotalConstraint, lastMicroBlock)
       .flatMap {
         case res @ Success(newBlock, newConstraint) =>
-          Task.defer(generateMicroBlockSequence(account, newBlock, newConstraint, res.nanoTime))
+          Task.defer(generateMicroBlockSequence(signingKey, newBlock, newConstraint, res.nanoTime))
         case Retry =>
           Task
-            .defer(generateMicroBlockSequence(account, accumulatedBlock, restTotalConstraint, lastMicroBlock))
+            .defer(generateMicroBlockSequence(signingKey, accumulatedBlock, restTotalConstraint, lastMicroBlock))
             .delayExecution((settings.microBlockInterval / 2).max(1.millis))
         case Stop =>
           setDebugState(MinerDebugInfo.MiningBlocks)
@@ -62,7 +62,7 @@ class MicroBlockMinerImpl(
       .recover { case e => log.error("Error mining microblock", e) }
 
   private[mining] def generateOneMicroBlockTask(
-      account: KeyPair,
+      signingKey: SigningKey,
       accumulatedBlock: Block,
       restTotalConstraint: MiningConstraint,
       lastMicroBlock: Long
@@ -113,14 +113,14 @@ class MicroBlockMinerImpl(
         for {
           _ <- Task.now(if (delay > Duration.Zero) log.trace(s"Sleeping ${delay.toMillis} ms before applying microBlock"))
           _ <- Task.sleep(delay)
-          _ = log.trace(s"Generating microBlock for ${account.toAddress}, constraints: $updatedTotalConstraint")
-          blocks <- forgeBlocks(account, accumulatedBlock, unconfirmed, stateHash)
+          _ = log.trace(s"Generating microBlock for ${signingKey.toAddress.toBech32}, constraints: $updatedTotalConstraint")
+          blocks <- forgeBlocks(signingKey, accumulatedBlock, unconfirmed, stateHash)
             .leftWiden[Throwable]
             .liftTo[Task]
           (signedBlock, microBlock) = blocks
           blockId <- appendMicroBlock(microBlock)
           _ = BlockStats.mined(microBlock, blockId)
-          _ <- broadcastMicroBlock(account, microBlock, blockId)
+          _ <- broadcastMicroBlock(signingKey, microBlock, blockId)
         } yield {
           if (updatedTotalConstraint.isFull) Stop
           else Success(signedBlock, updatedTotalConstraint)
@@ -142,7 +142,7 @@ class MicroBlockMinerImpl(
     }
   }
 
-  private def broadcastMicroBlock(account: KeyPair, microBlock: MicroBlock, blockId: BlockId): Task[Unit] =
+  private def broadcastMicroBlock(account: SigningKey, microBlock: MicroBlock, blockId: BlockId): Task[Unit] =
     Task(if (allChannels != null) allChannels.broadcast(MicroBlockInv(account, blockId, microBlock.reference)))
 
   private def appendMicroBlock(microBlock: MicroBlock): Task[BlockId] =
@@ -153,7 +153,7 @@ class MicroBlockMinerImpl(
       }
 
   private def forgeBlocks(
-      account: KeyPair,
+      signingKey: SigningKey,
       accumulatedBlock: Block,
       unconfirmed: Seq[Transaction],
       stateHash: Option[ByteStr]
@@ -169,7 +169,7 @@ class MicroBlockMinerImpl(
             baseTarget = accumulatedBlock.header.baseTarget,
             generationSignature = accumulatedBlock.header.generationSignature,
             txs = accumulatedBlock.transactionData ++ unconfirmed,
-            signer = account,
+            signer = signingKey,
             featureVotes = accumulatedBlock.header.featureVotes,
             rewardVote = accumulatedBlock.header.rewardVote,
             stateHash = if (blockchainUpdater.supportsLightNodeBlockFields()) stateHash else None,
@@ -180,7 +180,7 @@ class MicroBlockMinerImpl(
         microBlock <- MicroBlock
           .buildAndSign(
             signedBlock.header.version,
-            account,
+            signingKey,
             unconfirmed,
             accumulatedBlock.id(),
             signedBlock.signature,

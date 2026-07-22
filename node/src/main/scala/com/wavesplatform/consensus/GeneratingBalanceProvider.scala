@@ -1,9 +1,9 @@
 package com.wavesplatform.consensus
 
-import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.state.{Blockchain, Height}
+import tech.hearth.crypto.Address
 
 object GeneratingBalanceProvider {
   val MinimalEffectiveBalanceForGenerator1: Long = 1000000000000L

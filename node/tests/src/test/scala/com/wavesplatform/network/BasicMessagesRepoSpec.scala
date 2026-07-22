@@ -7,7 +7,7 @@ import com.wavesplatform.protobuf.block.*
 import com.wavesplatform.protobuf.transaction.*
 import com.wavesplatform.test.FreeSpec
 import com.wavesplatform.transaction.Asset.IssuedAsset
-import com.wavesplatform.transaction.{DataTransaction, Proofs, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Proofs, TxHelpers}
 
 import java.io.ByteArrayOutputStream
 
@@ -48,15 +48,7 @@ class BasicMessagesRepoSpec extends FreeSpec {
     codedTransactionMaxLengthPBPrefix.writeUInt32NoTag(MiningConstraints.MaxTxsSizeInBytes)
     codedTransactionMaxLengthPBPrefix.flush()
 
-    val minPossibleTransactionSize = PBTransactions
-      .protobuf(
-        TxHelpers.removeScript(
-          accountGen.sample.get,
-          fee = 1L,
-          version = TxVersion.V2
-        )
-      )
-      .serializedSize
+    val minPossibleTransactionSize = PBTransactions.protobuf(TxHelpers.transfer(amount = 1, fee = 1)).serializedSize
 
     val maxSize =
       headerPBPrefix.toByteArray.length + headerSize +
@@ -69,7 +61,7 @@ class BasicMessagesRepoSpec extends FreeSpec {
 
   "PBTransactionSpec max length" in {
     val maxSizeTransaction = PBSignedTransaction(
-      PBSignedTransaction.Transaction.WavesTransaction(
+      Some(
         PBTransaction(
           Byte.MaxValue,
           ByteString.copyFrom(bytes32gen.sample.get),
@@ -83,11 +75,10 @@ class BasicMessagesRepoSpec extends FreeSpec {
 
     val dataPBPrefix      = new ByteArrayOutputStream()
     val codedDataPBPrefix = CodedOutputStream.newInstance(dataPBPrefix)
-    codedDataPBPrefix.writeTag(Transaction.DATA_TRANSACTION_FIELD_NUMBER, WireFormat.WIRETYPE_LENGTH_DELIMITED)
-    codedDataPBPrefix.writeUInt32NoTag(DataTransaction.MaxProtoBytes)
+    codedDataPBPrefix.writeTag(Transaction.COMMIT_TO_GENERATION_FIELD_NUMBER, WireFormat.WIRETYPE_LENGTH_DELIMITED)
     codedDataPBPrefix.flush()
 
-    val size = maxSizeTransaction.serializedSize + dataPBPrefix.toByteArray.length + DataTransaction.MaxProtoBytes
+    val size = maxSizeTransaction.serializedSize + dataPBPrefix.toByteArray.length + 1
 
     size should be <= PBTransactionSpec.maxLength
   }

@@ -1,28 +1,19 @@
 package com.wavesplatform.protobuf.utils
 
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.protobuf.{Amount, *}
 import com.wavesplatform.protobuf.transaction.*
+import com.wavesplatform.protobuf.*
 import com.wavesplatform.transaction.Asset
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.crypto.Address
 
 object PBImplicitConversions {
-  import com.google.protobuf.{ByteString as PBByteString}
-  import com.wavesplatform.{account as va}
+  import com.google.protobuf.ByteString as PBByteString
 
-  implicit class AddressOrAliasToPBExt(val r: va.AddressOrAlias) extends AnyVal {
-    def toPB: Recipient = r match {
-      case va.Alias(_, name) => Recipient.of(Recipient.Recipient.Alias(name))
-      case w: va.Address     => Recipient.of(Recipient.Recipient.PublicKeyHash(PBByteString.copyFrom(w.publicKeyHash)))
+  // The canonical on-chain form is the 21-byte payload (version || hash); see PBRecipients.toAddress, which parses it back
+  extension (a: Address) def toPB: Recipient = Recipient.of(PBByteString.copyFrom(a.toBytes()))
 
-    }
-  }
-
-  implicit class PBRecipientImplicitConversionOps(val recipient: Recipient) extends AnyVal {
-    def toAddress(chainId: Byte): Either[ValidationError, va.Address]               = PBRecipients.toAddress(recipient, chainId)
-    def toAlias(chainId: Byte): Either[ValidationError, va.Alias]                   = PBRecipients.toAlias(recipient, chainId)
-    def toAddressOrAlias(chainId: Byte): Either[ValidationError, va.AddressOrAlias] = PBRecipients.toAddressOrAlias(recipient, chainId)
-  }
+  extension (r: Recipient) def toAddress(chainId: Byte): Either[ValidationError, Address] = PBRecipients.toAddress(r, chainId)
 
   implicit def fromAssetIdAndAmount(v: (VanillaAssetId, Long)): Amount = v match {
     case (IssuedAsset(assetId), amount) =>

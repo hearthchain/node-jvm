@@ -2,7 +2,7 @@ package com.wavesplatform.mining
 
 import com.typesafe.config.ConfigFactory
 import com.wavesplatform.WithNewDBForEachTest
-import com.wavesplatform.account.{Address, KeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.block.{Block, BlockSnapshot, MicroBlock, MicroBlockSnapshot, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
@@ -12,6 +12,7 @@ import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.settings.*
 import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
 import com.wavesplatform.state.diffs.ENOUGH_AMT
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.state.*
 import com.wavesplatform.test.FlatSpec
 import com.wavesplatform.transaction.{BlockchainUpdater, DiscardedBlocks, LastBlockInfo, Transaction}
@@ -26,6 +27,7 @@ import monix.execution.Scheduler
 import monix.execution.Scheduler.Implicits.global
 import monix.execution.atomic.AtomicInt
 import monix.reactive.Observable
+import tech.hearth.crypto.SigningKey
 
 class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
   trait BlockchainUpdaterNG extends Blockchain with BlockchainUpdater with NG
@@ -132,7 +134,7 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
     val blockchainSettings = {
       val bs = wavesSettings.blockchainSettings
       val fs = bs.functionalitySettings
-      bs.copy(functionalitySettings = fs.copy(blockVersion3AfterHeight = 0, preActivatedFeatures = Map(2.toShort -> 0)))
+      bs.copy(functionalitySettings = fs.copy(preActivatedFeatures = Map(2.toShort -> 0)))
     }
 
     val (miner, appenderScheduler) = {
@@ -150,7 +152,7 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
         utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        wallet,
+        Seq.empty,
         pos,
         scheduler,
         scheduler,
@@ -160,11 +162,11 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
 
     val account       = accountGen.sample.get
     val generateBlock = generateBlockTask(miner)(account)
-    generateBlock.runSyncUnsafe() shouldBe ((): Unit)
+    generateBlock.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")) shouldBe ((): Unit)
     minedBlock.header.featureVotes shouldBe empty
     appenderScheduler.shutdown()
   }
 
-  private def generateBlockTask(miner: MinerImpl)(account: KeyPair): Task[Unit] =
-    miner.generateBlockTask(account, None)
+  private def generateBlockTask(miner: MinerImpl)(account: SigningKey): Task[Unit] =
+    miner.generateBlockTask(account, TxHelpers.vrfKeyOf(account), None)
 }

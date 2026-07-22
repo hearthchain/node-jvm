@@ -6,45 +6,58 @@ import com.wavesplatform.crypto
 import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsPublicKey, BlsSignature}
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.Height
-import com.wavesplatform.transaction.serialization.impl.{BaseTxJson, PBTransactionSerializer}
+import com.wavesplatform.transaction.serialization.impl.BaseTxJson
 import com.wavesplatform.transaction.validation.TxValidator
 import com.wavesplatform.transaction.validation.impl.CommitToGenerationTxValidator
 import monix.eval.Coeval
+import tech.hearth.crypto.{Ecvrf, VrfKey}
 import play.api.libs.json.*
 
+/** @param vrfPublicKey
+  *   The generator's VRF public key, which its blocks' generation signatures are verified against. It is registered
+  *   here because a VRF key is derived independently of the account's signing key, so it can't be recovered from the
+  *   block header alone.
+  * @param vrfCommitmentSignature
+  *   Proof that the sender holds the corresponding VRF secret key. Unlike the BLS commitmentSignature this is not
+  *   needed to keep the scheme sound - VRF proofs are never aggregated, so there is no rogue-key attack, and
+  *   registering a key you don't hold only stops you from mining. It catches a misconfigured key at commit time
+  *   instead of leaving a dead generator slot for a whole period.
+  */
 final case class CommitToGenerationTransaction(
-    override val version: TxVersion,
+    version: TxVersion,
     sender: PublicKey,
     endorserPublicKey: BlsPublicKey,
+    vrfPublicKey: ByteStr,
     generationPeriodStart: Height,
     timestamp: TxTimestamp,
     fee: TxPositiveAmount,
     commitmentSignature: BlsSignature,
+    vrfCommitmentSignature: ByteStr,
     proofs: Proofs,
     override val chainId: Byte
 ) extends Transaction(TransactionType.CommitToGeneration)
     with ProvenTransaction
-    with Versioned.ConstV1
     with TxWithFee.InWaves
-    with FastHashId
-    with PBSince.V1 {
+    with FastHashId {
 
   override type T = CommitToGenerationTransaction
 
   override def addProof(proof: ByteStr): CommitToGenerationTransaction = copy(proofs = proofs.add(proof))
 
-  override val bodyBytes: Coeval[Array[Byte]] = Coeval.evalOnce(PBTransactionSerializer.bodyBytes(this))
-  override val bytes: Coeval[Array[Byte]]     = Coeval.evalOnce(PBTransactionSerializer.bytes(this))
   override val json: Coeval[JsObject] =
     Coeval.evalOnce(
       BaseTxJson.toJson(this) ++ Json.obj(
-        "endorserPublicKey"     -> endorserPublicKey.base58,
-        "generationPeriodStart" -> generationPeriodStart,
-        "commitmentSignature"   -> commitmentSignature.base58
+        "endorserPublicKey"      -> endorserPublicKey.base58,
+        "vrfPublicKey"           -> vrfPublicKey.toString,
+        "generationPeriodStart"  -> generationPeriodStart,
+        "commitmentSignature"    -> commitmentSignature.base58,
+        "vrfCommitmentSignature" -> vrfCommitmentSignature.toString
       )
     )
 
   lazy val popMessage: Array[Byte] = CommitToGenerationTransaction.mkPopMessage(endorserPublicKey, generationPeriodStart)
+
+  lazy val vrfPopMessage: Array[Byte] = CommitToGenerationTransaction.mkVrfPopMessage(vrfPublicKey, generationPeriodStart)
 }
 
 object CommitToGenerationTransaction {
@@ -61,14 +74,23 @@ object CommitToGenerationTransaction {
   def mkPopMessage(blsPublicKey: BlsPublicKey, generationPeriodStart: Height): Array[Byte] =
     blsPublicKey.arr ++ generationPeriodStart.toByteArray
 
+  /** The VRF proof of possession: an ECVRF proof over the key being registered, verifiable with that key alone. */
+  def mkVrfPopSignature(vrfKey: VrfKey, generationPeriodStart: Height): ByteStr =
+    ByteStr(Ecvrf.prove(vrfKey, mkVrfPopMessage(ByteStr(vrfKey.publicKey()), generationPeriodStart)).proof().bytes())
+
+  def mkVrfPopMessage(vrfPublicKey: ByteStr, generationPeriodStart: Height): Array[Byte] =
+    vrfPublicKey.arr ++ generationPeriodStart.toByteArray
+
   def create(
       version: TxVersion,
       sender: PublicKey,
       endorserPublicKey: BlsPublicKey,
+      vrfPublicKey: ByteStr,
       generationPeriodStart: Height,
       timestamp: TxTimestamp,
       feeInWaves: Long,
       commitmentSignature: BlsSignature,
+      vrfCommitmentSignature: ByteStr,
       proofs: Proofs,
       chainId: Byte
   ): Either[ValidationError, CommitToGenerationTransaction] =
@@ -78,25 +100,14 @@ object CommitToGenerationTransaction {
         version,
         sender,
         endorserPublicKey,
+        vrfPublicKey,
         generationPeriodStart,
         timestamp,
         feeInWaves,
         commitmentSignature,
+        vrfCommitmentSignature,
         proofs,
         chainId
       ).validatedEither
     } yield tx
-
-  def selfSigned(
-      version: TxVersion,
-      sender: KeyPair,
-      endorserPublicKey: BlsPublicKey,
-      generationPeriodStart: Height,
-      timestamp: TxTimestamp,
-      feeInWaves: Long,
-      commitmentSignature: BlsSignature,
-      chainId: Byte = AddressScheme.current.chainId
-  ): Either[ValidationError, CommitToGenerationTransaction] =
-    create(version, sender.publicKey, endorserPublicKey, generationPeriodStart, timestamp, feeInWaves, commitmentSignature, Proofs.empty, chainId)
-      .map(signed(_, sender.privateKey))
 }

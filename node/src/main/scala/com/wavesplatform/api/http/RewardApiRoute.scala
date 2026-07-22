@@ -31,17 +31,14 @@ case class RewardApiRoute(blockchain: Blockchain) extends ApiRoute {
         .filter(_ <= height)
         .toRight(GenericError("Block reward feature is not activated yet"))
       reward <- blockchain.blockReward(height.toInt).toRight(GenericError(s"No information about rewards at height = $height"))
-      amount          = blockchain.wavesAmount(height.toInt)
-      rewardsSettings = blockchain.settings.rewardsSettings
-      funcSettings    = blockchain.settings.functionalitySettings
-      nextCheck = rewardsSettings.nearestTermEnd(activatedAt, height, blockchain.isFeatureActivated(BlockchainFeatures.CappedReward, height.toInt))
+      amount              = blockchain.wavesAmount(height.toInt)
+      rewardsSettings     = blockchain.settings.rewardsSettings
+      funcSettings        = blockchain.settings.functionalitySettings
+      nextCheck           = rewardsSettings.nearestTermEnd(activatedAt, height, modifyTerm = true) // CappedReward is active
       votingIntervalStart = nextCheck - rewardsSettings.votingInterval + 1
       votingThreshold     = rewardsSettings.votingInterval / 2 + 1
       votes               = blockchain.blockRewardVotes(height.toInt).filter(_ >= 0)
-      term =
-        if (blockchain.isFeatureActivated(BlockchainFeatures.CappedReward, height.toInt))
-          rewardsSettings.termAfterCappedRewardFeature
-        else rewardsSettings.term
+      term                = rewardsSettings.termAfterCappedRewardFeature                           // CappedReward is active
     } yield RewardStatus(
       height,
       amount,
@@ -53,8 +50,7 @@ case class RewardApiRoute(blockchain: Blockchain) extends ApiRoute {
       rewardsSettings.votingInterval,
       votingThreshold,
       RewardVotes(votes.count(_ > reward), votes.count(_ < reward)),
-      funcSettings.daoAddress,
-      funcSettings.xtnBuybackAddress
+      funcSettings.daoAddress
     )
 }
 
@@ -70,8 +66,7 @@ object RewardApiRoute {
       votingInterval: Int,
       votingThreshold: Int,
       votes: RewardVotes,
-      daoAddress: Option[String],
-      xtnBuybackAddress: Option[String]
+      daoAddress: Option[String]
   )
 
   final case class RewardVotes(increase: Int, decrease: Int)

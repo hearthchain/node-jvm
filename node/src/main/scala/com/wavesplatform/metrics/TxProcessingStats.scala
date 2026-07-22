@@ -1,7 +1,7 @@
 package com.wavesplatform.metrics
 
 import com.google.common.base.CaseFormat
-import com.wavesplatform.transaction.{Transaction, TransactionType}
+import com.wavesplatform.transaction.TransactionType
 import kamon.Kamon
 import kamon.metric.Metric
 
@@ -14,7 +14,7 @@ object TxProcessingStats {
   }
 
   extension (t: Metric.Timer)
-    def measureForType[A](tpe: Transaction.Type)(f: => A): A =
+    def measureForType[A](tpe: TransactionType)(f: => A): A =
       t.withTag("transaction-type", typeToName(tpe)).measure(f)
 
   val invokedScriptExecution: Metric.Timer    = Kamon.timer("tx.processing.script-execution.invoked")

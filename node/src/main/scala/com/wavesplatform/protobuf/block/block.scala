@@ -1,33 +1,53 @@
 package com.wavesplatform.protobuf
 
+/** The generated protobuf DTOs live in tech.hearth.protobuf; this package is the node's own encoding/decoding layer on
+  * top of them, and re-exports the message types it converts to and from.
+  */
 package object block {
-  type PBBlock = com.wavesplatform.protobuf.block.Block
-  val PBBlock = com.wavesplatform.protobuf.block.Block
+  type PBBlock = tech.hearth.protobuf.block.Block
+  val PBBlock = tech.hearth.protobuf.block.Block
 
   type VanillaBlock = com.wavesplatform.block.Block
   val VanillaBlock = com.wavesplatform.block.Block
 
-  type PBBlockHeader = com.wavesplatform.protobuf.block.Block.Header
-  val PBBlockHeader = com.wavesplatform.protobuf.block.Block.Header
+  type PBBlockHeader = tech.hearth.protobuf.block.Block.Header
+  val PBBlockHeader = tech.hearth.protobuf.block.Block.Header
 
   type VanillaBlockHeader = com.wavesplatform.block.BlockHeader
   val VanillaBlockHeader = com.wavesplatform.block.BlockHeader
 
-  type PBSignedMicroBlock = com.wavesplatform.protobuf.block.SignedMicroBlock
-  val PBSignedMicroBlock = com.wavesplatform.protobuf.block.SignedMicroBlock
+  type PBSignedMicroBlock = tech.hearth.protobuf.block.SignedMicroBlock
+  val PBSignedMicroBlock = tech.hearth.protobuf.block.SignedMicroBlock
 
-  type PBMicroBlock = com.wavesplatform.protobuf.block.MicroBlock
-  val PBMicroBlock = com.wavesplatform.protobuf.block.MicroBlock
+  type PBMicroBlock = tech.hearth.protobuf.block.MicroBlock
+  val PBMicroBlock = tech.hearth.protobuf.block.MicroBlock
 
   type VanillaMicroBlock = com.wavesplatform.block.MicroBlock
   val VanillaMicroBlock = com.wavesplatform.block.MicroBlock
 
-  type PBEndorseBlock = com.wavesplatform.protobuf.block.EndorseBlock
-  val PBEndorseBlock = com.wavesplatform.protobuf.block.EndorseBlock
+  type PBEndorseBlock = tech.hearth.protobuf.block.EndorseBlock
+  val PBEndorseBlock = tech.hearth.protobuf.block.EndorseBlock
 
   type VanillaFinalizationVoting = com.wavesplatform.block.FinalizationVoting
   val VanillaFinalizationVoting = com.wavesplatform.block.FinalizationVoting
 
-  type PBFinalizationVoting = com.wavesplatform.protobuf.block.FinalizationVoting
-  val PBFinalizationVoting = com.wavesplatform.protobuf.block.FinalizationVoting
+  type PBFinalizationVoting = tech.hearth.protobuf.block.FinalizationVoting
+  val PBFinalizationVoting = tech.hearth.protobuf.block.FinalizationVoting
+
+  // Re-exported so that this package's converters can keep naming the DTOs directly, as they did when the generated
+  // code shared this package
+  type Block = tech.hearth.protobuf.block.Block
+  val Block = tech.hearth.protobuf.block.Block
+
+  type MicroBlock = tech.hearth.protobuf.block.MicroBlock
+  val MicroBlock = tech.hearth.protobuf.block.MicroBlock
+
+  type SignedMicroBlock = tech.hearth.protobuf.block.SignedMicroBlock
+  val SignedMicroBlock = tech.hearth.protobuf.block.SignedMicroBlock
+
+  type EndorseBlock = tech.hearth.protobuf.block.EndorseBlock
+  val EndorseBlock = tech.hearth.protobuf.block.EndorseBlock
+
+  type FinalizationVoting = tech.hearth.protobuf.block.FinalizationVoting
+  val FinalizationVoting = tech.hearth.protobuf.block.FinalizationVoting
 }

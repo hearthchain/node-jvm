@@ -3,14 +3,11 @@ package com.wavesplatform.state.diffs
 import cats.implicits.toFoldableOps
 import cats.syntax.either.*
 import com.wavesplatform.account.Address
-import com.wavesplatform.crypto.EthereumKeyLength
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{GenericError, OrderValidationError}
 import com.wavesplatform.transaction.assets.exchange.*
-import com.wavesplatform.transaction.assets.exchange.OrderAuthentication.Eip712Signature
 import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.AssetDecimals
 import com.wavesplatform.transaction.{Asset, TxVersion}
 
@@ -26,53 +23,10 @@ object ExchangeTransactionDiff {
   }
 
   def apply(blockchain: Blockchain)(tx: ExchangeTransaction): Either[ValidationError, StateSnapshot] = {
-    val buyer  = tx.buyOrder.senderAddress
-    val seller = tx.sellOrder.senderAddress
-
-    val assetIds =
-      List(
-        tx.buyOrder.assetPair.amountAsset,
-        tx.buyOrder.assetPair.priceAsset,
-        tx.sellOrder.assetPair.amountAsset,
-        tx.sellOrder.assetPair.priceAsset
-      ).collect { case asset: IssuedAsset =>
-        asset
-      }.distinct
-    val assets = assetIds.map(id => id -> blockchain.assetDescription(id)).toMap
-
-    def smartFeaturesChecks(): Either[GenericError, Unit] =
-      for {
-        _ <- Right(())
-        smartTradesEnabled = blockchain.isFeatureActivated(BlockchainFeatures.SmartAccountTrading)
-        smartAssetsEnabled = blockchain.isFeatureActivated(BlockchainFeatures.SmartAssets)
-        assetsScripted     = assets.values.count(_.flatMap(_.script).isDefined)
-        _ <- Either.cond(
-          smartAssetsEnabled || assetsScripted == 0,
-          (),
-          GenericError(s"Smart assets can't participate in ExchangeTransactions (SmartAssetsFeature is disabled)")
-        )
-        buyerScripted = blockchain.hasAccountScript(buyer)
-        _ <- Either.cond(
-          smartTradesEnabled || !buyerScripted,
-          (),
-          GenericError(s"Buyer $buyer can't participate in ExchangeTransaction because it has assigned Script (SmartAccountsTrades is disabled)")
-        )
-        sellerScripted = blockchain.hasAccountScript(seller)
-        _ <- Either.cond(
-          smartTradesEnabled || !sellerScripted,
-          (),
-          GenericError(s"Seller $seller can't participate in ExchangeTransaction because it has assigned Script (SmartAccountsTrades is disabled)")
-        )
-      } yield ()
-
     for {
-      _          <- checkOrderPkRecover(tx.order1, blockchain)
-      _          <- checkOrderPkRecover(tx.order2, blockchain)
-      _          <- smartFeaturesChecks()
+      _          <- checkOrderPkRecover(tx.order1)
+      _          <- checkOrderPkRecover(tx.order2)
       _          <- enoughVolume(tx, blockchain)
-      _          <- checkOrderPriceModes(tx, blockchain)
-      _          <- checkAttachment(tx.order1, blockchain)
-      _          <- checkAttachment(tx.order2, blockchain)
       portfolios <- getPortfolios(blockchain, tx)
       orderFills = Map(
         tx.buyOrder.id()  -> VolumeAndFee(tx.amount.value, tx.buyMatcherFee),
@@ -179,15 +133,6 @@ object ExchangeTransactionDiff {
     } yield totalDiff
   }
 
-  private def checkOrderPriceModes(tx: ExchangeTransaction, blockchain: Blockchain): Either[GenericError, Unit] = {
-    def isLegacyModeOrder(order: Order) = order.version >= Order.V4 && order.priceMode != OrderPriceMode.Default
-    Either.cond(
-      !Seq(tx.order1, tx.order2).exists(isLegacyModeOrder) || blockchain.isFeatureActivated(BlockchainFeatures.RideV6),
-      (),
-      GenericError("Legacy price mode is only available after RideV6 activation")
-    )
-  }
-
   private def enoughVolume(exTrans: ExchangeTransaction, blockchain: Blockchain): Either[ValidationError, Unit] = {
 
     val filledBuy  = blockchain.filledVolumeAndFee(exTrans.buyOrder.id())
@@ -268,37 +213,8 @@ object ExchangeTransactionDiff {
   private[diffs] def getOrderFeePortfolio(order: Order, fee: Long): Portfolio =
     Portfolio.build(order.matcherFeeAssetId, fee)
 
-  private def checkOrderPkRecover(order: Order, blockchain: Blockchain): Either[GenericError, Unit] =
+  private def checkOrderPkRecover(order: Order): Either[GenericError, Unit] =
     order.orderAuthentication match {
-      case Eip712Signature(signature) =>
-        for {
-          _ <- Either.cond(
-            !(EthOrders.recoverEthSignerKeyBigInt(order, signature.arr).toByteArray.length < EthereumKeyLength) || blockchain.isFeatureActivated(
-              BlockchainFeatures.ConsensusImprovements
-            ),
-            (),
-            GenericError("Invalid public key for Ethereum orders")
-          )
-          sigData = EthOrders.decodeSignature(signature.arr)
-          v       = BigInt(1, sigData.getV)
-          _ <- Either.cond(
-            !(v == 0 || v == 1 || v > 28) || blockchain.isFeatureActivated(BlockchainFeatures.ConsensusImprovements),
-            (),
-            GenericError("Invalid order signature format")
-          )
-          _ <- Either.raiseWhen(
-            signature.size > 65 && blockchain.isFeatureActivated(BlockchainFeatures.DeterministicFinality)
-          )(GenericError("Invalid order signature format"))
-        } yield ()
       case _ => Right(())
     }
-
-  private def checkAttachment(order: Order, blockchain: Blockchain): Either[GenericError, Unit] =
-    for {
-      _ <- Either.cond(
-        order.attachment.isEmpty || blockchain.isFeatureActivated(BlockchainFeatures.LightNode),
-        (),
-        GenericError("Attachment field for orders is not supported yet")
-      )
-    } yield ()
 }

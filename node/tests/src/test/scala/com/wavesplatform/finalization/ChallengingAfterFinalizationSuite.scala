@@ -4,9 +4,9 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.history.Domain
+import com.wavesplatform.history.{Domain, defaultVrfKey}
 import com.wavesplatform.state.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.TestSchedulerOps
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.wallet.Wallet
@@ -37,7 +37,7 @@ class ChallengingAfterFinalizationSuite extends BaseFinalizationSpec, TestSchedu
       strictTime = true,
       generator = committedGenerator,
       stateHash = Some(Some(invalidStateHash)),
-      timestamp = Some(d.nextBlockTime(committedGenerator) + 1L) // HACK: challenger block timestamp will be better
+      timestamp = Some(d.nextBlockTime(committedGenerator, defaultVrfKey) + 1L) // HACK: challenger block timestamp will be better
     )
     d.appender.appendBlock(invalidBlock, requireAppended = false)
 

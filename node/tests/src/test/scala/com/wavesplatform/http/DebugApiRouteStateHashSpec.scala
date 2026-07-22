@@ -1,7 +1,6 @@
 package com.wavesplatform.http
 import com.typesafe.config.ConfigObject
 import com.wavesplatform.*
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.api.http.{DebugApiRoute, RouteTimeout}
 import com.wavesplatform.block.Block
 import com.wavesplatform.db.WithState.AddrWithBalance
@@ -12,7 +11,7 @@ import com.wavesplatform.network.PeerDatabase
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.{Blockchain, Height}
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.SharedSchedulerMixin
 import monix.eval.Task
@@ -40,7 +39,6 @@ class DebugApiRouteStateHashSpec
       dbSettings = DomainPresets.TransactionStateSnapshot.dbSettings.copy(storeStateHashes = true),
       restAPISettings = restAPISettings
     )
-    .setFeaturesHeight(BlockchainFeatures.DeterministicFinality -> deterministicFinalityActivationHeight)
     .configure(_.copy(generationPeriodLength = 2))
 
   private val configObject: ConfigObject = settings.config.root()
@@ -61,7 +59,6 @@ class DebugApiRouteStateHashSpec
       settings,
       ntpTime,
       domain.blockchain,
-      domain.wallet,
       domain.accountsApi,
       domain.transactionsApi,
       domain.assetsApi,

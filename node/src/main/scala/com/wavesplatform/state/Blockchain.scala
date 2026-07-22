@@ -1,24 +1,17 @@
 package com.wavesplatform.state
 
-import com.wavesplatform.account.*
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.Block.*
 import com.wavesplatform.block.{Block, BlockHeader, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.GeneratingBalanceProvider
-import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatureStatus, BlockchainFeatures}
-import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.lang.script.ContractScript
-import com.wavesplatform.lang.v1.ContractLimits
-import com.wavesplatform.lang.v1.traits.domain.Issue
 import com.wavesplatform.settings.BlockchainSettings
 import com.wavesplatform.state.TxMeta.Status
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.TxValidationError.AliasDoesNotExist
-import com.wavesplatform.transaction.assets.IssueTransaction
-import com.wavesplatform.transaction.transfer.TransferTransactionLike
-import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, ERC20Address, Transaction}
+import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, Transaction}
 import com.wavesplatform.utils.Numbers
+import tech.hearth.crypto.Address
 
 trait Blockchain {
   def settings: BlockchainSettings
@@ -48,7 +41,6 @@ trait Blockchain {
 
   def wavesAmount(height: Int): BigInt
 
-  def transferById(id: ByteStr): Option[(Int, TransferTransactionLike)]
   def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)]
   def transactionInfos(ids: Seq[ByteStr]): Seq[Option[(TxMeta, Transaction)]]
   def transactionMeta(id: ByteStr): Option[TxMeta]
@@ -57,8 +49,6 @@ trait Blockchain {
   def containsTransaction(tx: Transaction): Boolean
 
   def assetDescription(id: IssuedAsset): Option[AssetDescription]
-
-  def resolveAlias(a: Alias): Either[ValidationError, Address]
 
   def leaseDetails(leaseId: ByteStr): Option[LeaseDetails]
 
@@ -71,14 +61,6 @@ trait Blockchain {
     * @return Balance snapshots from most recent to oldest. May contain consecutive duplicate values
     */
   def balanceSnapshots(address: Address, from: Int, to: Option[BlockId]): Seq[BalanceSnapshot]
-
-  def accountScript(address: Address): Option[AccountScriptInfo]
-  def hasAccountScript(address: Address): Boolean
-
-  def assetScript(id: IssuedAsset): Option[AssetScriptInfo]
-
-  def accountData(acc: Address, key: String): Option[DataEntry[?]]
-  def hasData(address: Address): Boolean
 
   def leaseBalance(address: Address): LeaseBalance
 
@@ -93,11 +75,9 @@ trait Blockchain {
   def effectiveBalanceBanHeights(address: Address): Seq[Int]
 
   // TODO: named?
-  def committedGenerators(at: GenerationPeriod): IndexedSeq[(Address, BlsPublicKey)]
+  def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
   def conflictGenerators(at: GenerationPeriod): ConflictGenerators
-
-  def resolveERC20Address(address: ERC20Address): Option[IssuedAsset]
 
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
@@ -107,7 +87,7 @@ object Blockchain {
     def isEmpty: Boolean = blockchain.height == 0
 
     def isSponsorshipActive: Boolean = Height(blockchain.height) >= Sponsorship.sponsoredFeesSwitchHeight(blockchain)
-    def isNGActive: Boolean          = blockchain.isFeatureActivated(BlockchainFeatures.NG, blockchain.height - 1)
+    def isNGActive: Boolean          = true // NG is active
 
     def parentHeader(block: BlockHeader, back: Int = 1): Option[BlockHeader] =
       blockchain
@@ -133,17 +113,6 @@ object Blockchain {
     def lastBlockTimestamp: Option[Long]           = lastBlockHeader.map(_.header.timestamp)
     def lastBlockIds(maxRollbackLength: Int): Seq[ByteStr] =
       (blockchain.height to blockchain.finalizedHeightOrFallback(maxRollbackLength).toInt by -1).flatMap(blockId)
-
-    def resolveAlias(aoa: AddressOrAlias): Either[ValidationError, Address] =
-      (aoa: @unchecked) match {
-        case a: Address => Right(a)
-        case a: Alias   => blockchain.resolveAlias(a)
-      }
-
-    def canCreateAlias(alias: Alias): Boolean = blockchain.resolveAlias(alias) match {
-      case Left(AliasDoesNotExist(_)) => true
-      case _                          => false
-    }
 
     def effectiveBalance(address: Address, confirmations: Int, block: Option[BlockId] = blockchain.lastBlockId): Long = {
       val blockHeight = block.flatMap(b => blockchain.heightOf(b)).getOrElse(blockchain.height)
@@ -174,6 +143,24 @@ object Blockchain {
       generationDeposit = blockchain.generationDeposit(address)
     )
 
+    /** The VRF key a generator registered when it committed to generating for `at`'s period.
+      *
+      * A generator's VRF key is derived independently of its signing key, so it cannot be taken from a block header:
+      * only the commitment says which VRF key that generator's blocks are verified against.
+      */
+    def vrfPublicKeyOf(generator: PublicKey, at: Height): Either[String, ByteStr] = {
+      val generatorAddress = generator.toAddress
+      for {
+        period <- blockchain
+          .generationPeriodOf(at)
+          .toRight(s"No generation period at $at, so $generatorAddress has no registered VRF public key")
+        committed <- blockchain
+          .committedGenerators(period)
+          .find(_.address == generatorAddress)
+          .toRight(s"$generatorAddress is not a committed generator of period $period")
+      } yield committed.vrfPublicKey
+    }
+
     // TODO: lock?
     // TODO: not efficient? See RocksDBWriter.balanceSnapshots
     // TODO: optimize
@@ -181,10 +168,10 @@ object Blockchain {
       val committed = blockchain.committedGenerators(period)
       val conflict  = blockchain.conflictGenerators(period)
       val idxOnCurrent = committed.zipWithIndex
-        .collectFirst { case ((currentAddress, _), i) if currentAddress == address => GeneratorIndex(i) }
+        .collectFirst { case (cg, i) if cg.address == address => GeneratorIndex(i) }
         .filterNot { idx => conflict.hasInUpTo(at.prev, idx) } // Prev, because punishment on next height
 
-      val hasOnNext = blockchain.committedGenerators(period.next).exists { case (currentAddress, _) => currentAddress == address }
+      val hasOnNext = blockchain.committedGenerators(period.next).exists(_.address == address)
 
       val committedTimes = idxOnCurrent.size + Numbers.when(hasOnNext)(1)
       committedTimes * CommitToGenerationTransaction.DepositInWavelets
@@ -195,23 +182,10 @@ object Blockchain {
 
     def lastBlockReward: Option[Long] = blockchain.blockReward(blockchain.height)
 
-    def hasAssetScript(asset: IssuedAsset): Boolean = blockchain.assetScript(asset).isDefined
-    def hasPaidVerifier(account: Address): Boolean =
-      if (blockchain.isFeatureActivated(BlockchainFeatures.SynchronousCalls))
-        blockchain.accountScript(account).exists(_.verifierComplexity > ContractLimits.FreeVerifierComplexity)
-      else
-        blockchain.hasAccountScript(account)
-
     def vrf(atHeight: Int): Option[ByteStr] =
       blockchain
         .blockHeader(atHeight)
         .flatMap(header => if (header.header.version >= Block.ProtoBlockVersion) blockchain.hitSource(atHeight) else None)
-
-    def isNFT(issueTransaction: IssueTransaction): Boolean =
-      isNFT(issueTransaction.quantity.value, issueTransaction.decimals.value, issueTransaction.reissuable)
-    def isNFT(issueAction: Issue): Boolean = isNFT(issueAction.quantity, issueAction.decimals, issueAction.isReissuable)
-    def isNFT(quantity: Long, decimals: Int, reissuable: Boolean): Boolean =
-      isFeatureActivated(BlockchainFeatures.ReduceNFTFee) && quantity == 1 && decimals == 0 && !reissuable
 
     def isFeatureActivated(feature: BlockchainFeature, height: Int = blockchain.height): Boolean =
       blockchain.activatedFeatures.get(feature.id).exists(_ <= Height(height))
@@ -230,7 +204,7 @@ object Blockchain {
       val maybeConflict = for {
         period <- blockchain.generationPeriodOf(height)
         idx <- GeneratorIndex.checked {
-          blockchain.committedGenerators(period).indexWhere { case (addr, _) => addr == generator }
+          blockchain.committedGenerators(period).indexWhere(_.address == generator)
         }
       } yield blockchain.conflictGenerators(period).hasInUpTo(height, idx)
       maybeConflict.getOrElse(false)
@@ -243,50 +217,22 @@ object Blockchain {
     def featureActivationHeight(feature: Short): Option[Height]             = blockchain.activatedFeatures.get(feature)
     def featureApprovalHeight(feature: Short): Option[Height]               = blockchain.approvedFeatures.get(feature)
 
-    def blockVersionAt(height: Int): Byte =
-      if (isFeatureActivated(BlockchainFeatures.BlockV5, height)) ProtoBlockVersion
-      else if (isFeatureActivated(BlockchainFeatures.BlockReward, height)) {
-        if (blockchain.activatedFeatures(BlockchainFeatures.BlockReward.id) == Height(height)) NgBlockVersion else RewardBlockVersion
-      } else if (blockchain.settings.functionalitySettings.blockVersion3AfterHeight + 1 < height) NgBlockVersion
-      else if (height > 1) PlainBlockVersion
-      else GenesisBlockVersion
-
-    def binaryData(address: Address, key: String): Option[ByteStr] = blockchain.accountData(address, key).collect { case BinaryDataEntry(_, value) =>
-      value
-    }
-
-    def hasDApp(address: Address): Boolean =
-      blockchain.hasAccountScript(address) && blockchain
-        .accountScript(address)
-        .exists(_.script match {
-          case _: ContractScript.ContractScriptImpl => true
-          case _                                    => false
-        })
+    def blockVersionAt(height: Int): Byte = ProtoBlockVersion
 
     def transactionSucceeded(id: ByteStr): Boolean = blockchain.transactionMeta(id).exists(_.status == TxMeta.Status.Succeeded)
 
     def hasBannedEffectiveBalance(address: Address, height: Int = blockchain.height): Boolean =
       blockchain.effectiveBalanceBanHeights(address).contains(height)
 
-    def supportsLightNodeBlockFields(height: Int = blockchain.height): Boolean =
-      blockchain
-        .featureActivationHeight(BlockchainFeatures.LightNode)
-        .exists(Height(height) >= _ + blockchain.settings.functionalitySettings.lightNodeBlockFieldsAbsenceInterval)
+    def supportsLightNodeBlockFields(height: Int = blockchain.height): Boolean = true
 
-    def blockRewardBoost(height: Height): Int =
-      blockchain
-        .featureActivationHeight(BlockchainFeatures.BoostBlockReward)
-        .filter { boostHeight =>
-          boostHeight <= height && height < boostHeight + blockchain.settings.functionalitySettings.blockRewardBoostPeriod
-        }
-        .fold(1)(_ => BlockRewardCalculator.RewardBoost)
+    // Block rewards are never boosted.
+    def blockRewardBoost(height: Height): Int = 1
 
     /** @return None, if DeterministicFinality is not activated for provided height
       */
-    def generationPeriodOf(h: Height): Option[GenerationPeriod] = for {
-      activation <- blockchain.featureActivationHeight(BlockchainFeatures.DeterministicFinality)
-      p          <- GenerationPeriod.from(h, activation, blockchain.settings.functionalitySettings)
-    } yield p
+    def generationPeriodOf(h: Height): Option[GenerationPeriod] =
+      Some(GenerationPeriod.from(h, blockchain.settings.functionalitySettings))
 
     def currentGenerationPeriod: Option[GenerationPeriod] = this.generationPeriodOf(Height(blockchain.height))
 

@@ -12,7 +12,6 @@ import com.wavesplatform.transaction.validation.impl.ExchangeTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 case class ExchangeTransaction(
@@ -27,13 +26,10 @@ case class ExchangeTransaction(
     timestamp: Long,
     proofs: Proofs,
     chainId: Byte
-) extends Transaction(TransactionType.Exchange, order1.assetPair.checkedAssets),
+) extends Transaction(TransactionType.Exchange),
       ProvenTransaction,
-      HasSignature,
-      Versioned.ToV3,
       TxWithFee.InWaves,
-      FastHashId,
-      PBSince.V3 {
+      FastHashId {
 
   override type T = ExchangeTransaction
 
@@ -54,21 +50,16 @@ case class ExchangeTransaction(
 
   override val sender: PublicKey = buyOrder.matcherPublicKey
 
-  override val bodyBytes: Coeval[Array[Byte]] = Coeval.evalOnce(ExchangeTxSerializer.bodyBytes(this))
-  override val bytes: Coeval[Array[Byte]]     = Coeval.evalOnce(ExchangeTxSerializer.toBytes(this))
-  override val json: Coeval[JsObject]         = Coeval.evalOnce(ExchangeTxSerializer.toJson(this))
+  override val json: Coeval[JsObject] = Coeval.evalOnce(ExchangeTxSerializer.toJson(this))
 }
 
-object ExchangeTransaction extends TransactionParser {
+object ExchangeTransaction {
   type TransactionT = ExchangeTransaction
 
   implicit val validator: TxValidator[ExchangeTransaction] = ExchangeTxValidator
 
   implicit def sign(tx: ExchangeTransaction, privateKey: PrivateKey): ExchangeTransaction =
     tx.copy(proofs = Proofs(crypto.sign(privateKey, tx.bodyBytes())))
-
-  override def parseBytes(bytes: Array[TxVersion]): Try[ExchangeTransaction] =
-    ExchangeTxSerializer.parseBytes(bytes)
 
   val typeId: TxType = 7: Byte
 

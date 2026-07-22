@@ -6,27 +6,16 @@ import java.nio.file.{FileVisitResult, Files, Path, SimpleFileVisitor}
 
 import com.wavesplatform.account.Address
 import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.settings.{FunctionalitySettings, GenesisSettings, GenesisTransactionSettings, WavesSettings}
+import com.wavesplatform.settings.{FunctionalitySettings, GenesisBalanceSettings, GenesisSettings, WavesSettings}
 
 import scala.concurrent.duration.*
 
 object TestHelpers {
-  def genesisSettings(balances: Map[Address, Long], blockTimestamp: Long = System.currentTimeMillis()): GenesisSettings = {
-    val totalAmount = balances.values.sum
-    val transactions = balances.map { case (account, amount) =>
-      GenesisTransactionSettings(account.toString, amount)
-    }.toSeq
+  def genesisSettings(balances: Map[Address, Long], blockTimestamp: Long = System.currentTimeMillis()): GenesisSettings =
+    GenesisSettings(blockTimestamp, None, 1000, 60.seconds, balances = genesisBalances(balances))
 
-    GenesisSettings(blockTimestamp, blockTimestamp, totalAmount, None, transactions, 1000, 60.seconds)
-  }
-
-  def enableNG(settings: FunctionalitySettings): FunctionalitySettings =
-    settings.copy(blockVersion3AfterHeight = 0, preActivatedFeatures = settings.preActivatedFeatures ++ Map(BlockchainFeatures.NG.id -> 0))
-
-  def enableNG(settings: WavesSettings): WavesSettings =
-    settings.copy(
-      blockchainSettings = settings.blockchainSettings.copy(functionalitySettings = enableNG(settings.blockchainSettings.functionalitySettings))
-    )
+  def genesisBalances(balances: Map[Address, Long]): Seq[GenesisBalanceSettings] =
+    balances.map { case (account, amount) => GenesisBalanceSettings(account.toBech32, amount) }.toSeq
 
   def deleteRecursively(path: Path): Unit = Files.walkFileTree(
     path,

@@ -1,72 +1,61 @@
 package com.wavesplatform.history
 
-import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.history.Domain.BlockchainUpdaterExt
-import com.wavesplatform.state.diffs.*
+import com.wavesplatform.db.WithDomain
+import com.wavesplatform.db.WithState.AddrWithBalance
+import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.test.*
-import com.wavesplatform.transaction.*
-import com.wavesplatform.transaction.transfer.*
-import org.scalacheck.Gen
+import com.wavesplatform.transaction.TxHelpers
+import tech.hearth.crypto.SigningKey
 
-class BlockchainUpdaterInMemoryDiffTest extends PropSpec with DomainScenarioDrivenPropertyCheck {
-  val preconditionsAndPayments: Gen[(GenesisTransaction, TransferTransaction, TransferTransaction)] = for {
-    master    <- accountGen
-    recipient <- accountGen
-    ts        <- positiveIntGen
-    genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-    payment: TransferTransaction  <- wavesTransferGeneratorP(ts, master, recipient.toAddress)
-    payment2: TransferTransaction <- wavesTransferGeneratorP(ts, master, recipient.toAddress)
-  } yield (genesis, payment, payment2)
+class BlockchainUpdaterInMemoryDiffTest extends PropSpec, WithDomain {
+
+  private val master: SigningKey             = TxHelpers.signer(200)
+  private def balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(master.toAddress, ENOUGH_AMT))
 
   property("compaction with liquid block doesn't make liquid block affect state once") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments) {
-      case (domain, (genesis, payment1, payment2)) =>
-        val blocksWithoutCompaction = chainBlocks(
-          Seq(genesis) +:
-            Seq.fill(MaxTransactionsPerBlockDiff * 2 - 1)(Seq.empty[Transaction]) :+
-            Seq(payment1)
-        )
-        val blockTriggersCompaction = buildBlockOfTxs(blocksWithoutCompaction.last.id(), Seq(payment2))
+    withDomain(balances = balances) { d =>
+      val payment1 = TxHelpers.transfer(master)
+      val payment2 = TxHelpers.transfer(master)
 
-        blocksWithoutCompaction.foreach(b => domain.blockchainUpdater.processBlock(b) should beRight)
-        val mastersBalanceAfterPayment1 = domain.balance(genesis.recipient)
-        mastersBalanceAfterPayment1 shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value)
+      // Empty key blocks up to the compaction threshold, then payment1 in a microblock on the last liquid block
+      (1 until MaxTransactionsPerBlockDiff * 2).foreach(_ => d.appendKeyBlock())
+      d.appendKeyBlock()
+      d.appendMicroBlock(payment1)
 
-        domain.blockchainUpdater.height shouldBe MaxTransactionsPerBlockDiff * 2 + 1
+      d.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value)
+      d.blockchain.height shouldBe MaxTransactionsPerBlockDiff * 2 + 1
 
-        domain.blockchainUpdater.processBlock(blockTriggersCompaction) should beRight
+      // The next key block hardens the liquid block (with payment1) and triggers compaction
+      d.appendKeyBlock()
+      d.appendMicroBlock(payment2)
 
-        domain.blockchainUpdater.height shouldBe MaxTransactionsPerBlockDiff * 2 + 2
-
-        val mastersBalanceAfterPayment1AndPayment2 = domain.blockchainUpdater.balance(genesis.recipient)
-        mastersBalanceAfterPayment1AndPayment2 shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value - payment2.amount.value - payment2.fee.value)
+      d.blockchain.height shouldBe MaxTransactionsPerBlockDiff * 2 + 2
+      d.balance(master.toAddress) shouldBe
+        (ENOUGH_AMT - payment1.amount.value - payment1.fee.value - payment2.amount.value - payment2.fee.value)
     }
   }
+
   property("compaction without liquid block doesn't make liquid block affect state once") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments) {
-      case (domain, (genesis, payment1, payment2)) =>
-        val firstBlocks             = chainBlocks(Seq(Seq(genesis)) ++ Seq.fill(MaxTransactionsPerBlockDiff * 2 - 2)(Seq.empty[Transaction]))
-        val payment1Block           = buildBlockOfTxs(firstBlocks.last.id(), Seq(payment1))
-        val emptyBlock              = buildBlockOfTxs(payment1Block.id(), Seq.empty)
-        val blockTriggersCompaction = buildBlockOfTxs(payment1Block.id(), Seq(payment2))
+    withDomain(balances = balances) { d =>
+      val payment1 = TxHelpers.transfer(master)
+      val payment2 = TxHelpers.transfer(master)
 
-        firstBlocks.foreach(b => domain.blockchainUpdater.processBlock(b) should beRight)
-        domain.blockchainUpdater.processBlock(payment1Block) should beRight
-        domain.blockchainUpdater.processBlock(emptyBlock) should beRight
-        val mastersBalanceAfterPayment1 = domain.blockchainUpdater.balance(genesis.recipient)
-        mastersBalanceAfterPayment1 shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value)
+      (1 until MaxTransactionsPerBlockDiff * 2 - 1).foreach(_ => d.appendKeyBlock())
+      d.appendKeyBlock()
+      d.appendMicroBlock(payment1)
+      val payment1BlockId = d.lastBlockId
 
-        // discard liquid block
-        domain.blockchainUpdater.removeAfter(payment1Block.id())
-        domain.blockchainUpdater.processBlock(blockTriggersCompaction) should beRight
+      d.appendKeyBlock() // hardens the payment1 block, leaving an empty liquid block on top
+      d.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value)
 
-        domain.blockchainUpdater.height shouldBe MaxTransactionsPerBlockDiff * 2 + 1
+      // Discard that liquid block, so compaction happens without one
+      d.blockchainUpdater.removeAfter(payment1BlockId) should beRight
+      d.appendKeyBlock()
+      d.appendMicroBlock(payment2)
 
-        val mastersBalanceAfterPayment1AndPayment2 = domain.blockchainUpdater.balance(genesis.recipient)
-        mastersBalanceAfterPayment1AndPayment2 shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value - payment2.amount.value - payment2.fee.value)
+      d.blockchain.height shouldBe MaxTransactionsPerBlockDiff * 2 + 1
+      d.balance(master.toAddress) shouldBe
+        (ENOUGH_AMT - payment1.amount.value - payment1.fee.value - payment2.amount.value - payment2.fee.value)
     }
   }
 }

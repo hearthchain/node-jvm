@@ -8,10 +8,6 @@ class GenerationPeriodSpec extends FreeSpec {
   private val defaultGenerationPeriodLength = 3
 
   "from" - {
-    "returns None if feature not activated" in {
-      GenerationPeriod.from(Height(5), Height(7), 3) shouldBe empty
-    }
-
     "start is expected" - {
       "different h" in {
         forAll(
@@ -120,10 +116,10 @@ class GenerationPeriodSpec extends FreeSpec {
   }
 
   private def generationPeriodFrom(h: Int, activation: Int = defaultActivation, len: Int = defaultGenerationPeriodLength) =
-    GenerationPeriod.from(Height(h), Height(activation), len).value
+    GenerationPeriod.from(Height(h), len)
 
   private def generationPeriodOf(start: Int, activation: Int = defaultActivation, len: Int = defaultGenerationPeriodLength) =
-    GenerationPeriod(Height(activation), Height(start), len)
+    GenerationPeriod(Height(activation), len)
 
   // "Zero", because can't commit on this period
   private def zeroPeriod(activation: Int = defaultActivation, generationPeriodLength: Int = defaultGenerationPeriodLength) =

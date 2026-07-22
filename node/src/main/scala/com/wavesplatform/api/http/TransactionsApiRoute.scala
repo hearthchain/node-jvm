@@ -5,14 +5,13 @@ import cats.instances.list.*
 import cats.syntax.alternative.*
 import cats.syntax.either.*
 import cats.syntax.traverse.*
-import com.wavesplatform.account.{Address, Alias}
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.{CommonTransactionsApi, TransactionMeta}
 import com.wavesplatform.api.http.ApiError.*
 import com.wavesplatform.block.Block
 import com.wavesplatform.block.Block.TransactionProof
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.network.TransactionPublisher
 import com.wavesplatform.settings.RestAPISettings
 import com.wavesplatform.state.{Blockchain, Height}
@@ -55,14 +54,13 @@ case class TransactionsApiRoute(
         maybeAfter.map(s => ByteStr.decodeBase58(s).getOrElse(throw ApiException(CustomValidationError(s"Unable to decode transaction id $s"))))
       if (limit > settings.transactionsByAddressLimit) throw ApiException(TooBigArrayAllocation)
 
-      val blockV5Activation  = blockchain.activatedFeatures.get(BlockchainFeatures.BlockV5.id)
       val improvedSerializer = serializer.copy(blockchain = compositeBlockchain())
 
       routeTimeout.executeFromObservable {
         transactionsByAddress(address, limit, after) // Double list - [ [tx1, tx2, ...] ]
       }(using
         jacksonStreamMarshaller("[[", ",", "]]")(using
-          improvedSerializer.txMetaJsonSerializer(address, h => blockV5Activation.exists(v5h => v5h <= h), _)
+          improvedSerializer.txMetaJsonSerializer(address, _)
         )
       )
     }
@@ -187,13 +185,13 @@ case class TransactionsApiRoute(
 
   def sign: Route = (pathPrefix("sign") & withAuth) {
     pathEndOrSingleSlash(jsonPost[JsObject] { jsv =>
-      TransactionFactory.parseRequestAndSign(jsv, wallet, None, blockchain.currentGenerationPeriod.map(_.next.start.toInt))
+      TransactionFactory.parseRequestAndSign(jsv, wallet, None, None, blockchain.currentGenerationPeriod.map(_.next.start.toInt))
     }) ~ signWithSigner
   }
 
   def signWithSigner: Route = path(AddrSegment) { address =>
     jsonPost[JsObject](
-      TransactionFactory.parseRequestAndSign(_, wallet, Some(address.toString), blockchain.currentGenerationPeriod.map(_.next.start.toInt))
+      TransactionFactory.parseRequestAndSign(_, wallet, Some(address.toString), None, blockchain.currentGenerationPeriod.map(_.next.start.toInt))
     )
   }
 
@@ -221,29 +219,10 @@ case class TransactionsApiRoute(
     }
 
   def transactionsByAddress(address: Address, limitParam: Int, maybeAfter: Option[ByteStr]): Observable[TxMetaEnriched] = {
-    val aliasesOfAddress: Task[Set[Alias]] =
-      commonApi
-        .aliasesOfAddress(address)
-        .collect { case (_, cat) => cat.alias }
-        .toListL
-        .map(aliases => aliases.toSet)
-        .memoize
-
     def txMetaEnriched(address: Address, meta: TransactionMeta): Task[TxMetaEnriched] =
       meta.transaction match {
         case mtt: MassTransferTransaction if mtt.sender.toAddress != address =>
-          val aliasExists = mtt.transfers.exists(pt =>
-            pt.address match {
-              case _: Address => false
-              case _: Alias   => true
-            }
-          )
-
-          if (aliasExists) {
-            aliasesOfAddress.map(aliases => TxMetaEnriched(meta, Some(aliases)))
-          } else {
-            Task.now(TxMetaEnriched(meta))
-          }
+          Task.now(TxMetaEnriched(meta))
         case _ => Task.now(TxMetaEnriched(meta))
       }
 
@@ -299,5 +278,5 @@ object TransactionsApiRoute {
     } yield TransactionProof(id, transactionIndex, merkleProof)
   }
 
-  case class TxMetaEnriched(meta: TransactionMeta, aliases: Option[Set[Alias]] = None)
+  case class TxMetaEnriched(meta: TransactionMeta)
 }

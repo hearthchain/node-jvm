@@ -1,6 +1,6 @@
 package com.wavesplatform
 
-import com.wavesplatform.account.KeyPair
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.{Block, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -13,6 +13,7 @@ import monix.execution.schedulers.SchedulerService
 import monix.execution.{Ack, Scheduler}
 import monix.reactive.Observer
 import org.scalatest.{BeforeAndAfterAll, Suite}
+import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future}
@@ -34,12 +35,12 @@ trait RxScheduler extends BeforeAndAfterAll { suite: Suite =>
 
   def byteStr(id: Int): ByteStr = ByteStr(Array.concat(Array.fill(SignatureLength - 1)(0), Array(id.toByte)))
 
-  val signer: KeyPair = TestBlock.defaultSigner
+  val signer: SigningKey = TestBlock.defaultSigner
 
   def block(id: Int): Block = TestBlock.create(Seq.empty).block.copy(signature = byteStr(id))
 
   def microBlock(total: Int, prev: Int): MicroBlock = {
-    val tx = TransferTransaction.create(1.toByte, signer.publicKey, signer.toAddress, Waves, 1, Waves, 1, ByteStr.empty, 1, Proofs.empty).map(_.signWith(signer.privateKey)).explicitGet()
+    val tx = TransferTransaction.create(1.toByte, PublicKey(signer.publicKey), signer.toAddress, Waves, 1, Waves, 1, ByteStr.empty, 1, Proofs.empty).map(_.signWith(signer)).explicitGet()
     MicroBlock.buildAndSign(3.toByte, signer, Seq(tx), byteStr(prev), byteStr(total), None, None).explicitGet()
   }
 

@@ -1,34 +1,32 @@
 package com.wavesplatform.utils
 
 import com.google.common.io.ByteStreams
-import com.wavesplatform.account.{KeyPair, PKKeyPair, PrivateKey, PublicKey}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.explicitGet
 import com.wavesplatform.common.utils.{Base58, Base64, FastBase58}
 import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsSignature}
 import com.wavesplatform.crypto.{P256Curve, Sha256}
-import com.wavesplatform.features.EstimatorProvider.*
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.lang.script.{Script, ScriptReader}
-import com.wavesplatform.settings.{WalletSettings, WavesSettings}
+import com.wavesplatform.settings.WalletSettings
 import com.wavesplatform.state.Height
 import com.wavesplatform.transaction.TransactionFactory
-import com.wavesplatform.transaction.smart.script.ScriptCompiler
 import com.wavesplatform.wallet.Wallet
 import com.wavesplatform.{Application, Version}
 import play.api.libs.json.{JsObject, Json}
 import scopt.OParser
+import supranational.blst.SecretKey
+import tech.hearth.crypto.SigningKey
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util
-import scala.annotation.nowarn
 import scala.util.Random
 
 object UtilApp {
   enum Mode {
-    case CompileScript, DecompileScript, SignBytes, VerifySignature, CreateKeyPair, Hash, SerializeTx, SignTx, SmokeTest
+    case SignBytes, VerifySignature, CreateKeyPair, Hash, SerializeTx, SignTx, SmokeTest
   }
 
   case class CompileOptions(assetScript: Boolean = false)
@@ -51,18 +49,18 @@ object UtilApp {
       inFormat: String = "plain",
       outFormat: String = "plain",
       compileOptions: CompileOptions = CompileOptions(),
-      signOptions: String | KeyPair = "",
+      signOptions: String | SigningKey = "",
       verifyOptions: VerifyOptions = VerifyOptions(),
       hashOptions: HashOptions = HashOptions(),
       keyPairOptions: KeyPairOptions = KeyPairOptions()
   )
 
-  private def maybeFindKeyPair(cmd: Command): Either[ValidationError, KeyPair] = {
+  private def maybeFindKeyPair(cmd: Command): Either[ValidationError, SigningKey] = {
     // we need to load application config to properly set chain ID
     val walletSettings = Application.loadApplicationConfig(cmd.configFile.map(new File(_))).walletSettings
     cmd.signOptions match {
       case signerAddress: String => Wallet(walletSettings).findPrivateKey(signerAddress)
-      case kp: KeyPair           => Right(kp)
+      case kp: SigningKey        => Right(kp)
     }
   }
 
@@ -70,8 +68,6 @@ object UtilApp {
     OParser.parse(commandParser, args, Command()).foreach { cmd =>
       val inBytes = IO.readInput(cmd)
       val result = cmd.mode match {
-        case Mode.CompileScript   => Actions.doCompile(Application.loadApplicationConfig(cmd.configFile.map(new File(_))))(cmd, inBytes)
-        case Mode.DecompileScript => Actions.doDecompile(inBytes)
         case Mode.SignBytes       => maybeFindKeyPair(cmd).flatMap(Actions.doSign(_, inBytes))
         case Mode.VerifySignature => Actions.doVerify(cmd, inBytes)
         case Mode.CreateKeyPair   => Actions.doCreateKeyPair(cmd, inBytes)
@@ -132,14 +128,6 @@ object UtilApp {
           .action((cf, c) => c.copy(configFile = Some(cf).filter(_.nonEmpty)))
           .text("Node config file path")
       ),
-      cmd("script").children(
-        cmd("compile")
-          .action((_, c) => c.copy(mode = Mode.CompileScript))
-          .text("Compiles RIDE script"),
-        cmd("decompile")
-          .action((_, c) => c.copy(mode = Mode.DecompileScript))
-          .text("Decompiles binary script to RIDE code")
-      ),
       cmd("hash")
         .children(
           opt[String]('m', "mode")
@@ -153,7 +141,7 @@ object UtilApp {
             opt[String]('k', "private-key")
               .text("Private key for signing")
               .required()
-              .action((s, c) => c.copy(signOptions = PKKeyPair(PrivateKey(Base58.decode(s)))))
+              .action((s, c) => c.copy(signOptions = SigningKey.fromSeed(Base58.decode(s))))
           )
           .text("Sign bytes with provided private key")
           .action((_, c) => c.copy(mode = Mode.SignBytes)),
@@ -209,7 +197,7 @@ object UtilApp {
             opt[String]("private-key")
               .abbr("sk")
               .text("Private key")
-              .action((a, c) => c.copy(signOptions = PKKeyPair(PrivateKey(Base58.decode(a)))))
+              .action((a, c) => c.copy(signOptions = SigningKey.fromSeed(Base58.decode(a))))
           )
       ),
       cmd("smoke").action((_, c) => c.copy(mode = Mode.SmokeTest, inputData = Input.Str(""))),
@@ -224,28 +212,12 @@ object UtilApp {
   private object Actions {
     type ActionResult = Either[String, Array[Byte]]
 
-    @nowarn("cat=deprecation")
-    def doCompile(settings: WavesSettings)(c: Command, str: Array[Byte]): ActionResult = {
-      ScriptCompiler(new String(str), c.compileOptions.assetScript, settings.estimator)
-        .map(_._1.bytes().arr)
-    }
-
-    def doDecompile(data: Array[Byte]): ActionResult = {
-      ScriptReader.fromBytes(data) match {
-        case Left(value) =>
-          Left(value.m)
-        case Right(value) =>
-          val (scriptText, _) = Script.decompile(value)
-          Right(scriptText.getBytes(StandardCharsets.UTF_8))
-      }
-    }
-
-    def doSign(keyPair: KeyPair, data: Array[Byte]): ActionResult =
-      Right(com.wavesplatform.crypto.sign(keyPair.privateKey, data).arr)
+    def doSign(keyPair: SigningKey, data: Array[Byte]): ActionResult =
+      Right(keyPair.sign(data))
 
     def doVerify(c: Command, data: Array[Byte]): ActionResult =
       Either.cond(
-        com.wavesplatform.crypto.verify(c.verifyOptions.signature, data, c.verifyOptions.publicKey, c.verifyOptions.checkWeakPk),
+        com.wavesplatform.crypto.verify(c.verifyOptions.signature, data, c.verifyOptions.publicKey),
         data,
         "Invalid signature"
       )
@@ -254,7 +226,7 @@ object UtilApp {
       import com.wavesplatform.utils.byteStrFormat
       (c.keyPairOptions.seedType match {
         case "account" =>
-          KeyPair.fromSeed(new String(data))
+          Right(SigningKey.fromSeed(data))
         case "wallet" =>
           Wallet(WalletSettings(None, Some("123"), Some(ByteStr(data))))
             .generateNewAccount(c.keyPairOptions.nonce)
@@ -265,8 +237,7 @@ object UtilApp {
           Json.toBytes(
             Json.obj(
               "publicKey"  -> kp.publicKey,
-              "privateKey" -> kp.privateKey,
-              "address"    -> kp.publicKey.toAddress,
+              "address"    -> kp.toAddress.toString,
               "walletSeed" -> ByteStr(data),
               "nonce"      -> c.keyPairOptions.nonce
             )
@@ -287,11 +258,11 @@ object UtilApp {
         .map(_.toString)
         .map(_.bytes())
 
-    def doSignTx(signerKeyPair: KeyPair, data: Array[Byte]): ActionResult = {
+    def doSignTx(signerKeyPair: SigningKey, data: Array[Byte]): ActionResult = {
       import cats.syntax.either.*
 
       TransactionFactory
-        .parseRequestAndSign(Json.parse(data).as[JsObject], signerKeyPair, None)
+        .parseRequestAndSign(Json.parse(data).as[JsObject], signerKeyPair, None, None)
         .leftMap(_.toString)
         .map(_.json().toString().getBytes())
     }
@@ -308,12 +279,16 @@ object UtilApp {
 
       val blsSK1bs = new Array[Byte](32)
       Random.nextBytes(blsSK1bs)
-      val blsSK1  = BlsKeyPair(PrivateKey(blsSK1bs))
+      val sk1 = SecretKey()
+      sk1.from_bendian(blsSK1bs)
+      val blsSK1  = BlsKeyPair(sk1)
       val blsSig1 = blsSK1.sign(message)
 
       val blsSK2bs = new Array[Byte](32)
       Random.nextBytes(blsSK2bs)
-      val blsSK2  = BlsKeyPair(PrivateKey(blsSK2bs))
+      val sk2 = SecretKey()
+      sk2.from_bendian(blsSK2bs)
+      val blsSK2  = BlsKeyPair(sk2)
       val blsSig2 = blsSK2.sign(message)
 
       val aggSig = BlsSignature.agg(Seq(blsSig1, blsSig2)).explicitGet()

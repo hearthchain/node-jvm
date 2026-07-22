@@ -2,7 +2,6 @@ package com.wavesplatform.mining
 
 import cats.effect.Resource
 import com.typesafe.config.ConfigFactory
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -15,7 +14,8 @@ import com.wavesplatform.settings.*
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.state.{BlockEndorser, Blockchain, BlockchainUpdaterImpl, EndorsementStorage, NG}
 import com.wavesplatform.transaction.Asset.Waves
-import com.wavesplatform.transaction.{BlockchainUpdater, GenesisTransaction, Transaction, TxHelpers}
+import com.wavesplatform.state.utils.TestRocksDB
+import com.wavesplatform.transaction.{BlockchainUpdater, Transaction, TxHelpers}
 import com.wavesplatform.utx.UtxPoolImpl
 import com.wavesplatform.wallet.Wallet
 import com.wavesplatform.{TransactionGen, WithNewDBForEachTest}
@@ -28,9 +28,12 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.compatible.Assertion
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
+import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.Future
 import scala.concurrent.duration.*
+import com.wavesplatform.test.DomainPresets.*
+import com.wavesplatform.db.WithState.AddrWithBalance
 
 class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBForEachTest with TransactionGen with DBCacheSettings {
   import MiningWithRewardSuite.*
@@ -48,14 +51,14 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       } yield {
         blockchain.balance(account.toAddress) should be(newBalance)
         blockchain.height should be(3)
-        blockchain.blockHeader(2).get.header.version should be(Block.RewardBlockVersion)
-        blockchain.blockHeader(3).get.header.version should be(Block.RewardBlockVersion)
+        blockchain.blockHeader(2).get.header.version should be(Block.ProtoBlockVersion)
+        blockchain.blockHeader(3).get.header.version should be(Block.ProtoBlockVersion)
       }
     }
   }
 
   it should "generate valid empty block of version 4 after block of version 3" in {
-    withEnv(Seq((ts, reference, _) => TestBlock.create(time = ts, ref = reference, txs = Nil, version = Block.NgBlockVersion).block)) {
+    withEnv(Seq((ts, reference, _) => TestBlock.create(time = ts, ref = reference, txs = Nil, version = Block.ProtoBlockVersion).block)) {
       case Env(_, account, miner, blockchain) =>
         val generateBlock = generateBlockTask(miner)(account)
         val oldBalance    = blockchain.balance(account.toAddress)
@@ -74,7 +77,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       val recipient2 = createAccount.toAddress
       val tx1 = TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts, version = 2.toByte)
       val tx2 = TxHelpers.transfer(from = account, to = recipient2, amount = 5 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts, version = 2.toByte)
-      TestBlock.create(time = ts, ref = reference, txs = Seq(tx1, tx2), version = Block.NgBlockVersion).block
+      TestBlock.create(time = ts, ref = reference, txs = Seq(tx1, tx2), version = Block.ProtoBlockVersion).block
     })
 
     val txs: Seq[TransactionProducer] = Seq((ts, account) => {
@@ -102,32 +105,43 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
 
   private def withEnv(bps: Seq[BlockProducer], txs: Seq[TransactionProducer] = Seq(), settings: WavesSettings = MiningWithRewardSuite.settings)(
       f: Env => Task[Assertion]
-  ): Task[Assertion] =
-    resources(settings).use { case (blockchainUpdater, _) =>
+  ): Task[Assertion] = {
+    // The account has to exist before the state does: it is credited by the genesis snapshot, which is built from
+    // the settings the state is created with
+    val account             = createAccount
+    val settingsWithGenesis = settings.withGenesisBalances(AddrWithBalance(account.toAddress, ENOUGH_AMT))
+
+    resources(settingsWithGenesis).use { case (blockchainUpdater, _) =>
       for {
         _ <- Task.unit
-        pos         = PoSSelector(blockchainUpdater, settings.synchronizationSettings.maxBaseTarget)
-        utxPool     = new UtxPoolImpl(ntpTime, blockchainUpdater, settings.utxSettings, settings.maxTxErrorLogSize, settings.minerSettings.enable)
+        pos     = PoSSelector(blockchainUpdater, settingsWithGenesis.synchronizationSettings.maxBaseTarget)
+        utxPool = new UtxPoolImpl(
+          ntpTime,
+          blockchainUpdater,
+          settingsWithGenesis.utxSettings,
+          settingsWithGenesis.maxTxErrorLogSize,
+          settingsWithGenesis.minerSettings.enable
+        )
         scheduler   = Scheduler.singleThread("appender")
         allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
         wallet      = Wallet(WalletSettings(None, Some("123"), None))
         miner = new MinerImpl(
           allChannels,
           blockchainUpdater,
-          settings,
+          settingsWithGenesis,
           ntpTime,
           utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          wallet,
+          Seq.empty,
           pos,
           scheduler,
           scheduler,
           Observable.empty
         )
-        account      = createAccount
-        ts           = ntpTime.correctedTime() - 60000
-        genesisBlock = TestBlock.create(ts + 2, List(GenesisTransaction.create(account.toAddress, ENOUGH_AMT, ts + 1).explicitGet())).block
+        ts = ntpTime.correctedTime() - 60000
+        // The block at height 1 is empty: it carries the genesis snapshot that credits the account
+        genesisBlock = TestBlock.create(ts + 2, Seq.empty).block
         _ <- Task {
           blockchainUpdater.processBlock(genesisBlock, genesisBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty)
         }
@@ -147,10 +161,11 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
         _ = utxPool.close()
       } yield r
     }
+  }
 
-  private def generateBlockTask(miner: MinerImpl)(account: KeyPair): Task[Unit] = miner.generateBlockTask(account, None)
+  private def generateBlockTask(miner: MinerImpl)(account: SigningKey): Task[Unit] = miner.generateBlockTask(account, TxHelpers.vrfKeyOf(account), None)
 
-  private def forgeBlock(miner: MinerImpl)(account: KeyPair): Either[String, ForgeAttemptResult.Success] = miner.forgeBlock(account).toEither
+  private def forgeBlock(miner: MinerImpl)(account: SigningKey): Either[String, ForgeAttemptResult.Success] = miner.forgeBlock(account, TxHelpers.vrfKeyOf(account)).toEither
 
   private def resources(settings: WavesSettings): Resource[Task, (BlockchainUpdaterImpl, RDB)] =
     Resource
@@ -170,10 +185,10 @@ object MiningWithRewardSuite {
   import TestFunctionalitySettings.Enabled
   import monix.execution.Scheduler.Implicits.global
 
-  type BlockProducer       = (Long, ByteStr, KeyPair) => Block
-  type TransactionProducer = (Long, KeyPair) => Transaction
+  type BlockProducer       = (Long, ByteStr, SigningKey) => Block
+  type TransactionProducer = (Long, SigningKey) => Transaction
 
-  case class Env(blocks: Seq[Block], account: KeyPair, miner: MinerImpl, blockchain: Blockchain & BlockchainUpdater & NG)
+  case class Env(blocks: Seq[Block], account: SigningKey, miner: MinerImpl, blockchain: Blockchain & BlockchainUpdater & NG)
 
   val settings: WavesSettings = {
     val commonSettings: WavesSettings = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
@@ -200,12 +215,14 @@ object MiningWithRewardSuite {
     )
   }
 
-  def createAccount: KeyPair =
+  def createAccount: SigningKey =
     Gen
       .containerOfN[Array, Byte](32, Arbitrary.arbitrary[Byte])
-      .map(bs => KeyPair(bs))
+      .map(bs => SigningKey.fromSeed(bs))
       .sample
       .get
 
-  private implicit def taskToFuture(task: Task[Assertion]): Future[Assertion] = task.runToFuture
+  // Bounded: a task that never completes (e.g. mining that can never succeed) has to fail its own test rather than
+  // hang the whole suite, which an async spec would otherwise wait on forever
+  private implicit def taskToFuture(task: Task[Assertion]): Future[Assertion] = task.timeout(60.seconds).runToFuture
 }

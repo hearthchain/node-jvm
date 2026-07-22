@@ -1,20 +1,20 @@
 package com.wavesplatform.transaction.assets.exchange
 
-import com.wavesplatform.account.{KeyPair, PublicKey}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base64
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.test.PropSpec
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{GenericError, OrderValidationError}
 import com.wavesplatform.transaction.assets.exchange.AssetPair.extractAssetId
-import com.wavesplatform.transaction.serialization.impl.ExchangeTxSerializer
-import com.wavesplatform.transaction.{Asset, Proofs, TxExchangeAmount, TxMatcherFee, TxOrderPrice, TxVersion}
+import com.wavesplatform.transaction.serialization.impl.PBTransactionSerializer
+import com.wavesplatform.transaction.{Asset, Proofs, TxExchangeAmount, TxHelpers, TxMatcherFee, TxOrderPrice, TxVersion}
 import com.wavesplatform.utils.JsonMatchers
-import com.wavesplatform.{NTPTime, crypto}
+import com.wavesplatform.NTPTime
 import org.scalacheck.Gen
 import play.api.libs.json.Json
+import tech.hearth.crypto.SigningKey
 
 import scala.math.pow
 
@@ -29,7 +29,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     (3.toByte, 3.toByte, 2.toByte)
   )
 
-  val preconditions: Gen[(KeyPair, KeyPair, KeyPair, AssetPair, Asset, Asset, (Byte, Byte, Byte))] =
+  val preconditions: Gen[(SigningKey, SigningKey, SigningKey, AssetPair, Asset, Asset, (Byte, Byte, Byte))] =
     for {
       sender1                 <- accountGen
       sender2                 <- accountGen
@@ -44,150 +44,11 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
   property("ExchangeTransaction transaction serialization roundtrip") {
     forAll(exchangeTransactionGen) { om =>
-      val recovered = ExchangeTransaction.parseBytes(om.bytes()).get
+      val recovered = PBTransactionSerializer.parseBytes(om.bytes()).get.asInstanceOf[ExchangeTransaction]
       om.id() shouldBe recovered.id()
       om.buyOrder.idStr() shouldBe recovered.buyOrder.idStr()
       recovered.bytes() shouldEqual om.bytes()
     }
-  }
-
-  property("ExchangeV1 decode pre-encoded bytes") {
-    val bytes = Base64.decode(
-      "BwAAAOsAAADr9IY3xy16mJnKoO7SBmSNwHaWV3+d1vdcScPApgVWuxw/7SjoOPJrjgTy5xdT8N3r7nLDWi3CccphnxST/KmeUQHxYAG8ADfqHbsA/38AAH+keW+2fw8DAP6A/wB//21bgAHx3r0A/y7FAH8BAFS23wGAAQEBL//yAfnlgP9y/79zAAAAABG5xwQSFQAAArPyBO9qQmFjJrw/+p8AAAFukBeODgAAEkKNAYSH9FYkAkJ2Q6J9qR5OrnYtaK/sCcM9DZQ3CodGM6JrI/QnfvYXZUb+20f7cDxjOiGauEtcQsv8J0AHA2tAB5kShDOChq6mDOBwWh43hScnayT6y/MZbsruL5u9cyOjzaQFP+0o6Djya44E8ucXU/Dd6+5yw1otwnHKYZ8Uk/ypnlEB8WABvAA36h27AP9/AAB/pHlvtn8PAwD+gP8Af/9tW4AB8d69AP8uxQB/AQBUtt8BgAEBAS//8gH55YD/cv+/cwABAAARuccEEhUAAA7fHo31SkJhYya8P/qfAAABbpAXjg4AABJCjQGEhwijiz5c7B6+H7DEoTcbco5lJ8qmEul84+Ajj7xYCgdTFOnn7vjdnBQxnD3D0O5JMo4M+62X+BFJOqv17/E5DwYAABG5xwQSFQAAAACD65xwAAAAA3s1q3kAAAAAofpKAgAAAAIOl/q9AAABbpAXjap5ZjtkLKpxCBjDxPna0J5VpVVycklUVJbBaeMSZo48HqkGqYHNxTlQAEywiUxZk/7Ba60mv9//myCl4QmucpWK"
-    )
-    val json = Json.parse(
-      """{
-        |  "senderPublicKey" : "5JYRxUHTuVkHvfdt9gkfWd3hn9qW3mmqUqCkCA3PqLSU",
-        |  "amount" : 2213256304,
-        |  "signature" : "3RmyNspCXA1WTxKCn34tPVVDoFXAZ5upiTJNfxDovDajMHUsZQ2YcHBq3wNzAXt7znWhb6AvcySt2vqVorKdfVqB",
-        |  "fee" : 8834775741,
-        |  "type" : 7,
-        |  "version" : 1,
-        |  "sellMatcherFee" : 2717534722,
-        |  "sender" : "3N9kr6BrKYCYs1tEF1c7rPXswKPyajqb86k",
-        |  "feeAssetId" : null,
-        |  "proofs" : [ "3RmyNspCXA1WTxKCn34tPVVDoFXAZ5upiTJNfxDovDajMHUsZQ2YcHBq3wNzAXt7znWhb6AvcySt2vqVorKdfVqB" ],
-        |  "price" : 19489605554709,
-        |  "id" : "5Z4B6S27X27edwWj8aYVLP2yXaeCcNPu57Q2KSje9FDY",
-        |  "order2" : {
-        |    "version" : 1,
-        |    "id" : "BMVA9vp4vDcjwHsgGCsN5FFTiMb7yFpkGkp5Jpug4o7H",
-        |    "sender" : "3MswDigq2LUsRTUpEkmjEDaQbhgmg9eTfeD",
-        |    "senderPublicKey" : "4U5ENWf58FPV32uVt2LmkbQMb7bJZnTR2ZHSFEmYokma",
-        |    "matcherPublicKey" : "5JYRxUHTuVkHvfdt9gkfWd3hn9qW3mmqUqCkCA3PqLSU",
-        |    "assetPair" : {
-        |      "amountAsset" : "HFEAWpxTBVhiZfyLn9LRnCRGmz8YT61Ah99he1y6MJd5",
-        |      "priceAsset" : "HHAFGgAJfFKeYyJJJNMgtmWbeLCycUunUq2wuRgsnSgX"
-        |    },
-        |    "orderType" : "sell",
-        |    "amount" : 16351453115722,
-        |    "price" : 19489605554709,
-        |    "timestamp" : 4783213297262394015,
-        |    "expiration" : 1574375493134,
-        |    "matcherFee" : 20077042828423,
-        |    "signature" : "B22PFqHfHPxXesjvqQBmjd4BRd2KCNXveMutM5WEvrQ8P6WW7BcDGoC3jfEZ92Bj25dBgem9KbbDijXGrm8WXRf",
-        |    "proofs" : [ "B22PFqHfHPxXesjvqQBmjd4BRd2KCNXveMutM5WEvrQ8P6WW7BcDGoC3jfEZ92Bj25dBgem9KbbDijXGrm8WXRf" ]
-        |  },
-        |  "order1" : {
-        |    "version" : 1,
-        |    "id" : "5bZMswwfyY2LMXhTE3s3Ng1wA7ckfkMYMJeqFz7bTXf3",
-        |    "sender" : "3NCyrQZdTZARUgXhia2rJzkJ1A73qMSefDA",
-        |    "senderPublicKey" : "HTXBWf7iBQgHm9fSpHwjLff3W9NQm7Mi822vGWJGtbPH",
-        |    "matcherPublicKey" : "5JYRxUHTuVkHvfdt9gkfWd3hn9qW3mmqUqCkCA3PqLSU",
-        |    "assetPair" : {
-        |      "amountAsset" : "HFEAWpxTBVhiZfyLn9LRnCRGmz8YT61Ah99he1y6MJd5",
-        |      "priceAsset" : "HHAFGgAJfFKeYyJJJNMgtmWbeLCycUunUq2wuRgsnSgX"
-        |    },
-        |    "orderType" : "buy",
-        |    "amount" : 2971882811242,
-        |    "price" : 19489605554709,
-        |    "timestamp" : 4783213297262394015,
-        |    "expiration" : 1574375493134,
-        |    "matcherFee" : 20077042828423,
-        |    "signature" : "5tLNaVttbCwLLSmSfZkVRxvE6HML3DPrFmXXJm7Y9TsfAgZ4cNRpxxkkVcAHNnJRJtQZHtALmetSAbLMmsivhmWK",
-        |    "proofs" : [ "5tLNaVttbCwLLSmSfZkVRxvE6HML3DPrFmXXJm7Y9TsfAgZ4cNRpxxkkVcAHNnJRJtQZHtALmetSAbLMmsivhmWK" ]
-        |  },
-        |  "buyMatcherFee" : 14952016761,
-        |  "timestamp" : 1574375493034
-        |}
-        |""".stripMargin
-    )
-
-    val tx = ExchangeTxSerializer.parseBytes(bytes).get
-    tx.json() should matchJson(json)
-    assert(crypto.verify(tx.sellOrder.signature, tx.sellOrder.bodyBytes(), tx.sellOrder.sender), "sellOrder signature should be valid")
-    assert(crypto.verify(tx.buyOrder.signature, tx.buyOrder.bodyBytes(), tx.buyOrder.sender), "buyOrder signature should be valid")
-    assert(crypto.verify(tx.signature, tx.bodyBytes(), tx.sender), "signature should be valid")
-  }
-
-  property("ExchangeV2 decode pre-encoded bytes") {
-    val bytes = Base64.decode(
-      "AAcCAAAA8QK+o7m/j7ZEi+lM2oE0cec3t4lb556CcDbjgPXmAQRxVSX9uNZTQxi/BAK0J0+qRUYyWeWwFJcFYNBaSxQ0GjcyAQAAgADf/wAAf4D/a7wG0f8BoGEBfwHff4D//+x/f94BAQCAcf8AgBz/AAH/X38B2lIjUxT//2///4D/gP9WABqAAAAAAUBccJzlAAAVkbhXuJVZ/bUwsm9ykgAAAW75rITfAAAZgUnEb3EBAAEAQFSX8+znQylR4qI1eWdKXT04bVgH/W+npUEH7pYV07i+/5AqmQMfqbSCzPKCHBMUx/bij/vlbn8RBTZsyHm7zQIAAADyAzSq2tCPs5dl4m4HlMSvIyWRyJHUFuxGjWJsqHImxZgXJf241lNDGL8EArQnT6pFRjJZ5bAUlwVg0FpLFDQaNzIBAACAAN//AAB/gP9rvAbR/wGgYQF/Ad9/gP//7H9/3gEBAIBx/wCAHP8AAf9ffwHaUiNTFP//b///gP+A/1YAGoABAAABQFxwnOUAABdqPljMsln9tTCyb3KSAAABbvmshN8AABmBScRvcQABAAEAQGDF9E4Yz7DdMiQMOX2kqIqHYig4J3DxRuQHNgZgkVQyuDEwSyTEFzfVv+SgaCTT9q3oZgO1IHDbskkcD0LyngcAAAFAXHCc5QAAAANnzytVAAAABAbkM9UAAAADtaBwygAAAAPeQlJPAAABbvmshHsBAAEAQPL1jLp5HAdsUrnxa3cdRRip8t1UGEqQbbEBXRT4/CrlgAlK+EO4Cw1Dz0xLEG1retjDt2LfIVwR10MEN1thqQs="
-    )
-    val json = Json.parse(
-      """{
-        |  "senderPublicKey" : "3ZJUiWs5xiuZqYBHBthdgH4U6tYxLy5fHNKxMApEMJ6V",
-        |  "amount" : 14626532181,
-        |  "fee" : 16613790287,
-        |  "type" : 7,
-        |  "version" : 2,
-        |  "sellMatcherFee" : 15932092618,
-        |  "sender" : "3Mubc9sE9PSTUb2xNUrayMcQEbTQTFuwFvV",
-        |  "feeAssetId" : null,
-        |  "proofs" : [ "5rjjpMEqcv6Dpc6tUukWCPNLKWFbtALPwpfKTHYmNS2x1xSZyJ7UCHqEGHG2ANuyuYT831wTxdqTFyhanbD9bVSa" ],
-        |  "price" : 1375940418789,
-        |  "id" : "EwHU7KoCxXHadkLgooJNt7guvb4v7UWV6ZmSv5AZ2XPN",
-        |  "order2" : {
-        |    "senderPublicKey" : "4YbJhJxb6CbdjCx6T2Bp9J9zAy8tjr58BYpZkFCqqMuY",
-        |    "orderType" : "sell",
-        |    "amount" : 25745079979186,
-        |    "matcherFeeAssetId" : null,
-        |    "signature" : "2wDh9Jgf42R9ahTE4Sg2pVChPX9Yti5epKBFsrphEG96RQEJriptHUyofgxy6Hz8CuTrGAKyPMjPQmUEQwd41k6i",
-        |    "assetPair" : {
-        |      "amountAsset" : "11SecKqegK2kMMorte6oN1qsp19B85CxGMGqYys9cJU",
-        |      "priceAsset" : "12xbfZzJThEirK9zGRyvmhqNSHmvzkroiU3GkVfCUDtT"
-        |    },
-        |    "version" : 3,
-        |    "matcherFee" : 28043079085937,
-        |    "sender" : "3Mqo7jsWkw6ncJm1Q1BkpUQRmtsJiWz72dC",
-        |    "price" : 1375940418789,
-        |    "proofs" : [ "2wDh9Jgf42R9ahTE4Sg2pVChPX9Yti5epKBFsrphEG96RQEJriptHUyofgxy6Hz8CuTrGAKyPMjPQmUEQwd41k6i" ],
-        |    "matcherPublicKey" : "3ZJUiWs5xiuZqYBHBthdgH4U6tYxLy5fHNKxMApEMJ6V",
-        |    "expiration" : 1576146863327,
-        |    "id" : "ARayJvx7uq9gLnXoMYAbUqE13LD7a367hsR58ALUMu86",
-        |    "timestamp" : 6484538259240088210
-        |  },
-        |  "order1" : {
-        |    "senderPublicKey" : "DqBGDQE5XafzqV2ZpL4FxnTR8ECbqT5pekhHU5TrTAdA",
-        |    "orderType" : "buy",
-        |    "amount" : 23715607197845,
-        |    "signature" : "2h6XD9GHUh1Cmy65pdFrVvJkqRD3hQehnR7ysGQwH3kUoh7oD7eQaJWNL9fENfrSXgqjV7uESrPDeYwFi5aD2A49",
-        |    "assetPair" : {
-        |      "amountAsset" : "11SecKqegK2kMMorte6oN1qsp19B85CxGMGqYys9cJU",
-        |      "priceAsset" : "12xbfZzJThEirK9zGRyvmhqNSHmvzkroiU3GkVfCUDtT"
-        |    },
-        |    "version" : 2,
-        |    "matcherFee" : 28043079085937,
-        |    "sender" : "3MrqxMUe7mCKnJNgJjmWWbuzJQgQuLVKhkp",
-        |    "price" : 1375940418789,
-        |    "proofs" : [ "2h6XD9GHUh1Cmy65pdFrVvJkqRD3hQehnR7ysGQwH3kUoh7oD7eQaJWNL9fENfrSXgqjV7uESrPDeYwFi5aD2A49" ],
-        |    "matcherPublicKey" : "3ZJUiWs5xiuZqYBHBthdgH4U6tYxLy5fHNKxMApEMJ6V",
-        |    "expiration" : 1576146863327,
-        |    "id" : "7zS6RWD9BAogytjd3mMtVxDubFbR97gnFzKT7TifRU4y",
-        |    "timestamp" : 6484538259240088210
-        |  },
-        |  "buyMatcherFee" : 17295487957,
-        |  "timestamp" : 1576146863227
-        |}
-        |
-        |""".stripMargin
-    )
-
-    val tx = ExchangeTxSerializer.parseBytes(bytes).get
-    tx.json() shouldBe json
-    assert(crypto.verify(tx.sellOrder.signature, tx.sellOrder.bodyBytes(), tx.sellOrder.sender), "sellOrder signature should be valid")
-    assert(crypto.verify(tx.buyOrder.signature, tx.buyOrder.bodyBytes(), tx.buyOrder.sender), "buyOrder signature should be valid")
-    assert(crypto.verify(tx.signature, tx.bodyBytes(), tx.sender), "signature should be valid")
   }
 
   property("ExchangeTransaction invariants validation") {
@@ -205,11 +66,11 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
       val (buyV, sellV, exchangeV) = versions
 
-      val buy = Order
+      val buy = TxHelpers
         .buy(
           buyV,
           sender1,
-          matcher.publicKey,
+          PublicKey(matcher.publicKey),
           pair,
           buyAmount,
           buyPrice,
@@ -219,11 +80,11 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
           if (buyV == 3) buyerMatcherFeeAssetId else Waves
         )
         .explicitGet()
-      val sell = Order
+      val sell = TxHelpers
         .sell(
           sellV,
           sender2,
-          matcher.publicKey,
+          PublicKey(matcher.publicKey),
           pair,
           sellAmount,
           sellPrice,
@@ -278,13 +139,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       create(buyOrder = buy.copy(assetPair = buy.assetPair.copy(amountAsset = sell.assetPair.priceAsset))) shouldBe an[Left[?, ?]]
       create(buyOrder = buy.copy(expiration = 1L)) shouldBe an[Left[?, ?]]
       create(buyOrder = buy.copy(expiration = buy.expiration + 1)) shouldBe an[Left[?, ?]]
-      create(buyOrder = buy.copy(matcherPublicKey = sender2.publicKey)) shouldBe an[Left[?, ?]]
+      create(buyOrder = buy.copy(matcherPublicKey = PublicKey(sender2.publicKey))) shouldBe an[Left[?, ?]]
 
       create(sellOrder = sell.copy(orderType = OrderType.BUY)) shouldBe Left(GenericError("sellOrder should has OrderType.SELL"))
       create(sellOrder = sell.copy(assetPair = sell.assetPair.copy(priceAsset = buy.assetPair.amountAsset))) shouldBe an[Left[?, ?]]
       create(sellOrder = sell.copy(expiration = 1L)) shouldBe an[Left[?, ?]]
       create(sellOrder = sell.copy(expiration = sell.expiration + 1)) shouldBe an[Left[?, ?]]
-      create(sellOrder = sell.copy(matcherPublicKey = sender2.publicKey)) shouldBe an[Left[?, ?]]
+      create(sellOrder = sell.copy(matcherPublicKey = PublicKey(sender2.publicKey))) shouldBe an[Left[?, ?]]
 
       create(sellOrder = buy, buyOrder = sell) shouldBe Left(GenericError("order1 should have OrderType.BUY"))
       create(version = TxVersion.V3, sellOrder = buy, buyOrder = sell) shouldBe an[Right[?, ?]]
@@ -326,11 +187,11 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       val (sellV, buyV, exchangeV) = versions
 
       val sell =
-        Order
+        TxHelpers
           .sell(
             sellV,
             sender2,
-            matcher.publicKey,
+            PublicKey(matcher.publicKey),
             pair,
             2,
             sellPrice,
@@ -341,11 +202,11 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
           )
           .explicitGet()
       val buy =
-        Order
+        TxHelpers
           .buy(
             buyV,
             sender1,
-            matcher.publicKey,
+            PublicKey(matcher.publicKey),
             pair,
             1,
             buyPrice,
@@ -360,8 +221,8 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
       val sell1 =
         if (sellV == 3) {
-          Order.sell(sellV, sender2, matcher.publicKey, pair, 1, buyPrice, time, time - 1, matcherFee, sellerMatcherFeeAssetId).explicitGet()
-        } else Order.sell(sellV, sender2, matcher.publicKey, pair, 1, buyPrice, time, time - 1, matcherFee).explicitGet()
+          TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee, sellerMatcherFeeAssetId).explicitGet()
+        } else TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee).explicitGet()
 
       createExTx(buy, sell1, buyPrice, exchangeV) shouldBe Left(OrderValidationError(sell1, "expiration should be > currentTime"))
     }

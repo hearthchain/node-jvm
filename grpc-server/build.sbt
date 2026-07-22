@@ -14,7 +14,7 @@ inConfig(Compile)(
     Compile / PB.protoSources := Seq(PB.externalIncludePath.value),
     PB.generate / includeFilter := new SimpleFileFilter(
       (f: File) =>
-        ((** / "waves" / "node" / "grpc" / ** / "*.proto") || (** / "waves" / "events" / ** / "*.proto"))
+        ((** / "hearth" / "node" / "grpc" / ** / "*.proto") || (** / "hearth" / "events" / ** / "*.proto"))
           .accept(f.toPath, FileAttributes(f.toPath).getOrElse(FileAttributes.NonExistent))
     ),
     PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value

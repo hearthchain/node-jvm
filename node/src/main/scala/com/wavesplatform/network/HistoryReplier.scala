@@ -1,6 +1,5 @@
 package com.wavesplatform.network
 
-import com.wavesplatform.block.Block
 import com.wavesplatform.history.History
 import com.wavesplatform.settings.SynchronizationSettings
 import com.wavesplatform.utils.ScorexLogging
@@ -34,8 +33,8 @@ class HistoryReplier(score: => BigInt, history: History, settings: Synchronizati
     case GetBlock(sig) =>
       respondWith(
         ctx,
-        history.loadBlockBytes(sig).fold(s"Error loading block $sig") { case (blockVersion, bytes) =>
-          RawBytes(if (blockVersion < Block.ProtoBlockVersion) BlockSpec.messageCode else PBBlockSpec.messageCode, bytes)
+        history.loadBlockBytes(sig).fold(s"Error loading block $sig") { case (_, bytes) =>
+          RawBytes(PBBlockSpec.messageCode, bytes)
         }
       )
 

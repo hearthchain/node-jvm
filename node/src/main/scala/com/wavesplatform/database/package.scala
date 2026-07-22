@@ -1,6 +1,6 @@
 package com.wavesplatform
 
-import com.google.common.collect.{Interners, Maps}
+import com.google.common.collect.Maps
 import com.google.common.io.ByteStreams.{newDataInput, newDataOutput}
 import com.google.common.io.{ByteArrayDataInput, ByteArrayDataOutput}
 import com.google.common.primitives.{Ints, Longs}
@@ -15,15 +15,14 @@ import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database.protobuf as pb
 import com.wavesplatform.database.protobuf.DataEntry.Value
 import com.wavesplatform.database.protobuf.TransactionData.Transaction as TD
-import com.wavesplatform.lang.script.ScriptReader
 import com.wavesplatform.protobuf.block.PBBlocks
-import com.wavesplatform.protobuf.snapshot.TransactionStateSnapshot
+import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import com.wavesplatform.protobuf.transaction.{PBRecipients, PBTransactions}
 import com.wavesplatform.protobuf.{PBSnapshots, toByteStr, toByteString, toPublicKey}
 import com.wavesplatform.state.*
-import com.wavesplatform.state.StateHash.SectionId
+import com.wavesplatform.state.StateHash.Section
 import com.wavesplatform.transaction.Asset.IssuedAsset
-import com.wavesplatform.transaction.{EthereumTransaction, PBSince, Transaction, TransactionParsers, TxPositiveAmount, TxValidationError, Versioned}
+import com.wavesplatform.transaction.{Transaction, TxPositiveAmount, TxValidationError}
 import com.wavesplatform.utils.*
 import monix.eval.Task
 import monix.reactive.Observable
@@ -289,18 +288,18 @@ package object database {
     val sections = (0 until sectionsCount).map { _ =>
       val sectionId = ndi.readByte()
       val value     = ndi.readByteStr(DigestLength)
-      SectionId(sectionId) -> value
+      Section.fromOrdinal(sectionId) -> value
     }
     val totalHash = ndi.readByteStr(DigestLength)
     StateHash(totalHash, sections.toMap)
   }
 
   def writeStateHash(sh: StateHash): Array[Byte] = {
-    val sorted = sh.sectionHashes.toSeq.sortBy(_._1)
+    val sorted = sh.sectionHashes.toSeq
     val ndo    = newDataOutput(crypto.DigestLength + 1 + sorted.length * (1 + crypto.DigestLength))
     ndo.writeByte(sorted.length)
     sorted.foreach { case (sectionId, value) =>
-      ndo.writeByte(sectionId.id.toByte)
+      ndo.writeByte(sectionId.ordinal)
       ndo.writeByteStr(value.ensuring(_.arr.length == DigestLength))
     }
     ndo.writeByteStr(sh.totalHash.ensuring(_.arr.length == DigestLength))
@@ -371,22 +370,27 @@ package object database {
       }
       .array()
 
-  def readCommittedGenerators(data: Array[Byte]): Seq[(AddressId, BlsPublicKey)] = {
+  /** Each record is addressId ++ BLS public key ++ VRF public key, all fixed width */
+  def readCommittedGenerators(data: Array[Byte]): Seq[(AddressId, BlsPublicKey, ByteStr)] = {
     val addressSize = Longs.BYTES
     data
-      .grouped(addressSize + BlsPublicKey.SizeInBytes)
+      .grouped(addressSize + BlsPublicKey.SizeInBytes + crypto.KeyLength)
       .map { data =>
-        val (addressIdBytes, blsPublicKeyBytes) = data.splitAt(addressSize)
+        val (addressIdBytes, rest)            = data.splitAt(addressSize)
+        val (blsPublicKeyBytes, vrfPublicKey) = rest.splitAt(BlsPublicKey.SizeInBytes)
         (
           Longs.fromByteArray(addressIdBytes),
-          BlsPublicKey(blsPublicKeyBytes).explicitGet()
+          BlsPublicKey(blsPublicKeyBytes).explicitGet(),
+          ByteStr(vrfPublicKey)
         )
       }
       .toSeq
   }
 
-  def writeCommittedGenerators(data: Seq[(AddressId, BlsPublicKey)]): Array[Byte] =
-    data.view.flatMap { (addressId, blsPublicKey) => Longs.toByteArray(addressId) ++ blsPublicKey.arr }.toArray
+  def writeCommittedGenerators(data: Seq[(AddressId, BlsPublicKey, ByteStr)]): Array[Byte] =
+    data.view.flatMap { (addressId, blsPublicKey, vrfPublicKey) =>
+      Longs.toByteArray(addressId) ++ blsPublicKey.arr ++ vrfPublicKey.arr
+    }.toArray
 
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)
@@ -652,59 +656,19 @@ package object database {
   def createBlock(header: BlockHeader, signature: ByteStr, txs: Seq[Transaction]): Either[TxValidationError.GenericError, Block] =
     Validators.validateBlock(Block(header, signature, txs))
 
-  def writeAssetScript(script: AssetScriptInfo): Array[Byte] =
-    Longs.toByteArray(script.complexity) ++ script.script.bytes().arr
-
-  def readAssetScript(b: Array[Byte]): AssetScriptInfo =
-    AssetScriptInfo(ScriptReader.fromBytes(b.drop(8)).explicitGet(), Longs.fromByteArray(b))
-
-  def writeAccountScriptInfo(scriptInfo: AccountScriptInfo): Array[Byte] =
-    pb.AccountScriptInfo.toByteArray(
-      pb.AccountScriptInfo(
-        ByteString.copyFrom(scriptInfo.publicKey.arr),
-        ByteString.copyFrom(scriptInfo.script.bytes().arr),
-        scriptInfo.verifierComplexity,
-        scriptInfo.complexitiesByEstimator.map { case (version, complexities) =>
-          pb.AccountScriptInfo.ComplexityByVersion(version, complexities)
-        }.toSeq
-      )
-    )
-
-  private val scriptInterner = Interners.newWeakInterner[AccountScriptInfo]()
-
-  def readAccountScriptInfo(b: Array[Byte]): AccountScriptInfo = {
-    val asi = pb.AccountScriptInfo.parseFrom(b)
-    scriptInterner.intern(
-      AccountScriptInfo(
-        PublicKey(asi.publicKey.toByteArray),
-        ScriptReader.fromBytes(asi.scriptBytes.toByteArray).explicitGet(),
-        asi.maxComplexity,
-        asi.callableComplexity.map { c =>
-          c.version -> c.callableComplexity
-        }.toMap
-      )
-    )
-  }
-
   def readTransaction(height: Height)(b: Array[Byte]): (TxMeta, Transaction) = {
     val data = pb.TransactionData.parseFrom(b)
     TxMeta(height, TxMeta.Status.fromProtobuf(data.status), data.spentComplexity) -> toVanillaTransaction(data.transaction)
   }
 
   def toVanillaTransaction(tx: pb.TransactionData.Transaction): Transaction = tx match {
-    case tx: TD.LegacyBytes         => TransactionParsers.parseBytes(tx.value.toByteArray).get
-    case tx: TD.WavesTransaction    => PBTransactions.vanilla(tx.value, unsafe = false).explicitGet()
-    case tx: TD.EthereumTransaction => EthereumTransaction(tx.value.toByteArray).explicitGet()
-    case _                          => throw new IllegalArgumentException("Illegal transaction data")
+    case tx: TD.WavesTransaction => PBTransactions.vanilla(tx.value).explicitGet()
+    case _                       => throw new IllegalArgumentException("Illegal transaction data")
   }
 
   def writeTransaction(v: (TxMeta, Transaction)): Array[Byte] = {
     val (m, tx) = v
-    val ptx = tx match {
-      case lps: (PBSince & Versioned) if PBSince.affects(lps) => TD.WavesTransaction(PBTransactions.protobuf(tx))
-      case et: EthereumTransaction                            => TD.EthereumTransaction(ByteString.copyFrom(et.bytes()))
-      case _                                                  => TD.LegacyBytes(ByteString.copyFrom(tx.bytes()))
-    }
+    val ptx     = TD.WavesTransaction(PBTransactions.protobuf(tx))
     pb.TransactionData(ptx, m.status.protobuf, m.spentComplexity).toByteArray
   }
 
@@ -742,8 +706,6 @@ package object database {
     for {
       pbStaticInfo       <- resource.get(Keys.assetStaticInfo(asset))
       (info, volumeInfo) <- fromHistory(resource, Keys.assetDetailsHistory(asset), Keys.assetDetails(asset))
-      sponsorship = fromHistory(resource, Keys.sponsorshipHistory(asset), Keys.sponsorship(asset)).fold(0L)(_.minFee)
-      script      = fromHistory(resource, Keys.assetScriptHistory(asset), Keys.assetScript(asset)).flatten
     } yield AssetDescription(
       TransactionId(pbStaticInfo.sourceId.toByteStr),
       PublicKey(pbStaticInfo.issuerPublicKey.toByteStr),
@@ -753,8 +715,6 @@ package object database {
       volumeInfo.isReissuable,
       volumeInfo.volume,
       info.lastUpdatedAt,
-      script,
-      sponsorship,
       pbStaticInfo.isNft,
       pbStaticInfo.sequenceInBlock,
       Height(pbStaticInfo.height)

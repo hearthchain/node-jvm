@@ -16,8 +16,8 @@ import io.netty.handler.codec.ByteToMessageCodec
 
 import java.util
 import scala.concurrent.duration.FiniteDuration
-import scala.util.control.NonFatal
 import scala.jdk.DurationConverters.*
+import scala.util.control.NonFatal
 
 abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessageCodec[Any] with ScorexLogging {
 
@@ -79,6 +79,7 @@ object LegacyFrameCodec {
 
 class LegacyFrameCodecL1(peerDatabase: PeerDatabase, receivedTxsCacheTimeout: FiniteDuration) extends LegacyFrameCodec(peerDatabase) {
 
+  // todo: this is highly inefficient
   private val receivedTxsCache = CacheBuilder
     .newBuilder()
     .expireAfterWrite(receivedTxsCacheTimeout.toJava)
@@ -86,15 +87,14 @@ class LegacyFrameCodecL1(peerDatabase: PeerDatabase, receivedTxsCacheTimeout: Fi
 
   protected def specsByCodes: Map[MessageCode, Spec] = BasicMessagesRepo.specsByCodes
 
-  protected override def filterBySpecOrChecksum(spec: BasicMessagesRepo.Spec, checkSum: Array[Byte]): Boolean = {
-    spec != TransactionSpec || {
+  protected override def filterBySpecOrChecksum(spec: BasicMessagesRepo.Spec, checkSum: Array[Byte]): Boolean =
+    spec != PBTransactionSpec || {
       val actualChecksumStr = Base64.encode(checkSum)
       if (receivedTxsCache.getIfPresent(actualChecksumStr) == null) {
         receivedTxsCache.put(actualChecksumStr, LegacyFrameCodecL1.dummy)
         true
       } else false
     }
-  }
 
   protected def messageToRawData(msg: Any): MessageRawData = {
     val rawBytes = (msg: @unchecked) match {

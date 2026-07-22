@@ -6,7 +6,6 @@ import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.crypto.*
 import com.wavesplatform.transaction.TxValidationError.InvalidAddress
 import com.wavesplatform.utils.base58Length
-import org.web3j.crypto.Keys
 import play.api.libs.json.{Format, Writes}
 
 opaque type PublicKey = ByteStr
@@ -40,9 +39,8 @@ object PublicKey {
     def byteStr: ByteStr   = pk
     def toAddress: Address = toAddress(AddressScheme.current.chainId)
     def toAddress(chainId: Byte): Address = pk.size match {
-      case KeyLength         => Address.fromPublicKey(pk, chainId)
-      case EthereumKeyLength => Address(Keys.getAddress(pk.arr), chainId)
-      case other             => throw new IllegalArgumentException(s"Unexpected public key length: $other")
+      case KeyLength => Address.fromPublicKey(pk)
+      case other     => throw new IllegalArgumentException(s"Unexpected public key length: $other")
     }
   }
 

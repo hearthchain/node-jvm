@@ -5,7 +5,7 @@ import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.mining.{Miner, MinerImpl}
 import com.wavesplatform.state.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{CatchLogs, NumericExt, TestSchedulerOps, TestTime}
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import com.wavesplatform.wallet.Wallet
@@ -55,7 +55,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
         d.utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        d.wallet,
+        Seq.empty,
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -72,7 +72,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
       d.appender.appendBlock(block2)
 
       log.debug("Trigger forging block3")
-      time.setTimeIfGreater(d.nextBlockTime(minerAcc))
+      time.setTimeIfGreater(d.nextBlockTime(minerAcc, ???))
       appenderScheduler.tickNext("appender-1")
       minerScheduler.tickNext("miner-1")
       appenderScheduler.tickNext("appender-2")
@@ -95,7 +95,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
       val liquidBlock1 = d.lastBlockId
 
       log.debug("Trigger next block forging")
-      time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc))
+      time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc, ???))
       minerScheduler.tickNext("miner-3")
       appenderScheduler.tickNext("appender-4")
       minerScheduler.tickNext("miner-4")
@@ -139,7 +139,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
           d.utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          d.wallet,
+          Seq.empty,
           d.posSelector,
           minerScheduler,
           appenderScheduler,
@@ -156,7 +156,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
         d.appender.appendBlock(block2)
 
         log.debug("Trigger forging block3")
-        time.setTimeIfGreater(d.nextBlockTime(minerAcc))
+        time.setTimeIfGreater(d.nextBlockTime(minerAcc, ???))
         appenderScheduler.tickNext("appender-1")
         minerScheduler.tickNext("miner-1")
         appenderScheduler.tickNext("appender-2")
@@ -179,7 +179,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
         val liquidBlock1 = d.lastBlockId
 
         log.debug("Trigger next block forging")
-        time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc))
+        time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc, ???))
         minerScheduler.tickNext("miner-3")
         appenderScheduler.tickNext("appender-4")
         minerScheduler.tickNext("miner-4") // Second time because of two accounts on node
@@ -237,7 +237,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
           d.utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          d.wallet,
+          Seq.empty,
           d.posSelector,
           minerScheduler,
           appenderScheduler,
@@ -254,7 +254,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
         d.appender.appendBlock(block2)
 
         log.debug("Trigger forging block3")
-        time.setTimeIfGreater(d.nextBlockTime(minerAcc))
+        time.setTimeIfGreater(d.nextBlockTime(minerAcc, ???))
         appenderScheduler.tickNext("appender-1")
         minerScheduler.tickNext("miner-1")
         appenderScheduler.tickNext("appender-2")
@@ -277,7 +277,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
         val liquidBlock1 = d.lastBlockId
 
         log.debug("Trigger next block forging - first attempt")
-        time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc))
+        time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc, ???))
         minerScheduler.tickNext("miner-3")
         appenderScheduler.tickNext("appender-4")
         minerScheduler.tickNext("miner-4") // Second time because of two accounts on node
@@ -309,7 +309,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
 
         log.debug("Trigger next block forging - second attempt")
         time.advance(defaultSettings.minerSettings.minMicroBlockAge)
-        time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc))
+        time.setTimeIfGreater(d.nextBlockTime(notCommittedAcc, ???))
         minerScheduler.tickNext("miner-7")
         appenderScheduler.tickNext("appender-7")
         withClue("Not committed forged: ") {

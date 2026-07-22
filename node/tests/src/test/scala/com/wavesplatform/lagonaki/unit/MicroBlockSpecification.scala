@@ -1,7 +1,6 @@
 package com.wavesplatform.lagonaki.unit
 
-import com.wavesplatform.account.{KeyPair, PublicKey}
-import com.wavesplatform.block.serialization.MicroBlockSerializer
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.{Block, BlockEndorsement, FinalizationVoting, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base64
@@ -17,6 +16,7 @@ import com.wavesplatform.test.*
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.transfer.*
+import tech.hearth.crypto.{Crypto, SigningKey}
 
 import scala.util.Random
 
@@ -26,34 +26,8 @@ class MicroBlockSpecification extends FunSuite {
   private val totalResBlockSig = ByteStr(Array.fill(Block.BlockIdLength)(Random.nextInt(100).toByte))
   private val stateHash        = ByteStr.fill(DigestLength)(Random.nextInt(100).toByte)
   private val reference        = Array.fill(Block.BlockIdLength)(Random.nextInt(100).toByte)
-  private val sender           = KeyPair(reference.dropRight(2))
-  private val gen              = KeyPair(reference)
-
-  test("MicroBlock with txs bytes/parse roundtrip, without finalizationVoting") {
-
-    val ts = System.currentTimeMillis() - 5000
-    val tr: TransferTransaction =
-      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = Waves, fee = 2, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts + 1, version = 1.toByte)
-    val assetId = IssuedAsset(ByteStr(Array.fill(AssetIdLength)(Random.nextInt(100).toByte)))
-    val tr2: TransferTransaction =
-      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = assetId, fee = 2, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts + 2, version = 1.toByte)
-
-    val transactions = Seq(tr, tr2)
-
-    val microBlock  = MicroBlock.buildAndSign(3.toByte, sender, transactions, prevResBlockSig, totalResBlockSig, Some(stateHash), None).explicitGet()
-    val parsedBlock = MicroBlock.parseBytes(MicroBlockSerializer.toBytes(microBlock)).get
-
-    assert(microBlock.signaturesValid().isRight)
-    assert(parsedBlock.signaturesValid().isRight)
-
-    assert(microBlock.signature == parsedBlock.signature)
-    assert(microBlock.sender == parsedBlock.sender)
-    assert(microBlock.totalResBlockSig == parsedBlock.totalResBlockSig)
-    assert(microBlock.reference == parsedBlock.reference)
-    assert(microBlock.transactionData == parsedBlock.transactionData)
-    assert(microBlock.stateHash == parsedBlock.stateHash)
-    assert(microBlock == parsedBlock)
-  }
+  private val sender           = SigningKey.fromSeed(Crypto.defaultBackend().sha256(reference.dropRight(2)))
+  private val gen              = SigningKey.fromSeed(Crypto.defaultBackend().sha256(reference))
 
   test("MicroBlock with txs bytes/parse roundtrip, with finalizationVoting") {
     val ts = System.currentTimeMillis() - 5000
@@ -70,7 +44,7 @@ class MicroBlockSpecification extends FunSuite {
     val finalizedHeight = Height(5)
     val finalizedId     = ByteStr(Array.fill(Block.BlockIdLength)(2.toByte))
     val endorsedId      = ByteStr(Array.fill(Block.BlockIdLength)(3.toByte))
-    val blsEndorser     = BlsKeyPair(TxHelpers.signer(7).privateKey)
+    val blsEndorser     = BlsKeyPair(???)
     val conflictEndorsements: IndexedSeq[BlockEndorsement] =
       IndexedSeq(BlockEndorsement.signed(blsEndorser, GeneratorIndex(7), finalizedId, finalizedHeight, endorsedId))
 
@@ -166,7 +140,7 @@ class MicroBlockSpecification extends FunSuite {
 
     val txBytesBase64 =
       "ClcIVBIg7FlNNgjs8B4KV3mLFwdyeS2xRTKEN3fgrPVEXywc8wQaBBCgjQYgydOsyLgtKAHCBiEKFgoUflp9MfPSElPDgt8e0bJfEbpsP6wSBxCA7oO7rwESQEz8sQx7qThcCFVSdgGm5Dk0VKETkPcJXXJYxnt70rxfsarlD7D4gHB5yTXdDzfndnHAyXH7NwZfzy8YR/CizgY="
-    val transaction        = PBTransactions.vanillaUnsafe(PBSignedTransaction.parseFrom(Base64.decode(txBytesBase64)))
+    val transaction        = PBTransactions.vanilla(PBSignedTransaction.parseFrom(Base64.decode(txBytesBase64))).explicitGet()
     val senderPublicKey    = PublicKey(ByteStr(Base64.decode("xJSp5EjVj+mv4H1T062etqFbqsDYN+7U+sYuhC6feGI=")))
     val referenceSignature = decode("37ex9gonRZtUddDHgSzSes5Ds9UeQyS74DyAXtGFrDpJnEg7sjGdi2ncaV4rVpZnLboQmid3whcbZUWS49FV3ZCs")
     val totalResSignature  = decode("3ta68P5LdLHWKuKcDvASsjcCMEQsm1ySrpxYZwqmzCHiAWHgrYJE1ZmaTsh3ytPqY73545EUPDaGfVdrguTqVTHg")

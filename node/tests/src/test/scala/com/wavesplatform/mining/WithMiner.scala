@@ -19,13 +19,14 @@ import monix.reactive.Observable
 import org.scalatest.Suite
 
 import scala.concurrent.Await
-import scala.concurrent.duration.Duration.Inf
+import scala.concurrent.duration.*
 
 trait WithMiner extends WithDomain { suite: Suite =>
   def withMiner(
       blockchain: Blockchain & BlockchainUpdater & NG,
       time: Time,
       settings: WavesSettings,
+      miningAccounts: Seq[MiningAccount] = Seq.empty,
       verify: Boolean = true,
       timeDrift: Long = appender.MaxTimeDrift
   )(
@@ -45,7 +46,7 @@ trait WithMiner extends WithDomain { suite: Suite =>
       utxPool,
       BlockEndorser.Disabled,
       EndorsementStorage.Disabled,
-      wallet,
+      miningAccounts,
       pos,
       minerScheduler,
       appenderScheduler,
@@ -54,7 +55,8 @@ trait WithMiner extends WithDomain { suite: Suite =>
     )
     def appendBlock(b: Block) = {
       val appendTask = BlockAppender(blockchain, time, utxPool, pos, BlockEndorser.Disabled, appenderScheduler, verify)(b, None)
-      Await.result(appendTask.runToFuture(using appenderScheduler), Inf)
+      // Bounded, so a block that never gets appended fails the test instead of hanging the suite
+      Await.result(appendTask.runToFuture(using appenderScheduler), 60.seconds)
     }
     f(miner, appendBlock)
     appenderScheduler.shutdown()
@@ -65,12 +67,14 @@ trait WithMiner extends WithDomain { suite: Suite =>
   def withDomainAndMiner(
       settings: WavesSettings,
       balances: Seq[AddrWithBalance] = Seq(),
+      miningAccounts: Seq[MiningAccount] = Seq.empty,
       verify: Boolean = true,
       timeDrift: Long = appender.MaxTimeDrift
   )(
       assert: (Domain, MinerImpl, Appender) => Unit
   ): Unit =
-    withDomain(settings, balances) { d =>
-      withMiner(d.blockchain, d.testTime, d.settings, verify, timeDrift)(assert(d, _, _))
+    // The mining accounts have to be committed generators for their blocks to be valid
+    withDomain(settings, balances, generators = miningAccounts.map(_.signingKey)) { d =>
+      withMiner(d.blockchain, d.testTime, d.settings, miningAccounts, verify, timeDrift)(assert(d, _, _))
     }
 }

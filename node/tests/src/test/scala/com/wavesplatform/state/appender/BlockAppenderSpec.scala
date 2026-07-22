@@ -2,6 +2,7 @@ package com.wavesplatform.state.appender
 
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
+import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.network.{MessageCodec, PBBlockSpec, PeerDatabase, RawBytes}
 import com.wavesplatform.state.BlockEndorser
@@ -44,7 +45,7 @@ class BlockAppenderSpec extends FlatSpec with WithDomain with BeforeAndAfterAll 
       val block = d.createBlock(generator = sender, strictTime = true)
 
       testTime.setTime(block.header.timestamp)
-      appender(block).runSyncUnsafe()
+      appender(block).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
 
       channel1.outboundMessages().isEmpty shouldBe false
       PBBlockSpec.deserializeData(channel1.readOutbound[RawBytes]().data).get shouldBe block
@@ -53,14 +54,14 @@ class BlockAppenderSpec extends FlatSpec with WithDomain with BeforeAndAfterAll 
         .processBlock(
           block,
           com.wavesplatform.crypto
-            .verifyVRF(block.header.generationSignature, d.blockchain.hitSource(1).get.arr, block.sender)
+            .verifyVRF(block.header.generationSignature, d.blockchain.hitSource(1).get.arr, ByteStr(TxHelpers.defaultVrfKey.publicKey()))
             .explicitGet(),
           snapshot = None,
           generatorSet = Seq.empty
         )
         .explicitGet() shouldBe Ignored
 
-      appender(block).runSyncUnsafe()
+      appender(block).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
       channel1.outboundMessages().isEmpty shouldBe true
     }
   }

@@ -16,7 +16,7 @@ package object api {
           case JsString(`notimplemented`) => JsSuccess(NotImplemented)
           case JsString(`implemented`)    => JsSuccess(Implemented)
           case JsString(`voted`)          => JsSuccess(Voted)
-          case _                          => ???
+          case other                      => JsError(s"Unknown node feature status: $other")
         }
 
       override def writes(o: NodeFeatureStatus): JsValue = {
@@ -39,7 +39,7 @@ package object api {
           case JsString(`undefined`) => JsSuccess(Undefined)
           case JsString(`approved`)  => JsSuccess(Approved)
           case JsString(`activated`) => JsSuccess(Activated)
-          case _                     => ???
+          case other                 => JsError(s"Unknown blockchain feature status: $other")
         }
 
       override def writes(o: BlockchainFeatureStatus): JsValue = {

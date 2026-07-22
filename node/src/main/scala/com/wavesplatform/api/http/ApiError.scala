@@ -1,6 +1,6 @@
 package com.wavesplatform.api.http
 
-import com.wavesplatform.account.{Address, Alias}
+import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.Height
@@ -46,7 +46,6 @@ object ApiError {
       case TxValidationError.GenericError(ge)                => CustomValidationError(ge)
       case TxValidationError.AlreadyInTheState(tx, txHeight) => AlreadyInState(tx, txHeight)
       case TxValidationError.AccountBalanceError(errs)       => AccountBalanceErrors(errs)
-      case TxValidationError.AliasDoesNotExist(alias)        => AliasDoesNotExist(alias)
       case TxValidationError.OrderValidationError(o, m)      => OrderInvalid(o, m)
       case TxValidationError.UnsupportedTransactionType      => UnsupportedTransactionType
       case TxValidationError.Mistiming(err)                  => Mistiming(err)
@@ -55,16 +54,8 @@ object ApiError {
       case err: TxValidationError.ToBigProof                 => InvalidProofs(err.toString())
       case TransactionValidationError(cause, tx) =>
         cause match {
-          case e: TxValidationError.TransactionNotAllowedByScript =>
-            if (e.isAssetScript) TransactionNotAllowedByAssetScript(tx)
-            else TransactionNotAllowedByAccountScript(tx)
-          case TxValidationError.Mistiming(errorMessage)                         => Mistiming(errorMessage)
-          case e: TxValidationError.ScriptExecutionError                         => ScriptExecutionError(tx, e.message, e.isAssetScript)
-          case e: TxValidationError.FailedTransactionError if e.isAssetExecution => ScriptExecutionError(tx, e.message, isTokenScript = true)
-          case e: TxValidationError.FailedTransactionError if e.isDAppExecution  => InvokeExecutionError(tx, e.message)
-          case e: TxValidationError.InvokeRejectError                            => InvokeExecutionError(tx, e.message)
-          case _: TxValidationError.FailedTransactionError                       => TransactionNotAllowedByAssetScript(tx)
-          case err                                                               => StateCheckFailed(tx, fromValidationError(err))
+          case TxValidationError.Mistiming(errorMessage) => Mistiming(errorMessage)
+          case err                                       => StateCheckFailed(tx, fromValidationError(err))
         }
       case error => CustomValidationError(error.toString)
     }
@@ -214,13 +205,6 @@ object ApiError {
     override val id: Int          = 301
     override val code: StatusCode = StatusCodes.NotFound
     override val message: String  = "block does not exist"
-  }
-
-  final case class AliasDoesNotExist(alias: Alias) extends ApiError {
-    override val id: Int          = AliasDoesNotExist.Id
-    override val code: StatusCode = StatusCodes.NotFound
-
-    override lazy val message: String = s"alias '$alias' doesn't exist"
   }
 
   case object AliasDoesNotExist {

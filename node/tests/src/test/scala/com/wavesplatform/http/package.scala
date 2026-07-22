@@ -1,6 +1,6 @@
 package com.wavesplatform
 
-import com.wavesplatform.account.{AddressOrAlias, PublicKey}
+import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -59,25 +59,10 @@ package object http {
     }
   )
 
-  implicit val addressOrAliasFormat: Format[AddressOrAlias] = Format[AddressOrAlias](
-    Reads {
-      case JsString(str) =>
-        Base58
-          .tryDecodeWithLimit(str)
-          .toEither
-          .flatMap[Object, AddressOrAlias](AddressOrAlias.fromBytes)
-          .map(JsSuccess(_))
-          .getOrElse(JsError("Can't read PublicKey"))
-
-      case _ => JsError("Can't read PublicKey")
-    },
-    Writes(x => JsString(x.toString))
-  )
-
   implicit val versionedTransferTransactionFormat: Reads[TransferTransaction] = (
     (JsPath \ "version").readNullable[Byte] and
       (JsPath \ "senderPublicKey").read[PublicKey] and
-      (JsPath \ "recipient").read[AddressOrAlias] and
+      (JsPath \ "recipient").read[String].map(Address.fromString(_).explicitGet()) and
       (JsPath \ "assetId").read[Asset] and
       (JsPath \ "amount").read[Long] and
       (JsPath \ "timestamp").read[Long] and

@@ -10,9 +10,7 @@ import com.wavesplatform.actor.RootActorSystem
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.api.common.*
 import com.wavesplatform.api.http.*
-import com.wavesplatform.api.http.alias.AliasApiRoute
 import com.wavesplatform.api.http.assets.AssetsApiRoute
-import com.wavesplatform.api.http.eth.EthRpcRoute
 import com.wavesplatform.api.http.leasing.LeaseApiRoute
 import com.wavesplatform.api.http.utils.UtilsApiRoute
 import com.wavesplatform.common.state.ByteStr
@@ -20,7 +18,6 @@ import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.database.{DBExt, Keys, RDB}
 import com.wavesplatform.events.{BlockchainUpdateTriggers, UtxEvent}
 import com.wavesplatform.extensions.{Context, Extension}
-import com.wavesplatform.features.EstimatorProvider.*
 import com.wavesplatform.features.api.ActivationApiRoute
 import com.wavesplatform.history.{History, StorageFactory}
 import com.wavesplatform.lang.ValidationError
@@ -158,7 +155,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
         utxStorage,
         blockEndorser,
         endorsementStorage,
-        wallet,
+        Seq.empty,
         pos,
         minerScheduler,
         appenderScheduler,
@@ -173,7 +170,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           new BlockChallengerImpl(
             blockchainUpdater,
             allChannels,
-            wallet,
+            Seq.empty,
             settings,
             time,
             pos,
@@ -404,7 +401,6 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
       val routeTimeout         = new RouteTimeout(serverRequestTimeout)(using heavyRequestScheduler)
 
       val apiRoutes = Seq(
-        new EthRpcRoute(blockchainUpdater, extensionContext.transactionsApi, time),
         NodeApiRoute(settings.restAPISettings, blockchainUpdater, () => shutdown()),
         BlocksApiRoute(settings.restAPISettings, extensionContext.blocksApi, time, routeTimeout),
         TransactionsApiRoute(
@@ -418,12 +414,10 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           time,
           routeTimeout
         ),
-        WalletApiRoute(settings.restAPISettings, wallet),
         UtilsApiRoute(
           time,
           settings.restAPISettings,
           settings.maxTxErrorLogSize,
-          () => blockchainUpdater.estimator,
           limitedScheduler,
           blockchainUpdater
         ),
@@ -444,7 +438,6 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           settings,
           time,
           blockchainUpdater,
-          wallet,
           extensionContext.accountsApi,
           extensionContext.transactionsApi,
           extensionContext.assetsApi,
@@ -482,15 +475,6 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           transactionPublisher,
           time,
           extensionContext.accountsApi,
-          routeTimeout
-        ),
-        AliasApiRoute(
-          settings.restAPISettings,
-          extensionContext.transactionsApi,
-          wallet,
-          transactionPublisher,
-          time,
-          blockchainUpdater,
           routeTimeout
         ),
         RewardApiRoute(blockchainUpdater),

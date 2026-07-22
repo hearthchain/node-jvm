@@ -1,6 +1,6 @@
 package com.wavesplatform.transaction
 
-import com.wavesplatform.account.{Address, PublicKey}
+import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -12,58 +12,6 @@ import com.wavesplatform.transaction.transfer.*
 import play.api.libs.json.Json
 
 class TransferTransactionV1Specification extends PropSpec {
-
-  property("Transfer serialization roundtrip") {
-    forAll(transferV1Gen) { (transfer: TransferTransaction) =>
-      val recovered = TransferTransaction.parseBytes(transfer.bytes()).get
-
-      recovered.sender shouldEqual transfer.sender
-      recovered.assetId shouldBe transfer.assetId
-      recovered.feeAssetId shouldBe transfer.feeAssetId
-      recovered.timestamp shouldEqual transfer.timestamp
-      recovered.amount shouldEqual transfer.amount
-      recovered.fee shouldEqual transfer.fee
-      recovered.recipient shouldEqual transfer.recipient
-
-      recovered.bytes() shouldEqual transfer.bytes()
-    }
-  }
-
-  property("TransferV2 decode pre-encoded bytes") {
-    val bytes = Base58.decode(
-      "2vs1kZ8fsY8kznd5FW5zv1XvBjgtNwNW8WS3GP1MC1dHKDVCjLhLV9UgAtVkUP48bXtgFH2TFFsnwqRoJjEVowSHcFqURiDzCZTEU4pKFjXaDmauvmSpN8LPw7VckeQYkAxvpzPpMxhY765wv5zD4sd8oyFeUxVToaNfepstek4ugJFzXZVM4gAqxz5jtiTksxySdNVHRkhgmY3NYxmRFQPenhaXydUWmLAa9xEfjj4gjVPUy47FbFwQUgta3WspKWq1eki6LA4vZtHFZPfcp2DHu9D1KGMSxERmRJpdLRbvD5LbTS8TaXQHUiqTqiafSme829aB1Jdw1s5KXPZhCWEqmv8ryTzHCF3UqnFcEgsi6VKYu1ARDrbUMwB3gbYq4qTW7uhs4qEG348mdEm6CLm1vE5a6ih"
-    )
-    val json = Json.parse(
-      """{
-        |  "senderPublicKey" : "45FQmahaQC5BsHYnzLypvTB4YKuzQLytu3m83AcDKn1d",
-        |  "amount" : 61305167369911,
-        |  "signature" : "3GgwEGeTmHKoZxMyQWRspwk5KfV2RyoE9sbPxxQVgrDXgVjZZbz2Qzyiu2hNHGm2FovYq62YzSMXkzqSmgbTsoEr",
-        |  "fee" : 2084965,
-        |  "type" : 4,
-        |  "version" : 1,
-        |  "attachment" : "U7iyYx6HwPHpZjpLKDrkE2LjuF2JAZcjT7aKM3ryzcihToW4FgLqqiUcYbGADz9PMCFXibDCb126RVm4AtoHSzpuW8NDMcAmxZBd2LPiQ3VBuDJacn3dD1X",
-        |  "sender" : "3N44LV7DJAi6qxyuMxNsxmsKcGtAD4rXwDV",
-        |  "feeAssetId" : "4vKvkk5vseBeaWR1wdjWf8LfWRvzU9SruKwpW2Cvi5u",
-        |  "proofs" : [ "3GgwEGeTmHKoZxMyQWRspwk5KfV2RyoE9sbPxxQVgrDXgVjZZbz2Qzyiu2hNHGm2FovYq62YzSMXkzqSmgbTsoEr" ],
-        |  "assetId" : "Hrs1iH8YJJKgo1ZgVsqfvFGbRgFp5HxuuU7eCPDPwMjN",
-        |  "recipient" : "3N8JoB6QHbKxSFCD2HfhnQXQkibJkBPC4Ag",
-        |  "feeAsset" : "4vKvkk5vseBeaWR1wdjWf8LfWRvzU9SruKwpW2Cvi5u",
-        |  "id" : "BQTeR8HhbzZfVZ48LFzesi29nPLiKeSGYfesTwWH1pXJ",
-        |  "timestamp" : 1133967589140510377
-        |}
-        |""".stripMargin
-    )
-
-    val tx = TransferTxSerializer.parseBytes(bytes)
-    tx.get.json() shouldBe json
-  }
-
-  property("Transfer serialization from TypedTransaction") {
-    forAll(transferV1Gen) { (tx: TransferTransaction) =>
-      val recovered = TransactionParsers.parseBytes(tx.bytes()).get
-      recovered.bytes() shouldEqual tx.bytes()
-    }
-  }
 
   property("JSON format validation") {
     val js = Json.parse("""{
@@ -97,7 +45,7 @@ class TransferTransactionV1Specification extends PropSpec {
       ByteStr.decodeBase58("4t2Xazb2SX").get,
       1526552510868L,
       Proofs(Seq(ByteStr.decodeBase58("eaV1i3hEiXyYQd6DQY7EnPg9XzpAvB9VA3bnpin2qJe4G36GZXaGnYKCgSf9xiQ61DcAwcBFzjSXh6FwCgazzFz").get)),
-      recipient.chainId
+      AddressScheme.current.chainId
     )
 
     tx.json() shouldEqual js
@@ -106,7 +54,7 @@ class TransferTransactionV1Specification extends PropSpec {
   property("negative") {
     for {
       (_, sender, recipient, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
-    } yield TransferTransaction.create(1.toByte, sender.publicKey, recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty).map(_.signWith(sender.privateKey)) should produce(
+    } yield TransferTransaction.create(1.toByte, PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty).map(_.signWith(sender)) should produce(
       "insufficient fee"
     )
   }

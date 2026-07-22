@@ -24,77 +24,13 @@ ThisBuild / publishTo := {
   else localStaging.value
 }
 
-lazy val lang =
-  crossProject(JSPlatform, JVMPlatform)
-    .withoutSuffixFor(JVMPlatform)
-    .crossType(CrossType.Full)
-    .settings(
-      assembly / test := {},
-      libraryDependencies ++= Dependencies.lang.value ++ Dependencies.test,
-      inConfig(Compile)(
-        Seq(
-          sourceGenerators += Tasks.docSource,
-          PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value,
-          PB.protoSources += PB.externalIncludePath.value,
-          PB.generate / includeFilter := { (f: File) =>
-            (** / "waves" / "lang" / "*.proto").matches(f.toPath)
-          },
-          PB.deleteTargetDirectory := false
-        )
-      )
-    )
-
-lazy val `lang-jvm` = lang.jvm
-  .enablePlugins(PublishedModule)
-  .settings(
-    name           := "RIDE Compiler",
-    normalizedName := "lang",
-    description    := "The RIDE smart contract language compiler",
-    libraryDependencies ++= Seq(
-      "org.scala-js" %% "scalajs-stubs" % "1.1.0" % Provided,
-      Dependencies.logback,
-      Dependencies.scalaLogging,
-      Dependencies.gProto,
-      Dependencies.gProto % "protobuf"
-    )
-  )
-
-lazy val `lang-js` = lang.js
-  .enablePlugins(VersionObject)
-  .settings(
-    libraryDependencies ++= Dependencies.scalapbRuntimeJS.value
-  )
-
-lazy val `lang-testkit` = project
-  .in(file("lang/testkit"))
-  .dependsOn(`lang-jvm`)
-  .enablePlugins(PublishedModule)
-  .settings(
-    libraryDependencies ++=
-      Dependencies.test.map(_.withConfigurations(Some("compile"))) ++ Dependencies.logDeps :+
-        Dependencies.scalaLogging
-  )
-
-lazy val `lang-tests` = project
-  .in(file("lang/tests"))
-  .dependsOn(`lang-testkit`)
-
-lazy val `lang-tests-js` = project
-  .in(file("lang/tests-js"))
-  .enablePlugins(ScalaJSPlugin)
-  .dependsOn(`lang-js`)
-  .settings(
-    libraryDependencies += Dependencies.scalaJsTest.value,
-    testFrameworks += new TestFramework("utest.runner.Framework")
-  )
-
-lazy val node = project.dependsOn(`lang-jvm`)
+lazy val node = project
 
 lazy val `node-testkit` = project
   .in(file("node/testkit"))
-  .dependsOn(`node`, `lang-testkit`)
+  .dependsOn(`node`)
   .enablePlugins(PublishedModule)
-  .settings(libraryDependencies ++= Dependencies.nodeTests)
+  .settings(libraryDependencies ++= Dependencies.nodeTests.map(_.withConfigurations(Some("compile"))))
 
 lazy val `node-tests` = project
   .in(file("node/tests"))
@@ -104,8 +40,7 @@ lazy val `node-tests` = project
 lazy val `grpc-server` =
   project.dependsOn(node % "compile;runtime->provided", `node-testkit` % "test")
 
-lazy val `ride-runner` = project.dependsOn(node, `grpc-server`, `node-testkit`)
-lazy val `node-it`     = project.dependsOn(`repl-jvm`, `grpc-server`, `node-testkit`)
+lazy val `node-it` = project.dependsOn(`grpc-server`, `node-testkit`)
 
 lazy val `node-generator` = project.dependsOn(node, `node-testkit`)
 
@@ -123,49 +58,22 @@ lazy val repl = crossProject(JSPlatform, JVMPlatform)
         PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value,
         PB.protoSources += PB.externalIncludePath.value,
         PB.generate / includeFilter := { (f: File) =>
-          (** / "waves" / "*.proto").matches(f.toPath)
+          (** / "hearth" / "*.proto").matches(f.toPath)
         },
         PB.deleteTargetDirectory := false
       )
     )
   )
 
-lazy val `repl-jvm` = repl.jvm
-  .dependsOn(`lang-jvm`, `lang-testkit`)
-  .settings(
-    libraryDependencies ++= Seq(
-      "org.scala-js" %% "scalajs-stubs" % "1.1.0" % Provided,
-      Dependencies.sttp3
-    )
-  )
-
-lazy val `repl-js` = repl.js
-  .dependsOn(`lang-js`)
-  .settings(
-    libraryDependencies ++= Dependencies.scalapbRuntimeJS.value ++ Seq(
-      "org.scala-js" %%% "scala-js-macrotask-executor" % "1.1.1"
-    )
-  )
-
-lazy val `curve25519-test` = project.dependsOn(node)
-
 lazy val `waves-node` = (project in file("."))
   .aggregate(
-    `lang-js`,
-    `lang-jvm`,
-    `lang-tests`,
-    `lang-tests-js`,
-    `lang-testkit`,
-    `repl-js`,
-    `repl-jvm`,
     node,
     `node-it`,
     `node-testkit`,
     `node-tests`,
     `node-generator`,
     `grpc-server`,
-    benchmark,
-    `ride-runner`
+    benchmark
   )
 
 inScope(Global)(
@@ -219,7 +127,7 @@ inScope(Global)(
 )
 
 commands += Command.command("packageAll") { state =>
-  "node / assembly" :: "ride-runner / assembly" :: "buildDebPackages" :: "buildTarballsForDocker" :: state
+  "node / assembly" :: "buildDebPackages" :: "buildTarballsForDocker" :: state
 }
 
 lazy val buildTarballsForDocker = taskKey[Unit]("Package node and grpc-server tarballs and copy them to docker/target")
@@ -231,14 +139,6 @@ buildTarballsForDocker := {
   IO.copyFile(
     (`grpc-server` / Universal / packageZipTarball).value,
     baseDirectory.value / "docker" / "target" / "waves-grpc-server.tgz"
-  )
-}
-
-lazy val buildRIDERunnerForDocker = taskKey[Unit]("Package RIDE Runner tarball and copy it to docker/target")
-buildRIDERunnerForDocker := {
-  IO.copyFile(
-    (`ride-runner` / Universal / packageZipTarball).value,
-    (`ride-runner` / baseDirectory).value / "docker" / "target" / s"${(`ride-runner` / name).value}.tgz"
   )
 }
 
@@ -257,9 +157,8 @@ checkPRRaw := Def
     compilePRRaw,
     Def.sequential(
       test.all(
-        ScopeFilter(inProjects(`lang-tests`, `repl-jvm`, `lang-tests-js`, `grpc-server`, `node-tests`, `ride-runner`), inConfigurations(Test))
+        ScopeFilter(inProjects(`grpc-server`, `node-tests`), inConfigurations(Test))
       ),
-      fullOptJS.all(ScopeFilter(inProjects(`lang-js`, `repl-js`), inConfigurations(Compile))),
       assembly.all(ScopeFilter(inProjects(node))),
       buildTarballsForDocker
     )
@@ -290,10 +189,9 @@ commands += Command.command("buildDebPackages") { state =>
     state
 }
 
-lazy val buildPlatformIndependentArtifacts = taskKey[Unit]("Build fat JARs for node and ride-runner and TGZ for grpc-server")
+lazy val buildPlatformIndependentArtifacts = taskKey[Unit]("Build fat JARs for node and TGZ for grpc-server")
 buildPlatformIndependentArtifacts := {
   (node / assembly).value
-  (`ride-runner` / assembly).value
   (`grpc-server` / Universal / packageZipTarball).value
 }
 

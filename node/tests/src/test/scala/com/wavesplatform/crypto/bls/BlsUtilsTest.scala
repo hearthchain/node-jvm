@@ -1,12 +1,12 @@
 package com.wavesplatform.crypto.bls
 
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.common.utils.Base64
 import com.wavesplatform.crypto.bls.BlsUtils.*
 import com.wavesplatform.test.{FreeSpec, produce}
 import org.scalatest.EitherValues
 import supranational.blst
 import supranational.blst.{P1, SecretKey}
+import tech.hearth.crypto.SigningKey
 
 import java.nio.charset.StandardCharsets
 import scala.util.Random
@@ -213,6 +213,5 @@ class BlsUtilsTest extends FreeSpec with EitherValues {
 
   private def aggSig2(sig1: Array[Byte], sig2: Array[Byte]): Array[Byte] = BlsUtils.aggSig(Seq(sig1, sig2)).value
 
-  private def mkRandomSecretKey(): SecretKey  = mkSecretKey(mkRandomWavesKeyPair().privateKey.arr)
-  private def mkRandomWavesKeyPair(): KeyPair = KeyPair(Array.fill(32)(Random.nextInt().toByte))
+  private def mkRandomSecretKey(): SecretKey  = mkSecretKey(Array.fill(32)(Random.nextInt().toByte))
 }

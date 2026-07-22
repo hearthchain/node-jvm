@@ -9,7 +9,7 @@ import cats.{Monad, StackSafeMonad}
 
 final case class TracedResult[+E, +A](
     resultE: Either[E, A],
-    trace: List[TraceStep] = Nil,
+    trace: List[String] = Nil,
     attributes: TracedResult.Attributes = Map.empty
 ) {
   def flatMap[B, E1 >: E](f: A => TracedResult[E1, B]): TracedResult[E1, B] = {

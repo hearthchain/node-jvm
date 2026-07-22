@@ -14,7 +14,7 @@ import com.wavesplatform.settings.TestFunctionalitySettings
 import com.wavesplatform.state.{Blockchain, EndorsementStorage, StateSnapshot}
 import com.wavesplatform.test.DomainPresets.RideV6
 import com.wavesplatform.test.FlatSpec
-import com.wavesplatform.transaction.TxHelpers.{createAlias, defaultAddress, defaultSigner, secondAddress, transfer}
+import com.wavesplatform.transaction.TxHelpers.{defaultAddress, defaultSigner, secondAddress, transfer}
 import com.wavesplatform.transaction.{Transaction, TxVersion}
 import com.wavesplatform.utils.Schedulers
 import com.wavesplatform.utx.{UtxPool, UtxPoolImpl, UtxPriorityPool}
@@ -22,7 +22,7 @@ import monix.execution.Scheduler
 import monix.reactive.Observable
 import monix.reactive.subjects.ConcurrentSubject
 
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.duration.*
 import scala.util.Random
 
@@ -58,9 +58,9 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
         )
         import Scheduler.Implicits.global
         val startTime = System.nanoTime()
-        val tx = createAlias(name = "test" + Random.nextInt(), sender = acc, fee = TestValues.fee, version = TxVersion.V1)
+        val tx = transfer()
         utxPool.putIfNew(tx).resultE.explicitGet()
-        val result = task.runSyncUnsafe()
+        val result = task.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
         result match {
           case res @ MicroBlockMinerImpl.Success(b, totalConstraint) =>
             val isFirstBlock = block.transactionData.isEmpty
@@ -130,7 +130,7 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
         ): (Option[Seq[Transaction]], MiningConstraint, Option[ByteStr]) = {
           val (txs, constraint, stateHash) = inner.packUnconfirmed(rest, None, strategy, cancelled)
           val waitingConstraint = new MiningConstraint {
-            def isFull: Boolean                                                         = { eventHasBeenSent.await(); constraint.isFull }
+            def isFull: Boolean = { eventHasBeenSent.await(60, TimeUnit.SECONDS); constraint.isFull }
             def isOverfilled: Boolean                                                   = constraint.isOverfilled
             def put(b: Blockchain, tx: Transaction, s: StateSnapshot): MiningConstraint = constraint.put(b, tx, s)
           }
@@ -175,7 +175,12 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
 
       utxPool.putIfNew(transfer(amount = 123))
 
-      while (d.lastBlockId == block.id()) Thread.sleep(100)
+      // Bounded: if the micro block never gets appended this has to fail the test rather than hang the whole suite
+      val deadline = System.nanoTime() + 30.seconds.toNanos
+      while (d.lastBlockId == block.id() && System.nanoTime() < deadline) Thread.sleep(100)
+      withClue("micro block was not appended within 30s: ") {
+        d.lastBlockId should not be block.id()
+      }
       d.balance(secondAddress) shouldBe 123
 
       miner.shutdown()

@@ -4,13 +4,10 @@ import com.wavesplatform.state.Blockchain
 
 object FunctionCallPolicyProvider {
   implicit class MultiPaymentAllowedExt(b: Blockchain) {
-    def callableListArgumentsAllowed: Boolean =
-      b.isFeatureActivated(BlockchainFeatures.BlockV5)
+    def callableListArgumentsAllowed: Boolean = true
 
-    def callableListArgumentsCorrected: Boolean =
-      b.isFeatureActivated(BlockchainFeatures.RideV6)
+    def callableListArgumentsCorrected: Boolean = true
 
-    def checkSyncCallArgumentsTypes: Boolean =
-      b.isFeatureActivated(BlockchainFeatures.RideV6)
+    def checkSyncCallArgumentsTypes: Boolean = true
   }
 }

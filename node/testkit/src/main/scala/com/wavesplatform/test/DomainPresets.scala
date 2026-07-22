@@ -1,11 +1,53 @@
 package com.wavesplatform.test
 
+import com.wavesplatform.db.WithState
+import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatures}
-import com.wavesplatform.lang.directives.values.*
-import com.wavesplatform.settings.{FunctionalitySettings, WavesSettings, loadConfig}
+import com.wavesplatform.settings.{FunctionalitySettings, GenesisAssetSettings, GenesisBalanceSettings, WavesSettings, loadConfig}
+import tech.hearth.crypto.SigningKey
+
+import scala.concurrent.duration.DurationInt
 
 object DomainPresets {
-  implicit class WavesSettingsOps(val ws: WavesSettings) extends AnyVal {
+  given Conversion[AddrWithBalance, GenesisBalanceSettings] = (b: AddrWithBalance) => GenesisBalanceSettings(b.address.toBech32, b.balance)
+
+  extension (ws: WavesSettings) {
+    def withFunctionalitySettings(fs: FunctionalitySettings): WavesSettings =
+      ws.copy(blockchainSettings = ws.blockchainSettings.copy(functionalitySettings = fs))
+
+    def withGenesisBalances(balances: AddrWithBalance*): WavesSettings =
+      if (balances.isEmpty) ws
+      else
+        ws.copy(blockchainSettings =
+          ws.blockchainSettings.copy(
+            genesisSettings = ws.blockchainSettings.genesisSettings.copy(
+              balances = balances.map(b => GenesisBalanceSettings(b.address.toBech32, b.balance, b.assets.map { case (k, v) => k.toString -> v }))
+            )
+          )
+        )
+
+    def withGenesisGenerators(generators: SigningKey*): WavesSettings =
+      if (generators.isEmpty) ws
+      else
+        ws.copy(blockchainSettings =
+          ws.blockchainSettings.copy(
+            genesisSettings = ws.blockchainSettings.genesisSettings.copy(
+              generators = generators.map(WithState.genesisGeneratorFor)
+            )
+          )
+        )
+
+    def withGenesisAssets(assets: GenesisAssetSettings*): WavesSettings =
+      if (assets.isEmpty) ws
+      else
+        ws.copy(blockchainSettings =
+          ws.blockchainSettings.copy(
+            genesisSettings = ws.blockchainSettings.genesisSettings.copy(
+              assets = assets
+            )
+          )
+        )
+
     def configure(transformF: FunctionalitySettings => FunctionalitySettings): WavesSettings = {
       val functionalitySettings = transformF(ws.blockchainSettings.functionalitySettings)
       ws.copy(blockchainSettings = ws.blockchainSettings.copy(functionalitySettings = functionalitySettings))
@@ -25,7 +67,7 @@ object DomainPresets {
     }
 
     def withActivationPeriod(period: Int): WavesSettings =
-      configure(_.copy(featureCheckBlocksPeriod = period, blocksForFeatureActivation = period, doubleFeaturesPeriodsAfterHeight = 10000))
+      configure(_.copy(featureCheckBlocksPeriod = period, blocksForFeatureActivation = period))
 
     def noFeatures(): WavesSettings = {
       ws.copy(
@@ -38,7 +80,25 @@ object DomainPresets {
     }
   }
 
-  lazy val SettingsFromDefaultConfig: WavesSettings = WavesSettings.fromRootConfig(loadConfig(None))
+  /** Blocks are timestamped from the genesis block onwards (parent.timestamp + block delay), while TxHelpers stamps
+    * transactions with the current time. The TESTNET genesis sits in 2016, which would put every transaction years in
+    * the future relative to its block, so tests start the chain an hour ago instead.
+    */
+  private lazy val genesisTimestamp: Long = System.currentTimeMillis() - 1.hour.toMillis
+
+  lazy val SettingsFromDefaultConfig: WavesSettings = {
+    val settings = WavesSettings.fromRootConfig(loadConfig(None))
+    // The default config is TESTNET, but genesis balances are now part of the genesis snapshot built from the settings,
+    // and tests declare their own via withDomain(balances = ...). So start from an empty genesis.
+    settings.copy(blockchainSettings =
+      settings.blockchainSettings.copy(genesisSettings =
+        settings.blockchainSettings.genesisSettings.copy(
+          balances = Seq.empty,
+          timestamp = genesisTimestamp
+        )
+      )
+    )
+  }
 
   def domainSettingsWithFS(fs: FunctionalitySettings): WavesSettings =
     SettingsFromDefaultConfig.copy(
@@ -62,7 +122,8 @@ object DomainPresets {
 
   val NG: WavesSettings = domainSettingsWithPreactivatedFeatures(
     BlockchainFeatures.MassTransfer, // Removes limit of 100 transactions per block
-    BlockchainFeatures.NG
+    BlockchainFeatures.NG,
+    BlockchainFeatures.DeterministicFinality
   )
 
   val ScriptsAndSponsorship: WavesSettings = NG
@@ -97,28 +158,9 @@ object DomainPresets {
 
   val BlockRewardDistribution: WavesSettings = ConsensusImprovements.addFeatures(BlockchainFeatures.BlockRewardDistribution)
 
-  val ContinuationTransaction: WavesSettings = RideV6
-    .addFeatures(BlockchainFeatures.ContinuationTransaction)
-    .copy(
-      featuresSettings = RideV6.featuresSettings.copy(autoShutdownOnUnsupportedFeature = false)
-    )
-
   val TransactionStateSnapshot: WavesSettings = BlockRewardDistribution.addFeatures(BlockchainFeatures.LightNode)
 
   val DeterministicFinality: WavesSettings = TransactionStateSnapshot.addFeatures(BlockchainFeatures.DeterministicFinality)
-
-  def settingsForRide(version: StdLibVersion): WavesSettings =
-    version match {
-      case V1 => RideV3
-      case V2 => RideV3
-      case V3 => RideV3
-      case V4 => RideV4
-      case V5 => RideV5
-      case V6 => RideV6
-      case V7 => BlockRewardDistribution
-      case V8 => TransactionStateSnapshot
-      case V9 => DeterministicFinality
-    }
 
   def mostRecent: WavesSettings = RideV6
 }

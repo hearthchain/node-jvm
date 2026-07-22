@@ -2,13 +2,12 @@ package com.wavesplatform.state
 
 import cats.syntax.either.*
 import cats.syntax.option.*
-import com.wavesplatform.account.{Address, Alias}
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{Block, BlockSnapshot, FinalizationVoting, MicroBlock, MicroBlockSnapshot, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database.RocksDBWriter
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.features.BlockchainFeatures
@@ -22,7 +21,6 @@ import com.wavesplatform.state.diffs.BlockDiffer
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{BlockAppendError, GenericError, MicroBlockAppendError}
-import com.wavesplatform.transaction.transfer.TransferTransactionLike
 import com.wavesplatform.utils.{ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
 import kamon.Kamon
 import monix.reactive.Observable
@@ -167,11 +165,7 @@ class BlockchainUpdaterImpl(
         .flatMap { activatedAt =>
           val mayBeReward     = lastBlockReward
           val mayBeTimeToVote = nextHeight - activatedAt
-          val modifiedTerm = if (rocksdb.isFeatureActivated(BlockchainFeatures.CappedReward, this.height)) {
-            settings.termAfterCappedRewardFeature
-          } else {
-            settings.term
-          }
+          val modifiedTerm    = settings.termAfterCappedRewardFeature // CappedReward is active
 
           mayBeReward match {
             case Some(reward) if mayBeTimeToVote > 0 && mayBeTimeToVote % modifiedTerm == 0 =>
@@ -396,7 +390,7 @@ class BlockchainUpdaterImpl(
                           liquid.data.finalizedHeight,
                           ng.finalizationState.generatorSet
                         )
-                        BlockStats.appended(liquid.block, liquid.data.snapshot.scriptsComplexity)
+                        BlockStats.appended(liquid.block, 0L)
                         TxsInBlockchainStats.record(ng.transactions.size)
                         blockchainUpdateTriggers.onProcessBlock(block, differResult.keyBlockSnapshot, reward, hitSource, rocksdb)
                         val (discardedMbs, discardedSnapshots) = liquid.discarded.unzip
@@ -446,7 +440,7 @@ class BlockchainUpdaterImpl(
                     featuresApprovedWithBlock(block),
                     reward,
                     hitSource,
-                    cancelLeases(collectLeasesToCancel(newHeight), newHeight),
+                    cancelLeases(Map.empty, newHeight),
                     finalizationState = FinalizationState.init(
                       generatorSet,
                       conflictGenerators =
@@ -469,20 +463,6 @@ class BlockchainUpdaterImpl(
           }
         )
     }
-
-  private def collectLeasesToCancel(newHeight: Height): Map[ByteStr, LeaseDetails] =
-    if (rocksdb.isFeatureActivated(BlockchainFeatures.LeaseExpiration, newHeight.toInt)) {
-      val toHeight = newHeight - rocksdb.settings.functionalitySettings.leaseExpiration
-      val fromHeight = rocksdb.featureActivationHeight(BlockchainFeatures.LeaseExpiration) match {
-        case Some(`newHeight`) =>
-          log.trace(s"Collecting leases created up till height $toHeight")
-          GenesisBlockHeight
-        case _ =>
-          log.trace(s"Collecting leases created at height $toHeight")
-          toHeight
-      }
-      collectActiveLeases(fromHeight, toHeight)
-    } else Map.empty
 
   private def cancelLeases(leaseDetails: Map[ByteStr, LeaseDetails], height: Height): Map[ByteStr, StateSnapshot] =
     for {
@@ -744,10 +724,6 @@ class BlockchainUpdaterImpl(
     else rocksdb.blockHeader(height)
   }
 
-  override def transferById(id: BlockId): Option[(Int, TransferTransactionLike)] = readLock {
-    snapshotBlockchain.transferById(id)
-  }
-
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] = readLock {
     snapshotBlockchain.transactionInfo(id)
   }
@@ -762,10 +738,6 @@ class BlockchainUpdaterImpl(
 
   override def assetDescription(id: IssuedAsset): Option[AssetDescription] = readLock {
     snapshotBlockchain.assetDescription(id)
-  }
-
-  override def resolveAlias(alias: Alias): Either[ValidationError, Address] = readLock {
-    snapshotBlockchain.resolveAlias(alias)
   }
 
   override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = readLock {
@@ -791,26 +763,6 @@ class BlockchainUpdaterImpl(
         SnapshotBlockchain(rocksdb, liquid.data.snapshot, liquid.block, ByteStr.empty, 0L, None, None)
       }
       .balanceSnapshots(address, from, to)
-  }
-
-  override def accountScript(address: Address): Option[AccountScriptInfo] = readLock {
-    snapshotBlockchain.accountScript(address)
-  }
-
-  override def hasAccountScript(address: Address): Boolean = readLock {
-    snapshotBlockchain.hasAccountScript(address)
-  }
-
-  override def assetScript(asset: IssuedAsset): Option[AssetScriptInfo] = readLock {
-    snapshotBlockchain.assetScript(asset)
-  }
-
-  override def accountData(acc: Address, key: String): Option[DataEntry[?]] = readLock {
-    snapshotBlockchain.accountData(acc, key)
-  }
-
-  override def hasData(acc: Address): Boolean = readLock {
-    snapshotBlockchain.hasData(acc)
   }
 
   override def transactionMeta(id: ByteStr): Option[TxMeta] = readLock {
@@ -852,10 +804,6 @@ class BlockchainUpdaterImpl(
     }
   }
 
-  override def resolveERC20Address(address: ERC20Address): Option[IssuedAsset] = readLock {
-    snapshotBlockchain.resolveERC20Address(address)
-  }
-
   override def lastStateHash(refId: Option[ByteStr]): ByteStr = readLock {
     ngState
       .map { ng =>
@@ -864,7 +812,7 @@ class BlockchainUpdaterImpl(
       .getOrElse(rocksdb.lastStateHash(None))
   }
 
-  override def committedGenerators(at: GenerationPeriod): IndexedSeq[(Address, BlsPublicKey)] = readLock {
+  override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = readLock {
     snapshotBlockchain.committedGenerators(at)
   }
 

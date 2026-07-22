@@ -2,6 +2,7 @@ package com.wavesplatform.state.diffs
 
 import cats.syntax.either.*
 import com.wavesplatform.consensus.GeneratingBalanceProvider
+import com.wavesplatform.crypto
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.CommitToGenerationTransaction
@@ -21,11 +22,19 @@ object CommitToGenerationTransactionDiff {
       _ <- tx.commitmentSignature
         .verifyBasic(tx.popMessage, tx.endorserPublicKey)
         .leftMap(e => GenericError(s"Invalid commitment signature: $e"))
+      // Proves the sender holds the VRF key it registers, so that a mistyped key fails here rather than silently
+      // leaving a generator unable to produce a verifiable block for the whole period
+      _ <- crypto
+        .verifyVRF(tx.vrfCommitmentSignature, tx.vrfPopMessage, tx.vrfPublicKey)
+        .leftMap(e => GenericError(s"Invalid VRF commitment signature: $e"))
       _ <- blockchain.committedGenerators(next).foldLeft(Either.unit[GenericError]) {
         case (r @ Left(_), _) => r
-        case (Right(_), (addr, blsPk)) =>
-          if (addr == sender) GenericError(s"$sender is already committed").asLeft
-          else if (blsPk == tx.endorserPublicKey) GenericError(s"BLS key ${tx.endorserPublicKey} is already committed, try another key").asLeft
+        case (Right(_), cg) =>
+          if (cg.address == sender) GenericError(s"$sender is already committed").asLeft
+          else if (cg.endorserPublicKey == tx.endorserPublicKey)
+            GenericError(s"BLS key ${tx.endorserPublicKey} is already committed, try another key").asLeft
+          else if (cg.vrfPublicKey == tx.vrfPublicKey)
+            GenericError(s"VRF key ${tx.vrfPublicKey} is already committed, try another key").asLeft
           else ().asRight
       }
       snapshot <- StateSnapshot.build(
@@ -36,7 +45,7 @@ object CommitToGenerationTransactionDiff {
             // generationDeposit = ??? // We don't need this, because calculate from nextCommittedGenerators
           )
         ),
-        nextCommittedGenerators = Seq(tx.sender -> tx.endorserPublicKey)
+        nextCommittedGenerators = Seq(GenerationCommitment(tx.sender, tx.endorserPublicKey, tx.vrfPublicKey))
       )
       generatingBalanceAfterDeposit = SnapshotBlockchain(blockchain, snapshot).generatingBalance(sender)
       minBalance                    = GeneratingBalanceProvider.minMiningBalance(blockchain, Height(blockchain.height))

@@ -1,8 +1,0 @@
-${{header}}
-${{loader-functions}}
-
-if [ "$1" = remove ]; then
-    stopService ${{app_name}} || true
-fi
-
-exit 0

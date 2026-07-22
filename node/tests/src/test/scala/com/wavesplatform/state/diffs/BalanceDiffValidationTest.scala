@@ -3,17 +3,22 @@ package com.wavesplatform.state.diffs
 import com.wavesplatform.TestValues
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithState
+import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.settings.TestFunctionalitySettings
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.lease.LeaseTransaction
 import com.wavesplatform.transaction.transfer.*
-import com.wavesplatform.transaction.{CommitToGenerationTransaction, GenesisTransaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers, TxVersion}
 
 class BalanceDiffValidationTest extends PropSpec with WithState {
-  val ownLessThatLeaseOut: (GenesisTransaction, TransferTransaction, LeaseTransaction, LeaseTransaction, TransferTransaction) = {
-    val master = TxHelpers.signer(1)
+  private val master = TxHelpers.signer(1)
+
+  // The master is credited by the genesis snapshot, which is applied to the block at height 1
+  private val masterBalance = Seq(AddrWithBalance(master.toAddress))
+
+  val ownLessThatLeaseOut: (TransferTransaction, LeaseTransaction, LeaseTransaction, TransferTransaction) = {
     val alice  = TxHelpers.signer(2)
     val bob    = TxHelpers.signer(3)
     val cooper = TxHelpers.signer(4)
@@ -23,43 +28,30 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
     val aliceLeaseToBobAmount    = 500.waves
     val masterLeaseToAliceAmount = 750.waves
 
-    val genesis                = TxHelpers.genesis(master.toAddress)
     val masterTransfersToAlice = TxHelpers.transfer(master, alice.toAddress, masterTransferAmount, fee = fee, version = TxVersion.V1)
     val aliceLeasesToBob       = TxHelpers.lease(alice, bob.toAddress, aliceLeaseToBobAmount)
     val masterLeasesToAlice    = TxHelpers.lease(master, alice.toAddress, masterLeaseToAliceAmount)
     val aliceTransfersMoreThanOwnsMinusLeaseOut =
       TxHelpers.transfer(alice, cooper.toAddress, masterTransferAmount - fee - aliceLeaseToBobAmount, fee = fee, version = TxVersion.V1)
 
-    (genesis, masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice, aliceTransfersMoreThanOwnsMinusLeaseOut)
-  }
-
-  property("can transfer more than own-leaseOut before allow-leased-balance-transfer-until") {
-    val settings = TestFunctionalitySettings.Enabled.copy(blockVersion3AfterHeight = 4)
-
-    val (genesis, masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice, aliceTransfersMoreThanOwnsMinusLeaseOut) = ownLessThatLeaseOut
-    assertDiffEi(
-      Seq(TestBlock.create(Seq(genesis, masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice))),
-      TestBlock.create(Seq(aliceTransfersMoreThanOwnsMinusLeaseOut)),
-      settings
-    ) { snapshotEi =>
-      snapshotEi.explicitGet()
-    }
+    (masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice, aliceTransfersMoreThanOwnsMinusLeaseOut)
   }
 
   property("cannot transfer more than own-leaseOut after allow-leased-balance-transfer-until") {
-    val settings = TestFunctionalitySettings.Enabled.copy(blockVersion3AfterHeight = 4)
+    val settings = TestFunctionalitySettings.Enabled
 
-    val (genesis, masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice, aliceTransfersMoreThanOwnsMinusLeaseOut) = ownLessThatLeaseOut
+    val (masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice, aliceTransfersMoreThanOwnsMinusLeaseOut) = ownLessThatLeaseOut
     assertDiffEi(
       Seq(
-        TestBlock.create(Seq(genesis)),
+        TestBlock.create(Seq()), // Height 1: carries the genesis snapshot
         TestBlock.create(Seq()),
         TestBlock.create(Seq()),
         TestBlock.create(Seq()),
         TestBlock.create(Seq(masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice))
       ),
       TestBlock.create(Seq(aliceTransfersMoreThanOwnsMinusLeaseOut)),
-      settings
+      settings,
+      masterBalance
     ) { snapshotEi =>
       snapshotEi should produce("trying to spend leased money")
     }
@@ -72,9 +64,10 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
     val initBalance      = notBlockedAmount + CommitToGenerationTransaction.DepositInWavelets + TestValues.commitToGenerationFee
 
     assertDiffEiTraced(
-      Seq(TestBlock.create(Seq(TxHelpers.genesis(TxHelpers.defaultAddress, amount = initBalance)))),
+      Seq(TestBlock.create(Seq())), // Height 1: carries the genesis snapshot
       TestBlock.create(Seq(TxHelpers.commitToGeneration(Height(4)))),
-      settings
+      settings,
+      Seq(AddrWithBalance(TxHelpers.defaultAddress, initBalance))
     ) { snapshotEi =>
       snapshotEi.resultE.explicitGet()
     }
@@ -90,11 +83,12 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
     val transferAmount = notBlockedAmount + 1
     assertDiffEiTraced(
       Seq(
-        TestBlock.create(Seq(TxHelpers.genesis(TxHelpers.defaultAddress, amount = initBalance))),
+        TestBlock.create(Seq()), // Height 1: carries the genesis snapshot
         TestBlock.create(Seq(TxHelpers.commitToGeneration(Height(4))))
       ),
       TestBlock.create(Seq(TxHelpers.transfer(amount = transferAmount))),
-      settings
+      settings,
+      Seq(AddrWithBalance(TxHelpers.defaultAddress, initBalance))
     ) { snapshotEi =>
       snapshotEi.resultE should produce("trying to spend a deposit")
     }

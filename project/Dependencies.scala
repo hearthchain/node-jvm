@@ -11,6 +11,10 @@ object Dependencies {
   val overrides = Def.setting(
     Seq(
       "org.scala-lang"           %% "scala3-library" % scalaVersion.value,
+      // monix 3.4.1 -> cats-effect 2.5.4 drags in cats-core 2.6.1, which predates
+      // Either.raiseWhen/raiseUnless (added in cats 2.10.0). Force the version used by `lang`.
+      "org.typelevel"            %% "cats-core"      % "2.13.0",
+      "org.typelevel"            %% "cats-kernel"    % "2.13.0",
       "com.google.code.gson"      % "gson"           % "2.14.0",
       "com.squareup.okio"         % "okio-jvm"       % "3.17.0",
       "org.apache.httpcomponents" % "httpclient"     % "4.5.14",
@@ -33,7 +37,7 @@ object Dependencies {
 
   // Node protobuf schemas
   lazy val protoSchemasLib =
-    "com.wavesplatform" % "protobuf-schemas" % "1.6.0" classifier "protobuf-src" intransitive ()
+    "tech.hearth" % "protobuf-schemas" % "0.1.0-SNAPSHOT" classifier "protobuf-src" intransitive ()
 
   private def pekkoModule(module: String) = "org.apache.pekko" %% s"pekko-$module" % "1.6.0"
 
@@ -68,7 +72,7 @@ object Dependencies {
   val sttp3      = sttp3Module("core")
   val sttp3Monix = sttp3Module("monix")
 
-  val console = Seq("com.github.scopt" %% "scopt" % "4.1.0")
+  val cli = Seq("com.github.scopt" %% "scopt" % "4.1.0")
 
   def amazonCorretto(c: String): ModuleID = "software.amazon.cryptools" % "AmazonCorrettoCryptoProvider" % "2.5.0" classifier c
 
@@ -78,24 +82,8 @@ object Dependencies {
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java
-    "org.bouncycastle" % "bcprov-jdk18on" % "1.84"
-  )
-
-  val lang = Def.setting(
-    Seq(
-      // defined here because %%% can only be used within a task or setting macro
-      // explicit dependency can likely be removed when monix 3 is released
-      monixModule("eval").value,
-      "org.typelevel" %%% s"cats-core" % "2.13.0",
-      "com.lihaoyi"   %%% "fastparse"  % "3.1.1",
-      "org.typelevel" %%% "cats-mtl"   % "1.7.0",
-      "ch.obermuhlner"  % "big-math"   % "2.3.2",
-      googleGuava, // BaseEncoding.base16()
-      curve25519,
-      "com.wavesplatform" % "zwaves" % "0.2.1",
-      web3jModule("crypto").excludeAll(ExclusionRule("org.bouncycastle", "bcprov-jdk15on")),
-      protoSchemasLib % "protobuf"
-    ) ++ cryptoProviders
+    "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
+    "tech.hearth" % "crypto" % "0.1.0-SNAPSHOT"
   )
 
   lazy val scalapbRuntimeJS = Def.setting(
@@ -157,8 +145,9 @@ object Dependencies {
       web3jModule("abi").excludeAll(ExclusionRule("org.bouncycastle", "bcprov-jdk15on")),
       "com.wavesplatform"         % "blst-java"                    % "0.3.15-1",
       amazonCorretto("linux-x86_64") % Optional,
-      amazonCorretto("linux-aarch_64") % Optional
-    ) ++ console ++ logDeps ++ protobuf.value
+      amazonCorretto("linux-aarch_64") % Optional,
+      web3jModule("crypto").excludeAll(ExclusionRule("org.bouncycastle", "bcprov-jdk15on")),
+    ) ++ cryptoProviders ++ cli ++ logDeps ++ protobuf.value
   )
 
   lazy val nodeTests = Seq(
@@ -198,7 +187,7 @@ object Dependencies {
       "com.softwaremill.diffx"             %% "diffx-core"             % "0.9.0" % Test,
       "com.softwaremill.diffx"             %% "diffx-scalatest-should" % "0.9.0" % Test,
       grpcModule("grpc-inprocess")          % Test
-    ) ++ Dependencies.console ++ Dependencies.logDeps ++ Dependencies.test
+    ) ++ Dependencies.cli ++ Dependencies.logDeps ++ Dependencies.test
   )
 
   lazy val circe = Def.setting {

@@ -56,56 +56,6 @@ class BlockSpecification extends PropSpec {
       )
       .explicitGet()
 
-  property("block with txs bytes/parse roundtrip version 1,2") {
-    Seq[Byte](1, 2).foreach { version =>
-      forAll(blockGen) { case (baseTarget, reference, generationSignature, recipient, transactionData) =>
-        val block = Block
-          .buildAndSign(
-            version,
-            time,
-            reference,
-            baseTarget,
-            generationSignature,
-            transactionData,
-            recipient,
-            featureVotes = Seq.empty,
-            rewardVote = -1L,
-            stateHash = None,
-            challengedHeader = None,
-            finalizationVoting = None
-          )
-          .explicitGet()
-        val parsedBlock = Block.parseBytes(block.bytes()).get
-        assert(block.signatureValid())
-        assert(parsedBlock.signatureValid())
-        assert(parsedBlock.header.generationSignature == generationSignature)
-        assert(parsedBlock.header.version.toInt == version)
-        assert(parsedBlock.header.generator == recipient.publicKey)
-      }
-    }
-  }
-
-  property("block version 1,2 could not contain feature votes") {
-    Seq[Byte](1, 2).foreach { version =>
-      forAll(blockGen) { case (baseTarget, reference, generationSignature, recipient, transactionData) =>
-        Block.buildAndSign(
-          version,
-          time,
-          reference,
-          baseTarget,
-          generationSignature,
-          transactionData,
-          recipient,
-          featureVotes = Seq(1),
-          rewardVote = -1L,
-          stateHash = None,
-          challengedHeader = None,
-          finalizationVoting = None
-        ) should produce("could not contain feature votes")
-      }
-    }
-  }
-
   property(s"feature flags limit is ${Block.MaxFeaturesInBlock}") {
     val version           = 3.toByte
     val supportedFeatures = (0 to Block.MaxFeaturesInBlock * 2).map(_.toShort)
@@ -125,37 +75,6 @@ class BlockSpecification extends PropSpec {
         challengedHeader = None,
         finalizationVoting = None
       ) should produce(s"Block could not contain more than ${Block.MaxFeaturesInBlock} feature votes")
-    }
-  }
-  property("block with txs bytes/parse roundtrip version 3") {
-    val version = 3.toByte
-
-    val featureSetGen: Gen[Seq[Short]] = Gen.choose(0, Block.MaxFeaturesInBlock).flatMap(fc => Gen.listOfN(fc, arbitrary[Short])).map(_.distinct)
-
-    forAll(blockGen, featureSetGen) { case ((baseTarget, reference, generationSignature, recipient, transactionData), featureVotes) =>
-      val block = Block
-        .buildAndSign(
-          version,
-          time,
-          reference,
-          baseTarget,
-          generationSignature,
-          transactionData,
-          recipient,
-          featureVotes,
-          rewardVote = -1L,
-          stateHash = None,
-          challengedHeader = None,
-          finalizationVoting = None
-        )
-        .explicitGet()
-      val parsedBlock = Block.parseBytes(block.bytes()).get
-      assert(block.signatureValid())
-      assert(parsedBlock.signatureValid())
-      assert(parsedBlock.header.generationSignature == generationSignature)
-      assert(parsedBlock.header.version.toInt == version)
-      assert(parsedBlock.header.generator == recipient.publicKey)
-      assert(parsedBlock.header.featureVotes == featureVotes)
     }
   }
 
@@ -191,15 +110,7 @@ class BlockSpecification extends PropSpec {
           )
         val (bytes, _) = Instrumented.withTimeMillis(block.bytes().dropRight(crypto.SignatureLength))
         val (hash, _)  = Instrumented.withTimeMillis(crypto.fastHash(bytes))
-        Instrumented.withTimeMillis(crypto.sign(acc.privateKey, hash))
-    }
-  }
-
-  ignore("serialize and deserialize big block") {
-    forAll(bigBlockGen(100 * 1000)) { block =>
-      val parsedBlock = Block.parseBytes(block.bytes()).get
-      block.signatureValid() shouldBe true
-      parsedBlock.signatureValid() shouldBe true
+        Instrumented.withTimeMillis(acc.sign(hash))
     }
   }
 }

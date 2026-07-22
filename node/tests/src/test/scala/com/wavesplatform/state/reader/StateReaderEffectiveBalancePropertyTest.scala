@@ -1,7 +1,7 @@
 package com.wavesplatform.state.reader
 
 import com.wavesplatform.TestValues
-import com.wavesplatform.block.Block.PlainBlockVersion
+import com.wavesplatform.block.Block.ProtoBlockVersion
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures.*
@@ -9,7 +9,7 @@ import com.wavesplatform.lagonaki.mocks.TestBlock.create as block
 import com.wavesplatform.settings.TestFunctionalitySettings.Enabled
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.diffs.*
-import com.wavesplatform.state.{BalanceSnapshot, LeaseBalance, Height}
+import com.wavesplatform.state.{BalanceSnapshot, Height, LeaseBalance}
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.TxHelpers.*
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, Transaction, TxHelpers}
@@ -20,15 +20,14 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
   property("No-interactions genesis account's effectiveBalance doesn't depend on depths") {
     val master = TxHelpers.signer(1)
 
-    val genesis = TxHelpers.genesis(master.toAddress)
-
     val emptyBlocksAmt = 10
     val confirmations  = 20
 
-    val genesisBlock = block(Seq(genesis))
+    // The master is credited by the genesis snapshot, which is applied to the block at height 1
+    val genesisBlock = block(Seq.empty)
     val nextBlocks   = List.fill(emptyBlocksAmt - 1)(block(Seq.empty))
-    assertDiffAndState(genesisBlock +: nextBlocks, block(Seq.empty)) { (_, newState) =>
-      newState.effectiveBalance(genesis.recipient, confirmations) shouldBe genesis.amount.value
+    assertDiffAndState(genesisBlock +: nextBlocks, block(Seq.empty), balances = Seq(AddrWithBalance(master.toAddress))) { (_, newState) =>
+      newState.effectiveBalance(master.toAddress, confirmations) shouldBe ENOUGH_AMT
     }
   }
 
@@ -39,17 +38,21 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
       val master = TxHelpers.signer(1)
       val leaser = TxHelpers.signer(2)
 
-      val genesis = TxHelpers.genesis(master.toAddress)
       val xfer1   = TxHelpers.transfer(master, leaser.toAddress, ENOUGH_AMT / 3)
       val lease1  = TxHelpers.lease(leaser, master.toAddress, xfer1.amount.value - Fee, fee = Fee)
       val xfer2   = TxHelpers.transfer(master, leaser.toAddress, ENOUGH_AMT / 3)
       val lease2  = TxHelpers.lease(leaser, master.toAddress, xfer2.amount.value - Fee, fee = Fee)
 
-      (leaser, genesis, xfer1, lease1, xfer2, lease2)
+      (master, leaser, xfer1, lease1, xfer2, lease2)
     }
 
-    val (leaser, genesis, xfer1, lease1, xfer2, lease2) = setup
-    assertDiffAndState(Seq(block(Seq(genesis)), block(Seq(xfer1, lease1))), block(Seq(xfer2, lease2)), fs) { (_, state) =>
+    val (master, leaser, xfer1, lease1, xfer2, lease2) = setup
+    assertDiffAndState(
+      Seq(block(Seq()), block(Seq(xfer1, lease1))), // Height 1: carries the genesis snapshot
+      block(Seq(xfer2, lease2)),
+      fs,
+      Seq(AddrWithBalance(master.toAddress))
+    ) { (_, state) =>
       val portfolio       = state.wavesPortfolio(lease1.sender.toAddress)
       val expectedBalance = xfer1.amount.value + xfer2.amount.value - 2 * Fee
       portfolio.balance shouldBe expectedBalance
@@ -178,7 +181,7 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
     val settings = DeterministicFinality.configure(_.copy(generationPeriodLength = 3))
     withDomain(settings, balances = AddrWithBalance.enoughBalances(account1, account2)) { d =>
       def appendBlock(txs: Transaction*): Unit = {
-        val block = d.createBlock(txs, strictTime = true, generator = account2, version = PlainBlockVersion)
+        val block = d.createBlock(txs, strictTime = true, generator = account2, version = ProtoBlockVersion)
         d.appender.appendBlock(block)
       }
 

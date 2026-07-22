@@ -1,17 +1,16 @@
 package com.wavesplatform.protobuf.transaction
 
-import com.wavesplatform.transaction as vt
 import com.wavesplatform.account.{AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.protobuf.*
-import com.wavesplatform.protobuf.order.AssetPair
-import com.wavesplatform.protobuf.order.Order.{PriceMode, Sender}
-import com.wavesplatform.protobuf.order.Order.PriceMode.{ASSET_DECIMALS, FIXED_DECIMALS, DEFAULT as DEFAULT_PRICE_MODE}
-import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals, Default as DefaultPriceMode}
-import vt.assets.exchange.OrderAuthentication
+import tech.hearth.protobuf.order.AssetPair
+import tech.hearth.protobuf.order.Order.PriceMode.{ASSET_DECIMALS, FIXED_DECIMALS, DEFAULT as DEFAULT_PRICE_MODE}
+import tech.hearth.protobuf.order.Order.PriceMode
+import com.wavesplatform.transaction as vt
 import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.transaction.assets.exchange.OrderType
+import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals, Default as DefaultPriceMode}
+import com.wavesplatform.transaction.assets.exchange.{OrderAuthentication, OrderType}
 import com.wavesplatform.transaction.{TxExchangeAmount, TxMatcherFee, TxOrderPrice}
 
 object PBOrders {
@@ -26,11 +25,8 @@ object PBOrders {
     } yield {
       VanillaOrder(
         order.version.toByte,
-        order.sender match {
-          case Sender.SenderPublicKey(value) => OrderAuthentication.OrderProofs(PublicKey(value.toByteStr), order.proofs.map(_.toByteStr))
-          case Sender.Eip712Signature(sig)   => OrderAuthentication.Eip712Signature(sig.toByteStr)
-          case Sender.Empty                  => throw new IllegalArgumentException("Order should have either senderPublicKey or eip712Signature")
-        },
+        // The sender is a plain field now, rather than a oneof of a public key and an ethereum signature
+        OrderAuthentication.OrderProofs(PublicKey(order.senderPublicKey.toByteStr), order.proofs.map(_.toByteStr)),
         PublicKey(order.matcherPublicKey.toByteArray),
         vt.assets.exchange
           .AssetPair(PBAmounts.toVanillaAssetId(order.getAssetPair.amountAssetId), PBAmounts.toVanillaAssetId(order.getAssetPair.priceAssetId)),
@@ -53,34 +49,33 @@ object PBOrders {
 
   def protobuf(order: VanillaOrder): PBOrder = {
     PBOrder(
-      AddressScheme.current.chainId,
-      order.matcherPublicKey.toByteString,
-      Some(AssetPair(PBAmounts.toPBAssetId(order.assetPair.amountAsset), PBAmounts.toPBAssetId(order.assetPair.priceAsset))),
-      order.orderType match {
+      chainId = AddressScheme.current.chainId,
+      senderPublicKey = order.orderAuthentication match {
+        case OrderAuthentication.OrderProofs(key, _) => key.toByteString
+      },
+      matcherPublicKey = order.matcherPublicKey.toByteString,
+      assetPair = Some(AssetPair(PBAmounts.toPBAssetId(order.assetPair.amountAsset), PBAmounts.toPBAssetId(order.assetPair.priceAsset))),
+      orderSide = order.orderType match {
         case vt.assets.exchange.OrderType.BUY  => PBOrder.Side.BUY
         case vt.assets.exchange.OrderType.SELL => PBOrder.Side.SELL
       },
-      order.amount.value,
-      order.price.value,
-      order.timestamp,
-      order.expiration,
-      Some((order.matcherFeeAssetId, order.matcherFee.value)),
-      order.version,
-      order.proofs.map(_.toByteString),
-      order.priceMode match {
+      amount = order.amount.value,
+      price = order.price.value,
+      timestamp = order.timestamp,
+      expiration = order.expiration,
+      matcherFee = Some((order.matcherFeeAssetId, order.matcherFee.value)),
+      version = order.version,
+      proofs = order.proofs.map(_.toByteString),
+      priceMode = order.priceMode match {
         case DefaultPriceMode => DEFAULT_PRICE_MODE
         case AssetDecimals    => ASSET_DECIMALS
         case FixedDecimals    => FIXED_DECIMALS
       },
-      order.attachment.getOrElse(ByteStr.empty).toByteString,
-      order.orderAuthentication match {
-        case OrderAuthentication.OrderProofs(key, _)        => Sender.SenderPublicKey(key.toByteString)
-        case OrderAuthentication.Eip712Signature(signature) => Sender.Eip712Signature(signature.toByteString)
-      }
+      attachment = order.attachment.getOrElse(ByteStr.empty).toByteString
     )
   }
 
-  private def vanillaOrderType(orderSide: com.wavesplatform.protobuf.order.Order.Side): Either[GenericError, OrderType] =
+  private def vanillaOrderType(orderSide: tech.hearth.protobuf.order.Order.Side): Either[GenericError, OrderType] =
     orderSide match {
       case PBOrder.Side.BUY             => Right(vt.assets.exchange.OrderType.BUY)
       case PBOrder.Side.SELL            => Right(vt.assets.exchange.OrderType.SELL)

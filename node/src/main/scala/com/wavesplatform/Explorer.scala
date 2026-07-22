@@ -3,21 +3,17 @@ package com.wavesplatform
 import com.google.common.hash.{Funnels, BloomFilter as GBloomFilter}
 import com.google.common.primitives.{Ints, Longs, Shorts}
 import com.wavesplatform.account.{Address, PublicKey}
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.api.common.{AddressPortfolio, CommonAccountsApi}
+import com.wavesplatform.api.common.AddressPortfolio
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.common.utils.{Base58, Base64}
 import com.wavesplatform.database.*
 import com.wavesplatform.database.protobuf.StaticAssetInfo
-import com.wavesplatform.lang.script.ContractScript
-import com.wavesplatform.lang.script.v1.ExprScript
+import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.settings.Constants
-import com.wavesplatform.state.diffs.{DiffsCommon, SetScriptTransactionDiff}
-import com.wavesplatform.state.{Blockchain, Height, LeaseDetails, Portfolio, SnapshotBlockchain, StateHash, StateSnapshot, TransactionId}
+import com.wavesplatform.state.{Blockchain, Height, LeaseDetails, Portfolio, StateHash, StateSnapshot, TransactionId}
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.utils.ScorexLogging
-import monix.execution.{ExecutionModel, Scheduler}
 import org.rocksdb.{ReadOptions, RocksDB}
 
 import java.io.File
@@ -26,8 +22,6 @@ import java.util
 import scala.annotation.tailrec
 import scala.collection.immutable.VectorMap
 import scala.collection.mutable
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters.*
 import scala.util.{Try, Using}
 
@@ -296,23 +290,6 @@ object Explorer extends ScorexLogging {
           txCounts.zipWithIndex.sorted.takeRight(100).foreach { case (count, id) =>
             log.info(s"${rdb.db.get(Keys.idToAddress(AddressId(id.toLong)))}: $count")
           }
-        case "ES" =>
-          rdb.db.iterateOver(KeyTag.AddressScript) { e =>
-            val asi = readAccountScriptInfo(e.getValue)
-            val estimationResult = asi.script match {
-              case ContractScript.ContractScriptImpl(stdLibVersion, expr) =>
-                SetScriptTransactionDiff.estimate(reader, stdLibVersion, expr)
-              case script: ExprScript =>
-                DiffsCommon.countVerifierComplexity(Some(script), reader, isAsset = false)
-              case _ => ???
-            }
-
-            estimationResult.left.foreach { error =>
-              val addressId = Longs.fromByteArray(e.getKey.drop(2).dropRight(4))
-              val address   = rdb.db.get(Keys.idToAddress(AddressId(addressId)))
-              log.info(s"$address: $error")
-            }
-          }
 
         case "CSAI" =>
           val PrefixLength = argument(1, "prefix").toInt
@@ -331,25 +308,6 @@ object Explorer extends ScorexLogging {
             prevAssetId = thisAssetId
           }
           log.info(s"Checked $assetCounter asset(s)")
-
-        case "LDT" =>
-          val s = Scheduler.fixedPool("foo-bar", 8, executionModel = ExecutionModel.AlwaysAsyncExecution)
-
-          def countEntries(): Future[Long] = {
-            CommonAccountsApi(() => SnapshotBlockchain(reader, StateSnapshot.empty), rdb, reader)
-              .dataStream(Address.fromString("3PC9BfRwJWWiw9AREE2B3eWzCks3CYtg4yo").explicitGet(), None)
-              .countL
-              .runToFuture(using s)
-          }
-
-          import scala.concurrent.ExecutionContext.Implicits.global
-
-          println(
-            Await.result(
-              Future.sequence(Seq.fill(16)(countEntries())),
-              Duration.Inf
-            )
-          )
 
         case "DDD" =>
           log.info(s"Collecting addresses")
@@ -372,7 +330,7 @@ object Explorer extends ScorexLogging {
           log.info(s"Loading state hash at $targetHeight")
           val deterministicFinalityActivated = reader.isFeatureActivated(BlockchainFeatures.DeterministicFinality, targetHeight.toInt)
           rdb.db.get(Keys.stateHash(targetHeight)).foreach { sh =>
-            println(StateHash.toJson(sh, deterministicFinalityActivated).toString())
+            println(StateHash.toJson(sh).toString())
           }
         case "CTI" =>
           log.info("Counting transaction IDs")

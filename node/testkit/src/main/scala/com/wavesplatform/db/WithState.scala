@@ -1,10 +1,8 @@
 package com.wavesplatform.db
 
-import cats.syntax.traverse.*
 import com.google.common.primitives.Shorts
-import com.wavesplatform.account.{Address, KeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
-import com.wavesplatform.block.Block.{GenesisBlockVersion, GenesisGenerationSignature, GenesisGenerator, GenesisReference}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.database.{KeyTag, RDB, RocksDBWriter, TestStorageFactory, loadActiveLeases}
@@ -15,36 +13,24 @@ import com.wavesplatform.history.Domain
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.lagonaki.mocks.TestBlock.BlockWithSigner
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.lang.directives.DirectiveDictionary
-import com.wavesplatform.lang.directives.values.*
 import com.wavesplatform.mining.{Miner, MiningConstraint}
 import com.wavesplatform.settings.{TestFunctionalitySettings as TFS, *}
 import com.wavesplatform.state.diffs.{BlockDiffer, ENOUGH_AMT}
 import com.wavesplatform.state.utils.TestRocksDB
-import com.wavesplatform.state.{
-  Blockchain,
-  BlockchainUpdaterImpl,
-  CompleteBlockchainUpdater,
-  FinalizationState,
-  GenesisBlockHeight,
-  Height,
-  NgState,
-  SnapshotBlockchain,
-  StateSnapshot,
-  TxStateSnapshotHashBuilder
-}
+import com.wavesplatform.state.*
 import com.wavesplatform.test.*
-import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.test.DomainPresets.*
+import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxHelpers.defaultAddress
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
-import com.wavesplatform.transaction.{BlockchainUpdater, GenesisTransaction, Transaction, TxHelpers}
+import com.wavesplatform.transaction.{BlockchainUpdater, Transaction, TxHelpers}
 import com.wavesplatform.{NTPTime, TestHelpers}
 import org.rocksdb.RocksDB
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, Suite}
+import tech.hearth.crypto.SigningKey
 
 import java.nio.file.Files
-import scala.concurrent.duration.*
 import scala.util.Using
 
 trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers with NTPTime { suite: Suite =>
@@ -111,51 +97,62 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     }
   }
 
-  protected def withTestState[A](bs: BlockchainSettings)(test: (BlockchainUpdaterImpl, RocksDBWriter) => A): A =
-    withTestState(TestSettings.Default.copy(blockchainSettings = bs))(test(_, _))
-
-  def withTestState[A](fs: FunctionalitySettings)(test: (BlockchainUpdaterImpl, RocksDBWriter) => A): A =
-    withTestState(TestRocksDB.createTestBlockchainSettings(fs))(test)
+  /** @param balances
+    *   Accounts to credit in the genesis snapshot. There are no genesis transactions any more, so this is the only way
+    *   to fund an account: the snapshot is built from the settings, and applied to the block at height 1.
+    */
+  def withTestState[A](fs: FunctionalitySettings, balances: Seq[AddrWithBalance], assets: Seq[GenesisAssetSettings])(test: (BlockchainUpdaterImpl, RocksDBWriter) => A): A =
+    withTestState(
+      TestSettings.Default
+        .copy(blockchainSettings = TestRocksDB.createTestBlockchainSettings(fs))
+        .withGenesisBalances(balances*)
+        .withGenesisAssets(assets*)
+    )(test)
 
   def assertDiffEi(
       preconditions: Seq[BlockWithSigner],
       block: BlockWithSigner,
       fs: FunctionalitySettings = TFS.Enabled,
-      enableExecutionLog: Boolean = false
+      balances: Seq[AddrWithBalance] = Seq.empty,
+      assets: Seq[GenesisAssetSettings] = Seq.empty
   )(
       assertion: Either[ValidationError, StateSnapshot] => Unit
-  ): Unit = withTestState(fs) { (bcu, state) =>
-    assertDiffEi(preconditions, block, bcu, state, enableExecutionLog)(assertion)
+  ): Unit = withTestState(fs, balances, assets) { (bcu, state) =>
+    assertDiffEi(preconditions, block, bcu, state)(assertion)
   }
 
   def assertDiffEi(
       preconditions: Seq[BlockWithSigner],
       block: BlockWithSigner,
       bcu: BlockchainUpdaterImpl,
-      state: RocksDBWriter,
-      enableExecutionLog: Boolean
+      state: RocksDBWriter
   )(
       assertion: Either[ValidationError, StateSnapshot] => Unit
   ): Unit = {
+    // blockWithComputedStateHash derives the block's state hash from the reward the next block earns, so the differ
+    // has to see that same reward - otherwise it hashes a different miner balance and rejects the block. This mirrors
+    // what assertDiffEiTraced and the real appender do.
+    def nextReward(blockchain: Blockchain): Option[Long] = if (blockchain.height > 0) bcu.computeNextReward else None
+
     def differ(blockchain: Blockchain, b: Block) =
       BlockDiffer.fromBlock(
-        blockchain,
+        SnapshotBlockchain(blockchain, nextReward(blockchain)),
         None,
         b,
         None,
         MiningConstraint.Unlimited,
-        b.header.generationSignature,
-        enableExecutionLog = enableExecutionLog
+        b.header.generationSignature
       )
 
     preconditions.foreach { precondition =>
       val preconditionBlock = blockWithComputedStateHash(precondition.block, precondition.signer, bcu).resultE.explicitGet()
+      val reward            = nextReward(state)
       val BlockDiffer.Result(snapshot, carryFee, totalFee, _, _, computedStateHash) = differ(state, preconditionBlock).explicitGet()
       state.append(
         snapshot,
         carryFee,
         totalFee,
-        reward = None,
+        reward,
         preconditionBlock.header.generationSignature,
         computedStateHash,
         preconditionBlock,
@@ -174,10 +171,11 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       preconditions: Seq[BlockWithSigner],
       block: BlockWithSigner,
       fs: FunctionalitySettings = TFS.Enabled,
-      enableExecutionLog: Boolean = false
+      balances: Seq[AddrWithBalance] = Seq.empty,
+      assets: Seq[GenesisAssetSettings] = Seq.empty
   )(
       assertion: TracedResult[ValidationError, StateSnapshot] => Unit
-  ): Unit = withTestState(fs) { (bcu, state) =>
+  ): Unit = withTestState(fs, balances, assets) { (bcu, state) =>
     def getCompBlockchain(blockchain: Blockchain) = {
       val reward = if (blockchain.height > 0) bcu.computeNextReward else None
       SnapshotBlockchain(blockchain, reward)
@@ -193,7 +191,6 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
         b.header.generationSignature,
         (_, _) => (),
         verify = true,
-        enableExecutionLog = enableExecutionLog,
         txSignParCheck = true
       )
 
@@ -223,9 +220,16 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     assertion(snapshot1.map(_.snapshot))
   }
 
-  private def assertDiffAndState(preconditions: Seq[BlockWithSigner], block: BlockWithSigner, fs: FunctionalitySettings, withNg: Boolean)(
+  private def assertDiffAndState(
+      preconditions: Seq[BlockWithSigner],
+      block: BlockWithSigner,
+      fs: FunctionalitySettings,
+      withNg: Boolean,
+      balances: Seq[AddrWithBalance],
+      assets: Seq[GenesisAssetSettings]
+  )(
       assertion: (StateSnapshot, Blockchain) => Unit
-  ): Unit = withTestState(fs) { (bcu, state) =>
+  ): Unit = withTestState(fs, balances, assets) { (bcu, state) =>
     def getCompBlockchain(blockchain: Blockchain) =
       if (withNg && fs.preActivatedFeatures.get(BlockchainFeatures.BlockReward.id).exists(_ <= blockchain.height)) {
         val reward = if (blockchain.height > 0) bcu.computeNextReward else None
@@ -294,18 +298,28 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     }).explicitGet()
   }
 
-  def assertNgDiffState(preconditions: Seq[BlockWithSigner], block: BlockWithSigner, fs: FunctionalitySettings = TFS.Enabled)(
+  def assertNgDiffState(
+      preconditions: Seq[BlockWithSigner],
+      block: BlockWithSigner,
+      fs: FunctionalitySettings = TFS.Enabled,
+      balances: Seq[AddrWithBalance] = Seq.empty
+  )(
       assertion: (StateSnapshot, Blockchain) => Unit
   ): Unit =
-    assertDiffAndState(preconditions, block, fs, withNg = true)(assertion)
+    assertDiffAndState(preconditions, block, fs, withNg = true, balances, Seq.empty)(assertion)
 
-  def assertDiffAndState(preconditions: Seq[BlockWithSigner], block: BlockWithSigner, fs: FunctionalitySettings = TFS.Enabled)(
+  def assertDiffAndState(
+      preconditions: Seq[BlockWithSigner],
+      block: BlockWithSigner,
+      fs: FunctionalitySettings = TFS.Enabled,
+      balances: Seq[AddrWithBalance] = Seq.empty
+  )(
       assertion: (StateSnapshot, Blockchain) => Unit
   ): Unit =
-    assertDiffAndState(preconditions, block, fs, withNg = false)(assertion)
+    assertDiffAndState(preconditions, block, fs, withNg = false, balances, Seq.empty)(assertion)
 
   def assertDiffAndState(fs: FunctionalitySettings)(test: (Seq[Transaction] => Either[ValidationError, Unit]) => Unit): Unit =
-    withTestState(fs) { (bcu, state) =>
+    withTestState(fs, Seq.empty, Seq.empty) { (bcu, state) =>
       def getCompBlockchain(blockchain: Blockchain) = {
         val reward = if (blockchain.height > 0) bcu.computeNextReward else None
         SnapshotBlockchain(blockchain, reward)
@@ -323,8 +337,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
 
       test { txs =>
         val nextHeight   = state.height + 1
-        val isProto      = state.activatedFeatures.get(BlockchainFeatures.BlockV5.id).exists(nextHeight > 1 && Height(nextHeight) >= _)
-        val block        = TestBlock.create(txs, if (isProto) Block.ProtoBlockVersion else Block.PlainBlockVersion)
+        val block        = TestBlock.create(txs, Block.ProtoBlockVersion)
         val checkedBlock = blockWithComputedStateHash(block.block, block.signer, bcu).resultE.explicitGet()
 
         val blockchain = getCompBlockchain(state)
@@ -355,86 +368,48 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     snapshot.leaseBalances.foreach { case (address, balance) => balance shouldBe db.leaseBalance(address) }
   }
 
-  def assertLeft(preconditions: Seq[BlockWithSigner], block: BlockWithSigner, fs: FunctionalitySettings = TFS.Enabled)(errorMessage: String): Unit =
-    assertDiffEi(preconditions, block, fs)(_ should produce(errorMessage))
+  def assertLeft(
+      preconditions: Seq[BlockWithSigner],
+      block: BlockWithSigner,
+      fs: FunctionalitySettings = TFS.Enabled,
+      balances: Seq[AddrWithBalance] = Seq.empty
+  )(errorMessage: String): Unit =
+    assertDiffEi(preconditions, block, fs, balances)(_ should produce(errorMessage))
 
   def blockWithComputedStateHash(
       blockWithoutStateHash: Block,
-      signer: KeyPair,
+      signer: SigningKey,
       blockchain: BlockchainUpdater & Blockchain
-  ): TracedResult[ValidationError, Block] = {
-    (if (blockchain.supportsLightNodeBlockFields(blockchain.height + 1)) {
-       val compBlockchain =
-         SnapshotBlockchain(blockchain, StateSnapshot.empty, blockWithoutStateHash, ByteStr.empty, 0, blockchain.computeNextReward, None)
-       val prevStateHash = blockchain.lastStateHash(Some(blockWithoutStateHash.header.reference))
-       TracedResult(
-         BlockDiffer
-           .createInitialBlockSnapshot(
-             blockchain,
-             blockWithoutStateHash.header.reference,
-             blockWithoutStateHash.header.generator.toAddress
-           )
-       )
-         .flatMap { initSnapshot =>
-           val initStateHash = BlockDiffer.computeInitialStateHash(compBlockchain, initSnapshot, prevStateHash)
-
-           TxStateSnapshotHashBuilder
-             .computeStateHash(
-               blockWithoutStateHash.transactionData,
-               initStateHash,
-               initSnapshot,
-               signer,
-               blockchain.lastBlockTimestamp,
-               blockWithoutStateHash.header.timestamp,
-               blockWithoutStateHash.header.challengedHeader.isDefined,
-               compBlockchain
-             )
-             .map(Some(_))
-         }
-     } else TracedResult(Right(None)))
-    .flatMap { stateHash =>
-      TracedResult(
-        Block.buildAndSign(
-          version = blockWithoutStateHash.header.version,
-          timestamp = blockWithoutStateHash.header.timestamp,
-          reference = blockWithoutStateHash.header.reference,
-          baseTarget = blockWithoutStateHash.header.baseTarget,
-          generationSignature = blockWithoutStateHash.header.generationSignature,
-          txs = blockWithoutStateHash.transactionData,
-          featureVotes = blockWithoutStateHash.header.featureVotes,
-          rewardVote = blockWithoutStateHash.header.rewardVote,
-          signer = signer,
-          stateHash = stateHash,
-          challengedHeader = None,
-          finalizationVoting = None
-        )
-      )
-    }
-  }
+  ): TracedResult[ValidationError, Block] =
+    WithState.blockWithComputedStateHash(blockWithoutStateHash, signer, blockchain)
 }
 
-trait WithDomain extends WithState { suite: Suite =>
+trait WithDomain extends WithState {
+  suite: Suite =>
   val DomainPresets = com.wavesplatform.test.DomainPresets
-  import DomainPresets.*
 
   def domainSettingsWithFS(fs: FunctionalitySettings): WavesSettings =
     DomainPresets.domainSettingsWithFS(fs)
 
   def withDomain[A](
-      settings: WavesSettings =
-        DomainPresets.SettingsFromDefaultConfig.addFeatures(BlockchainFeatures.SmartAccounts), // SmartAccounts to allow V2 transfers by default
+      settings: WavesSettings = DomainPresets.SettingsFromDefaultConfig,
       balances: Seq[AddrWithBalance] = Seq.empty,
       wrapDB: RocksDB => RocksDB = identity,
       wrapBU: CompleteBlockchainUpdater => CompleteBlockchainUpdater = identity,
       miner: Miner = Miner.StrictDisabledMiner,
-      time: TestTime = TestTime()
-  )(test: Domain => A): A =
-    withRocksDBWriter(settings) { blockchain =>
+      time: TestTime = TestTime(),
+      generators: Seq[SigningKey] = Nil
+  )(test: Domain => A): A = {
+    // The genesis block has no transactions: its balances are part of the genesis snapshot, which BlockDiffer
+    // builds from the settings. So they have to be in the settings the state itself is built from.
+    val settingsWithGenesis = settings.withGenesisBalances(balances*).withGenesisGenerators(generators*)
+
+    withRocksDBWriter(settingsWithGenesis) { blockchain =>
       var domain: Domain = null
       val bcu = wrapBU(
         new BlockchainUpdaterImpl(
           blockchain,
-          settings,
+          settingsWithGenesis,
           time,
           BlockchainUpdateTriggers.combined(domain.triggers),
           loadActiveLeases(rdb, _, _),
@@ -445,87 +420,111 @@ trait WithDomain extends WithState { suite: Suite =>
       try {
         val wrappedDb = wrapDB(rdb.db)
         assert(wrappedDb.getNativeHandle == rdb.db.getNativeHandle, "wrap function should not create new database instance")
-        domain =
-          Domain(new RDB(wrappedDb, rdb.txMetaHandle, rdb.txHandle, rdb.txSnapshotHandle, rdb.apiHandle, Seq.empty), bcu, blockchain, settings, time)
-        val genesis = balances.map { case AddrWithBalance(address, amount) =>
-          TxHelpers.genesis(address, amount)
-        }
-        if (genesis.nonEmpty) {
-          domain.appendBlock(
-            createGenesisWithStateHash(
-              genesis,
-              fillStateHash = blockchain.supportsLightNodeBlockFields(),
-              Some(settings.blockchainSettings.genesisSettings.initialBaseTarget)
-            )
-          )
-        }
+        domain = Domain(
+          new RDB(wrappedDb, rdb.txMetaHandle, rdb.txHandle, rdb.txSnapshotHandle, rdb.apiHandle, Seq.empty),
+          bcu,
+          blockchain,
+          settingsWithGenesis,
+          time
+        )
+        domain.appendBlock(WithState.createGenesisBlock(settingsWithGenesis))
         test(domain)
       } finally {
-        domain.utxPool.close()
+        // domain stays null if the setup above threw; closing it unconditionally would mask the real failure with an NPE
+        if (domain != null) domain.utxPool.close()
         bcu.shutdown()
       }
     }
-
-  private val allVersions = DirectiveDictionary[StdLibVersion].all
-  private val lastVersion = allVersions.last
-
-  def testDomain(
-      balances: Seq[AddrWithBalance] = Nil,
-      from: StdLibVersion = V3,
-      to: StdLibVersion = lastVersion
-  )(assertion: (StdLibVersion, Domain) => Unit): Unit =
-    allVersions
-      .filter(v => v >= from && v <= to)
-      .foreach(v => withDomain(DomainPresets.settingsForRide(v), balances)(assertion(v, _)))
-
-  def createGenesisWithStateHash(txs: Seq[GenesisTransaction], fillStateHash: Boolean, baseTarget: Option[Long] = None): Block = {
-    val timestamp = txs.map(_.timestamp).max
-    val genesisSettings = GenesisSettings(
-      timestamp,
-      timestamp,
-      txs.map(_.amount.value).sum,
-      None,
-      txs.map { tx =>
-        GenesisTransactionSettings(tx.recipient.toString, tx.amount.value)
-      },
-      baseTarget.getOrElse(2L),
-      60.seconds
-    )
-
-    (for {
-      txs <- genesisSettings.transactions.toList.map { gts =>
-        for {
-          address <- Address.fromString(gts.recipient)
-          tx      <- GenesisTransaction.create(address, gts.amount, genesisSettings.timestamp)
-        } yield tx
-      }.sequence
-      baseTarget = genesisSettings.initialBaseTarget
-      timestamp  = genesisSettings.blockTimestamp
-      block <- Block.buildAndSign(
-        GenesisBlockVersion,
-        timestamp,
-        GenesisReference,
-        baseTarget,
-        GenesisGenerationSignature,
-        txs,
-        GenesisGenerator,
-        Seq.empty,
-        rewardVote = -1,
-        Option.when(fillStateHash)(TxStateSnapshotHashBuilder.createGenesisStateHash(txs)),
-        challengedHeader = None,
-        finalizationVoting = None
-      )
-    } yield block).explicitGet()
   }
 }
 
 object WithState {
-  case class AddrWithBalance(address: Address, balance: Long = ENOUGH_AMT)
+  case class AddrWithBalance(address: Address, balance: Long = ENOUGH_AMT, assets: Map[IssuedAsset, Long] = Map.empty)
 
   object AddrWithBalance {
-    def enoughBalances(accs: KeyPair*): Seq[AddrWithBalance] =
+    def enoughBalances(accs: SigningKey*): Seq[AddrWithBalance] =
       accs.map(acc => AddrWithBalance(acc.toAddress))
 
-    implicit def toAddrWithBalance(v: (KeyPair, Long)): AddrWithBalance = AddrWithBalance(v._1.toAddress, v._2)
+    given Conversion[(Address, Long), AddrWithBalance] = v => AddrWithBalance(v._1, v._2)
+    given Conversion[(SigningKey, Long), AddrWithBalance] = v => AddrWithBalance(v._1.toAddress, v._2)
+    given Conversion[(SigningKey, IssuedAsset, Long), AddrWithBalance] = v => AddrWithBalance(v._1.toAddress, 0, Map(v._2 -> v._3))
+
   }
+
+  /** The generator the test harness mines with. Blocks forged by `defaultSigner` carry a VRF proof made with
+    * `defaultVrfKey`, and [[Blockchain.vrfPublicKeyOf]] only resolves that key from a commitment, so every test genesis
+    * has to commit the pair for its blocks to verify.
+    */
+  def genesisGeneratorFor(signer: SigningKey): GenesisGeneratorSettings =
+    GenesisGeneratorSettings(
+      ByteStr(signer.publicKey()).toString,
+      // Derived the same way TxHelpers.commitToGeneration derives them, so that a test re-committing this signer
+      // registers the very keys the genesis already committed for it
+      TxHelpers.blsKeyOf(signer).publicKey.base58,
+      ByteStr(TxHelpers.vrfKeyOf(signer).publicKey()).toString
+    )
+
+  def blockWithComputedStateHash(
+      blockWithoutStateHash: Block,
+      signer: SigningKey,
+      blockchain: BlockchainUpdater & Blockchain
+  ): TracedResult[ValidationError, Block] = {
+    val compBlockchain =
+      SnapshotBlockchain(blockchain, StateSnapshot.empty, blockWithoutStateHash, ByteStr.empty, 0, blockchain.computeNextReward, None)
+    val prevStateHash = blockchain.lastStateHash(Some(blockWithoutStateHash.header.reference))
+    // The block at height 1 earns no reward: its initial snapshot is the predefined genesis snapshot, exactly as
+    // BlockDiffer builds it. Using the reward snapshot here instead would compute a state hash the differ rejects.
+    TracedResult(
+      if (Height(blockchain.height + 1) == GenesisBlockHeight)
+        GenesisSnapshot.build(blockchain.settings.genesisSettings, blockchain.settings.functionalitySettings)
+      else
+        BlockDiffer
+          .createInitialBlockSnapshot(
+            blockchain,
+            blockWithoutStateHash.header.reference,
+            blockWithoutStateHash.header.generator.toAddress
+          )
+    )
+      .flatMap { initSnapshot =>
+        val initStateHash = BlockDiffer.computeInitialStateHash(initSnapshot, prevStateHash)
+
+        TxStateSnapshotHashBuilder
+          .computeStateHash(
+            blockWithoutStateHash.transactionData,
+            initStateHash,
+            initSnapshot,
+            signer,
+            blockchain.lastBlockTimestamp,
+            blockWithoutStateHash.header.timestamp,
+            blockWithoutStateHash.header.challengedHeader.isDefined,
+            compBlockchain
+          )
+          .map(Some(_))
+      }
+  }.flatMap { stateHash =>
+    TracedResult(
+      Block.buildAndSign(
+        version = blockWithoutStateHash.header.version,
+        timestamp = blockWithoutStateHash.header.timestamp,
+        reference = blockWithoutStateHash.header.reference,
+        baseTarget = blockWithoutStateHash.header.baseTarget,
+        generationSignature = blockWithoutStateHash.header.generationSignature,
+        txs = blockWithoutStateHash.transactionData,
+        featureVotes = blockWithoutStateHash.header.featureVotes,
+        rewardVote = blockWithoutStateHash.header.rewardVote,
+        signer = signer,
+        stateHash = stateHash,
+        challengedHeader = None,
+        finalizationVoting = None
+      )
+    )
+  }
+
+  def createGenesisBlock(settings: WavesSettings): Block =
+    Block
+      .genesis(
+        settings.blockchainSettings.genesisSettings,
+        settings.blockchainSettings.functionalitySettings
+      )
+      .explicitGet()
 }

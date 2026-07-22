@@ -3,7 +3,7 @@ package com.wavesplatform
 import cats.implicits.catsSyntaxOption
 import cats.syntax.apply.*
 import com.google.common.io.ByteStreams
-import com.google.common.primitives.{Ints, Longs}
+import com.google.common.primitives.Ints
 import com.wavesplatform.Exporter.Formats
 import com.wavesplatform.api.common.*
 import com.wavesplatform.block.{Block, BlockHeader}
@@ -12,13 +12,12 @@ import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.database.{DBExt, KeyTag, RDB}
 import com.wavesplatform.events.{BlockchainUpdateTriggers, UtxEvent}
 import com.wavesplatform.extensions.{Context, Extension}
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.StorageFactory
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.mining.Miner
 import com.wavesplatform.network.BlockSnapshotResponse
 import com.wavesplatform.protobuf.block.{PBBlocks, VanillaBlock}
-import com.wavesplatform.protobuf.snapshot.TransactionStateSnapshot
+import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult
 import com.wavesplatform.state.ParSignatureChecker.sigverify
@@ -217,8 +216,6 @@ object Importer extends ScorexLogging {
     val maxSize = importOptions.maxQueueSize
     val queue   = new mutable.Queue[(VanillaBlock, Option[BlockSnapshotResponse])](maxSize)
 
-    val CurrentTS = System.currentTimeMillis()
-
     @tailrec
     def readBlocks(queue: mutable.Queue[(VanillaBlock, Option[BlockSnapshotResponse])], remainCount: Int, maxCount: Int): Unit = {
       if (remainCount == 0) ()
@@ -249,12 +246,9 @@ object Importer extends ScorexLogging {
             if (blocksToSkip > 0) {
               blocksToSkip -= 1
             } else {
-              val rideV6                = blockchain.isFeatureActivated(BlockchainFeatures.RideV6, blockchain.height + (maxCount - remainCount) + 1)
-              lazy val parsedProtoBlock = PBBlocks.vanilla(PBBlocks.addChainId(protobuf.block.PBBlock.parseFrom(blockBytes)), unsafe = true)
-              val block = (if (1 < blockBytes.head && blockBytes.head < 5 && Longs.fromByteArray(blockBytes.slice(1, 9)) < CurrentTS)
-                             Block.parseBytes(blockBytes).orElse(parsedProtoBlock)
-                           else
-                             parsedProtoBlock).get
+              val rideV6                = true // RideV6 is active
+              lazy val parsedProtoBlock = PBBlocks.vanilla(PBBlocks.addChainId(protobuf.block.PBBlock.parseFrom(blockBytes)))
+              val block                 = parsedProtoBlock.get
               val blockSnapshot = snapshotsBytes.map { bytes =>
                 BlockSnapshotResponse(
                   block.id(),
@@ -389,7 +383,7 @@ object Importer extends ScorexLogging {
     sys.addShutdownHook {
       quit = true
       lock.synchronized {
-        if (blockchainUpdater.isFeatureActivated(BlockchainFeatures.NG) && blockchainUpdater.liquidBlockMeta.nonEmpty) {
+        if (blockchainUpdater.liquidBlockMeta.nonEmpty) { // NG is active
           // Force store liquid block in rocksdb
           val lastHeader = blockchainUpdater.lastBlockHeader.get.header
           val pseudoBlock = Block(

@@ -5,7 +5,7 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database
 import com.wavesplatform.database.RDB
 import com.wavesplatform.protobuf.PBSnapshots
-import com.wavesplatform.protobuf.snapshot.TransactionStateSnapshot
+import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import com.wavesplatform.state.{Blockchain, Height, StateSnapshot}
 
 trait History {

@@ -3,19 +3,19 @@ package com.wavesplatform.network
 import com.google.common.primitives.{Bytes, Ints}
 import com.typesafe.scalalogging.Logger
 import com.wavesplatform.account.PublicKey
-import com.wavesplatform.block.serialization.{BlockHeaderSerializer, MicroBlockSerializer}
-import com.wavesplatform.block.{Block, MicroBlock}
+import com.wavesplatform.block.serialization.BlockHeaderSerializer
+import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.EitherExt2.explicitGet
 import com.wavesplatform.crypto
 import com.wavesplatform.crypto.*
-import com.wavesplatform.mining.Miner.MaxTransactionsPerMicroblock
 import com.wavesplatform.mining.MiningConstraints
 import com.wavesplatform.network.message.*
 import com.wavesplatform.network.message.Message.*
 import com.wavesplatform.protobuf.block.{PBBlock, PBBlocks, PBMicroBlocks, SignedMicroBlock, EndorseBlock as PBEndorseBlock}
-import com.wavesplatform.protobuf.snapshot.{BlockSnapshot as PBBlockSnapshot, MicroBlockSnapshot as PBMicroBlockSnapshot}
+import tech.hearth.protobuf.snapshot.{BlockSnapshot as PBBlockSnapshot, MicroBlockSnapshot as PBMicroBlockSnapshot}
 import com.wavesplatform.protobuf.transaction.{PBSignedTransaction, PBTransactions}
-import com.wavesplatform.transaction.{DataTransaction, EthereumTransaction, Transaction, TransactionParsers}
+import com.wavesplatform.transaction.Transaction
 import io.netty.channel.ChannelHandler.Sharable
 
 import java.net.{InetAddress, InetSocketAddress}
@@ -186,16 +186,6 @@ object GetBlockSpec extends MessageSpec[GetBlock] {
   }
 }
 
-object BlockSpec extends MessageSpec[Block] {
-  override val messageCode: MessageCode = 23: Byte
-
-  override val maxLength: Int = 271 + TransactionSpec.maxLength * Block.MaxTransactionsPerBlockVer3
-
-  override def serializeData(block: Block): Array[Byte] = block.bytes()
-
-  override def deserializeData(bytes: Array[Byte]): Try[Block] = Block.parseBytes(bytes)
-}
-
 object ScoreSpec extends MessageSpec[BigInt] {
   override val messageCode: MessageCode = 24: Byte
 
@@ -211,19 +201,6 @@ object ScoreSpec extends MessageSpec[BigInt] {
   override def deserializeData(bytes: Array[Byte]): Try[BigInt] = Try {
     BigInt(1, bytes)
   }
-}
-
-object TransactionSpec extends MessageSpec[Transaction] {
-  override val messageCode: MessageCode = 25: Byte
-
-  // Modeled after Data Transaction https://wavesplatform.atlassian.net/wiki/spaces/MAIN/pages/119734321/Data+Transaction
-  override val maxLength: Int = (DataTransaction.MaxBytes * 1.2).toInt // 150 * 1024
-
-  override def deserializeData(bytes: Array[Byte]): Try[Transaction] =
-    TransactionParsers.parseBytes(bytes)
-
-  override def serializeData(tx: Transaction): Array[Byte] =
-    tx.bytes().ensuring(!tx.isInstanceOf[EthereumTransaction])
 }
 
 object MicroBlockInvSpec extends MessageSpec[MicroBlockInv] {
@@ -267,20 +244,6 @@ object MicroBlockRequestSpec extends MessageSpec[MicroBlockRequest] {
   override val maxLength: Int = 500
 }
 
-object LegacyMicroBlockResponseSpec extends MessageSpec[MicroBlockResponse] {
-  override val messageCode: MessageCode = 28: Byte
-
-  override def deserializeData(bytes: Array[Byte]): Try[MicroBlockResponse] =
-    MicroBlock.parseBytes(bytes).map(MicroBlockResponse(_))
-
-  override def serializeData(resp: MicroBlockResponse): Array[Byte] = {
-    require(resp.microblock.version < Block.ProtoBlockVersion)
-    MicroBlockSerializer.toBytes(resp.microblock)
-  }
-
-  override val maxLength: Int = 271 + TransactionSpec.maxLength * MaxTransactionsPerMicroblock
-}
-
 object PBBlockSpec extends MessageSpec[Block] {
   override val messageCode: MessageCode = 29: Byte
 
@@ -307,11 +270,11 @@ object PBMicroBlockSpec extends MessageSpec[MicroBlockResponse] {
 object PBTransactionSpec extends MessageSpec[Transaction] {
   override val messageCode: MessageCode = 31: Byte
 
-  // 624 + DataTransaction.MaxProtoBytes + 5 + 100 // Signed (8 proofs) PBTransaction + max DataTransaction.DataEntry + max proto serialization meta + gap
-  override val maxLength: Int = (DataTransaction.MaxBytes * 1.2).toInt
+  // A single transaction can never exceed the transaction bytes one block may carry (the largest is a mass transfer)
+  override val maxLength: Int = MiningConstraints.MaxTxsSizeInBytes
 
   override def deserializeData(bytes: Array[MessageCode]): Try[Transaction] =
-    PBTransactions.tryToVanilla(PBSignedTransaction.parseFrom(bytes))
+    Try(PBTransactions.vanilla(PBSignedTransaction.parseFrom(bytes)).explicitGet())
 
   override def serializeData(data: Transaction): Array[MessageCode] =
     PBTransactions.toByteArray(data)
@@ -388,12 +351,9 @@ object BasicMessagesRepo {
     GetSignaturesSpec,
     SignaturesSpec,
     GetBlockSpec,
-    BlockSpec,
     ScoreSpec,
-    TransactionSpec,
     MicroBlockInvSpec,
     MicroBlockRequestSpec,
-    LegacyMicroBlockResponseSpec,
     PBBlockSpec,
     PBMicroBlockSpec,
     PBTransactionSpec,
@@ -417,9 +377,9 @@ object BasicMessagesRepo {
     protected def codeOf(msg: AnyRef): Option[Byte] = {
       val aux: PartialFunction[AnyRef, Byte] = {
         case x: RawBytes                          => x.code
-        case _: Transaction                       => TransactionSpec.messageCode
+        case _: Transaction                       => PBTransactionSpec.messageCode
         case _: BigInt | _: LocalScoreChanged     => ScoreSpec.messageCode
-        case _: Block | _: BlockForged            => BlockSpec.messageCode
+        case _: Block | _: BlockForged            => PBBlockSpec.messageCode
         case x: com.wavesplatform.network.Message => specsByClasses(x.getClass).messageCode
         case _: Handshake                         => HandshakeSpec.messageCode
       }

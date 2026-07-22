@@ -1,81 +1,64 @@
 package com.wavesplatform.history
 
-import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.history.Domain.BlockchainUpdaterExt
-import com.wavesplatform.state.diffs.*
+import com.wavesplatform.db.WithDomain
+import com.wavesplatform.db.WithState.AddrWithBalance
+import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.test.*
-import com.wavesplatform.transaction.*
-import com.wavesplatform.transaction.transfer.*
-import org.scalacheck.Gen
+import com.wavesplatform.transaction.TxHelpers
+import tech.hearth.crypto.SigningKey
 
-class BlockchainUpdaterBlockOnlyTest extends PropSpec with DomainScenarioDrivenPropertyCheck {
+class BlockchainUpdaterBlockOnlyTest extends PropSpec, WithDomain {
 
-  def preconditionsAndPayments(paymentsAmt: Int): Gen[(GenesisTransaction, Seq[TransferTransaction])] =
-    for {
-      master    <- accountGen
-      recipient <- accountGen
-      ts        <- positiveIntGen
-      genesis: GenesisTransaction = GenesisTransaction.create(master.toAddress, ENOUGH_AMT, ts).explicitGet()
-      payments <- Gen.listOfN(paymentsAmt, wavesTransferGeneratorP(ts, master, recipient.toAddress))
-    } yield (genesis, payments)
+  private val master: SigningKey             = TxHelpers.signer(200)
+  private def balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(master.toAddress, ENOUGH_AMT))
 
   property("can apply valid blocks") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments(1)) {
-      case (domain, (genesis, payments)) =>
-        val blocks = chainBlocks(Seq(Seq(genesis), Seq(payments.head)))
-        blocks.map(block => domain.blockchainUpdater.processBlock(block) should beRight)
+    withDomain(balances = balances) { d =>
+      d.appendKeyBlock()
+      d.appendMicroBlockE(TxHelpers.transfer(master)) should beRight
     }
   }
 
   property("can apply, rollback and reprocess valid blocks") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments(2)) {
-      case (domain, (genesis, payments)) =>
-        val blocks = chainBlocks(Seq(Seq(genesis), Seq(payments.head), Seq(payments(1))))
-        domain.blockchainUpdater.processBlock(blocks.head) should beRight
-        domain.blockchainUpdater.height shouldBe 1
-        domain.blockchainUpdater.processBlock(blocks(1)) should beRight
-        domain.blockchainUpdater.height shouldBe 2
-        domain.blockchainUpdater.removeAfter(blocks.head.id()) should beRight
-        domain.blockchainUpdater.height shouldBe 1
-        domain.blockchainUpdater.processBlock(blocks(1)) should beRight
-        domain.blockchainUpdater.processBlock(blocks(2)) should beRight
+    withDomain(balances = balances) { d =>
+      val genesisId = d.lastBlockId
+      val block1    = d.appendKeyBlock()
+      d.blockchain.height shouldBe 2
+      val block2 = d.appendKeyBlock()
+      d.blockchain.height shouldBe 3
+
+      d.blockchainUpdater.removeAfter(genesisId) should beRight
+      d.blockchain.height shouldBe 1
+
+      d.appendBlockE(block1) should beRight
+      d.appendBlockE(block2) should beRight
     }
   }
 
   property("can't apply block with invalid signature") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments(1)) {
-      case (domain, (genesis, payment)) =>
-        val blocks = chainBlocks(Seq(Seq(genesis), payment))
-        domain.blockchainUpdater.processBlock(blocks.head) should beRight
-        domain.blockchainUpdater.processBlock(spoilSignature(blocks.last)) should produce("invalid signature")
+    withDomain(balances = balances) { d =>
+      val block = d.createBlock(Nil, ref = Some(d.lastBlockId))
+      d.appendBlockE(spoilSignature(block)) should produce("invalid signature")
     }
   }
 
   property("can't apply block with invalid signature after rollback") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments(1)) {
-      case (domain, (genesis, payment)) =>
-        val blocks = chainBlocks(Seq(Seq(genesis), payment))
-        domain.blockchainUpdater.processBlock(blocks.head) should beRight
-        domain.blockchainUpdater.processBlock(blocks(1)) should beRight
-        domain.blockchainUpdater.removeAfter(blocks.head.id()) should beRight
-        domain.blockchainUpdater.processBlock(spoilSignature(blocks(1))) should produce("invalid signature")
+    withDomain(balances = balances) { d =>
+      val block1 = d.appendKeyBlock()
+      val block2 = d.appendKeyBlock()
+      d.blockchainUpdater.removeAfter(block1.id()) should beRight
+      d.appendBlockE(spoilSignature(block2)) should produce("invalid signature")
     }
   }
 
-  property("can process 11 blocks and then rollback to genesis") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
-    scenario(preconditionsAndPayments(10)) {
-      case (domain, (genesis, payments)) =>
-        val blocks = chainBlocks(Seq(genesis) +: payments.map(Seq(_)))
-        blocks.foreach { b =>
-          domain.blockchainUpdater.processBlock(b) should beRight
-        }
-        domain.blockchainUpdater.removeAfter(blocks.head.id()) should beRight
+  property("can process 10 blocks and then rollback to genesis") {
+    withDomain(balances = balances) { d =>
+      val genesisId = d.lastBlockId
+      (1 to 10).foreach(_ => d.appendKeyBlock())
+      d.blockchain.height shouldBe 11
+
+      d.blockchainUpdater.removeAfter(genesisId) should beRight
+      d.blockchain.height shouldBe 1
     }
   }
 }

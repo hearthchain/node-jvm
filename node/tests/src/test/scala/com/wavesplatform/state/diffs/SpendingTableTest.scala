@@ -2,11 +2,12 @@ package com.wavesplatform.state.diffs
 
 import com.wavesplatform.consensus.GeneratingBalanceProvider
 import com.wavesplatform.db.WithState
+import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import com.wavesplatform.utils.Numbers
 
@@ -18,15 +19,14 @@ class SpendingTableTest extends FreeSpec with WithState {
   }
 
   "spending more than have" - {
-    def test(blockVersion3AfterHeight: Int)(hasLeasing: Boolean, hasDeposit: Boolean, spending: Spending, expectedError: String): Unit =
+    def test(hasLeasing: Boolean, hasDeposit: Boolean, spending: Spending, expectedError: String): Unit =
       s"hasLeasing=$hasLeasing, hasDeposit=$hasDeposit, spending=$spending" in {
         val settings = DomainPresets.DeterministicFinality
           .addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
           .blockchainSettings
           .functionalitySettings
           .copy(
-            blockVersion3AfterHeight = blockVersion3AfterHeight,
-            generationPeriodLength = 2
+            generationPeriodLength = 3
           )
 
         val spendingAmount = CommitToGenerationTransaction.DepositInWavelets + // To fit both leasing and deposit cases
@@ -35,7 +35,7 @@ class SpendingTableTest extends FreeSpec with WithState {
         val miner     = TxHelpers.signer(0)
         val minerAddr = miner.toAddress
 
-        val spender     = TxHelpers.signer(1)
+        val spender     = TxHelpers.signer(10)
         val spenderAddr = spender.toAddress
 
         val txFee       = 1.waves
@@ -45,25 +45,21 @@ class SpendingTableTest extends FreeSpec with WithState {
           Numbers.when(initLeasing > 0)(initLeasing + txFee) + Numbers.when(initDeposit > 0)(initDeposit + txFee)
 
         val initLeasingTx = Option.when(hasLeasing)(TxHelpers.lease(sender = spender, minerAddr, amount = initLeasing, fee = txFee))
-        val initDepositTx = Option.when(hasDeposit)(TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(3), fee = txFee))
+        val initDepositTx = Option.when(hasDeposit)(TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(4), fee = txFee))
         val spendingTx = spending match {
           case Spending.Leasing  => TxHelpers.lease(sender = spender, minerAddr, amount = spendingAmount, fee = txFee)
-          case Spending.Deposit  => TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(5), fee = txFee)
+          case Spending.Deposit  => TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(7), fee = txFee)
           case Spending.Transfer => TxHelpers.transfer(from = spender, to = minerAddr, amount = spendingAmount, fee = txFee)
         }
 
         assertDiffEiTraced(
           Seq(
-            TestBlock.create(
-              Seq(
-                TxHelpers.genesis(minerAddr, amount = 10_000.waves),
-                TxHelpers.genesis(spenderAddr, amount = initBalance)
-              )
-            ),
+            TestBlock.create(Seq()), // Height 1: carries the genesis snapshot
             TestBlock.create(miner, Seq(initLeasingTx, initDepositTx).flatten)
           ),
           TestBlock.create(miner, Seq(spendingTx)),
-          settings
+          settings,
+          Seq(AddrWithBalance(minerAddr, 10_000.waves), AddrWithBalance(spenderAddr, initBalance))
         ) { snapshotEi =>
           snapshotEi.resultE should produce(expectedError)
         }
@@ -76,7 +72,7 @@ class SpendingTableTest extends FreeSpec with WithState {
       (false, false, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required for block generation"),
       // CommonValidation
       (false, false, Spending.Transfer, "Transaction application leads to negative waves balance to (at least) temporary negative state"),
-      (false, true, Spending.Leasing, "trying to spend either a deposit or leased money"), // BalanceDiffValidation
+      (false, true, Spending.Leasing, "negative effective balance"), // BalanceDiffValidation
       // CommitToGenerationTransactionDiff
       (false, true, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required"),
       (false, true, Spending.Transfer, "trying to spend a deposit"), // BalanceDiffValidation
@@ -84,11 +80,11 @@ class SpendingTableTest extends FreeSpec with WithState {
       // CommitToGenerationTransactionDiff
       (true, false, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required for block generation"),
       // (true, false, Spending.Transfer, success), // Covered by BalanceDiffValidationTest
-      (true, true, Spending.Leasing, "trying to spend either a deposit or leased money"), // BalanceDiffValidation
+      (true, true, Spending.Leasing, "negative effective balance"), // BalanceDiffValidation
       // CommitToGenerationTransactionDiff
       (true, true, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required for block generation"),
-      (true, true, Spending.Transfer, "trying to spend either a deposit or leased money") // BalanceDiffValidation
-    ).foreach(test(blockVersion3AfterHeight = 1000))
+      (true, true, Spending.Transfer, "negative effective balance") // BalanceDiffValidation
+    ).foreach(test)
 
     "blockVersion3AfterHeight from 0" - Table(
       ("hasLeasing", "hasDeposit", "spending", "expectedError"),
@@ -109,6 +105,6 @@ class SpendingTableTest extends FreeSpec with WithState {
       // CommitToGenerationTransactionDiff
       (true, true, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required for block generation"),
       (true, true, Spending.Transfer, "negative effective balance") // BalanceDiffValidation
-    ).foreach(test(blockVersion3AfterHeight = 0))
+    ).foreach(test)
   }
 }

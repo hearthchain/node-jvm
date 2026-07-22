@@ -1,18 +1,15 @@
 package com.wavesplatform.utils
 
 import com.typesafe.config.ConfigFactory
-import com.wavesplatform.account.{Address, Alias}
+import com.wavesplatform.account.Address
 import com.wavesplatform.block.SignedBlockHeader
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto.bls.BlsPublicKey
-import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.settings.BlockchainSettings
 import com.wavesplatform.state.*
 import com.wavesplatform.state.TxMeta.Status
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.transaction.transfer.TransferTransactionLike
-import com.wavesplatform.transaction.{Asset, ERC20Address, Transaction}
+import com.wavesplatform.transaction.{Asset, Transaction}
 
 trait EmptyBlockchain extends Blockchain {
   override lazy val settings: BlockchainSettings = BlockchainSettings.fromRootConfig(ConfigFactory.load())
@@ -47,8 +44,6 @@ trait EmptyBlockchain extends Blockchain {
 
   override def wavesAmount(height: Int): BigInt = 0
 
-  override def transferById(id: ByteStr): Option[(Int, TransferTransactionLike)] = None
-
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] = None
 
   override def transactionInfos(ids: Seq[ByteStr]): Seq[Option[(TxMeta, Transaction)]] = Seq.empty
@@ -61,8 +56,6 @@ trait EmptyBlockchain extends Blockchain {
 
   override def assetDescription(id: IssuedAsset): Option[AssetDescription] = None
 
-  override def resolveAlias(a: Alias): Either[ValidationError, Address] = Left(GenericError("Empty blockchain"))
-
   override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = None
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = VolumeAndFee(0, 0)
@@ -70,16 +63,6 @@ trait EmptyBlockchain extends Blockchain {
   /** Retrieves Waves balance snapshot in the [from, to] range (inclusive) */
   override def balanceAtHeight(address: Address, height: Int, assetId: Asset = Waves): Option[(Int, Long)] = Option.empty
   override def balanceSnapshots(address: Address, from: Int, to: Option[ByteStr]): Seq[BalanceSnapshot]    = Seq.empty
-
-  override def accountScript(address: Address): Option[AccountScriptInfo] = None
-
-  override def hasAccountScript(address: Address): Boolean = false
-
-  override def assetScript(asset: IssuedAsset): Option[AssetScriptInfo] = None
-
-  override def accountData(acc: Address, key: String): Option[DataEntry[?]] = None
-
-  override def hasData(acc: Address): Boolean = false
 
   override def balance(address: Address, mayBeAssetId: Asset): Long = 0
 
@@ -93,11 +76,9 @@ trait EmptyBlockchain extends Blockchain {
 
   override def leaseBalances(addresses: Seq[Address]): Map[Address, LeaseBalance] = Map.empty
 
-  override def resolveERC20Address(address: ERC20Address): Option[IssuedAsset] = None
-
   override def lastStateHash(refId: Option[ByteStr]): ByteStr = TxStateSnapshotHashBuilder.InitStateHash
 
-  override def committedGenerators(at: GenerationPeriod): IndexedSeq[(Address, BlsPublicKey)] = IndexedSeq.empty
+  override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = IndexedSeq.empty
 
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = ConflictGenerators.empty
 }

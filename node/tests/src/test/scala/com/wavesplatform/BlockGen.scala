@@ -1,6 +1,5 @@
 package com.wavesplatform
 
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block
 import com.wavesplatform.block.Block.{GenerationSignatureLength, GenerationVRFSignatureLength, ProtoBlockVersion}
 import com.wavesplatform.common.state.ByteStr
@@ -8,21 +7,22 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.transaction.Transaction
 import org.scalacheck.Gen
 import org.scalatest.Suite
+import tech.hearth.crypto.{Crypto, KeyTree, SigningKey}
 
 trait BlockGen extends TransactionGen { suite: Suite =>
 
   import BlockGen.*
 
-  val blockParamGen: Gen[(Seq[Transaction], KeyPair)] = for {
+  val blockParamGen: Gen[(Seq[Transaction], SigningKey)] = for {
     count        <- Gen.choose(minTransactionsInBlockCount, maxTransactionsInBlockCount)
     transactions <- randomTransactionsGen(count)
     signer       <- accountGen
   } yield (transactions, signer)
 
-  def versionedBlockGen(txs: Seq[Transaction], signer: KeyPair, version: Byte): Gen[Block] =
+  def versionedBlockGen(txs: Seq[Transaction], signer: SigningKey, version: Byte): Gen[Block] =
     byteArrayGen(Block.BlockIdLength).flatMap(ref => versionedBlockGen(ByteStr(ref), txs, signer, version))
 
-  def versionedBlockGen(reference: ByteStr, txs: Seq[Transaction], signer: KeyPair, version: Byte): Gen[Block] =
+  def versionedBlockGen(reference: ByteStr, txs: Seq[Transaction], signer: SigningKey, version: Byte): Gen[Block] =
     for {
       baseTarget <- Gen.posNum[Long]
       genSig     <- if (version < ProtoBlockVersion) byteArrayGen(GenerationSignatureLength) else byteArrayGen(GenerationVRFSignatureLength)
@@ -44,7 +44,7 @@ trait BlockGen extends TransactionGen { suite: Suite =>
       )
       .explicitGet()
 
-  def blockGen(txs: Seq[Transaction], signer: KeyPair): Gen[Block] = versionedBlockGen(txs, signer, 1)
+  def blockGen(txs: Seq[Transaction], signer: SigningKey): Gen[Block] = versionedBlockGen(txs, signer, 1)
 
   val randomSignerBlockGen: Gen[Block] = for {
     (transactions, signer) <- blockParamGen
@@ -76,7 +76,7 @@ trait BlockGen extends TransactionGen { suite: Suite =>
 }
 
 object BlockGen {
-  val minTransactionsInBlockCount         = 1
-  val maxTransactionsInBlockCount         = 100
-  val predefinedSignerPrivateKey: KeyPair = KeyPair(ByteStr(Array.tabulate(10)(_.toByte)))
+  val minTransactionsInBlockCount            = 1
+  val maxTransactionsInBlockCount            = 100
+  val predefinedSignerPrivateKey: SigningKey = SigningKey.fromSeed(Crypto.defaultBackend().sha256(new Array[Byte](32)))
 }

@@ -5,7 +5,7 @@ import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.state.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{NumericExt, produce}
 import com.wavesplatform.transaction.CommitToGenerationTransaction.DepositInWavelets
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
@@ -231,7 +231,6 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
         defaultSettings.configure(
           _.copy(
             generationPeriodLength = 51,
-            generationBalanceDepthFrom50To1000AfterHeight = 1000
           )
         ),
         AddrWithBalance.enoughBalances(committedGenerator1) :+ AddrWithBalance(

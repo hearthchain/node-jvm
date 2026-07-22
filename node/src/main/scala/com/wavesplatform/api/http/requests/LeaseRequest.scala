@@ -1,6 +1,6 @@
 package com.wavesplatform.api.http.requests
 
-import com.wavesplatform.account.{AddressOrAlias, PublicKey}
+import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.Proofs
@@ -9,6 +9,7 @@ import play.api.libs.json.{Format, Json}
 
 case class LeaseRequest(
     version: Option[Byte],
+    chainId: Option[Byte],
     senderPublicKey: String,
     recipient: String,
     amount: Long,
@@ -19,11 +20,12 @@ case class LeaseRequest(
 ) extends TxBroadcastRequest[LeaseTransaction] {
   def toTx: Either[ValidationError, LeaseTransaction] =
     for {
-      validRecipient <- AddressOrAlias.fromString(recipient)
+      validRecipient <- Address.fromString(recipient)
       validProofs    <- toProofs(signature, proofs)
       validSender    <- PublicKey.fromBase58String(senderPublicKey)
       tx <- LeaseTransaction.create(
         version.getOrElse(1.toByte),
+        chainId.getOrElse(AddressScheme.current.chainId),
         validSender,
         validRecipient,
         amount,

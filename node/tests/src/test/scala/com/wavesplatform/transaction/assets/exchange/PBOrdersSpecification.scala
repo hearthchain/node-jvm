@@ -5,26 +5,26 @@ import com.wavesplatform.TestValues
 import com.wavesplatform.account.AddressScheme
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.protobuf.order.AssetPair as PBAssetPair
+import tech.hearth.protobuf.order.AssetPair as PBAssetPair
 import com.wavesplatform.protobuf.transaction.{PBAmounts, PBOrder, PBOrders}
 import com.wavesplatform.test.FlatSpec
 import com.wavesplatform.transaction.Asset.Waves
-import com.wavesplatform.transaction.smart.Verifier
 
 class PBOrdersSpecification extends FlatSpec {
+  // Order.sender is a plain field now, rather than a oneof of a public key and an ethereum signature
   private val protoOrder = PBOrder(
-    AddressScheme.current.chainId.toInt,
-    ByteString.copyFrom(TestValues.keyPair.publicKey.arr),
-    Some(PBAssetPair(PBAmounts.toPBAssetId(TestValues.asset), PBAmounts.toPBAssetId(Waves))),
-    PBOrder.Side.SELL,
+    chainId = AddressScheme.current.chainId.toInt,
+    senderPublicKey = ByteString.copyFrom(TestValues.keyPair.publicKey),
+    matcherPublicKey = ByteString.copyFrom(TestValues.keyPair.publicKey),
+    assetPair = Some(PBAssetPair(PBAmounts.toPBAssetId(TestValues.asset), PBAmounts.toPBAssetId(Waves))),
+    orderSide = PBOrder.Side.SELL,
     amount = 1000,
     price = 1000,
     timestamp = 1000,
     expiration = 10000,
     matcherFee = Some(PBAmounts.fromAssetAndAmount(Waves, 300000L)),
     version = 1,
-    proofs = Nil,
-    sender = PBOrder.Sender.SenderPublicKey(ByteString.copyFrom(TestValues.keyPair.publicKey.arr))
+    proofs = Nil
   )
 
   it should "validate asset pair" in {
@@ -73,20 +73,20 @@ class PBOrdersSpecification extends FlatSpec {
     val signed = PBOrders
       .vanilla(
         protoOrder.copy(
-          proofs = Seq(ByteString.copyFrom(Base58.decode("5f5irpd67tknEkHr9GejWSC7poZGfdaZabV84GjxifxqdtMKfcU8QnhZYBQR9F54GjfTcA8a91DSAb79CTtFoxnd")))
+          proofs = Seq(ByteString.copyFrom(Base58.decode("4FbthG8Dq2kmkNykEdjawdXKQkwRFyD1rXQGCiFH8ThL5ZDceqM2USnRzCRiNwpQfXCwhNzS9c5RQ8wuQsSAxRSu")))
         )
       ).explicitGet()
-    Verifier.verifyAsEllipticCurveSignature(signed, true) shouldBe Symbol("right")
+    signed.firstProofIsValidSignatureAfterV6 shouldBe Symbol("right")
 
     val signedV4 = PBOrders
       .vanilla(
         protoOrder.copy(
           version = Order.V4,
-          proofs = Seq(ByteString.copyFrom(Base58.decode("2kRQDV8TbSEVe9B2yy8XR8XijYrbxEXTvptxuCr42Vp6u1psZyEzaRj6eAb267zA2Tm5D8EGN8FTMQFGdQDcyNT8")))
+          proofs = Seq(ByteString.copyFrom(Base58.decode("wx7L8EBk9hWmu9oZtFFWjpikJEin7TsXtiSv4K5Nw4g1pD86EEzpuV32hiaqoJECQCa9YuonprmrSqjA1rEKX5Z")))
         )
       ).explicitGet()
 
-    Verifier.verifyAsEllipticCurveSignature(signedV4, true) shouldBe Symbol("right")
+    signedV4.firstProofIsValidSignatureAfterV6 shouldBe Symbol("right")
   }
 
   it should "handle roundtrip" in {

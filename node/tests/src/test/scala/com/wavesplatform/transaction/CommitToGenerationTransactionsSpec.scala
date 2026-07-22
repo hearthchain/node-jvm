@@ -1,5 +1,7 @@
 package com.wavesplatform.transaction
 
+import com.google.common.primitives.Ints
+import tech.hearth.crypto.{Crypto, VrfKey}
 import com.wavesplatform.account.{AddressScheme, PrivateKey, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
@@ -15,8 +17,11 @@ import scala.util.{Failure, Success}
 
 class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
   private val wavesSigner = TxHelpers.signer(0)
-  private val blsKp       = BlsKeyPair(wavesSigner.privateKey)
+  private val blsKp       = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(0)))
   private val sig         = CommitToGenerationTransaction.mkPopSignature(blsKp, Height(3000))
+  private val vrfKey      = VrfKey.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(0)))
+  private val vrfPk       = ByteStr(vrfKey.publicKey())
+  private val vrfSig      = CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, Height(3000))
 
   private val origTx = CommitToGenerationTransaction(
     version = TxVersion.V1,
@@ -26,6 +31,8 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
     timestamp = 1526287561757L,
     fee = TxPositiveAmount.unsafeFrom(100000000),
     commitmentSignature = sig,
+    vrfPublicKey = vrfPk,
+    vrfCommitmentSignature = vrfSig,
     proofs = Proofs(ByteStr.decodeBase58("28kE1uN1pX2bwhzr9UHw5UuB9meTFEDFgeunNgy6nZWpHX4pzkGYotu8DhQ88AdqUG6Yy5wcXgHseKPBUygSgRMJ").get),
     chainId = AddressScheme.current.chainId
   )
@@ -42,7 +49,9 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
       "generationPeriodStart": 3000,
       "endorserPublicKey": "6CagLT3FjEcaNHPYCaG2dcfEfzDj6ynVeZbxbLHkHdfzvbfBmBMkkatTYcBXD9cHMU",
+      "vrfPublicKey": "$vrfPk",
       "commitmentSignature": "$sig",
+      "vrfCommitmentSignature": "$vrfSig",
       "proofs": [
         "28kE1uN1pX2bwhzr9UHw5UuB9meTFEDFgeunNgy6nZWpHX4pzkGYotu8DhQ88AdqUG6Yy5wcXgHseKPBUygSgRMJ"
       ],
@@ -64,7 +73,7 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
   "Expected BLS key and PoP" in {
     val wavesPk = PrivateKey(ByteStr.decodeBase58("7UR2CZi6Gv6v1yqmgcPDD98ZtosvtHnNZRxvrHA2Tuyn").get)
 
-    val blsKp = BlsKeyPair(wavesPk)
+    val blsKp = BlsKeyPair.fromSeed(wavesPk.arr)
     blsKp.publicKey.byteStr.base64Raw shouldBe "jrugi0W0es2WxuHoptQtchqwactZsldOGucYObZrEIOpxbWmhL8dodvpnzA+2qUf"
 
     CommitToGenerationTransaction.mkPopSignature(blsKp, Height(1001)).byteStr.base64Raw shouldBe

@@ -1,19 +1,14 @@
 package com.wavesplatform.state
 
 import cats.syntax.option.*
-import com.wavesplatform.account.{Address, Alias, PublicKey}
+import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{Block, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.crypto.bls.BlsPublicKey
-import com.wavesplatform.features.BlockchainFeatures.RideV6
-import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.settings.BlockchainSettings
 import com.wavesplatform.state.TxMeta.Status
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.TxValidationError.{AliasDoesNotExist, AliasIsDisabled}
-import com.wavesplatform.transaction.transfer.{TransferTransaction, TransferTransactionLike}
-import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, ERC20Address, Transaction}
+import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, Transaction}
 
 case class SnapshotBlockchain(
     inner: Blockchain,
@@ -77,11 +72,6 @@ case class SnapshotBlockchain(
     inner.leaseBalances(innerBalances) ++ snapshotBalances
   }
 
-  override def assetScript(asset: IssuedAsset): Option[AssetScriptInfo] =
-    maybeSnapshot
-      .flatMap(_.assetScripts.get(asset))
-      .orElse(inner.assetScript(asset))
-
   override def assetDescription(asset: IssuedAsset): Option[AssetDescription] =
     SnapshotBlockchain.assetDescription(asset, snapshot, height, inner)
 
@@ -92,14 +82,6 @@ case class SnapshotBlockchain(
       case None            => newer
     }
   }
-
-  override def transferById(id: ByteStr): Option[(Int, TransferTransactionLike)] =
-    snapshot.transactions
-      .get(id)
-      .collect { case NewTransactionInfo(tx: TransferTransaction, _, _, TxMeta.Status.Succeeded, _) =>
-        (height, tx)
-      }
-      .orElse(inner.transferById(id))
 
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions
@@ -134,12 +116,6 @@ case class SnapshotBlockchain(
 
   override def finalizedHeightAt(at: Height): Option[Height] = inner.finalizedHeightAt(at)
 
-  override def resolveAlias(alias: Alias): Either[ValidationError, Address] = inner.resolveAlias(alias) match {
-    case l @ Left(AliasIsDisabled(_)) => l
-    case Right(addr)                  => Right(snapshot.aliases.getOrElse(alias, addr))
-    case Left(_)                      => snapshot.aliases.get(alias).toRight(AliasDoesNotExist(alias))
-  }
-
   override def containsTransaction(tx: Transaction): Boolean =
     snapshot.transactions.contains(tx.id()) || inner.containsTransaction(tx)
 
@@ -167,36 +143,12 @@ case class SnapshotBlockchain(
       val deposit = this.generationDeposit(address, h)
 
       val bs         = BalanceSnapshot(h, Portfolio(balance, lease, generationDeposit = deposit))
-      val height2Fix = h.toInt == 2 && from1 < 2 && inner.isFeatureActivated(RideV6)
+      val height2Fix = h.toInt == 2 && from1 < 2 // RideV6 is active
       if (inner.height > 0 && (from1 < h.toInt - 1 || height2Fix))
         bs +: inner.balanceSnapshots(address, from1, to)
       else
         Seq(bs)
     }
-  }
-
-  override def accountScript(address: Address): Option[AccountScriptInfo] =
-    snapshot.accountScriptsByAddress.get(address) match {
-      case None            => inner.accountScript(address)
-      case Some(None)      => None
-      case Some(Some(scr)) => Some(scr)
-    }
-
-  override def hasAccountScript(address: Address): Boolean =
-    snapshot.accountScriptsByAddress.get(address) match {
-      case None          => inner.hasAccountScript(address)
-      case Some(None)    => false
-      case Some(Some(_)) => true
-    }
-
-  override def accountData(acc: Address, key: String): Option[DataEntry[?]] =
-    (for {
-      d <- snapshot.accountData.get(acc)
-      e <- d.get(key)
-    } yield e).orElse(inner.accountData(acc, key)).filterNot(_.isEmpty)
-
-  override def hasData(acc: Address): Boolean = {
-    snapshot.accountData.contains(acc) || inner.hasData(acc)
   }
 
   override def carryFee(refId: Option[ByteStr]): Long = carry
@@ -244,18 +196,17 @@ case class SnapshotBlockchain(
       .collect { case (_, hitSource) if this.height == height => hitSource }
       .orElse(inner.hitSource(height))
 
-  override def resolveERC20Address(address: ERC20Address): Option[IssuedAsset] =
-    inner
-      .resolveERC20Address(address)
-      .orElse(snapshot.erc20Addresses.get(address))
-
   override def lastStateHash(refId: Option[ByteStr]): BlockId =
     stateHash.orElse(blockMeta.flatMap(_._1.header.stateHash)).getOrElse(inner.lastStateHash(refId))
 
-  override def committedGenerators(at: GenerationPeriod): IndexedSeq[(Address, BlsPublicKey)] = {
-    val base   = inner.committedGenerators(at)
-    val atNext = this.currentGenerationPeriod.exists(_.next == at)
-    if (atNext) base ++ snapshot.nextCommittedGenerators.map { case (pk, blsPk) => pk.toAddress -> blsPk } else base
+  override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = {
+    val base = inner.committedGenerators(at)
+    // Generators committed in the genesis block generate from the very first period, everyone else from the next one.
+    // Mirrors how Caches.append persists them once the block is no longer liquid.
+    val committedHere =
+      if (Height(this.height) == GenesisBlockHeight) this.currentGenerationPeriod.contains(at)
+      else this.currentGenerationPeriod.exists(_.next == at)
+    if (committedHere) base ++ snapshot.nextCommittedGenerators.map(_.toCommittedGenerator) else base
   }
 
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = {
@@ -311,10 +262,8 @@ object SnapshotBlockchain {
       height: Int,
       inner: Blockchain
   ): Option[AssetDescription] = {
-    lazy val volume      = snapshot.assetVolumes.get(asset)
-    lazy val info        = snapshot.assetNamesAndDescriptions.get(asset)
-    lazy val sponsorship = snapshot.sponsorships.get(asset).map(_.minFee)
-    lazy val script      = snapshot.assetScripts.get(asset)
+    lazy val volume = snapshot.assetVolumes.get(asset)
+    lazy val info   = snapshot.assetNamesAndDescriptions.get(asset)
     snapshot.assetStatics
       .get(asset)
       .map { case (static, assetNum) =>
@@ -327,8 +276,6 @@ object SnapshotBlockchain {
           volume.get.isReissuable,
           volume.get.volume,
           info.get.lastUpdatedAt,
-          script,
-          sponsorship.getOrElse(0),
           static.nft,
           assetNum,
           Height(height)
@@ -343,9 +290,7 @@ object SnapshotBlockchain {
               reissuable = volume.map(_.isReissuable).getOrElse(d.reissuable),
               name = info.map(_.name).getOrElse(d.name),
               description = info.map(_.description).getOrElse(d.description),
-              lastUpdatedAt = info.map(_.lastUpdatedAt).getOrElse(d.lastUpdatedAt),
-              sponsorship = sponsorship.getOrElse(d.sponsorship),
-              script = script.orElse(d.script)
+              lastUpdatedAt = info.map(_.lastUpdatedAt).getOrElse(d.lastUpdatedAt)
             )
           )
       )

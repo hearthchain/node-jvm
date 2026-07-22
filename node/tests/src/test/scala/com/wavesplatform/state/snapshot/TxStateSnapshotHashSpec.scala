@@ -6,10 +6,7 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base64
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.crypto.fastHash
-import com.wavesplatform.lang.directives.values.V6
-import com.wavesplatform.lang.v1.compiler.TestCompiler
-import com.wavesplatform.protobuf.snapshot.{TransactionStatus, TransactionStateSnapshot as TSS}
-import com.wavesplatform.protobuf.transaction.DataEntry
+import tech.hearth.protobuf.snapshot.{TransactionStatus, TransactionStateSnapshot as TSS}
 import com.wavesplatform.protobuf.{Amount, PBSnapshots}
 import com.wavesplatform.state.*
 import com.wavesplatform.test.*
@@ -35,77 +32,36 @@ class TxStateSnapshotHashSpec extends PropSpec {
   private val orderId1 = hashInt(0xee23ef22)
   private val orderId2 = hashInt(0xbb77ef29)
 
-  private val testScript = bs(TestCompiler(V6).compileExpression("true").bytes().arr)
 
   private val wavesBalances = TSS(balances =
     Seq(
-      TSS.Balance(bs(address1.bytes), Some(Amount(amount = 10.waves))),
-      TSS.Balance(bs(address2.bytes), Some(Amount(amount = 20.waves)))
+      TSS.Balance(bs(address1.toBytes), Some(Amount(amount = 10.waves))),
+      TSS.Balance(bs(address2.toBytes), Some(Amount(amount = 20.waves)))
     )
   )
 
   private val assetBalances = TSS(balances =
     Seq(
-      TSS.Balance(bs(address1.bytes), Some(Amount(assetId1, 10_000))),
-      TSS.Balance(bs(address2.bytes), Some(Amount(assetId2, 20_000)))
+      TSS.Balance(bs(address1.toBytes), Some(Amount(assetId1, 10_000))),
+      TSS.Balance(bs(address2.toBytes), Some(Amount(assetId2, 20_000)))
     )
   )
-
-  private val dataEntries = TSS(accountData =
-    Seq(
-      TSS.AccountData(
-        bs(address1.bytes),
-        Seq(
-          DataEntry("foo", DataEntry.Value.Empty),
-          DataEntry("bar", DataEntry.Value.StringValue("StringValue")),
-          DataEntry("baz", DataEntry.Value.BinaryValue(bs(address1.bytes)))
-        )
-      ),
-      TSS.AccountData(
-        bs(address2.bytes),
-        Seq(
-          DataEntry("foo", DataEntry.Value.IntValue(1200)),
-          DataEntry("bar", DataEntry.Value.BoolValue(true))
-        )
-      )
-    )
-  )
-
-  private val accountScript = TSS(accountScripts =
-    Some(
-      TSS.AccountScript(
-        bs(signer101.publicKey.arr),
-        testScript,
-        250
-      )
-    )
-  )
-
-  private val assetScript = TSS(assetScripts = Some(TSS.AssetScript(assetId2, testScript)))
 
   private val newLease = TSS(
     leaseBalances = Seq(
-      TSS.LeaseBalance(bs(address1.bytes), out = 45.waves),
-      TSS.LeaseBalance(bs(address2.bytes), in = 55.waves)
+      TSS.LeaseBalance(bs(address1.toBytes), out = 45.waves),
+      TSS.LeaseBalance(bs(address2.toBytes), in = 55.waves)
     ),
     newLeases = Seq(
-      TSS.NewLease(leaseId, bs(signer101.publicKey.arr), bs(address2.bytes), 25.waves)
+      TSS.NewLease(leaseId, bs(signer101.publicKey()), bs(address2.toBytes), 25.waves)
     )
   )
 
   private val cancelledLease = TSS(
-    leaseBalances = Seq(TSS.LeaseBalance(bs(address3.bytes), out = 20.waves), TSS.LeaseBalance(bs(TxHelpers.address(104).bytes), in = 0.waves)),
+    leaseBalances = Seq(TSS.LeaseBalance(bs(address3.toBytes), out = 20.waves), TSS.LeaseBalance(bs(TxHelpers.address(104).toBytes), in = 0.waves)),
     cancelledLeases = Seq(
       TSS.CancelledLease(leaseId)
     )
-  )
-
-  private val sponsorship = TSS(
-    sponsorships = Seq(TSS.Sponsorship(assetId2, 5500))
-  )
-
-  private val alias = TSS(
-    aliases = Some(TSS.Alias(bs(address2.bytes), "wavesevo"))
   )
 
   private val volumeAndFee = TSS(
@@ -143,7 +99,7 @@ class TxStateSnapshotHashSpec extends PropSpec {
   )
   private val failedTransaction = TSS(
     balances = Seq(
-      TSS.Balance(bs(address2.bytes), Some(Amount(amount = 25.995.waves)))
+      TSS.Balance(bs(address2.toBytes), Some(Amount(amount = 25.995.waves)))
     ),
     transactionStatus = TransactionStatus.FAILED
   )
@@ -154,28 +110,23 @@ class TxStateSnapshotHashSpec extends PropSpec {
   private val withCommitment = TSS(
     generationCommitment = Some(
       TSS.GenerationCommitment(
-        bs(signer101.publicKey.arr),
-        bs(BlsKeyPair(signer101.privateKey).publicKey.byteStr.arr)
+        bs(signer101.publicKey()),
+        bs(BlsKeyPair.fromSeed(Ints.toByteArray(101)).publicKey.byteStr.arr)
       )
     )
   )
 
   private val all = TSS(
-    assetBalances.balances ++ wavesBalances.balances,
-    newLease.leaseBalances ++ cancelledLease.leaseBalances,
-    newLease.newLeases,
-    cancelledLease.cancelledLeases,
-    newAsset.assetStatics,
-    newAsset.assetVolumes ++ reissuedAsset.assetVolumes,
-    newAsset.assetNamesAndDescriptions ++ renamedAsset.assetNamesAndDescriptions,
-    newAsset.assetScripts,
-    alias.aliases,
-    volumeAndFee.orderFills,
-    accountScript.accountScripts,
-    dataEntries.accountData,
-    sponsorship.sponsorships,
-    failedTransaction.transactionStatus,
-    withCommitment.generationCommitment
+    balances = assetBalances.balances ++ wavesBalances.balances,
+    leaseBalances = newLease.leaseBalances ++ cancelledLease.leaseBalances,
+    newLeases = newLease.newLeases,
+    cancelledLeases = cancelledLease.cancelledLeases,
+    assetStatics = newAsset.assetStatics,
+    assetVolumes = newAsset.assetVolumes ++ reissuedAsset.assetVolumes,
+    assetNamesAndDescriptions = newAsset.assetNamesAndDescriptions ++ renamedAsset.assetNamesAndDescriptions,
+    orderFills = volumeAndFee.orderFills,
+    transactionStatus = failedTransaction.transactionStatus,
+    generationCommitment = withCommitment.generationCommitment
   )
 
   private val testData = Table(
@@ -197,30 +148,6 @@ class TxStateSnapshotHashSpec extends PropSpec {
       "16c4803d12ee8e9d6c705ca6334fd84f57c0e78c4ed8a9a3dc6c28dcd9b29a34"
     ),
     (
-      "data entries",
-      dataEntries,
-      "YloKGgFUYP1Q7yDeRXEgffuciL58HC+KIscK2I+1EgUKA2ZvbxISCgNiYXJqC1N0cmluZ1ZhbHVlEiEKA2JhemIaAVRg/VDvIN5FcSB9+5yIvnwcL4oixwrYj7ViLwoaAVRCxcljc/UP2BNQYE8cFPKmySVq2v0ZsCoSCAoDZm9vULAJEgcKA2JhclgB",
-      ByteStr.empty,
-      "16c4803d12ee8e9d6c705ca6334fd84f57c0e78c4ed8a9a3dc6c28dcd9b29a34",
-      "d33269372999bfd8f7afdf97e23bc343bcf3812f437e8971681a37d56868ec8a"
-    ),
-    (
-      "account script",
-      accountScript,
-      "Wi4KIFDHWa9Cd6VU8M20LLFHzbBTveERf1sEOw19SUS40GBoEgcGAQaw0U/PGPoB",
-      ByteStr.empty,
-      "d33269372999bfd8f7afdf97e23bc343bcf3812f437e8971681a37d56868ec8a",
-      "dcdf7df91b11fdbeb2d99c4fd64abb4657adfda15eed63b1d4730aa2b6275ee2"
-    ),
-    (
-      "asset script",
-      assetScript,
-      "QisKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEgcGAQaw0U/P",
-      ByteStr.empty,
-      "dcdf7df91b11fdbeb2d99c4fd64abb4657adfda15eed63b1d4730aa2b6275ee2",
-      "d3c7f2aeb1d978ecebc2fe1f0555e4378cef5171db460d8bbfebef0e59c3a44c"
-    ),
-    (
       "new lease",
       newLease,
       "EiIKGgFUYP1Q7yDeRXEgffuciL58HC+KIscK2I+1GICa4uEQEiIKGgFUQsXJY3P1D9gTUGBPHBTypsklatr9GbAqEICuzb4UGmYKILiCMyyFggW8Zd2LGt/AtMr7WWp+kfWbzlN93pXZqzqNEiBQx1mvQnelVPDNtCyxR82wU73hEX9bBDsNfUlEuNBgaBoaAVRCxcljc/UP2BNQYE8cFPKmySVq2v0ZsCoggPKLqAk=",
@@ -235,22 +162,6 @@ class TxStateSnapshotHashSpec extends PropSpec {
       ByteStr.empty,
       "2665ce187b867f2dae95699882d9fd7c31039c505b8af93ed22cada90524ff37",
       "dafc56fb4f5e13ddd3e82547874e154c5c61ac556e76e9e9766b5d7ccbc1e1be"
-    ),
-    (
-      "sponsorship",
-      sponsorship,
-      "aiUKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEPwq",
-      ByteStr.empty,
-      "dafc56fb4f5e13ddd3e82547874e154c5c61ac556e76e9e9766b5d7ccbc1e1be",
-      "d9eab5091d57c18c38e0a8702e7cbe6f133e109281f2ef0f2bc88686b458f31f"
-    ),
-    (
-      "alias",
-      alias,
-      "SiYKGgFUQsXJY3P1D9gTUGBPHBTypsklatr9GbAqEgh3YXZlc2V2bw==",
-      ByteStr.empty,
-      "d9eab5091d57c18c38e0a8702e7cbe6f133e109281f2ef0f2bc88686b458f31f",
-      "eaa251c161cfe875932275ce6ff8873cd169099e021f09245f4069ccd58d6669"
     ),
     (
       "order fill",

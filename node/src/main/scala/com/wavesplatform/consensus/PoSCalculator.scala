@@ -1,6 +1,6 @@
 package com.wavesplatform.consensus
 
-import com.wavesplatform.account.{PrivateKey, PublicKey}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.PoSCalculator.HitSize
 import com.wavesplatform.crypto
@@ -31,9 +31,6 @@ object PoSCalculator {
     System.arraycopy(publicKey.arr, 0, s, crypto.DigestLength, crypto.DigestLength)
     crypto.fastHash(s)
   }
-
-  private[consensus] def generationVRFSignature(signature: Array[Byte], privateKey: PrivateKey): ByteStr =
-    crypto.signVRF(privateKey, signature)
 
   def hit(generatorSignature: Array[Byte]): BigInt = BigInt(1, generatorSignature.take(HitSize).reverse)
 

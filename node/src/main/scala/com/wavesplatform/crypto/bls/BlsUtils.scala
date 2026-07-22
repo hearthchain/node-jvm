@@ -32,6 +32,14 @@ private[bls] object BlsUtils {
     sk
   }
 
+  /** @param scalar A 32-byte big-endian scalar, e.g. one derived by KeyTree.blsSecretKey
+    */
+  def secretKeyFromScalar(scalar: Array[Byte]): blst.SecretKey = {
+    val sk = new blst.SecretKey()
+    sk.from_bendian(scalar)
+    sk
+  }
+
   def mkPublicKey(sk: blst.SecretKey): Array[Byte] = new BlstPublicKeyJacobian(sk).compress()
 
   def signBasic(sk: blst.SecretKey, message: Array[Byte]): Array[Byte] =

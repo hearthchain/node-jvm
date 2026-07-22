@@ -47,7 +47,7 @@ object FinalityApiRoute {
 
   given Writes[GeneratorEntry] = (ge: GeneratorEntry) =>
     Json.obj(
-      "address"        -> ge.address,
+      "address"        -> ge.address.toBech32,
       "transactionId"  -> ge.commitTxnId,
       "balance"        -> ge.balance,
       "conflictHeight" -> ge.conflictHeight

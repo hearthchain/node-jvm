@@ -5,7 +5,7 @@ import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.Domain
 import com.wavesplatform.state.*
-import com.wavesplatform.test.DomainPresets.WavesSettingsOps
+import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{CatchLogs, FreeSpec, NumericExt, TestSchedulerOps, TestTime, WithResourceManager}
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.wallet.Wallet
@@ -56,7 +56,7 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
         d.utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        d.wallet,
+        Seq.empty,
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -115,7 +115,7 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
         d.utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        d.wallet,
+        Seq.empty,
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -175,7 +175,7 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
         d.utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        d.wallet,
+        Seq.empty,
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -186,10 +186,10 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
       d.appender.appendBlock(d.createBlock(strictTime = true, generator = otherNodeAcc))
 
       log.debug("Trigger forging of block 3")
-      val blockTs3 = Seq(thisNodeAcc1, thisNodeAcc2).map(d.nextBlockTime).min
+      val blockTs3 = Seq(thisNodeAcc1, thisNodeAcc2).map(d.nextBlockTime(_, ???)).min
       d.testTime.setTimeIfGreater(blockTs3)
 
-      val block4Ts = Seq(thisNodeAcc1, thisNodeAcc2).map(d.nextBlockTime).min
+      val block4Ts = Seq(thisNodeAcc1, thisNodeAcc2).map(d.nextBlockTime(_, ???)).min
       appenderScheduler.tickNext("appender-1")
       minerScheduler.tickNext("miner-1")
       appenderScheduler.tickNext("appender-2")

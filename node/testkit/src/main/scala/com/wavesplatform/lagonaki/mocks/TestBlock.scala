@@ -1,18 +1,19 @@
 package com.wavesplatform.lagonaki.mocks
 
-import com.wavesplatform.account.KeyPair
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.*
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.*
 import com.wavesplatform.transaction.Transaction
+import tech.hearth.crypto.{Crypto, KeyTree, SigningKey}
 
 import scala.util.{Random, Try}
 
 object TestBlock {
-  case class BlockWithSigner(block: Block, signer: KeyPair)
+  case class BlockWithSigner(block: Block, signer: SigningKey)
 
-  val defaultSigner: KeyPair = KeyPair(ByteStr(new Array[Byte](KeyLength)))
+  val defaultSigner: SigningKey = KeyTree.signingKey(Crypto.defaultBackend().sha256(new Array[Byte](32)), 100)
 
   val random: Random = new Random()
 
@@ -20,7 +21,7 @@ object TestBlock {
 
   def randomSignature(): ByteStr = randomOfLength(SignatureLength)
 
-  def sign(signer: KeyPair, b: Block): BlockWithSigner = {
+  def sign(signer: SigningKey, b: Block): BlockWithSigner = {
     val x = Block
       .buildAndSign(
         b.header.version,
@@ -45,21 +46,21 @@ object TestBlock {
   def create(txs: Seq[Transaction], version: Byte): BlockWithSigner =
     create(time = Try(txs.map(_.timestamp).max).getOrElse(0L), ref = randomSignature(), txs = txs, version = version)
 
-  def create(signer: KeyPair, txs: Seq[Transaction]): BlockWithSigner =
+  def create(signer: SigningKey, txs: Seq[Transaction]): BlockWithSigner =
     create(time = Try(txs.map(_.timestamp).max).getOrElse(0L), txs = txs, signer = signer)
 
-  def create(signer: KeyPair, txs: Seq[Transaction], features: Seq[Short]): BlockWithSigner =
+  def create(signer: SigningKey, txs: Seq[Transaction], features: Seq[Short]): BlockWithSigner =
     create(time = Try(txs.map(_.timestamp).max).getOrElse(0), ref = randomSignature(), txs = txs, signer = signer, version = 3, features = features)
 
   def create(time: Long, txs: Seq[Transaction]): BlockWithSigner = create(time, randomSignature(), txs, defaultSigner)
 
-  def create(time: Long, txs: Seq[Transaction], signer: KeyPair): BlockWithSigner = create(time, randomSignature(), txs, signer)
+  def create(time: Long, txs: Seq[Transaction], signer: SigningKey): BlockWithSigner = create(time, randomSignature(), txs, signer)
 
   def create(
       time: Long,
       ref: ByteStr,
       txs: Seq[Transaction],
-      signer: KeyPair = defaultSigner,
+      signer: SigningKey = defaultSigner,
       version: Byte = 2,
       features: Seq[Short] = Seq.empty[Short],
       rewardVote: Long = -1L,
@@ -77,7 +78,7 @@ object TestBlock {
         generationSignature =
           if (version < Block.ProtoBlockVersion) ByteStr(Array.fill(Block.GenerationSignatureLength)(0: Byte))
           else ByteStr(Array.fill(Block.GenerationVRFSignatureLength)(0: Byte)),
-        generator = signer.publicKey,
+        generator = PublicKey(signer.publicKey),
         featureVotes = features,
         rewardVote = rewardVote,
         transactionData = txs,
@@ -97,7 +98,7 @@ object TestBlock {
           ref,
           baseTarget = 2L,
           randomOfLength(Block.GenerationSignatureLength),
-          defaultSigner.publicKey,
+          PublicKey(defaultSigner.publicKey),
           featureVotes = Seq.empty,
           rewardVote = -1L,
           transactionsRoot = ByteStr.empty,
@@ -119,7 +120,7 @@ object TestBlock {
         ref,
         baseTarget = 2L,
         randomOfLength(Block.GenerationSignatureLength),
-        defaultSigner.publicKey,
+        PublicKey(defaultSigner.publicKey),
         features,
         rewardVote = -1L,
         transactionData = Seq.empty,

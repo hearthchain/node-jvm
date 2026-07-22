@@ -1,6 +1,5 @@
 package com.wavesplatform.api.http.leasing
 
-import org.apache.pekko.http.scaladsl.server.Route
 import com.wavesplatform.api.common.{CommonAccountsApi, LeaseInfo}
 import com.wavesplatform.api.http.*
 import com.wavesplatform.api.http.ApiError.{InvalidIds, TransactionDoesNotExist}
@@ -11,8 +10,9 @@ import com.wavesplatform.settings.RestAPISettings
 import com.wavesplatform.state.Blockchain
 import com.wavesplatform.utils.Time
 import com.wavesplatform.wallet.Wallet
-import play.api.libs.json.JsonConfiguration.Aux
+import org.apache.pekko.http.scaladsl.server.Route
 import play.api.libs.json.*
+import play.api.libs.json.JsonConfiguration.Aux
 
 case class LeaseApiRoute(
     settings: RestAPISettings,
@@ -81,6 +81,7 @@ object LeaseApiRoute {
   implicit val config: Aux[Json.MacroOptions] = JsonConfiguration(optionHandlers = OptionHandlers.WritesNull)
 
   implicit val leaseInfoWrites: OWrites[LeaseInfo] = {
+    import com.wavesplatform.account.Address.jsonFormat
     import com.wavesplatform.utils.byteStrFormat
     Json.writes[LeaseInfo]
   }

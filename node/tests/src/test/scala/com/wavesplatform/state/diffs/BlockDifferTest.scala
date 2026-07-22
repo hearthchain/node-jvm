@@ -1,7 +1,6 @@
 package com.wavesplatform.state.diffs
 
 import com.wavesplatform.TestValues
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.BlockSnapshot
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -15,20 +14,24 @@ import com.wavesplatform.settings.FunctionalitySettings
 import com.wavesplatform.state.diffs.BlockDiffer.Result
 import com.wavesplatform.state.{Blockchain, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.{TransactionStateSnapshot, WavesSettingsOps}
+import com.wavesplatform.test.DomainPresets.*
+import com.wavesplatform.test.DomainPresets.{TransactionStateSnapshot}
 import com.wavesplatform.test.node.*
 import com.wavesplatform.transaction.TxValidationError.InvalidStateHash
-import com.wavesplatform.transaction.{TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Transaction, TxHelpers, TxVersion}
+import tech.hearth.crypto.SigningKey
 
 class BlockDifferTest extends FreeSpec with WithDomain {
   private val TransactionFee = 10
 
   private val signerA, signerB = randomKeyPair()
 
-  private val testChain: Seq[BlockWithSigner] = {
-    val master, recipient = randomKeyPair()
-    getTwoMinersBlockChain(master, recipient, 9)
-  }
+  private val master, recipient = randomKeyPair()
+
+  // The master is credited by the genesis snapshot, which is applied to the block at height 1
+  private val masterBalance: Seq[AddrWithBalance] = Seq(AddrWithBalance(master.toAddress, Long.MaxValue - 1))
+
+  private val testChain: Seq[BlockWithSigner] = getTwoMinersBlockChain(master, recipient, 9)
 
   "BlockDiffer" - {
     "enableMicroblocksAfterHeight" - {
@@ -104,30 +107,31 @@ class BlockDifferTest extends FreeSpec with WithDomain {
     }
 
     "correctly computes state hash" - {
+      // The genesis block has no transactions, so its state hash covers the predefined snapshot built from the settings.
+      // withDomain appends it, which only succeeds if BlockDiffer agrees with the state hash the block carries.
       "genesis block" in {
-        val txs = (1 to 10).map(idx => TxHelpers.genesis(TxHelpers.address(idx), 100.waves)) ++
-          (1 to 5).map(idx => TxHelpers.genesis(TxHelpers.address(idx), 1.waves))
-        withDomain(TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0))) { d =>
-          val block = createGenesisWithStateHash(txs, fillStateHash = true)
+        val balances = (1 to 10).map(idx => AddrWithBalance(TxHelpers.address(idx), 100.waves))
 
-          block.header.stateHash shouldBe defined
-          BlockDiffer
-            .fromBlock(d.blockchain, None, block, None, MiningConstraint.Unlimited, block.header.generationSignature) should beRight
+        withDomain(TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)), balances) { d =>
+          d.lastBlock.header.stateHash shouldBe defined
+          d.lastBlock.transactionData shouldBe empty
+          d.blockchain.height shouldBe 1
+          balances.foreach { case AddrWithBalance(address, amount, _) => d.blockchain.balance(address) shouldBe amount }
         }
 
-        withDomain(DomainPresets.RideV6) { d =>
-          val block = createGenesisWithStateHash(txs, fillStateHash = false)
-
-          block.header.stateHash shouldBe None
-          BlockDiffer
-            .fromBlock(d.blockchain, None, block, None, MiningConstraint.Unlimited, block.header.generationSignature) should beRight
+        withDomain(DomainPresets.RideV6, balances) { d =>
+          d.lastBlock.header.stateHash shouldBe None
+          d.blockchain.height shouldBe 1
+          balances.foreach { case AddrWithBalance(address, amount, _) => d.blockchain.balance(address) shouldBe amount }
         }
       }
 
       "arbitrary block/microblock" in
-        withDomain(TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0))) { d =>
-          val genesis = createGenesisWithStateHash(Seq(TxHelpers.genesis(TxHelpers.address(1))), fillStateHash = true)
-          d.appendBlock(genesis)
+        withDomain(
+          TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)),
+          Seq(AddrWithBalance(TxHelpers.address(1)))
+        ) { d =>
+          val genesis = d.lastBlock
 
           val txs = (1 to 10).map(idx => TxHelpers.transfer(TxHelpers.signer(idx), TxHelpers.address(idx + 1), (100 - idx).waves))
 
@@ -290,22 +294,21 @@ class BlockDifferTest extends FreeSpec with WithDomain {
       featureCheckBlocksPeriod = ngAtHeight / 2,
       blocksForFeatureActivation = 1,
       preActivatedFeatures = Map[Short, Int]((2, ngAtHeight)),
-      doubleFeaturesPeriodsAfterHeight = Int.MaxValue
     )
-    assertNgDiffState(blocks.init, blocks.last, fs)(assertion)
+    assertNgDiffState(blocks.init, blocks.last, fs, masterBalance)(assertion)
   }
 
-  private def getTwoMinersBlockChain(from: KeyPair, to: KeyPair, numPayments: Int): Seq[BlockWithSigner] = {
-    val genesisTx            = TxHelpers.genesis(from.toAddress, Long.MaxValue - 1)
+  private def getTwoMinersBlockChain(from: SigningKey, to: SigningKey, numPayments: Int): Seq[BlockWithSigner] = {
     val features: Seq[Short] = Seq[Short](2)
 
     val paymentTxs = (1 to numPayments).map { _ =>
       TxHelpers.transfer(from, to.toAddress, 10000, fee = TransactionFee, version = TxVersion.V1)
     }
 
-    (genesisTx +: paymentTxs).zipWithIndex.map { case (x, i) =>
+    // The block at height 1 is empty: it used to hold the genesis transaction, which the genesis snapshot replaces
+    (Seq.empty[Transaction] +: paymentTxs.map(Seq(_))).zipWithIndex.map { case (txs, i) =>
       val signer = if (i % 2 == 0) signerA else signerB
-      TestBlock.create(signer, Seq(x), features)
+      TestBlock.create(signer, txs, features)
     }
   }
 }

@@ -3,8 +3,9 @@ package com.wavesplatform.settings
 import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.typesafe.config.Config
-import com.wavesplatform.account.Address
+import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.state.Height
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
@@ -58,33 +59,27 @@ object RewardsSettings {
 case class FunctionalitySettings(
     featureCheckBlocksPeriod: Int = 1000,
     blocksForFeatureActivation: Int = 800,
-    generationBalanceDepthFrom50To1000AfterHeight: Int = 0,
-    blockVersion3AfterHeight: Int = 0,
     preActivatedFeatures: Map[Short, Int] = Map.empty,
-    doubleFeaturesPeriodsAfterHeight: Int = Int.MaxValue,
     maxTransactionTimeBackOffset: FiniteDuration = 120.minutes,
     maxTransactionTimeForwardOffset: FiniteDuration = 90.minutes,
-    lastTimeBasedForkParameter: Long = 0L,
     leaseExpiration: Int = 1000000,
     estimatorPreCheckHeight: Int = 0,
-    minAssetInfoUpdateInterval: Int = 100000,
     minBlockTime: FiniteDuration = 15.seconds,
     delayDelta: Int = 8,
-    estimationOverflowFixHeight: Int = 0,
-    estimatorSumOverflowFixHeight: Int = 0,
-    enforceTransferValidationAfter: Int = 0,
-    ethInvokePaymentsCheckHeight: Int = 0,
     daoAddress: Option[String] = None,
-    xtnBuybackAddress: Option[String] = None,
-    xtnBuybackRewardPeriod: Int = Int.MaxValue,
     lightNodeBlockFieldsAbsenceInterval: Int = 1000,
     blockRewardBoostPeriod: Int = 1000,
-    paymentsCheckHeight: Int = 0,
-    unitsRegistryAddress: Option[String] = None,
     maxValidEndorsers: Int = 5,
-    generationPeriodLength: Int = 1000,
-    enforceEthTxValidationAfter: Int = 0
+    generationPeriodLength: Int = 1000
 ) {
+  val estimatorSumOverflowFixHeight: Int                      = 0
+  val enforceTransferValidationAfter: Int                     = 0
+  val ethInvokePaymentsCheckHeight: Int                       = 0
+  val lastTimeBasedForkParameter: Long                        = 0L
+  val minAssetInfoUpdateInterval: Int                         = 100000
+  val generationBalanceDepthFrom50To1000AfterHeight: Int      = 0
+  val blockVersion3AfterHeight: Int                           = 0
+  val doubleFeaturesPeriodsAfterHeight: Int                   = Int.MaxValue
   val allowLeasedBalanceTransferUntilHeight: Int              = blockVersion3AfterHeight
   val allowTemporaryNegativeUntil: Long                       = lastTimeBasedForkParameter
   val minimalGeneratingBalanceAfter: Long                     = lastTimeBasedForkParameter
@@ -95,10 +90,6 @@ case class FunctionalitySettings(
 
   lazy val daoAddressParsed: Either[String, Option[Address]] =
     daoAddress.traverse(Address.fromString(_)).leftMap(_ => "Incorrect dao-address")
-  lazy val xtnBuybackAddressParsed: Either[String, Option[Address]] =
-    xtnBuybackAddress.traverse(Address.fromString(_)).leftMap(_ => "Incorrect xtn-buyback-address")
-  lazy val unitsRegistryAddressParsed: Either[String, Option[Address]] =
-    unitsRegistryAddress.traverse(Address.fromString(_)).leftMap(_ => "Incorrect units-registry-address")
 
   require(featureCheckBlocksPeriod > 0, "feature-check-blocks-period must be greater than 0")
   require(
@@ -134,40 +125,21 @@ object FunctionalitySettings {
   val MAINNET: FunctionalitySettings = apply(
     featureCheckBlocksPeriod = 5000,
     blocksForFeatureActivation = 4000,
-    generationBalanceDepthFrom50To1000AfterHeight = 232000,
-    blockVersion3AfterHeight = 795000,
-    doubleFeaturesPeriodsAfterHeight = 810000,
-    lastTimeBasedForkParameter = 1530161445559L,
     estimatorPreCheckHeight = 1847610,
-    estimationOverflowFixHeight = 2858710,
-    estimatorSumOverflowFixHeight = 2897510,
-    enforceTransferValidationAfter = 2959447,
-    daoAddress = Some("3PEgG7eZHLFhcfsTSaYxgRhZsh4AxMvA4Ms"),
-    xtnBuybackAddress = Some("3PFjHWuH6WXNJbwnfLHqNFBpwBS5dkYjTfv"),
-    xtnBuybackRewardPeriod = 100000,
+    // TODO temporary stub, replace with the real hearth DAO address before launch
+    daoAddress = Some("hrthm1qzwgwm70gtj5dfja3ygzz0vufswwef7jxu0qhx40"),
     blockRewardBoostPeriod = 300_000,
-    paymentsCheckHeight = 4303300,
-    unitsRegistryAddress = Some("3P8LfPXcveST7WKkV3UACQNdr6J3shPYong"),
     maxValidEndorsers = 128, // BLS has much worse performance from 129
-    generationPeriodLength = 10_000,
-    enforceEthTxValidationAfter = 5234000
+    generationPeriodLength = 10_000
   )
 
   val TESTNET: FunctionalitySettings = apply(
     featureCheckBlocksPeriod = 3000,
     blocksForFeatureActivation = 2700,
-    blockVersion3AfterHeight = 161700,
-    doubleFeaturesPeriodsAfterHeight = Int.MaxValue,
-    lastTimeBasedForkParameter = 1492560000000L,
     estimatorPreCheckHeight = 817380,
-    estimationOverflowFixHeight = 1793770,
-    estimatorSumOverflowFixHeight = 1832520,
-    enforceTransferValidationAfter = 1698800,
-    daoAddress = Some("3Myb6G8DkdBb8YcZzhrky65HrmiNuac3kvS"),
-    xtnBuybackAddress = Some("3N13KQpdY3UU7JkWUBD9kN7t7xuUgeyYMTT"),
-    xtnBuybackRewardPeriod = 2000,
+    // TODO temporary stub, replace with the real hearth DAO address before launch
+    daoAddress = Some("hrtht1qzwgwm70gtj5dfja3ygzz0vufswwef7jxunes64r"),
     blockRewardBoostPeriod = 2_000,
-    unitsRegistryAddress = Some("3N9fwNGJcUcAbhh7YPr6mrpuGJD4tApZFsT"),
     maxValidEndorsers = 64,
     generationPeriodLength = 3000
   )
@@ -176,79 +148,118 @@ object FunctionalitySettings {
     featureCheckBlocksPeriod = 100,
     blocksForFeatureActivation = 40,
     preActivatedFeatures = (1 to 13).map(_.toShort -> 0).toMap,
-    doubleFeaturesPeriodsAfterHeight = 1000000000,
-    minAssetInfoUpdateInterval = 10,
-    estimationOverflowFixHeight = 1078680,
-    estimatorSumOverflowFixHeight = 1097419,
-    ethInvokePaymentsCheckHeight = 1311110,
-    daoAddress = Some("3MaFVH1vTv18FjBRugSRebx259D7xtRh9ic"),
-    xtnBuybackAddress = Some("3MbhiRiLFLJ1EVKNP9npRszcLLQDjwnFfZM"),
-    xtnBuybackRewardPeriod = 1000,
-    paymentsCheckHeight = 2195900,
+    // TODO temporary stub, replace with the real hearth DAO address before launch
+    daoAddress = Some("hrtht1qzwgwm70gtj5dfja3ygzz0vufswwef7jxunes64r"),
     maxValidEndorsers = 32,
     generationPeriodLength = 1000
   )
 }
 
-case class GenesisTransactionSettings(recipient: String, amount: Long) derives ConfigReader
+/** An asset issued in the genesis block. Since there is no issue transaction to derive it from, the id is specified explicitly. */
+case class GenesisAssetSettings(
+    id: ByteStr,
+    issuer: String,
+    name: String,
+    decimals: Int,
+    quantity: Long,
+    description: String = "",
+    reissuable: Boolean = false
+)
+
+object GenesisAssetSettings {
+  // This given is required for default args to work, see FunctionalitySettings.
+  given ConfigReader[GenesisAssetSettings] = deriveReader
+}
+
+/** An account committed to generating blocks starting from the very first generation period.
+  *
+  * @param endorserPublicKey
+  *   The BLS key this generator's endorsements are verified with
+  * @param vrfPublicKey
+  *   The VRF key this generator's block generation signatures are verified against
+  */
+case class GenesisGeneratorSettings(publicKey: String, endorserPublicKey: String, vrfPublicKey: String) derives ConfigReader
+
+/** Initial balances of an account. Every asset referenced here must be listed in [[GenesisSettings.assets]]. */
+case class GenesisBalanceSettings(recipient: String, waves: Long = 0L, assets: Map[String, Long] = Map.empty)
+
+object GenesisBalanceSettings {
+  // This given is required for default args to work, see FunctionalitySettings.
+  given ConfigReader[GenesisBalanceSettings] = deriveReader
+}
 
 case class GenesisSettings(
-    blockTimestamp: Long,
     timestamp: Long,
-    initialBalance: Long,
     signature: Option[ByteStr],
-    transactions: Seq[GenesisTransactionSettings],
     initialBaseTarget: Long,
-    averageBlockDelay: FiniteDuration
-) derives ConfigReader
+    averageBlockDelay: FiniteDuration,
+    assets: Seq[GenesisAssetSettings] = Seq.empty,
+    generators: Seq[GenesisGeneratorSettings] = Seq.empty,
+    balances: Seq[GenesisBalanceSettings] = Seq.empty
+) {
+  def blockTimestamp: Long = timestamp
+
+  /** Total amount of Waves in the genesis snapshot. Replaces the formerly configured `initial-balance`. */
+  lazy val initialBalance: Long = balances.map(_.waves).foldLeft(0L)(Math.addExact)
+
+  def render(): String =
+    s"""{
+       |  generators = [
+       |    ${generators.map(g => s"{ address = ${Address.fromPublicKey(PublicKey(Base58.decode(g.publicKey)))} }").mkString("\n")}
+       |  ]
+       |  balances = [
+       |    ${balances.map(b => s"{ address = ${b.recipient}, balance = ${b.waves}}").mkString("\n")}
+       |  ]
+       |}
+       |""".stripMargin
+}
 
 object GenesisSettings { // TODO: Move to network-defaults.conf
+  // This given is required for default args to work, see FunctionalitySettings.
+  given ConfigReader[GenesisSettings] = deriveReader
+
+  // Note: the predefined signatures of the pre-snapshot genesis blocks are gone along with the genesis transactions
+  // they were made over. The blocks below are signed by Block.GenesisGenerator instead.
   val MAINNET: GenesisSettings = GenesisSettings(
-    1460678400000L,
     1465742577614L,
-    Constants.UnitsInWave * Constants.TotalWaves,
-    ByteStr.decodeBase58("FSH8eAAzZNqnG8xgTZtz5xuLqXySsXgAjmFEC25hXMbEufiGjqWPnGCZFt6gLiVLJny16ipxRNAkkzjjhqTjBE2").toOption,
-    List(
-      GenesisTransactionSettings("3PAWwWa6GbwcJaFzwqXQN5KQm7H96Y7SHTQ", Constants.UnitsInWave * Constants.TotalWaves - 5 * Constants.UnitsInWave),
-      GenesisTransactionSettings("3P8JdJGYc7vaLu4UXUZc1iRLdzrkGtdCyJM", Constants.UnitsInWave),
-      GenesisTransactionSettings("3PAGPDPqnGkyhcihyjMHe9v36Y4hkAh9yDy", Constants.UnitsInWave),
-      GenesisTransactionSettings("3P9o3ZYwtHkaU1KxsKkFjJqJKS3dLHLC9oF", Constants.UnitsInWave),
-      GenesisTransactionSettings("3PJaDyprvekvPXPuAtxrapacuDJopgJRaU3", Constants.UnitsInWave),
-      GenesisTransactionSettings("3PBWXDFUc86N2EQxKJmW8eFco65xTyMZx6J", Constants.UnitsInWave)
-    ),
+    None,
     153722867L,
-    60.seconds
+    60.seconds,
+    balances = List(
+      GenesisBalanceSettings("3PAWwWa6GbwcJaFzwqXQN5KQm7H96Y7SHTQ", Constants.UnitsInWave * Constants.TotalWaves - 5 * Constants.UnitsInWave),
+      GenesisBalanceSettings("3P8JdJGYc7vaLu4UXUZc1iRLdzrkGtdCyJM", Constants.UnitsInWave),
+      GenesisBalanceSettings("3PAGPDPqnGkyhcihyjMHe9v36Y4hkAh9yDy", Constants.UnitsInWave),
+      GenesisBalanceSettings("3P9o3ZYwtHkaU1KxsKkFjJqJKS3dLHLC9oF", Constants.UnitsInWave),
+      GenesisBalanceSettings("3PJaDyprvekvPXPuAtxrapacuDJopgJRaU3", Constants.UnitsInWave),
+      GenesisBalanceSettings("3PBWXDFUc86N2EQxKJmW8eFco65xTyMZx6J", Constants.UnitsInWave)
+    )
   )
 
   val TESTNET: GenesisSettings = GenesisSettings(
-    1460678400000L,
     1478000000000L,
-    Constants.UnitsInWave * Constants.TotalWaves,
-    ByteStr.decodeBase58("5uqnLK3Z9eiot6FyYBfwUnbyid3abicQbAZjz38GQ1Q8XigQMxTK4C1zNkqS1SVw7FqSidbZKxWAKLVoEsp4nNqa").toOption,
-    List(
-      GenesisTransactionSettings("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8", (Constants.UnitsInWave * Constants.TotalWaves * 0.04).toLong),
-      GenesisTransactionSettings("3NBVqYXrapgJP9atQccdBPAgJPwHDKkh6A8", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-      GenesisTransactionSettings("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-      GenesisTransactionSettings("3NCBMxgdghg4tUhEEffSXy11L6hUi6fcBpd", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-      GenesisTransactionSettings(
+    None,
+    153722867L,
+    60.seconds,
+    balances = List(
+      GenesisBalanceSettings("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8", (Constants.UnitsInWave * Constants.TotalWaves * 0.04).toLong),
+      GenesisBalanceSettings("3NBVqYXrapgJP9atQccdBPAgJPwHDKkh6A8", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
+      GenesisBalanceSettings("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
+      GenesisBalanceSettings("3NCBMxgdghg4tUhEEffSXy11L6hUi6fcBpd", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
+      GenesisBalanceSettings(
         "3N18z4B8kyyQ96PhN5eyhCAbg4j49CgwZJx",
         (Constants.UnitsInWave * Constants.TotalWaves - Constants.UnitsInWave * Constants.TotalWaves * 0.1).toLong
       )
-    ),
-    153722867L,
-    60.seconds
+    )
   )
 
   val STAGENET: GenesisSettings = GenesisSettings(
     1561705836768L,
-    1561705836768L,
-    Constants.UnitsInWave * Constants.TotalWaves,
-    ByteStr.decodeBase58("2EaaguFPgrJ1bbMAFrPw2bi6i7kqjgvxsFj8YGqrKR7hT54ZvwmzZ3LHMm4qR7i7QB5cacp8XdkLMJyvjFkt8VgN").toOption,
-    List(
-      GenesisTransactionSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInWave * Constants.TotalWaves)
-    ),
+    None,
     5000,
-    1.minute
+    1.minute,
+    balances = List(
+      GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInWave * Constants.TotalWaves)
+    )
   )
 }
 

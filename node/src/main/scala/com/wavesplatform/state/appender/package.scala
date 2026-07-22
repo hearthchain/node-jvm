@@ -8,10 +8,8 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.block.{Block, BlockEndorsement, BlockSnapshot, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.PoSSelector
-import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.metrics.*
-import com.wavesplatform.mining.Miner
 import com.wavesplatform.network.BlockSnapshotResponse
 import com.wavesplatform.protobuf.PBSnapshots
 import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult
@@ -58,13 +56,13 @@ package object appender {
       conflictGenerators  = currentPeriod.fold(ConflictGenerators.empty)(blockchain.conflictGenerators).upTo(blockHeight)
       committedGenerators = currentPeriod.fold(Nil)(blockchain.committedGenerators)
       validGenerators = committedGenerators.view
-        .map { case v @ (address, _) => v -> blockchain.generatingBalance(address, Some(parentBlockId)) }
+        .map(cg => cg -> blockchain.generatingBalance(cg.address, Some(parentBlockId)))
         .zipWithIndex
         .collect {
-          case (((address, blsPk), balance), idx)
+          case ((cg, balance), idx)
               if !conflictGenerators.contains(GeneratorIndex(idx))
                 && blockchain.isGeneratingBalanceValid(parentHeight, newBlock.header, balance) =>
-            GeneratorInfo(GeneratorIndex(idx), address, blsPk, balance)
+            GeneratorInfo(GeneratorIndex(idx), cg.address, cg.endorserPublicKey, balance)
         }
         .toSeq
 
@@ -224,7 +222,6 @@ package object appender {
       parentHeight: Height
   ): Either[ValidationError, (ByteStr, GeneratorSet)] =
     for {
-      _ <- Miner.isAllowedForMiningByAccountScript(block.sender.toAddress, blockchain).leftMap(BlockAppendError(_, block))
       r <- blockConsensusValidation(blockchain, pos, time.correctedTime())(block, parentHeight)
       _ <- validateStateHash(block, blockchain)
       _ <- validateChallengedHeader(block, blockchain)
@@ -307,7 +304,7 @@ package object appender {
   private def validateConflictingEndorsement(
       blockchain: Blockchain,
       finalizationVoting: FinalizationVoting,
-      commitedGenerators: IndexedSeq[(Address, BlsPublicKey)],
+      commitedGenerators: IndexedSeq[CommittedGenerator],
       conflictingGenerators: Set[GeneratorIndex],
       validEndorsements: Set[Address],
       minerAddress: Address,
@@ -317,9 +314,11 @@ package object appender {
       conflictingEndorsement: BlockEndorsement
   ): Either[String, Unit] = for {
     _ <- Either.raiseWhen(commitedGenerators.isEmpty)("No one committed")
-    (address, blsPublicKey) <- commitedGenerators
+    committed <- commitedGenerators
       .lift(conflictingEndorsement.endorserIndex.toInt)
       .toRight(s"Invalid conflicting endorser index ${conflictingEndorsement.endorserIndex}")
+    address      = committed.address
+    blsPublicKey = committed.endorserPublicKey
     _ <- Either.raiseWhen(conflictingGenerators.contains(conflictingEndorsement.endorserIndex)) {
       "Second conflicting endorsement from one generator"
     }
@@ -373,7 +372,7 @@ package object appender {
           _ <- fv.valid.traverse { idx =>
             Either.raiseUnless(generatorsWithEnoughBalance.contains(idx))(s"Valid endorser $idx has insufficient balance or conflicting")
           }
-          validEndorserAddresses = validEndorsers.view.map(_._1).toSet
+          validEndorserAddresses = validEndorsers.view.map(_.address).toSet
           _ <- Either.raiseWhen(validEndorserAddresses.contains(block.header.generator.toAddress))("Miner can't endorse its own block")
 
           knownConflictGenerators = blockchain.conflictGenerators(blockGenerationPeriod).upTo(blockHeight)
@@ -400,7 +399,7 @@ package object appender {
                   finalizedBlockId <- blockchain.blockId(fv.finalizedHeight.toInt).toRight(s"Unable to get block ID at height ${fv.finalizedHeight}")
                   _ <- aggregatedEndorsement.verifyAgg(
                     BlockEndorsement.mkMessage(finalizedBlockId, fv.finalizedHeight, block.header.reference),
-                    validEndorsers.view.map(_._2)
+                    validEndorsers.view.map(_.endorserPublicKey)
                   )
                 } yield ()
           }

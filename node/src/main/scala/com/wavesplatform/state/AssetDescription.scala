@@ -12,8 +12,6 @@ case class AssetDescription(
     reissuable: Boolean,
     totalVolume: BigInt,
     lastUpdatedAt: Height,
-    script: Option[AssetScriptInfo],
-    sponsorship: Long,
     nft: Boolean,
     sequenceInBlock: Int,
     issueHeight: Height

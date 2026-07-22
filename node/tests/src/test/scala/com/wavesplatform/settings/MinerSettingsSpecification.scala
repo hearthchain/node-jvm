@@ -21,7 +21,8 @@ class MinerSettingsSpecification extends FlatSpec {
                       |    minimal-block-generation-offset: 500ms
                       |    max-transactions-in-micro-block: 400
                       |    min-micro-block-age: 3s
-                      |    private-keys: ["${TxHelpers.defaultSigner.privateKey}"]
+                      |    private-keys: []
+                      |    miner-accounts: []
                       |  }
                       |}
       """.stripMargin)
@@ -36,6 +37,5 @@ class MinerSettingsSpecification extends FlatSpec {
     settings.minimalBlockGenerationOffset should be(500.millis)
     settings.maxTransactionsInMicroBlock should be(400)
     settings.minMicroBlockAge should be(3.seconds)
-    settings.privateKeys should be(Seq(TxHelpers.defaultSigner.privateKey))
   }
 }
