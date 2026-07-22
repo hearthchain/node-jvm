@@ -1,0 +1,16 @@
+#!/bin/sh
+# hearthchain author guard: commits must be authored and committed by
+# swell-a2a <swell_ai@pm.me>. The machine-global git config is a different
+# identity, so a missing repo-local config must fail the commit.
+want="swell-a2a <swell_ai@pm.me>"
+for role in AUTHOR COMMITTER; do
+  ident=$(git var GIT_${role}_IDENT) || exit 1
+  case "$ident" in
+    "$want "*) ;;
+    *)
+      echo "pre-commit: $role is \"${ident% [0-9]*}\", must be \"$want\"" >&2
+      echo "fix: git config user.name swell-a2a && git config user.email swell_ai@pm.me" >&2
+      exit 1
+      ;;
+  esac
+done
