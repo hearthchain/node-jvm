@@ -36,9 +36,14 @@ object GenesisSnapshot {
         nextCommittedGenerators = generators
       )
       _ <- BalanceDiffValidation(snapshot)
-      _ <- generators.collectFirst { case c if snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L) < CommitToGenerationTransaction.DepositInWavelets =>
-        GenericError(s"Generator ${c.sender.toAddress} balance ${snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L)} is less than required for generation")
-      }.toLeft(())
+      _ <- generators
+        .collectFirst {
+          case c if snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L) < CommitToGenerationTransaction.DepositInWavelets =>
+            GenericError(
+              s"Generator ${c.sender.toAddress} balance ${snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L)} is less than required for generation"
+            )
+        }
+        .toLeft(())
     } yield snapshot
   private def issuedAssets(settings: Seq[GenesisAssetSettings]): Either[ValidationError, Seq[(IssuedAsset, NewAssetInfo)]] =
     for {

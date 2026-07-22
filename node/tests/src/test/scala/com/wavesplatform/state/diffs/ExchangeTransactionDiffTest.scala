@@ -57,7 +57,6 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
   val fsWithRideV6: FunctionalitySettings =
     fsWithBlockV5.copy(preActivatedFeatures = fsWithBlockV5.preActivatedFeatures + (BlockchainFeatures.RideV6.id -> 0))
 
-
   property("Preserves waves invariant, stores match info, rewards matcher") {
 
     val preconditionsAndExchange: Seq[(Seq[AddrWithBalance], ExchangeTransaction)] = {
@@ -779,8 +778,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val seller  = TxHelpers.signer(2)
     val matcher = TxHelpers.signer(3)
 
-    val genesis            = AddrWithBalance.enoughBalances(buyer, seller, matcher)
-    val baseBlocks         = Seq(TestBlock.create(Seq())) // Height 1: carries the genesis snapshot
+    val genesis    = AddrWithBalance.enoughBalances(buyer, seller, matcher)
+    val baseBlocks = Seq(TestBlock.create(Seq())) // Height 1: carries the genesis snapshot
 
     val amountAsset = iasset(2)
     val priceAsset  = iasset(1)
@@ -1183,8 +1182,14 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
             buyMatcherFee = fee,
             sellMatcherFee = fee,
             fee = TxPositiveAmount.unsafeFrom(fee),
-            order1 = { val o = tx.order1.copy(version = Order.V4, matcherFee = TxMatcherFee.unsafeFrom(fee)); o.withProofs(Proofs(ByteStr(buyer.sign(o.bodyBytes())))) },
-            order2 = { val o = tx.order2.copy(version = Order.V4, matcherFee = TxMatcherFee.unsafeFrom(fee)); o.withProofs(Proofs(ByteStr(seller.sign(o.bodyBytes())))) },
+            order1 = {
+              val o = tx.order1.copy(version = Order.V4, matcherFee = TxMatcherFee.unsafeFrom(fee));
+              o.withProofs(Proofs(ByteStr(buyer.sign(o.bodyBytes()))))
+            },
+            order2 = {
+              val o = tx.order2.copy(version = Order.V4, matcherFee = TxMatcherFee.unsafeFrom(fee));
+              o.withProofs(Proofs(ByteStr(seller.sign(o.bodyBytes()))))
+            },
             proofs = Proofs.empty
           )
           .signWith(matcher)

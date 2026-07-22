@@ -88,10 +88,9 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
     val address       = TxHelpers.address(0xaaff01)
     val transferCount = 4
 
-
     for (_ <- 1 to transferCount)
       domain.appendBlock(
-        TxHelpers.transfer(richAccount, address, amount = 1),
+        TxHelpers.transfer(richAccount, address, amount = 1)
       )
 
     val balanceCheckHeight = domain.blockchain.height

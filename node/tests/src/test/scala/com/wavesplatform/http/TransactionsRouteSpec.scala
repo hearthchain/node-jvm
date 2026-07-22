@@ -343,7 +343,10 @@ class TransactionsRouteSpec
     routePath("/unconfirmed/info/{id}") - {
       "handles invalid signature" in {
         forAll(invalidBase16Gen) { invalidBase16 =>
-          Get(routePath(s"/unconfirmed/info/$invalidBase16")) ~> route should produce(InvalidTransactionId("not a hexadecimal digit"), matchMsg = true)
+          Get(routePath(s"/unconfirmed/info/$invalidBase16")) ~> route should produce(
+            InvalidTransactionId("not a hexadecimal digit"),
+            matchMsg = true
+          )
         }
 
         Get(routePath(s"/unconfirmed/info/")) ~> route should produce(InvalidSignature)
@@ -577,9 +580,9 @@ class TransactionsRouteSpec
       (txInfo \ "order1" \ "attachment").asOpt[ByteStr] shouldBe Some(expectedAttachment)
     }
 
-    val sender     = TxHelpers.signer(1100)
-    val issuer     = TxHelpers.signer(1101)
-    val attachment = ByteStr.fill(32)(1)
+    val sender      = TxHelpers.signer(1100)
+    val issuer      = TxHelpers.signer(1101)
+    val attachment  = ByteStr.fill(32)(1)
     val issuedAsset = IssuedAsset(ByteStr(new Array[Byte](32)))
     val exchange =
       TxHelpers.exchangeFromOrders(

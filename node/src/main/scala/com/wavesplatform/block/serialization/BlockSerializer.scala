@@ -13,7 +13,7 @@ import play.api.libs.json.{JsArray, JsNumber, JsObject, Json}
 
 object BlockHeaderSerializer {
   def toBytes(header: BlockHeader): Array[Byte] =
-      PBUtils.encodeDeterministic(PBBlocks.protobuf(header))
+    PBUtils.encodeDeterministic(PBBlocks.protobuf(header))
 
   def toJson(blockHeader: BlockHeader): JsObject = {
     def createFeaturesJson(featureVotes: Seq[Short]): JsObject =

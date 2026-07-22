@@ -465,8 +465,6 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
     }
   }
 
-
-
   def checkGeneralInvoke(
       append: Append,
       issuerAssetBalanceAfterTx: Long,
@@ -491,8 +489,8 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
 object BlockchainUpdatesTestBase extends Assertions {
   def filterOutMinerBalanceUpdates(append: Append): Seq[StateUpdate.BalanceUpdate] = {
     val generatorPK = append.body match {
-      case Body.Empty => fail("Append event is empty")
-      case Body.Block(value) => value.getBlock.getHeader.generator
+      case Body.Empty             => fail("Append event is empty")
+      case Body.Block(value)      => value.getBlock.getHeader.generator
       case Body.MicroBlock(value) => value.getMicroBlock.getMicroBlock.senderPublicKey
     }
     val generatorAddress = ByteString.copyFrom(PublicKey(generatorPK.toByteArray).toAddress.bytes)

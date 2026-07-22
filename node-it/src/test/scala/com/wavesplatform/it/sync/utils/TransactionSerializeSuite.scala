@@ -91,7 +91,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       1,
       1,
       tsOrderFrom,
-      Proofs(ByteStr.decodeBase16("db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d").get)
+      Proofs(
+        ByteStr
+          .decodeBase16(
+            "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+          )
+          .get
+      )
     )
     .explicitGet()
 
@@ -106,7 +112,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       1,
       1,
       tsOrderFrom,
-      Proofs(Seq(ByteStr.decodeBase16("db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -118,7 +132,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       10000000000L,
       burnFee,
       ts,
-      Proofs(ByteStr.decodeBase16("2d5879ade04e17578da8d2ec810e56b52809ef2944e4767cae4bd9046770fdc5463ef1978a66a1f36979360579085b1637219a065c918e0316f23f6fa30d2589").get)
+      Proofs(
+        ByteStr
+          .decodeBase16(
+            "2d5879ade04e17578da8d2ec810e56b52809ef2944e4767cae4bd9046770fdc5463ef1978a66a1f36979360579085b1637219a065c918e0316f23f6fa30d2589"
+          )
+          .get
+      )
     )
     .explicitGet()
 
@@ -130,7 +150,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       10000000000L,
       burnFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("76aae510e4dd0b54dd1da7ef741e1ea08a118c54ae7ecf5e920781fe747a75c3ad4f68f9a3592ed0f440eb3ad215910e0b45bb2d0a309ed5c461e114ba431280").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "76aae510e4dd0b54dd1da7ef741e1ea08a118c54ae7ecf5e920781fe747a75c3ad4f68f9a3592ed0f440eb3ad215910e0b45bb2d0a309ed5c461e114ba431280"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -141,7 +169,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       "myalias",
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase16("09a65421fdb0632908bf6e157ae78f19f8cf4cf479bcb30c14aca7d75788cdcf10a7df9d6b6d2de0d1c4290be4a4f0495f05985d1a1cce62d6aa1f93b8bffb86").get)
+      Proofs(
+        ByteStr
+          .decodeBase16(
+            "09a65421fdb0632908bf6e157ae78f19f8cf4cf479bcb30c14aca7d75788cdcf10a7df9d6b6d2de0d1c4290be4a4f0495f05985d1a1cce62d6aa1f93b8bffb86"
+          )
+          .get
+      )
     )
     .explicitGet()
 
@@ -152,7 +186,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       "myalias",
       minFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("36bb64f8a1fc8faa30938b2ed138a0466ff6913d1d4e08a7071a0d891a677350789b20ff7f9c326eec9953c7f38f19b40a34db58c10d346f7e71312a2b708c87").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "36bb64f8a1fc8faa30938b2ed138a0466ff6913d1d4e08a7071a0d891a677350789b20ff7f9c326eec9953c7f38f19b40a34db58c10d346f7e71312a2b708c87"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -163,7 +205,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       List(IntegerDataEntry("int", 24), BooleanDataEntry("bool", true), BinaryDataEntry("blob", ByteStr.decodeBase64("YWxpY2U=").get)),
       minFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("658e5bb4a9c2e9a93821b87c68d4417bf955136dd4f4551fcf82e49d4ec8d8f13702699a6d3a85cec3d78dce11cc69cd06a41e10b995bd3dc50ef0b5eb0f6b8b").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "658e5bb4a9c2e9a93821b87c68d4417bf955136dd4f4551fcf82e49d4ec8d8f13702699a6d3a85cec3d78dce11cc69cd06a41e10b995bd3dc50ef0b5eb0f6b8b"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -178,7 +228,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     script = None,
     TxPositiveAmount.unsafeFrom(issueFee),
     ts,
-    Proofs(ByteStr.decodeBase16("38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81").get),
+    Proofs(
+      ByteStr
+        .decodeBase16(
+          "38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81"
+        )
+        .get
+    ),
     AddressScheme.current.chainId
   )
 
@@ -193,7 +249,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     None,
     TxPositiveAmount.unsafeFrom(issueFee),
     ts,
-    Proofs(Seq(ByteStr.decodeBase16("982a50240551cb4b2eb74963ca54319df33bcb06b532fac5986254b0c668cf311bdafb965dab3dea5b94a5b06e03ff42a6740bc68083620cc58e44ee16d4b28b").get)),
+    Proofs(
+      Seq(
+        ByteStr
+          .decodeBase16(
+            "982a50240551cb4b2eb74963ca54319df33bcb06b532fac5986254b0c668cf311bdafb965dab3dea5b94a5b06e03ff42a6740bc68083620cc58e44ee16d4b28b"
+          )
+          .get
+      )
+    ),
     AddressScheme.current.chainId
   )
 
@@ -204,7 +268,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       ByteStr.decodeBase16("c905697322ae74647ff72b38bf23de8c9db40276abb2195676c78a260edcec0f").get,
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase16("ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280").get)
+      Proofs(
+        ByteStr
+          .decodeBase16(
+            "ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280"
+          )
+          .get
+      )
     )
     .explicitGet()
 
@@ -215,7 +285,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       ByteStr.decodeBase16("b6c8c0ec67cb74ea16339e5cba54e274310234597b193fa49035e1013b205dc7").get,
       minFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -227,7 +305,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       10000000,
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase16("2430aa66d62717e1c622ffb58b335b0b584534e3a04afccf913df74a1f1a0798c89d3f07cc340c9318e4ec966663ba2a497bfbdb8037468d4787466b2fd91687").get)
+      Proofs(
+        ByteStr
+          .decodeBase16(
+            "2430aa66d62717e1c622ffb58b335b0b584534e3a04afccf913df74a1f1a0798c89d3f07cc340c9318e4ec966663ba2a497bfbdb8037468d4787466b2fd91687"
+          )
+          .get
+      )
     )
     .explicitGet()
 
@@ -239,7 +323,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       10000000,
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase16("d4ded0a3a798decf46459c701e03b6db01cc2c93d1445f6973a3cb5172247f89997a9729cec3d3f288a5a46484434c012e99ed76b1abfa3c31bee1097afc9c80").get)
+      Proofs(
+        ByteStr
+          .decodeBase16(
+            "d4ded0a3a798decf46459c701e03b6db01cc2c93d1445f6973a3cb5172247f89997a9729cec3d3f288a5a46484434c012e99ed76b1abfa3c31bee1097afc9c80"
+          )
+          .get
+      )
     )
     .explicitGet()
 
@@ -254,7 +344,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       2.waves,
       ts,
       ByteStr.decodeBase16("6d617373706179").get,
-      Proofs(Seq(ByteStr.decodeBase16("0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -267,7 +365,13 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       true,
       1.waves,
       ts,
-      Proofs(ByteStr.decodeBase16("75181d1b61ed9fcd77ea1377209fafb8e91432c62802f23efe08345444b16a477e3c45e919633a7438dbb0f2de226365371669b30fe8f712c6b61c87f3878385").get)
+      Proofs(
+        ByteStr
+          .decodeBase16(
+            "75181d1b61ed9fcd77ea1377209fafb8e91432c62802f23efe08345444b16a477e3c45e919633a7438dbb0f2de226365371669b30fe8f712c6b61c87f3878385"
+          )
+          .get
+      )
     )
     .explicitGet()
 
@@ -280,7 +384,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       true,
       1.waves,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("a09c6e2c09d8f1b76ccd2d45eab80fbdc564a02937738ba80ca1155cb5e7b95eb2fb3bbc47f28c67ed512ded60b5669c3cddb9c0fb09974a28db35162d919488").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "a09c6e2c09d8f1b76ccd2d45eab80fbdc564a02937738ba80ca1155cb5e7b95eb2fb3bbc47f28c67ed512ded60b5669c3cddb9c0fb09974a28db35162d919488"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -312,7 +424,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       None,
       setScriptFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("2c81fb0e22374a9d9824f8a7b5c2b9c61d83b082f24ff0eb8baa4ce0088cf06ced11abf963163a4ac491e4097dd1856c285d0670d44d0dd052e3d5115b913c8b").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "2c81fb0e22374a9d9824f8a7b5c2b9c61d83b082f24ff0eb8baa4ce0088cf06ced11abf963163a4ac491e4097dd1856c285d0670d44d0dd052e3d5115b913c8b"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -324,7 +444,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       Some(100000),
       1.waves,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("7899b9c4712c424c901ef829951e7c661c1d68640b098de87b8accadb912e580ef59189b751d5c82315c4d656fea66412d5b293a019dd5bd13a3c2b13ee2d488").get))
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "7899b9c4712c424c901ef829951e7c661c1d68640b098de87b8accadb912e580ef59189b751d5c82315c4d656fea66412d5b293a019dd5bd13a3c2b13ee2d488"
+            )
+            .get
+        )
+      )
     )
     .explicitGet()
 
@@ -339,7 +467,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     TxPositiveAmount.unsafeFrom(minFee),
     ByteStr.empty,
     ts,
-    Proofs(Seq(ByteStr.decodeBase16("2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981").get)),
+    Proofs(
+      Seq(
+        ByteStr
+          .decodeBase16(
+            "2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981"
+          )
+          .get
+      )
+    ),
     recipient.chainId
   )
 
@@ -353,7 +489,15 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     TxPositiveAmount.unsafeFrom(minFee),
     ByteStr.empty,
     ts,
-    Proofs(Seq(ByteStr.decodeBase16("b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f").get)),
+    Proofs(
+      Seq(
+        ByteStr
+          .decodeBase16(
+            "b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f"
+          )
+          .get
+      )
+    ),
     recipient.chainId
   )
 
@@ -368,11 +512,21 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
           args = List(TRUE)
         )
       ),
-      Seq(InvokeScriptTransaction.Payment(7, IssuedAsset(ByteStr.decodeBase16("59df714ead8fb10b68e31153ad01994117652cb3c960c6e32c57e7dec28a5846").get))),
+      Seq(
+        InvokeScriptTransaction.Payment(7, IssuedAsset(ByteStr.decodeBase16("59df714ead8fb10b68e31153ad01994117652cb3c960c6e32c57e7dec28a5846").get))
+      ),
       smartMinFee,
       Waves,
       ts,
-      Proofs(Seq(ByteStr.decodeBase16("b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f").get)),
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f"
+            )
+            .get
+        )
+      ),
       AddressScheme.current.chainId
     )
     .explicitGet()

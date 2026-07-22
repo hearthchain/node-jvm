@@ -73,18 +73,32 @@ class PBOrdersSpecification extends FlatSpec {
     val signed = PBOrders
       .vanilla(
         protoOrder.copy(
-          proofs = Seq(ByteString.copyFrom(Base16.decode("a2a49109c977ba45f29a40d32259c3944f33c348ef6b27e68054d5c8348dfe63e11e1a2dadc057d5aca0612ad132ee01a899e3bd32d240d059bf691fc10c6006")))
+          proofs = Seq(
+            ByteString.copyFrom(
+              Base16.decode(
+                "a2a49109c977ba45f29a40d32259c3944f33c348ef6b27e68054d5c8348dfe63e11e1a2dadc057d5aca0612ad132ee01a899e3bd32d240d059bf691fc10c6006"
+              )
+            )
+          )
         )
-      ).explicitGet()
+      )
+      .explicitGet()
     signed.firstProofIsValidSignatureAfterV6 shouldBe Symbol("right")
 
     val signedV4 = PBOrders
       .vanilla(
         protoOrder.copy(
           version = Order.V4,
-          proofs = Seq(ByteString.copyFrom(Base16.decode("2f630dd7728251552b23f5b56e4d6472377cf9368da151539b12b24fffb3abe367dbcad68c144c52c2183c2f619e425da1ee754ebb28be1d661ca3328968c400")))
+          proofs = Seq(
+            ByteString.copyFrom(
+              Base16.decode(
+                "2f630dd7728251552b23f5b56e4d6472377cf9368da151539b12b24fffb3abe367dbcad68c144c52c2183c2f619e425da1ee754ebb28be1d661ca3328968c400"
+              )
+            )
+          )
         )
-      ).explicitGet()
+      )
+      .explicitGet()
 
     signedV4.firstProofIsValidSignatureAfterV6 shouldBe Symbol("right")
   }

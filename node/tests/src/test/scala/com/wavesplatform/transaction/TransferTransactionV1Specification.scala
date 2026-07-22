@@ -44,7 +44,15 @@ class TransferTransactionV1Specification extends PropSpec {
       TxPositiveAmount.unsafeFrom(100000),
       ByteStr.decodeBase16("66616c6166656c").get,
       1526552510868L,
-      Proofs(Seq(ByteStr.decodeBase16("2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981").get)),
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981"
+            )
+            .get
+        )
+      ),
       AddressScheme.current.chainId
     )
 
@@ -54,7 +62,9 @@ class TransferTransactionV1Specification extends PropSpec {
   property("negative") {
     for {
       (_, sender, recipient, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
-    } yield TransferTransaction.create(1.toByte, PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty).map(_.signWith(sender)) should produce(
+    } yield TransferTransaction
+      .create(1.toByte, PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty)
+      .map(_.signWith(sender)) should produce(
       "insufficient fee"
     )
   }

@@ -50,7 +50,7 @@ abstract class Node(val config: Config) extends AutoCloseable {
     * inaccessible from the host.
     */
   def networkAddress: InetSocketAddress
-  
+
   def networkAddressAccessibleFromHost: InetSocketAddress
 
   override def close(): Unit = client.close()

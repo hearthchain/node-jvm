@@ -591,8 +591,8 @@ class BlocksApiRouteSpec
     withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves))) { d =>
       val route = new BlocksApiRoute(d.settings.restAPISettings, d.blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler)).route
 
-      def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(
-          implicit pos: Position
+      def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(implicit
+          pos: Position
       ): Unit = {
         Seq("/headers/at/", "/at/").foreach { prefix =>
           val path = routePath(s"$prefix$height")

@@ -221,7 +221,9 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
       val sell1 =
         if (sellV == 3) {
-          TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee, sellerMatcherFeeAssetId).explicitGet()
+          TxHelpers
+            .sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee, sellerMatcherFeeAssetId)
+            .explicitGet()
         } else TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee).explicitGet()
 
       createExTx(buy, sell1, buyPrice, exchangeV) shouldBe Left(OrderValidationError(sell1, "expiration should be > currentTime"))
@@ -283,7 +285,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       Order.V1,
       OrderAuthentication.OrderProofs(
         PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet(),
-        Proofs(ByteStr.decodeBase16("01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"
+            )
+            .get
+        )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
       AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
@@ -299,7 +307,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       Order.V1,
       OrderAuthentication.OrderProofs(
         PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet(),
-        Proofs(ByteStr.decodeBase16("46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"
+            )
+            .get
+        )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
       AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
@@ -322,7 +336,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         1,
         1,
         1526992336241L,
-        Proofs(ByteStr.decodeBase16("db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+            )
+            .get
+        )
       )
       .explicitGet()
 
@@ -383,7 +403,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       Order.V2,
       OrderAuthentication.OrderProofs(
         PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet(),
-        Proofs(ByteStr.decodeBase16("01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"
+            )
+            .get
+        )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
       AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
@@ -399,7 +425,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       Order.V1,
       OrderAuthentication.OrderProofs(
         PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet(),
-        Proofs(ByteStr.decodeBase16("46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"
+            )
+            .get
+        )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
       AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
@@ -422,7 +454,15 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         1,
         1,
         1526992336241L,
-        Proofs(Seq(ByteStr.decodeBase16("db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d").get))
+        Proofs(
+          Seq(
+            ByteStr
+              .decodeBase16(
+                "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+              )
+              .get
+          )
+        )
       )
       .explicitGet()
 
@@ -484,7 +524,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       Order.V3,
       OrderAuthentication.OrderProofs(
         PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet(),
-        Proofs(ByteStr.decodeBase16("01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"
+            )
+            .get
+        )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
       AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
@@ -501,7 +547,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       Order.V1,
       OrderAuthentication.OrderProofs(
         PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet(),
-        Proofs(ByteStr.decodeBase16("46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"
+            )
+            .get
+        )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
       AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
@@ -524,7 +576,15 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         1,
         1,
         1526992336241L,
-        Proofs(Seq(ByteStr.decodeBase16("db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d").get))
+        Proofs(
+          Seq(
+            ByteStr
+              .decodeBase16(
+                "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+              )
+              .get
+          )
+        )
       )
       .explicitGet()
 

@@ -196,7 +196,8 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
       .foreach { version =>
         val transferTxId = transferTxIds(version)
         val responseTx   = sender.transactionInfo[TransferTransactionInfo](transferTxId)
-        val bodyBytes = TxHelpers.transfer(
+        val bodyBytes = TxHelpers
+          .transfer(
             from = alice,
             to = Alias.createWithChainId(alias, chainId.toByte).explicitGet(),
             asset = IssuedAsset(ByteStr.decodeBase16(assetId).get),

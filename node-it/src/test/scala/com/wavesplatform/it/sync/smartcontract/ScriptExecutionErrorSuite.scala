@@ -34,12 +34,20 @@ class ScriptExecutionErrorSuite extends BaseTransactionSuite with CancelAfterFai
 
     val compiled = ScriptCompiler.compile(scriptSrc, ScriptEstimatorV2).explicitGet()._1
 
-    val tx = sender.signedBroadcast(SetScriptTransaction.create(1.toByte, thirdKeyPair.publicKey, Some(compiled), setScriptFee, ts, Proofs.empty).map(_.signWith(thirdKeyPair.privateKey)).explicitGet().json())
+    val tx = sender.signedBroadcast(
+      SetScriptTransaction
+        .create(1.toByte, thirdKeyPair.publicKey, Some(compiled), setScriptFee, ts, Proofs.empty)
+        .map(_.signWith(thirdKeyPair.privateKey))
+        .explicitGet()
+        .json()
+    )
     nodes.waitForHeightAriseAndTxPresent(tx.id)
 
     val alias = Alias.fromString(s"alias:${AddressScheme.current.chainId.toChar}:asdasdasdv").explicitGet()
     assertBadRequestAndResponse(
-      sender.signedBroadcast(TxHelpers.createAlias(name = alias.name, sender = thirdKeyPair, fee = minFee + smartFee, version = Transaction.V2).json()),
+      sender.signedBroadcast(
+        TxHelpers.createAlias(name = alias.name, sender = thirdKeyPair, fee = minFee + smartFee, version = Transaction.V2).json()
+      ),
       "Your transaction has incorrect type."
     )
   }

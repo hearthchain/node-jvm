@@ -197,7 +197,9 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
         // 2 x sponsor here: A-5, A-6
         // 2 x transfers with sponsored assets here: A-7, A-8
         sponsorTxs.size shouldBe 9
-        sponsorTxs.count(tx => tx.sender.contains(sponsorAddress) || tx.recipient.contains(sponsorAddress)) shouldBe 6 // Without initial transfer, A-7, A-8
+        sponsorTxs.count(tx =>
+          tx.sender.contains(sponsorAddress) || tx.recipient.contains(sponsorAddress)
+        ) shouldBe 6 // Without initial transfer, A-7, A-8
         sponsorTxs.map(_.id) should contain allElementsOf Seq(
           firstSponsorAssetId,
           secondSponsorAssetId,

@@ -40,7 +40,15 @@ class ProtoBufBenchmark {
           200000,
           1518091313964L,
           ByteStr.decodeBase16("6d617373706179").get,
-          Proofs(Seq(ByteStr.decodeBase16("0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289").get))
+          Proofs(
+            Seq(
+              ByteStr
+                .decodeBase16(
+                  "0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289"
+                )
+                .get
+            )
+          )
         )
         .explicitGet()
     }
@@ -67,7 +75,15 @@ class ProtoBufBenchmark {
           200000,
           1518091313964L,
           ByteStr.decodeBase16("6d617373706179").get,
-          Proofs(Seq(ByteStr.decodeBase16("0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289").get))
+          Proofs(
+            Seq(
+              ByteStr
+                .decodeBase16(
+                  "0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289"
+                )
+                .get
+            )
+          )
         )
         .explicitGet()
     }

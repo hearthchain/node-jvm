@@ -251,7 +251,9 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
           AssertiveApiError(StateCheckFailed.Id, "Fee .* does not exceed minimal value", StateCheckFailed.Code, true)
         ),
         (
-          sastx(assetId = IssuedAsset(ByteStr.decodeBase16("060730710c79cecda16f66e5d665d1660acdfbfb75dcdcc7e5aa14e912fba165ea3528bd1f2a2423720fa5229f").get)),
+          sastx(assetId =
+            IssuedAsset(ByteStr.decodeBase16("060730710c79cecda16f66e5d665d1660acdfbfb75dcdcc7e5aa14e912fba165ea3528bd1f2a2423720fa5229f").get)
+          ),
           AssertiveApiError(WrongJson.Id, WrongJson.WrongJsonDataMessage, StatusCodes.BadRequest, true)
         ),
         (

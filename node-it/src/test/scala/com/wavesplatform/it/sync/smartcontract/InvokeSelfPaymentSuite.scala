@@ -33,10 +33,15 @@ class InvokeSelfPaymentSuite extends BaseFunSuite with CancelAfterFailure {
   private lazy val dAppV4Address = dAppV4.toAddress.toString
 
   test("prerequisite: set contract") {
-    sender.massTransfer(caller, List(
-      Transfer(dAppV4.toAddress.toString, 100.waves),
-      Transfer(dAppV3.toAddress.toString, 100.waves),
-    ), 0.005.waves, waitForTx = true)
+    sender.massTransfer(
+      caller,
+      List(
+        Transfer(dAppV4.toAddress.toString, 100.waves),
+        Transfer(dAppV3.toAddress.toString, 100.waves)
+      ),
+      0.005.waves,
+      waitForTx = true
+    )
     sender.signedBroadcast(issueTx.json(), true)
 
     val sourceV4 =
@@ -83,11 +88,13 @@ class InvokeSelfPaymentSuite extends BaseFunSuite with CancelAfterFailure {
   }
 
   test("V4: can't invoke itself with payment") {
-    for (payment <- List(
-           Seq(InvokeScriptTransaction.Payment(1, Waves)),
-           Seq(InvokeScriptTransaction.Payment(1, asset1)),
-           Seq(InvokeScriptTransaction.Payment(1, Waves), InvokeScriptTransaction.Payment(1, asset1))
-         )) {
+    for (
+      payment <- List(
+        Seq(InvokeScriptTransaction.Payment(1, Waves)),
+        Seq(InvokeScriptTransaction.Payment(1, asset1)),
+        Seq(InvokeScriptTransaction.Payment(1, Waves), InvokeScriptTransaction.Payment(1, asset1))
+      )
+    ) {
       assertApiError(
         sender.invokeScript(dAppV4, dAppV4Address, payment = payment, fee = smartMinFee + smartFee),
         AssertiveApiError(ScriptExecutionError.Id, "DApp self-payment is forbidden since V4", matchMessage = true)
@@ -100,10 +107,12 @@ class InvokeSelfPaymentSuite extends BaseFunSuite with CancelAfterFailure {
   }
 
   test("V4: can't send tokens to itself from a script") {
-    for (args <- List(
-           List(CONST_STRING("WAVES").explicitGet()),
-           List(CONST_STRING(asset1Id).explicitGet())
-         )) {
+    for (
+      args <- List(
+        List(CONST_STRING("WAVES").explicitGet()),
+        List(CONST_STRING(asset1Id).explicitGet())
+      )
+    ) {
       assertApiError(
         sender.invokeScript(caller, dAppV4Address, Some("paySelf"), args),
         AssertiveApiError(ScriptExecutionError.Id, "Error while executing dApp: DApp self-transfer is forbidden since V4")

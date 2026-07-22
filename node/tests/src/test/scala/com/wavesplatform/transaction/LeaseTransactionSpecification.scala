@@ -19,7 +19,15 @@ class LeaseTransactionSpecification extends PropSpec {
         10000000,
         1000000,
         1526646497465L,
-        Proofs(Seq(ByteStr.decodeBase16("d4ded0a3a798decf46459c701e03b6db01cc2c93d1445f6973a3cb5172247f89997a9729cec3d3f288a5a46484434c012e99ed76b1abfa3c31bee1097afc9c80").get))
+        Proofs(
+          Seq(
+            ByteStr
+              .decodeBase16(
+                "d4ded0a3a798decf46459c701e03b6db01cc2c93d1445f6973a3cb5172247f89997a9729cec3d3f288a5a46484434c012e99ed76b1abfa3c31bee1097afc9c80"
+              )
+              .get
+          )
+        )
       )
       .explicitGet()
 

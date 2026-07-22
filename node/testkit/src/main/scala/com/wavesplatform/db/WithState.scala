@@ -101,7 +101,9 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     *   Accounts to credit in the genesis snapshot. There are no genesis transactions any more, so this is the only way
     *   to fund an account: the snapshot is built from the settings, and applied to the block at height 1.
     */
-  def withTestState[A](fs: FunctionalitySettings, balances: Seq[AddrWithBalance], assets: Seq[GenesisAssetSettings])(test: (BlockchainUpdaterImpl, RocksDBWriter) => A): A =
+  def withTestState[A](fs: FunctionalitySettings, balances: Seq[AddrWithBalance], assets: Seq[GenesisAssetSettings])(
+      test: (BlockchainUpdaterImpl, RocksDBWriter) => A
+  ): A =
     withTestState(
       TestSettings.Default
         .copy(blockchainSettings = TestRocksDB.createTestBlockchainSettings(fs))
@@ -445,8 +447,8 @@ object WithState {
     def enoughBalances(accs: SigningKey*): Seq[AddrWithBalance] =
       accs.map(acc => AddrWithBalance(acc.toAddress))
 
-    given Conversion[(Address, Long), AddrWithBalance] = v => AddrWithBalance(v._1, v._2)
-    given Conversion[(SigningKey, Long), AddrWithBalance] = v => AddrWithBalance(v._1.toAddress, v._2)
+    given Conversion[(Address, Long), AddrWithBalance]                 = v => AddrWithBalance(v._1, v._2)
+    given Conversion[(SigningKey, Long), AddrWithBalance]              = v => AddrWithBalance(v._1.toAddress, v._2)
     given Conversion[(SigningKey, IssuedAsset, Long), AddrWithBalance] = v => AddrWithBalance(v._1.toAddress, 0, Map(v._2 -> v._3))
 
   }

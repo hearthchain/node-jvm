@@ -12,7 +12,9 @@ import com.wavesplatform.wallet.Wallet
 class WalletSpecification extends FunSuite {
 
   private val walletSize = 10
-  val w                  = Wallet(WalletSettings(None, "cookies".some, ByteStr.decodeBase16("d614be8ab5715ff8ab463251b4b5c571ee656e6243b6fa4206d816ee9179e9c3").toOption))
+  val w = Wallet(
+    WalletSettings(None, "cookies".some, ByteStr.decodeBase16("d614be8ab5715ff8ab463251b4b5c571ee656e6243b6fa4206d816ee9179e9c3").toOption)
+  )
 
   test("wallet - acc creation") {
     w.generateNewAccounts(walletSize)
@@ -49,7 +51,9 @@ class WalletSpecification extends FunSuite {
   test("reopening") {
     val walletFile = Some(createTestTemporaryFile("wallet", ".dat"))
 
-    val w1 = Wallet(WalletSettings(walletFile, "cookies".some, ByteStr.decodeBase16("d614be8ab5715ff8ab463251b4b5c571ee656e6243b6fa4206d816ee9179e9c3").toOption))
+    val w1 = Wallet(
+      WalletSettings(walletFile, "cookies".some, ByteStr.decodeBase16("d614be8ab5715ff8ab463251b4b5c571ee656e6243b6fa4206d816ee9179e9c3").toOption)
+    )
     w1.generateNewAccounts(10)
     val w1PrivateKeys = w1.privateKeyAccounts
 
@@ -63,7 +67,8 @@ class WalletSpecification extends FunSuite {
 
   test("reopen with incorrect password") {
     val file = Some(createTestTemporaryFile("wallet", ".dat"))
-    val w1   = Wallet(WalletSettings(file, "password".some, ByteStr.decodeBase16("d614be8ab5715ff8ab463251b4b5c571ee656e6243b6fa4206d816ee9179e9c3").toOption))
+    val w1 =
+      Wallet(WalletSettings(file, "password".some, ByteStr.decodeBase16("d614be8ab5715ff8ab463251b4b5c571ee656e6243b6fa4206d816ee9179e9c3").toOption))
     w1.generateNewAccounts(3)
 
     assertThrows[IllegalArgumentException] {

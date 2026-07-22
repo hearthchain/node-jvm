@@ -26,14 +26,21 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
   private val origTx = CommitToGenerationTransaction(
     version = TxVersion.V1,
     sender = PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
-    endorserPublicKey = BlsPublicKey(Base16.decode("8dbf77df79479e11e99011f5ebc66b0d160ceddf2fcecfade325f07e96213f0d5d47a9af5a7ce3314f532e6aa03a33db")).explicitGet(),
+    endorserPublicKey =
+      BlsPublicKey(Base16.decode("8dbf77df79479e11e99011f5ebc66b0d160ceddf2fcecfade325f07e96213f0d5d47a9af5a7ce3314f532e6aa03a33db")).explicitGet(),
     generationPeriodStart = Height(3000),
     timestamp = 1526287561757L,
     fee = TxPositiveAmount.unsafeFrom(100000000),
     commitmentSignature = sig,
     vrfPublicKey = vrfPk,
     vrfCommitmentSignature = vrfSig,
-    proofs = Proofs(ByteStr.decodeBase16("38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81").get),
+    proofs = Proofs(
+      ByteStr
+        .decodeBase16(
+          "38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81"
+        )
+        .get
+    ),
     chainId = AddressScheme.current.chainId
   )
 

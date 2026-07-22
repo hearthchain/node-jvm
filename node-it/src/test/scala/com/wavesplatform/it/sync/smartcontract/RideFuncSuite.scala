@@ -18,7 +18,7 @@ import org.scalatest.CancelAfterFailure
 
 class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
   private val estimator = ScriptEstimatorV2
-  
+
   import NodeConfigs.*
   override protected def nodeConfigs: Seq[Config] = Seq(BiggestMiner.quorum(0))
 
@@ -44,14 +44,29 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
 
     val tx =
       sender.signedBroadcast(
-        SetScriptTransaction.create(1.toByte, pkNewAddress.publicKey, Some(compiled), setScriptFee, System.currentTimeMillis(), Proofs.empty).map(_.signWith(pkNewAddress.privateKey)).explicitGet().json()
+        SetScriptTransaction
+          .create(1.toByte, pkNewAddress.publicKey, Some(compiled), setScriptFee, System.currentTimeMillis(), Proofs.empty)
+          .map(_.signWith(pkNewAddress.privateKey))
+          .explicitGet()
+          .json()
       )
     nodes.waitForHeightAriseAndTxPresent(tx.id)
 
     assertBadRequestAndResponse(
       sender.signedBroadcast(
         TransferTransaction
-          .create(2.toByte, pkNewAddress.publicKey, pkNewAddress.toAddress, Waves, 1.waves, Waves, smartMinFee, ByteStr.empty, System.currentTimeMillis(), Proofs.empty)
+          .create(
+            2.toByte,
+            pkNewAddress.publicKey,
+            pkNewAddress.toAddress,
+            Waves,
+            1.waves,
+            Waves,
+            smartMinFee,
+            ByteStr.empty,
+            System.currentTimeMillis(),
+            Proofs.empty
+          )
           .map(_.signWith(pkNewAddress.privateKey))
           .explicitGet()
           .json()
@@ -81,7 +96,18 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
 
     val transfer = sender.signedBroadcast(
       TransferTransaction
-        .create(2.toByte, pkNewAddress.publicKey, pkNewAddress.toAddress, Waves, 1.waves, Waves, smartMinFee, ByteStr.empty, System.currentTimeMillis(), Proofs.empty)
+        .create(
+          2.toByte,
+          pkNewAddress.publicKey,
+          pkNewAddress.toAddress,
+          Waves,
+          1.waves,
+          Waves,
+          smartMinFee,
+          ByteStr.empty,
+          System.currentTimeMillis(),
+          Proofs.empty
+        )
         .map(_.signWith(pkNewAddress.privateKey))
         .explicitGet()
         .json()
@@ -111,7 +137,18 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
     assertBadRequestAndResponse(
       sender.signedBroadcast(
         TransferTransaction
-          .create(2.toByte, pkNewAddress.publicKey, pkNewAddress.toAddress, Waves, 1.waves, Waves, smartMinFee, ByteStr.empty, System.currentTimeMillis(), Proofs.empty)
+          .create(
+            2.toByte,
+            pkNewAddress.publicKey,
+            pkNewAddress.toAddress,
+            Waves,
+            1.waves,
+            Waves,
+            smartMinFee,
+            ByteStr.empty,
+            System.currentTimeMillis(),
+            Proofs.empty
+          )
           .map(_.signWith(pkNewAddress.privateKey))
           .explicitGet()
           .json()
@@ -141,7 +178,18 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
 
     val transferAfterUpd = sender.signedBroadcast(
       TransferTransaction
-        .create(2.toByte, pkNewAddress.publicKey, pkNewAddress.toAddress, Waves, 1.waves, Waves, smartMinFee, ByteStr.empty, System.currentTimeMillis(), Proofs.empty)
+        .create(
+          2.toByte,
+          pkNewAddress.publicKey,
+          pkNewAddress.toAddress,
+          Waves,
+          1.waves,
+          Waves,
+          smartMinFee,
+          ByteStr.empty,
+          System.currentTimeMillis(),
+          Proofs.empty
+        )
         .map(_.signWith(pkNewAddress.privateKey))
         .explicitGet()
         .json()
@@ -173,22 +221,26 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
     val pkNewAddress = newAddress
     sender.transfer(firstKeyPair, newAddress.toAddress.toString, 10.waves, minFee, waitForTx = true)
 
-    val scriptSet          = SetScriptTransaction.create(1.toByte, pkNewAddress.publicKey, Some(compiledScript), setScriptFee, System.currentTimeMillis(), Proofs.empty).map(_.signWith(pkNewAddress.privateKey))
+    val scriptSet = SetScriptTransaction
+      .create(1.toByte, pkNewAddress.publicKey, Some(compiledScript), setScriptFee, System.currentTimeMillis(), Proofs.empty)
+      .map(_.signWith(pkNewAddress.privateKey))
     val scriptSetBroadcast = sender.signedBroadcast(scriptSet.explicitGet().json())
     nodes.waitForHeightAriseAndTxPresent(scriptSetBroadcast.id)
 
-    val transfer = TransferTransaction.create(
-      2.toByte,
-      pkNewAddress.publicKey,
-      pkNewAddress.toAddress,
-      Waves,
-      1.waves,
-      Waves,
-      smartMinFee,
-      ByteStr.empty,
-      System.currentTimeMillis(),
-      Proofs.empty
-    ).map(_.signWith(pkNewAddress.privateKey))
+    val transfer = TransferTransaction
+      .create(
+        2.toByte,
+        pkNewAddress.publicKey,
+        pkNewAddress.toAddress,
+        Waves,
+        1.waves,
+        Waves,
+        smartMinFee,
+        ByteStr.empty,
+        System.currentTimeMillis(),
+        Proofs.empty
+      )
+      .map(_.signWith(pkNewAddress.privateKey))
     val transferBroadcast = sender.signedBroadcast(transfer.explicitGet().json())
     nodes.waitForHeightAriseAndTxPresent(transferBroadcast.id)
   }
@@ -197,19 +249,19 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
     val script = ScriptCompiler
       .compile(
         s"""
-         |  {-# STDLIB_VERSION 3       #-}
-         |  {-# CONTENT_TYPE   DAPP    #-}
-         |  {-# SCRIPT_TYPE    ACCOUNT #-}
-         |
-         |  @Verifier(tx)
-         |  func verify() = {
-         |    let block = extract(blockInfoByHeight(height))
-         |
-         |    let checkTs = lastBlock.timestamp == block.timestamp
-         |    let checkHeight = block.height == height
-         |    let checkHeightLast = lastBlock.height == height
-         |    checkTs && checkHeight && checkHeightLast
-         |  }
+           |  {-# STDLIB_VERSION 3       #-}
+           |  {-# CONTENT_TYPE   DAPP    #-}
+           |  {-# SCRIPT_TYPE    ACCOUNT #-}
+           |
+           |  @Verifier(tx)
+           |  func verify() = {
+           |    let block = extract(blockInfoByHeight(height))
+           |
+           |    let checkTs = lastBlock.timestamp == block.timestamp
+           |    let checkHeight = block.height == height
+           |    let checkHeightLast = lastBlock.height == height
+           |    checkTs && checkHeight && checkHeightLast
+           |  }
       """.stripMargin,
         estimator
       )

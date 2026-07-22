@@ -13,35 +13,34 @@ import play.api.libs.json.Json
 class TransferTransactionV2Specification extends PropSpec {
 
   property("VersionedTransferTransactionSpecification id doesn't depend on proof") {
-    forAll(accountGen, accountGen, proofsGen, proofsGen, attachmentGen) {
-      case (_, acc2, proofs1, proofs2, attachment) =>
-        val tx1 = TransferTransaction(
-          2.toByte,
-          PublicKey(acc2.publicKey),
-          acc2.toAddress,
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          attachment,
-          1,
-          proofs1,
-          AddressScheme.current.chainId
-        )
-        val tx2 = TransferTransaction(
-          2.toByte,
-          PublicKey(acc2.publicKey),
-          acc2.toAddress,
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          attachment,
-          1,
-          proofs2,
-          AddressScheme.current.chainId
-        )
-        tx1.id() shouldBe tx2.id()
+    forAll(accountGen, accountGen, proofsGen, proofsGen, attachmentGen) { case (_, acc2, proofs1, proofs2, attachment) =>
+      val tx1 = TransferTransaction(
+        2.toByte,
+        PublicKey(acc2.publicKey),
+        acc2.toAddress,
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        attachment,
+        1,
+        proofs1,
+        AddressScheme.current.chainId
+      )
+      val tx2 = TransferTransaction(
+        2.toByte,
+        PublicKey(acc2.publicKey),
+        acc2.toAddress,
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        attachment,
+        1,
+        proofs2,
+        AddressScheme.current.chainId
+      )
+      tx1.id() shouldBe tx2.id()
     }
   }
 
@@ -89,7 +88,15 @@ class TransferTransactionV2Specification extends PropSpec {
       TxPositiveAmount.unsafeFrom(100000000),
       ByteStr.decodeBase16("66616c6166656c").get,
       1526641218066L,
-      Proofs(Seq(ByteStr.decodeBase16("b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f").get)),
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f"
+            )
+            .get
+        )
+      ),
       AddressScheme.current.chainId
     )
 

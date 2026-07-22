@@ -41,7 +41,13 @@ class LeaseCancelTransactionSpecification extends PropSpec {
         ByteStr.decodeBase16("c905697322ae74647ff72b38bf23de8c9db40276abb2195676c78a260edcec0f").get,
         1000000,
         1526646300260L,
-        Proofs(ByteStr.decodeBase16("ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280"
+            )
+            .get
+        )
       )
       .explicitGet()
 
@@ -73,7 +79,15 @@ class LeaseCancelTransactionSpecification extends PropSpec {
         ByteStr.decodeBase16("b6c8c0ec67cb74ea16339e5cba54e274310234597b193fa49035e1013b205dc7").get,
         1000000,
         1526646300260L,
-        Proofs(Seq(ByteStr.decodeBase16("86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f").get))
+        Proofs(
+          Seq(
+            ByteStr
+              .decodeBase16(
+                "86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f"
+              )
+              .get
+          )
+        )
       )
       .explicitGet()
 

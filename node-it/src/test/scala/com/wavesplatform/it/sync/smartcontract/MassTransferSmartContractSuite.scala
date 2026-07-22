@@ -22,35 +22,35 @@ class MassTransferSmartContractSuite extends BaseTransactionSuite with CancelAft
 
   test("airdrop emulation via MassTransfer") {
     val scriptText = s"""
-       |{-# STDLIB_VERSION 2 #-}
-       |match tx {
-       |  case ttx: MassTransferTransaction =>
-       |    let commonAmount = (ttx.transfers[0].amount + ttx.transfers[1].amount)
-       |    let totalAmountToUsers = commonAmount == 8000000000
-       |    let totalAmountToGov = commonAmount == 2000000000
-       |    let massTxSize = size(ttx.transfers) == 2
-       |
-       |    let accountPK = base16'${notMiner.publicKey}'
-       |    let accSig = sigVerify(ttx.bodyBytes,ttx.proofs[0],accountPK)
-       |
-       |    let txToUsers = (massTxSize && totalAmountToUsers)
-       |
-       |    let mTx = transactionById(ttx.proofs[1])
-       |
-       |    if (txToUsers && accSig) then true
-       |    else
-       |    if(isDefined(mTx)) then
-       |        match extract(mTx) {
-       |          case mt2: MassTransferTransaction =>
-       |            let txToGov = (massTxSize && totalAmountToGov)
-       |            let txToGovComplete = (ttx.timestamp > mt2.timestamp + 30000) && sigVerify(mt2.bodyBytes,mt2.proofs[0], accountPK)
-       |            txToGovComplete && accSig && txToGov
-       |          case _ => false
-       |        }
-       |    else false
-       |case _ => false
-       |}
-       |""".stripMargin
+                        |{-# STDLIB_VERSION 2 #-}
+                        |match tx {
+                        |  case ttx: MassTransferTransaction =>
+                        |    let commonAmount = (ttx.transfers[0].amount + ttx.transfers[1].amount)
+                        |    let totalAmountToUsers = commonAmount == 8000000000
+                        |    let totalAmountToGov = commonAmount == 2000000000
+                        |    let massTxSize = size(ttx.transfers) == 2
+                        |
+                        |    let accountPK = base16'${notMiner.publicKey}'
+                        |    let accSig = sigVerify(ttx.bodyBytes,ttx.proofs[0],accountPK)
+                        |
+                        |    let txToUsers = (massTxSize && totalAmountToUsers)
+                        |
+                        |    let mTx = transactionById(ttx.proofs[1])
+                        |
+                        |    if (txToUsers && accSig) then true
+                        |    else
+                        |    if(isDefined(mTx)) then
+                        |        match extract(mTx) {
+                        |          case mt2: MassTransferTransaction =>
+                        |            let txToGov = (massTxSize && totalAmountToGov)
+                        |            let txToGovComplete = (ttx.timestamp > mt2.timestamp + 30000) && sigVerify(mt2.bodyBytes,mt2.proofs[0], accountPK)
+                        |            txToGovComplete && accSig && txToGov
+                        |          case _ => false
+                        |        }
+                        |    else false
+                        |case _ => false
+                        |}
+                        |""".stripMargin
 
     // set script
     val script = ScriptCompiler.compile(scriptText, ScriptEstimatorV2).explicitGet()._1.bytes().base64

@@ -124,7 +124,7 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       val block = Block
         .genesis(
           ws.blockchainSettings.genesisSettings,
-          ws.blockchainSettings.functionalitySettings,
+          ws.blockchainSettings.functionalitySettings
         )
         .explicitGet()
       val blockchain = preGenesisBlockchain(ws)
@@ -139,9 +139,8 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
     def applyGenesis(ws: WavesSettings): BlockDiffer.Result = genesisBlockAndResult(ws)._2
 
     "crediting the configured balances" in {
-      val ws = settingsWith(balances =
-        Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves), GenesisBalanceSettings(address(2).toBech32, 5.waves))
-      )
+      val ws =
+        settingsWith(balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves), GenesisBalanceSettings(address(2).toBech32, 5.waves)))
       val snapshot = applyGenesis(ws).snapshot
 
       snapshot.balances.get((address(1), Waves: com.wavesplatform.transaction.Asset)) shouldBe Some(100.waves)
@@ -176,8 +175,8 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
     }
 
     "recomputing the state hash the genesis block carries" in {
-      val ws           = settingsWith(balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves)))
-      val (block, r)   = genesisBlockAndResult(ws)
+      val ws         = settingsWith(balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves)))
+      val (block, r) = genesisBlockAndResult(ws)
 
       block.header.stateHash.value shouldBe r.computedStateHash
       // The signature covers the state hash, because the genesis block is protobuf-serialized
@@ -212,14 +211,20 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       )
       buildFails(settings) should include("Duplicate genesis balance recipient")
     }
-    
+
     "committed generator does not have enough balance" in {
       val generator = TxHelpers.signer(1005)
       val settings = settingsWith(
-        generators = Seq(GenesisGeneratorSettings(Base16.encode(generator.publicKey()), blsKeyOf(generator).publicKey.base16, Base16.encode(vrfKey(1005).publicKey()))),
+        generators = Seq(
+          GenesisGeneratorSettings(
+            Base16.encode(generator.publicKey()),
+            blsKeyOf(generator).publicKey.base16,
+            Base16.encode(vrfKey(1005).publicKey())
+          )
+        ),
         balances = Seq(GenesisBalanceSettings(generator.toAddress.toString, 5.waves))
       )
-      
+
       buildFails(settings) should include("not enough funds for deposit")
     }
   }
