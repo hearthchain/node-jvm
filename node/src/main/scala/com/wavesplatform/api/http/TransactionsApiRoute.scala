@@ -274,7 +274,7 @@ object TransactionsApiRoute {
       encoded          <- (jsv \ "id").validate[String]
       id               <- ByteStr.decodeBase16(encoded).fold(_ => JsError(InvalidSignature.message), JsSuccess(_))
       transactionIndex <- (jsv \ "transactionIndex").validate[Int]
-      merkleProof      <- (jsv \ "merkleProof").validate[List[String]].map(_.map(Base16.decode))
+      merkleProof      <- (jsv \ "merkleProof").validate[List[String]].map(_.map(s => Base16.tryDecodeWithLimit(s).get))
     } yield TransactionProof(id, transactionIndex, merkleProof)
   }
 

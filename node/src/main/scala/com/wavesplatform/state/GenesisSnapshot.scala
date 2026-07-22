@@ -75,7 +75,7 @@ object GenesisSnapshot {
         for {
           address <- Address.fromString(b.recipient).leftMap(e => GenericError(s"Genesis balance ${b.recipient}: invalid recipient: $e"))
           _       <- Either.cond(b.waves >= 0, (), GenericError(s"Genesis balance $address: Waves amount must not be negative, got ${b.waves}"))
-          _       <- checkNoDuplicates(b.assets.keys.toSeq, s"asset id in the balance of $address")
+          _       <- checkNoDuplicates(b.assets.keys.toSeq.map(_.toLowerCase), s"asset id in the balance of $address")
           assetEntries <- b.assets.toList.traverse { case (id, amount) =>
             for {
               assetId <- ByteStr.decodeBase16(id).toEither.leftMap(e => GenericError(s"Genesis balance $address: invalid asset id $id: $e"))
@@ -124,9 +124,10 @@ object GenesisSnapshot {
               s"$GenesisBlockHeight, got ${functionalitySettings.preActivatedFeatures.get(BlockchainFeatures.DeterministicFinality.id)}"
           )
         )
-        _ <- checkNoDuplicates(settings.map(_.publicKey), "genesis generator public key")
-        _ <- checkNoDuplicates(settings.map(_.endorserPublicKey), "genesis generator endorser public key")
-        _ <- checkNoDuplicates(settings.map(_.vrfPublicKey), "genesis generator VRF public key")
+        // Hex decoding is case-insensitive, so duplicates are checked on the lowercased form
+        _ <- checkNoDuplicates(settings.map(_.publicKey.toLowerCase), "genesis generator public key")
+        _ <- checkNoDuplicates(settings.map(_.endorserPublicKey.toLowerCase), "genesis generator endorser public key")
+        _ <- checkNoDuplicates(settings.map(_.vrfPublicKey.toLowerCase), "genesis generator VRF public key")
         generators <- settings.toList.traverse { g =>
           for {
             publicKey <- PublicKey.fromBase16String(g.publicKey).leftMap(e => GenericError(s"Genesis generator ${g.publicKey}: $e"))

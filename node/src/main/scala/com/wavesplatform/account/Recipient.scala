@@ -9,11 +9,11 @@ import scala.jdk.OptionConverters.*
 type Address = tech.hearth.crypto.Address
 
 object Address {
-  val Prefix: String           = "address:"
-  val AddressVersion: Byte     = tech.hearth.crypto.Address.ED25519_VERSION
-  val ChecksumLength: Int      = 4
-  val HashLength: Int          = 20
-  val AddressLength: Int       = 1 + 1 + HashLength + ChecksumLength
+  val Prefix: String       = "address:"
+  val AddressVersion: Byte = tech.hearth.crypto.Address.ED25519_VERSION
+  val ChecksumLength: Int  = 4
+  val HashLength: Int      = 20
+  val AddressLength: Int   = 1 + 1 + HashLength + ChecksumLength
 
   def fromPublicKey(publicKey: PublicKey): Address = tech.hearth.crypto.Address.fromPublicKey(publicKey.arr)
 
