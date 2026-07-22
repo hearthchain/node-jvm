@@ -30,7 +30,7 @@ object Dependencies {
       jacksonModule("core", "databind"),
       jacksonModule("datatype", "datatype-jdk8"),
       jacksonModule("datatype", "datatype-jsr310"),
-      "tools.jackson.core" % "jackson-databind" % "3.1.4",
+      "tools.jackson.core" % "jackson-databind" % "3.2.1",
       gProto
     )
   )
