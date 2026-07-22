@@ -2,18 +2,15 @@ package com.wavesplatform.common.utils
 
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.test.PropSpec
-import org.scalacheck.Gen
 
 class Base16Spec extends PropSpec {
-  private val byteArrayGen: Gen[Array[Byte]] = Gen.containerOf[Array, Byte](Gen.choose(Byte.MinValue, Byte.MaxValue))
-
   property("encodes to lowercase hex") {
     Base16.encode(Array[Byte](0x00, 0x01, 0x7f, 0xff.toByte)) shouldBe "00017fff"
     Base16.encode(Array.emptyByteArray) shouldBe ""
   }
 
   property("roundtrip") {
-    forAll(byteArrayGen) { bytes =>
+    forAll(genBoundedBytes(0, 300)) { bytes =>
       Base16.decode(Base16.encode(bytes)) shouldBe bytes
     }
   }

@@ -6,7 +6,6 @@ import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.serialization.Deser
 import com.wavesplatform.transaction.TxValidationError.{GenericError, ToBigProof, TooManyProofs, UsupportedProofVersion}
-import com.wavesplatform.utils.base16Length
 import monix.eval.Coeval
 
 import scala.util.Try
@@ -23,7 +22,6 @@ object Proofs {
   val Version: TxVersion      = 1: Byte
   val MaxProofs: Int          = 8
   val MaxProofSize: Int       = 64
-  val MaxProofStringSize: Int = base16Length(MaxProofSize)
 
   lazy val empty = new Proofs(Nil)
 

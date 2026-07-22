@@ -46,10 +46,10 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |        initial-base-target = 153722867
           |        average-block-delay = 60s
           |        assets = [
-          |          {id = "b4e393d26c2a3f66159e", issuer = "BASE58ISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
+          |          {id = "b4e393d26c2a3f66159e", issuer = "HEXISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
           |        ]
           |        generators = [
-          |          {public-key = "BASE58PUBLICKEY", endorser-public-key = "BASE58BLSKEY", vrf-public-key = "BASE58VRFKEY"}
+          |          {public-key = "HEXPUBLICKEY", endorser-public-key = "HEXBLSKEY", vrf-public-key = "HEXVRFKEY"}
           |        ]
           |        balances = [
           |          {recipient = "ADDRESS1", waves = 50000000000001},
@@ -83,7 +83,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
       Seq(
         GenesisAssetSettings(
           ByteStr.decodeBase16("b4e393d26c2a3f66159e").get,
-          "BASE58ISSUERKEY",
+          "HEXISSUERKEY",
           "Asset",
           decimals = 4,
           quantity = 1000,
@@ -91,7 +91,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
         )
       )
     )
-    settings.genesisSettings.generators should be(Seq(GenesisGeneratorSettings("BASE58PUBLICKEY", "BASE58BLSKEY", "BASE58VRFKEY")))
+    settings.genesisSettings.generators should be(Seq(GenesisGeneratorSettings("HEXPUBLICKEY", "HEXBLSKEY", "HEXVRFKEY")))
     settings.genesisSettings.balances should be(
       Seq(
         GenesisBalanceSettings("ADDRESS1", 50000000000001L),

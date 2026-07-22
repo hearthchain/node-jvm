@@ -8,7 +8,7 @@ import com.wavesplatform.lang.v1.EnvironmentFunctionsBenchmark.{curve25519}
 import com.wavesplatform.lang.v1.FunctionHeader.Native
 import com.wavesplatform.lang.v1.compiler.Terms.*
 import com.wavesplatform.lang.v1.evaluator.FunctionIds
-import com.wavesplatform.lang.v1.evaluator.FunctionIds.{FROMBASE58, SIGVERIFY, TOBASE58}
+import com.wavesplatform.lang.v1.evaluator.FunctionIds.{FROMBASE16, SIGVERIFY, TOBASE16}
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.PureContext
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -104,7 +104,7 @@ class Base16Perf {
           "v" + i,
           FUNCTION_CALL(
             PureContext.sizeString,
-            List(FUNCTION_CALL(Native(TOBASE58), List(CONST_BYTESTR(ByteStr(b)).explicitGet())))
+            List(FUNCTION_CALL(Native(TOBASE16), List(CONST_BYTESTR(ByteStr(b)).explicitGet())))
           )
         )
       }
@@ -122,7 +122,7 @@ class Base16Perf {
         Random.nextBytes(b)
         LET(
           "v" + i,
-          FUNCTION_CALL(PureContext.sizeBytes, List(FUNCTION_CALL(Native(FROMBASE58), List(CONST_STRING(Base16.encode(b)).explicitGet()))))
+          FUNCTION_CALL(PureContext.sizeBytes, List(FUNCTION_CALL(Native(FROMBASE16), List(CONST_STRING(Base16.encode(b)).explicitGet()))))
         )
       }
       .foldRight[EXPR](sum) { case (let, e) => BLOCK(let, e) }

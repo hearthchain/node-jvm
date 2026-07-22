@@ -2,7 +2,6 @@ package com.wavesplatform.account
 
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.TxValidationError.InvalidAddress
-import com.wavesplatform.utils.base16Length
 import play.api.libs.json.*
 
 import scala.jdk.OptionConverters.*
@@ -15,7 +14,6 @@ object Address {
   val ChecksumLength: Int      = 4
   val HashLength: Int          = 20
   val AddressLength: Int       = 1 + 1 + HashLength + ChecksumLength
-  val AddressStringLength: Int = base16Length(AddressLength)
 
   def fromPublicKey(publicKey: PublicKey): Address = tech.hearth.crypto.Address.fromPublicKey(publicKey.arr)
 

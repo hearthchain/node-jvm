@@ -219,7 +219,7 @@ paths:
       parameters:
         - name: address
           in: query
-          description: Addresses hex encoded
+          description: Addresses bech32 encoded
           required: true
           style: form
           explode: true
@@ -229,7 +229,7 @@ paths:
             maxItems: 47
             items:
               type: string
-              pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
+              pattern: '^hrth[mt]1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{40}$'
         - name: height
           in: query
           description: >-
@@ -273,10 +273,10 @@ paths:
               properties:
                 addresses:
                   type: array
-                  description: Addresses hex encoded
+                  description: Addresses bech32 encoded
                   items:
                     type: string
-                    pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
+                    pattern: '^hrth[mt]1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{40}$'
                   minItems: 1
                   maxItems: 1000
                 height:
@@ -1816,11 +1816,11 @@ paths:
       parameters:
         - name: signerAddress
           in: path
-          description: Wallet address hex encoded
+          description: Wallet address bech32 encoded
           required: true
           schema:
             type: string
-            pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
+            pattern: '^hrth[mt]1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{40}$'
       requestBody:
         description: >-
           Transaction [data in
@@ -2811,7 +2811,7 @@ paths:
             type: array
             items:
               type: string
-              pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+              pattern: '^[0-9a-fA-F]{64,128}$'
             minItems: 1
             maxItems: 1000
       responses:
@@ -2839,7 +2839,7 @@ paths:
                   description: Lease IDs hex encoded
                   items:
                     type: string
-                    pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+                    pattern: '^[0-9a-fA-F]{64,128}$'
                   minItems: 1
                   maxItems: 1000
           application/x-www-form-urlencoded:
@@ -2851,7 +2851,7 @@ paths:
                   description: Lease IDs hex encoded
                   items:
                     type: string
-                    pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+                    pattern: '^[0-9a-fA-F]{64,128}$'
             encoding:
               id:
                 style: form
@@ -3469,7 +3469,7 @@ components:
       example: 1610000
     Hash:
       type: string
-      pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+      pattern: '^[0-9a-fA-F]{64,128}$'
       example: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
     Signature:
       type: string
@@ -3514,8 +3514,8 @@ components:
         - $ref: '#/components/schemas/Hash'
     Address:
       type: string
-      pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
-      example: 3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k
+      pattern: '^hrth[mt]1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{40}$'
+      example: hrthm1qzwgwm70gtj5dfja3ygzz0vufswwef7jxu0qhx40
     Alias:
       type: string
       pattern: '^alias\:.:[\-\.0-9@_a-z]{4,30}$'
@@ -5684,7 +5684,7 @@ components:
                 $ref: '#/components/schemas/NonNegativeAmount'
       example:
         accounts:
-          '3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k':
+          'hrthm1qzwgwm70gtj5dfja3ygzz0vufswwef7jxu0qhx40':
             assetBalances:
               'DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p': '141592653'
               '34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ': 5897932
@@ -5998,7 +5998,7 @@ components:
     address:
       name: address
       in: path
-      description: Address hex encoded
+      description: Address bech32 encoded
       required: true
       schema:
         $ref: '#/components/schemas/Address'
@@ -6031,7 +6031,7 @@ components:
         height: 1610000
         totalFee: '100000'
         reference: 'qwertyuikmn56khjkKHKJHK787'
-        generator: '3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k'
+        generator: 'hrthm1qzwgwm70gtj5dfja3ygzz0vufswwef7jxu0qhx40'
         generatorPublicKey: '2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY'
         signature: 'string'
         id: 'string'
@@ -6081,7 +6081,7 @@ components:
         height: 1610000
         totalFee: '100000'
         reference: 'qwertyuikmn56khjkKHKJHK787'
-        generator: '3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k'
+        generator: 'hrthm1qzwgwm70gtj5dfja3ygzz0vufswwef7jxu0qhx40'
         generatorPublicKey: '2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY'
         signature: 'string'
         id: 'string'

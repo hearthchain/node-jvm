@@ -14,7 +14,7 @@ class RestAPISettingsSpecification extends FlatSpec {
         |    enable: yes
         |    bind-address: "127.0.0.1"
         |    port: 6869
-        |    api-key-hash: "BASE58APIKEYHASH"
+        |    api-key-hash: "HEXAPIKEYHASH"
         |    cors-headers {
         |      access-control-allow-headers = [ "Authorization", "Content-Type", "X-Requested-With", "Timestamp", "Signature" ]
         |      access-control-allow-origin = "http://localhost:8080"
@@ -40,7 +40,7 @@ class RestAPISettingsSpecification extends FlatSpec {
     settings.enable should be(true)
     settings.bindAddress should be("127.0.0.1")
     settings.port should be(6869)
-    settings.apiKeyHash should be("BASE58APIKEYHASH")
+    settings.apiKeyHash should be("HEXAPIKEYHASH")
     settings.transactionsByAddressLimit shouldBe 1000
     settings.transactionSnapshotsLimit shouldBe 123
     settings.distributionAddressLimit shouldBe 1000

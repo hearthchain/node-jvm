@@ -200,7 +200,7 @@ object PureFunctionsRebenchmark {
 
   @State(Scope.Benchmark)
   class FromBase16 {
-    val expr: EXPR = fromBaseStringExpr(Base16.encode(randomBytes(Global.MaxBase16Bytes)), FunctionIds.FROMBASE58)
+    val expr: EXPR = fromBaseStringExpr(Base16.encode(randomBytes(Global.MaxBase16Bytes)), FunctionIds.FROMBASE16)
   }
 
   @State(Scope.Benchmark)
@@ -234,7 +234,7 @@ object PureFunctionsRebenchmark {
     }
   }
 
-  class ToBase16 extends ToBaseStr(FunctionIds.TOBASE58) {
+  class ToBase16 extends ToBaseStr(FunctionIds.TOBASE16) {
     @Param(Array("32", "64"))
     var byteCount: Int = 0
   }
