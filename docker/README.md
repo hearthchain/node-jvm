@@ -53,7 +53,7 @@ The following environment variables can be passed to the container:
 
 | Env variable            | Description                                                                                                                                                                                                  |
 |-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `WAVES_WALLET_SEED`     | Base58 encoded seed, sets `-Dwaves.wallet.seed` system property.                                                                                                                                             |
+| `WAVES_WALLET_SEED`     | Hex encoded seed, sets `-Dwaves.wallet.seed` system property.                                                                                                                                             |
 | `WAVES_WALLET_PASSWORD` | Password for the wallet file, sets `-Dwaves.wallet.password` system property.                                                                                                                                |
 | `WAVES_LOG_LEVEL`       | Node stdout logging level. Available values: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`. More details about logging are available [here](https://docs.waves.tech/en/waves-node/logging-configuration). |
 | `WAVES_HEAP_SIZE`       | Default Java Heap Size limit in -X Command-line Options notation (`-Xmx=[your value]`). More details [here](https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html).            |

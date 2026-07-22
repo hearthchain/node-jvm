@@ -172,7 +172,7 @@ paths:
       parameters:
         - name: publicKey
           in: path
-          description: Public key base58 encoded
+          description: Public key hex encoded
           required: true
           schema:
             type: string
@@ -219,7 +219,7 @@ paths:
       parameters:
         - name: address
           in: query
-          description: Addresses base58 encoded
+          description: Addresses hex encoded
           required: true
           style: form
           explode: true
@@ -241,7 +241,7 @@ paths:
         - name: asset
           in: query
           description: >-
-            Base58 encoded asset ID. Not defined for WAVES asset
+            Hex encoded asset ID. Not defined for WAVES asset
           schema:
             $ref: '#/components/schemas/AssetId'
       responses:
@@ -273,7 +273,7 @@ paths:
               properties:
                 addresses:
                   type: array
-                  description: Addresses base58 encoded
+                  description: Addresses hex encoded
                   items:
                     type: string
                     pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
@@ -1471,7 +1471,7 @@ paths:
       parameters:
         - name: id
           in: query
-          description: Transaction IDs base58 encoded
+          description: Transaction IDs hex encoded
           required: true
           style: form
           explode: true
@@ -1816,7 +1816,7 @@ paths:
       parameters:
         - name: signerAddress
           in: path
-          description: Wallet address base58 encoded
+          description: Wallet address hex encoded
           required: true
           schema:
             type: string
@@ -1967,7 +1967,7 @@ paths:
       summary: Seed of specified length
       description: >-
         Generate random seed of a given length in bytes. The returned value is
-        base58 encoded
+        hex encoded
       operationId: generateSeedByLength
       parameters:
         - name: length
@@ -2241,7 +2241,7 @@ paths:
       tags:
         - utils
       summary: Seed
-      description: Generate random seed. The returned value is base58 encoded
+      description: Generate random seed. The returned value is hex encoded
       operationId: generateSeed
       responses:
         '200':
@@ -2520,7 +2520,7 @@ paths:
       parameters:
         - name: id
           in: query
-          description: Asset ID base58 encoded
+          description: Asset ID hex encoded
           required: true
           style: form
           explode: true
@@ -2782,7 +2782,7 @@ paths:
       parameters:
         - name: id
           in: path
-          description: Lease ID base58 encoded
+          description: Lease ID hex encoded
           required: true
           schema:
             type: string
@@ -2803,7 +2803,7 @@ paths:
       parameters:
         - name: id
           in: query
-          description: Lease ID base58 encoded
+          description: Lease ID hex encoded
           required: true
           style: form
           explode: true
@@ -2836,7 +2836,7 @@ paths:
               properties:
                 ids:
                   type: array
-                  description: Lease IDs base58 encoded
+                  description: Lease IDs hex encoded
                   items:
                     type: string
                     pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
@@ -2848,7 +2848,7 @@ paths:
               properties:
                 id:
                   type: array
-                  description: Lease IDs base58 encoded
+                  description: Lease IDs hex encoded
                   items:
                     type: string
                     pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
@@ -5998,28 +5998,28 @@ components:
     address:
       name: address
       in: path
-      description: Address base58 encoded
+      description: Address hex encoded
       required: true
       schema:
         $ref: '#/components/schemas/Address'
     assetId:
       name: assetId
       in: path
-      description: Asset ID base58 encoded
+      description: Asset ID hex encoded
       required: true
       schema:
         $ref: '#/components/schemas/AssetId'
     blockId:
       name: id
       in: path
-      description: Block ID base58 encoded
+      description: Block ID hex encoded
       required: true
       schema:
         $ref: '#/components/schemas/BlockId'
     txId:
       name: id
       in: path
-      description: Transaction ID base58 encoded
+      description: Transaction ID hex encoded
       required: true
       schema:
         $ref: '#/components/schemas/TransactionId'

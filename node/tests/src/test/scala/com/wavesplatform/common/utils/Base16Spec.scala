@@ -37,7 +37,8 @@ class Base16Spec extends PropSpec {
   property("ByteStr renders as hex and parses back") {
     val bytes = ByteStr(Array[Byte](0x00, 0x01, 0x7f, 0xff.toByte))
     bytes.toString shouldBe "00017fff"
-    ByteStr.decodeBase16("00017fff").get shouldBe bytes
+    val decoded = ByteStr.decodeBase16("00017fff").get
+    decoded shouldBe bytes
   }
 
   property("large ByteStr still renders as base64") {

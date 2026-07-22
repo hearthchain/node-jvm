@@ -1,20 +1,20 @@
 package com.wavesplatform.common.state
 
-import com.wavesplatform.common.utils.{Base58, Base64}
+import com.wavesplatform.common.utils.{Base16, Base58, Base64}
 
 import scala.util.Try
 
 case class ByteStr(arr: Array[Byte]) {
-  private lazy val base58: String = Base58.encode(arr)
+  private lazy val base16: String = Base16.encode(arr)
   lazy val base64Raw: String      = Base64.encode(arr)
   lazy val base64: String         = "base64:" + base64Raw
   lazy val trim: String = (if (arr.length < 1024) {
-                             base58.take(7)
+                             base16.take(8)
                            } else {
                              base64Raw
                            }) + "..."
   override lazy val toString: String = if (arr.length < 1024) {
-    base58
+    base16
   } else {
     base64
   }
@@ -77,6 +77,10 @@ object ByteStr {
   }
 
   def fill(size: Int)(b: Int): ByteStr = ByteStr(Array.fill(size)(b.toByte))
+
+  def decodeBase16(s: String): Try[ByteStr] = Base16.tryDecodeWithLimit(s).map { bs =>
+    ByteStr(bs)
+  }
 
   def decodeBase58(s: String): Try[ByteStr] = Base58.tryDecodeWithLimit(s).map { bs =>
     ByteStr(bs)
