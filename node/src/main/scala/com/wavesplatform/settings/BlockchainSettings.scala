@@ -5,7 +5,7 @@ import cats.syntax.traverse.*
 import com.typesafe.config.Config
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.state.Height
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
@@ -205,7 +205,7 @@ case class GenesisSettings(
   def render(): String =
     s"""{
        |  generators = [
-       |    ${generators.map(g => s"{ address = ${Address.fromPublicKey(PublicKey(Base58.decode(g.publicKey)))} }").mkString("\n")}
+       |    ${generators.map(g => s"{ address = ${Address.fromPublicKey(PublicKey(Base16.decode(g.publicKey)))} }").mkString("\n")}
        |  ]
        |  balances = [
        |    ${balances.map(b => s"{ address = ${b.recipient}, balance = ${b.waves}}").mkString("\n")}

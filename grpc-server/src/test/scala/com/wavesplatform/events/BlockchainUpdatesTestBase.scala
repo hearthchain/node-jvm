@@ -85,7 +85,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
                                                |func verify () = match(tx) {
                                                |    case _ =>
                                                |      if (
-                                               |        ${(1 to 9).map(_ => "sigVerify(base58'', base58'', base58'')").mkString(" || \n")}
+                                               |        ${(1 to 9).map(_ => "sigVerify(base16'', base16'', base16'')").mkString(" || \n")}
                                                |      ) then true else true
                                                |}""".stripMargin)
 

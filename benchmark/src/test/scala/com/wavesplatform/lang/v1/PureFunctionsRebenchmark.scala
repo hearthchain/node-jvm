@@ -3,7 +3,7 @@ package com.wavesplatform.lang.v1
 import com.google.common.primitives.Longs
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.common.utils.{Base58, Base64}
+import com.wavesplatform.common.utils.{Base16, Base64}
 import com.wavesplatform.lang.v1.FunctionHeader.Native
 import com.wavesplatform.lang.v1.PureFunctionsRebenchmark.*
 import com.wavesplatform.lang.v1.compiler.Terms.*
@@ -30,10 +30,10 @@ class PureFunctionsRebenchmark {
   def parseIntValue(st: ParseIntVal, bh: Blackhole): Unit = bh.consume(eval(st.expr))
 
   @Benchmark
-  def toBase58(st: ToBase58, bh: Blackhole): Unit = bh.consume(eval(st.expr))
+  def toBase16(st: ToBase16, bh: Blackhole): Unit = bh.consume(eval(st.expr))
 
   @Benchmark
-  def fromBase58(st: FromBase58, bh: Blackhole): Unit = bh.consume(eval(st.expr))
+  def fromBase16(st: FromBase16, bh: Blackhole): Unit = bh.consume(eval(st.expr))
 
   @Benchmark
   def toBase64(st: ToBase64, bh: Blackhole): Unit = bh.consume(eval(st.expr))
@@ -199,8 +199,8 @@ object PureFunctionsRebenchmark {
     )
 
   @State(Scope.Benchmark)
-  class FromBase58 {
-    val expr: EXPR = fromBaseStringExpr(Base58.encode(randomBytes(Global.MaxBase58Bytes)), FunctionIds.FROMBASE58)
+  class FromBase16 {
+    val expr: EXPR = fromBaseStringExpr(Base16.encode(randomBytes(Global.MaxBase16Bytes)), FunctionIds.FROMBASE58)
   }
 
   @State(Scope.Benchmark)
@@ -234,7 +234,7 @@ object PureFunctionsRebenchmark {
     }
   }
 
-  class ToBase58 extends ToBaseStr(FunctionIds.TOBASE58) {
+  class ToBase16 extends ToBaseStr(FunctionIds.TOBASE58) {
     @Param(Array("32", "64"))
     var byteCount: Int = 0
   }

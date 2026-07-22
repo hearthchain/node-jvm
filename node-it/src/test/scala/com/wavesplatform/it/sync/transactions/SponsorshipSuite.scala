@@ -136,7 +136,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
         for (v <- sponsorshipTxSupportedVersions) {
           def invalidTx(timestamp: Long): SponsorFeeTransaction =
             TxHelpers.sponsor(
-              asset = IssuedAsset(ByteStr.decodeBase58(firstSponsorAssetId).get),
+              asset = IssuedAsset(ByteStr.decodeBase16(firstSponsorAssetId).get),
               minSponsoredAssetFee = Some(SmallFee),
               sender = sponsor,
               fee = minFee,

@@ -106,14 +106,14 @@ class MassTransferTransactionSpecification extends PropSpec {
   property("JSON format validation") {
     val js = Json.parse("""{
                        "type": 11,
-                       "id": "H36CTJc7ztGRZPCrvpNYeagCN1HV1gXqUthsXKdBT3UD",
+                       "id": "ee44077c7354ccce547c401edc3cd87a8ae24bf1e69aa75bc07cf2618aeb6722",
                        "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                       "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
                        "fee": 200000,
                        "feeAssetId": null,
                        "timestamp": 1518091313964,
                        "proofs": [
-                       "FXMNu3ecy5zBjn9b69VtpuYRwxjCbxdkZ3xZpLzB8ZeFDvcgTkmEDrD29wtGYRPtyLS3LPYrL2d5UM6TpFBMUGQ"],
+                       "0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289"],
                        "version": 1,
                        "assetId": null,
                        "attachment": "59QuUcqP6p",
@@ -141,13 +141,13 @@ class MassTransferTransactionSpecification extends PropSpec {
     val tx = MassTransferTransaction
       .create(
         1.toByte,
-        PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
+        PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
         Waves,
         transfers,
         200000,
         1518091313964L,
-        ByteStr.decodeBase58("59QuUcqP6p").get,
-        Proofs(Seq(ByteStr.decodeBase58("FXMNu3ecy5zBjn9b69VtpuYRwxjCbxdkZ3xZpLzB8ZeFDvcgTkmEDrD29wtGYRPtyLS3LPYrL2d5UM6TpFBMUGQ").get))
+        ByteStr.decodeBase16("6d617373706179").get,
+        Proofs(Seq(ByteStr.decodeBase16("0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289").get))
       )
       .explicitGet()
 

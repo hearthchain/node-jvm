@@ -3,7 +3,7 @@ package com.wavesplatform.it.sync.transactions
 import com.wavesplatform.account.KeyPair
 import com.wavesplatform.api.http.ApiError.{Mistiming, StateCheckFailed, WrongJson}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
 import com.wavesplatform.it.api.SyncHttpApi.*
@@ -139,7 +139,7 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
           TestCompiler.DefaultVersion
             .compileAsset(
               s"""match tx {
-                 |case s : SetAssetScriptTransaction => s.sender == addressFromPublicKey(base58'${secondKeyPair.publicKey}')
+                 |case s : SetAssetScriptTransaction => s.sender == addressFromPublicKey(base16'${secondKeyPair.publicKey}')
                  |case _ => false
                  |}
                  |""".stripMargin
@@ -235,7 +235,7 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
       def sastx(
           fee: Long = setAssetScriptFee,
           timestamp: Long = System.currentTimeMillis,
-          assetId: IssuedAsset = IssuedAsset(ByteStr.decodeBase58(assetWScript).get)
+          assetId: IssuedAsset = IssuedAsset(ByteStr.decodeBase16(assetWScript).get)
       ): SetAssetScriptTransaction =
         TxHelpers.setAssetScript(sender.keyPair, assetId, script, fee, timestamp, v)
 
@@ -251,11 +251,11 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
           AssertiveApiError(StateCheckFailed.Id, "Fee .* does not exceed minimal value", StateCheckFailed.Code, true)
         ),
         (
-          sastx(assetId = IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz9ekQuYn92natMnMq8").get)),
+          sastx(assetId = IssuedAsset(ByteStr.decodeBase16("060730710c79cecda16f66e5d665d1660acdfbfb75dcdcc7e5aa14e912fba165ea3528bd1f2a2423720fa5229f").get)),
           AssertiveApiError(WrongJson.Id, WrongJson.WrongJsonDataMessage, StatusCodes.BadRequest, true)
         ),
         (
-          sastx(assetId = IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get)),
+          sastx(assetId = IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get)),
           AssertiveApiError(StateCheckFailed.Id, "Referenced assetId not found", StateCheckFailed.Code, true)
         )
       )
@@ -276,7 +276,7 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
         TxHelpers
           .setAssetScript(
             acc = firstKeyPair,
-            asset = IssuedAsset(ByteStr.decodeBase58(assetWScript).get),
+            asset = IssuedAsset(ByteStr.decodeBase16(assetWScript).get),
             script = script,
             fee = setAssetScriptFee,
             version = v
@@ -294,7 +294,7 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
       }
       nodes.foreach(_.ensureTxDoesntExist(id(noProof)))
 
-      val badProof = request ++ Json.obj("proofs" -> Seq(Base58.encode(Array.fill(64)(Random.nextInt().toByte))))
+      val badProof = request ++ Json.obj("proofs" -> Seq(Base16.encode(Array.fill(64)(Random.nextInt().toByte))))
       assertApiError(sender.postJson("/transactions/broadcast", badProof)) { error =>
         error.message should include regex "Proof doesn't validate as signature"
       }
@@ -354,7 +354,7 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
         acc = accountA,
         script = ScriptCompiler
           .compile(
-            s"""|let pkB = base58'${accountB.publicKey}'
+            s"""|let pkB = base16'${accountB.publicKey}'
                 |match tx {
                 |  case s: SetAssetScriptTransaction => sigVerify(s.bodyBytes,s.proofs[0],pkB)
                 |  case _ => true
@@ -377,7 +377,7 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
       val nonIssuerUnsignedTx = SetAssetScriptTransaction(
         version = v,
         accountA.publicKey,
-        IssuedAsset(ByteStr.decodeBase58(assetWithScript).get),
+        IssuedAsset(ByteStr.decodeBase16(assetWithScript).get),
         Some(unchangeableScript),
         TxPositiveAmount.unsafeFrom(setAssetScriptFee + smartFee),
         System.currentTimeMillis,
@@ -399,7 +399,7 @@ class SetAssetScriptTransactionSuite extends BaseTransactionSuite {
       val nonIssuerUnsignedTx2 = SetAssetScriptTransaction(
         version = v,
         accountA.publicKey,
-        IssuedAsset(ByteStr.decodeBase58(assetWithScript).get),
+        IssuedAsset(ByteStr.decodeBase16(assetWithScript).get),
         Some(script),
         TxPositiveAmount.unsafeFrom(setAssetScriptFee + smartFee),
         System.currentTimeMillis,

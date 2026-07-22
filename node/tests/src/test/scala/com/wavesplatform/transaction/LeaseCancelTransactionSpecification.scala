@@ -2,7 +2,7 @@ package com.wavesplatform.transaction
 
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.PropSpec
 import com.wavesplatform.transaction.lease.LeaseCancelTransaction
@@ -21,27 +21,27 @@ class LeaseCancelTransactionSpecification extends PropSpec {
   property("JSON format validation for LeaseCancelTransactionV1") {
     val js = Json.parse("""{
                        "type": 9,
-                       "id": "7hmabbFS8a2z79a29pzZH1s8LHxrsEAnnLjJxNdZ1gGw",
+                       "id": "6397c284b792a5539899794830b0f5675635b3137fe2589999d0bc0cffa28e58",
                        "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                       "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
                        "fee": 1000000,
                        "feeAssetId": null,
                        "timestamp": 1526646300260,
-                       "signature": "4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3",
-                       "proofs": ["4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3"],
+                       "signature": "ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280",
+                       "proofs": ["ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280"],
                        "version": 1,
-                       "leaseId": "EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY"
+                       "leaseId": "c905697322ae74647ff72b38bf23de8c9db40276abb2195676c78a260edcec0f"
                        }
     """)
 
     val tx = LeaseCancelTransaction
       .create(
         1.toByte,
-        PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
-        ByteStr.decodeBase58("EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY").get,
+        PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
+        ByteStr.decodeBase16("c905697322ae74647ff72b38bf23de8c9db40276abb2195676c78a260edcec0f").get,
         1000000,
         1526646300260L,
-        Proofs(ByteStr.decodeBase58("4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3").get)
+        Proofs(ByteStr.decodeBase16("ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280").get)
       )
       .explicitGet()
 
@@ -51,17 +51,17 @@ class LeaseCancelTransactionSpecification extends PropSpec {
   property("JSON format validation for LeaseCancelTransactionV2") {
     val js = Json.parse("""{
                         "type": 9,
-                        "id": "4nvUUiQjTH7D2LFyzaxs8JwaZYZHDggJgq1iP99TvVDM",
+                        "id": "3856a8fff691dbd7ccc42d20322cb9fd6b9c90263c0f16bae7bda858617127a4",
                         "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                        "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                        "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
                         "fee": 1000000,
                         "feeAssetId":null,
                         "timestamp": 1526646300260,
                         "proofs": [
-                        "3h5SQLbCzaLoTHUeoCjXUHB6qhNUfHZjQQVsWTRAgTGMEdK5aeULMVUfDq63J56kkHJiviYTDT92bLGc8ELrUgvi"
+                        "86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f"
                         ],
                         "version": 2,
-                        "leaseId": "DJWkQxRyJNqWhq9qSQpK2D4tsrct6eZbjSv3AH4PSha6",
+                        "leaseId": "b6c8c0ec67cb74ea16339e5cba54e274310234597b193fa49035e1013b205dc7",
                         "chainId": 84
                        }
     """)
@@ -69,11 +69,11 @@ class LeaseCancelTransactionSpecification extends PropSpec {
     val tx = LeaseCancelTransaction
       .create(
         2.toByte,
-        PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
-        ByteStr.decodeBase58("DJWkQxRyJNqWhq9qSQpK2D4tsrct6eZbjSv3AH4PSha6").get,
+        PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
+        ByteStr.decodeBase16("b6c8c0ec67cb74ea16339e5cba54e274310234597b193fa49035e1013b205dc7").get,
         1000000,
         1526646300260L,
-        Proofs(Seq(ByteStr.decodeBase58("3h5SQLbCzaLoTHUeoCjXUHB6qhNUfHZjQQVsWTRAgTGMEdK5aeULMVUfDq63J56kkHJiviYTDT92bLGc8ELrUgvi").get))
+        Proofs(Seq(ByteStr.decodeBase16("86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f").get))
       )
       .explicitGet()
 

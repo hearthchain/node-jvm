@@ -2,7 +2,7 @@ package com.wavesplatform.transaction
 
 import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.PropSpec
 import com.wavesplatform.transaction.Asset.Waves
@@ -61,13 +61,13 @@ class TransferTransactionV2Specification extends PropSpec {
   property("JSON format validation") {
     val js = Json.parse("""{
                        "type": 4,
-                       "id": "2qMiGUpNMuRpeyTnXLa1mLuVP1cYEtxys55cQbDaXd5g",
+                       "id": "1b3efbfce34964e000d028a53b87632e48405a90a1d16e837c2b2d1b83e7ce5f",
                        "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                       "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
                        "fee": 100000000,
                        "timestamp": 1526641218066,
                        "proofs": [
-                       "4bfDaqBcnK3hT8ywFEFndxtS1DTSYfncUqd4s5Vyaa66PZHawtC73rDswUur6QZu5RpqM7L9NFgBHT1vhCoox4vi"
+                       "b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f"
                        ],
                        "version": 2,
                        "recipient": "3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8",
@@ -81,15 +81,15 @@ class TransferTransactionV2Specification extends PropSpec {
     val recipient = Address.fromString("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8").explicitGet()
     val tx = TransferTransaction(
       2.toByte,
-      PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
+      PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
       recipient,
       Waves,
       TxPositiveAmount.unsafeFrom(100000000),
       Waves,
       TxPositiveAmount.unsafeFrom(100000000),
-      ByteStr.decodeBase58("4t2Xazb2SX").get,
+      ByteStr.decodeBase16("66616c6166656c").get,
       1526641218066L,
-      Proofs(Seq(ByteStr.decodeBase58("4bfDaqBcnK3hT8ywFEFndxtS1DTSYfncUqd4s5Vyaa66PZHawtC73rDswUur6QZu5RpqM7L9NFgBHT1vhCoox4vi").get)),
+      Proofs(Seq(ByteStr.decodeBase16("b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f").get)),
       AddressScheme.current.chainId
     )
 

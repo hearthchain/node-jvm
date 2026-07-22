@@ -85,7 +85,7 @@ class BlockChallengeSuite extends BaseFunSuite with TransferSending {
   }
 
   private def createBlockWithInvalidStateHash(lastBlock: ApiBlock, height: Height, signer: KeyPair, txs: Seq[Transaction]): Block = {
-    val lastBlockVrfOrGenSig = lastBlock.vrf.orElse(lastBlock.generationSignature).map(str => ByteStr.decodeBase58(str).get).get.arr
+    val lastBlockVrfOrGenSig = lastBlock.vrf.orElse(lastBlock.generationSignature).map(str => ByteStr.decodeBase16(str).get).get.arr
     val genSig: ByteStr      = crypto.signVRF(signer.privateKey, lastBlockVrfOrGenSig)
 
     val hitSource =
@@ -115,7 +115,7 @@ class BlockChallengeSuite extends BaseFunSuite with TransferSending {
       .buildAndSign(
         version = version,
         timestamp = lastBlock.timestamp + validBlockDelay,
-        reference = ByteStr.decodeBase58(lastBlock.id).get,
+        reference = ByteStr.decodeBase16(lastBlock.id).get,
         baseTarget = baseTarget,
         generationSignature = genSig,
         txs = txs,

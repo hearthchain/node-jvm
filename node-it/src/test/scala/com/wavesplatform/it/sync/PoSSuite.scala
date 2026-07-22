@@ -5,7 +5,7 @@ import com.wavesplatform.account.{KeyPair, PublicKey}
 import com.wavesplatform.api.http.DebugMessage
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.FairPoSCalculator
 import com.wavesplatform.consensus.nxt.NxtLikeConsensusBlockData
@@ -27,7 +27,7 @@ class PoSSuite extends BaseFunSuite {
     val bt = (json \ "base-target").as[Long]
     val gs = (json \ "generation-signature").as[String]
 
-    JsSuccess(NxtLikeConsensusBlockData(bt, ByteStr.decodeBase58(gs).get))
+    JsSuccess(NxtLikeConsensusBlockData(bt, ByteStr.decodeBase16(gs).get))
   }
 
   test("BlockV4: Node mines several blocks, integration test checks that block timestamps equal to time of appearence (+-1100ms)") {
@@ -251,10 +251,10 @@ class PoSSuite extends BaseFunSuite {
 
   def blockInfo(height: Height): (Array[Byte], Long, NxtLikeConsensusBlockData, Option[ByteStr]) = {
     val lastBlock      = Json.parse(nodes.head.get(s"/blocks/at/$height").getResponseBody)
-    val lastBlockId    = Base58.tryDecodeWithLimit((lastBlock \ "signature").as[String]).get
+    val lastBlockId    = Base16.tryDecodeWithLimit((lastBlock \ "signature").as[String]).get
     val lastBlockTS    = (lastBlock \ "timestamp").as[Long]
     val lastBlockCData = (lastBlock \ "nxt-consensus").as[NxtLikeConsensusBlockData]
-    val lastBlockVRF   = (lastBlock \ "VRF").asOpt[String].map(str => ByteStr.decodeBase58(str).get)
+    val lastBlockVRF   = (lastBlock \ "VRF").asOpt[String].map(str => ByteStr.decodeBase16(str).get)
 
     (lastBlockId, lastBlockTS, lastBlockCData, lastBlockVRF)
   }
@@ -268,7 +268,7 @@ class PoSSuite extends BaseFunSuite {
   }
 
   def blockSignature(h: Height): Array[Byte] = {
-    Base58
+    Base16
       .tryDecodeWithLimit(
         (Json.parse(
           nodes.head

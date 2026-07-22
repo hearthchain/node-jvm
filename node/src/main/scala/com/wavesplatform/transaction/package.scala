@@ -8,14 +8,14 @@ import com.wavesplatform.state.{GeneratorSet, StateSnapshot}
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.assets.exchange.Order
 import com.wavesplatform.transaction.validation.TxValidator
-import com.wavesplatform.utils.{EthEncoding, base58Length}
+import com.wavesplatform.utils.{EthEncoding, base16Length}
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.{Interval, NonNegative, Positive}
 import play.api.libs.json.*
 
 package object transaction {
   val AssetIdLength: Int       = com.wavesplatform.crypto.DigestLength
-  val AssetIdStringLength: Int = base58Length(AssetIdLength)
+  val AssetIdStringLength: Int = base16Length(AssetIdLength)
 
   case class DiscardedBlock(block: Block, hitSource: ByteStr, snapshot: Option[BlockSnapshot], generatorSet: GeneratorSet)
   type DiscardedBlocks       = Seq[DiscardedBlock]

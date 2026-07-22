@@ -84,7 +84,7 @@ class RideBlockInfoSuite extends BaseTransactionSuite {
 
     val block = sender.blockAt(height)
     checkCommonFields(block)
-    sender.getDataByKey(dAppAddress, "vrf").value.asInstanceOf[ByteStr] shouldBe ByteStr.decodeBase58(block.vrf.get).get
+    sender.getDataByKey(dAppAddress, "vrf").value.asInstanceOf[ByteStr] shouldBe ByteStr.decodeBase16(block.vrf.get).get
   }
 
   test("not able to retrieve vrf from block V4") {
@@ -128,13 +128,13 @@ class RideBlockInfoSuite extends BaseTransactionSuite {
 
     sender.invokeScript(caller, dAppAddress, func = Some("blockInfoV5"), args = List(CONST_LONG(height.toInt)), waitForTx = true)
     val vrf1 = sender.getDataByKey(dAppAddress, "vrf").value.asInstanceOf[ByteStr]
-    vrf1 shouldBe ByteStr.decodeBase58(sender.blockAt(height).vrf.get).get
+    vrf1 shouldBe ByteStr.decodeBase16(sender.blockAt(height).vrf.get).get
 
     sender.transfer(caller, dAppAddress, 1, waitForTx = true)
 
     sender.invokeScript(caller, dAppAddress, func = Some("blockInfoV5"), args = List(CONST_LONG(height.toInt)), waitForTx = true)
     val vrf2 = sender.getDataByKey(dAppAddress, "vrf").value.asInstanceOf[ByteStr]
-    vrf2 shouldBe ByteStr.decodeBase58(sender.blockAt(height).vrf.get).get
+    vrf2 shouldBe ByteStr.decodeBase16(sender.blockAt(height).vrf.get).get
 
     vrf1 shouldBe vrf2
   }
@@ -144,7 +144,7 @@ class RideBlockInfoSuite extends BaseTransactionSuite {
     sender.getDataByKey(dAppAddress, "height").value.asInstanceOf[Long] shouldBe block.height
     sender.getDataByKey(dAppAddress, "baseTarget").value.asInstanceOf[Long] shouldBe block.baseTarget.get
     sender.getDataByKey(dAppAddress, "generationSignature").value.asInstanceOf[ByteStr].toString shouldBe block.generationSignature.get
-    sender.getDataByKey(dAppAddress, "generator").value.asInstanceOf[ByteStr] shouldBe ByteStr.decodeBase58(block.generator).get
+    sender.getDataByKey(dAppAddress, "generator").value.asInstanceOf[ByteStr] shouldBe ByteStr.decodeBase16(block.generator).get
     sender.getDataByKey(dAppAddress, "generatorPublicKey").value.asInstanceOf[ByteStr].arr shouldBe block.generatorPublicKey.arr
   }
 }

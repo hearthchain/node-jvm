@@ -1308,7 +1308,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
   def script(caseType: String, v: Boolean, complex: Boolean = false): Seq[String] = Seq(true, false).map { full =>
     val expr =
       s"""
-         |  strict c = ${if (complex) (1 to 16).map(_ => "sigVerify(base58'', base58'', base58'')").mkString(" || ") else "true"}
+         |  strict c = ${if (complex) (1 to 16).map(_ => "sigVerify(base16'', base16'', base16'')").mkString(" || ") else "true"}
          |  match tx {
          |   case _: $caseType => $v
          |   case _ => ${!v}

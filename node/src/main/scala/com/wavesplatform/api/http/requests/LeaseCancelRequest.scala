@@ -21,8 +21,8 @@ case class LeaseCancelRequest(
   def toTx: Either[ValidationError, LeaseCancelTransaction] =
     for {
       validProofs  <- toProofs(signature, proofs)
-      validLeaseId <- parseBase58(leaseId, "invalid.leaseTx", DigestStringLength)
-      validSender  <- PublicKey.fromBase58String(senderPublicKey)
+      validLeaseId <- parseBase16(leaseId, "invalid.leaseTx", DigestStringLength)
+      validSender  <- PublicKey.fromBase16String(senderPublicKey)
       tx <- LeaseCancelTransaction.create(
         version.getOrElse(1.toByte),
         validSender,

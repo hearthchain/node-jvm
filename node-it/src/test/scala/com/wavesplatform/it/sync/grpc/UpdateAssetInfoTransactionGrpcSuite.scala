@@ -133,7 +133,7 @@ class UpdateAssetInfoTransactionGrpcSuite extends GrpcBaseTransactionSuite with 
   }
 
   test("not able to update info of not-issued asset") {
-    val notIssuedAssetId = "BzARFPgBqWFu6MHGxwkPVKmaYAzyShu495Ehsgru72Wz"
+    val notIssuedAssetId = "a3399fda7de21af8d42730ac63ed19deeb212937c1741658e0d53dc70bdad67f"
     assertGrpcError(
       sender.updateAssetInfo(issuer, notIssuedAssetId, "updatedName", "updatedDescription", minFee),
       "Referenced assetId not found",

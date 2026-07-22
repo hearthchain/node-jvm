@@ -5,7 +5,7 @@ import scala.util.Random
 import cats.data.NonEmptyList
 import com.wavesplatform.account.{PrivateKey, PublicKey}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
 import com.wavesplatform.test.PropSpec
@@ -157,20 +157,20 @@ object FairPoSCalculatorTest {
   )
 
   implicit val inputReads: Reads[Input] = (
-    (JsPath \ "privateKey").read[String].map(value => PrivateKey(Base58.decode(value))) and
-      (JsPath \ "publicKey").read[String].map(value => PublicKey(Base58.decode(value))) and
+    (JsPath \ "privateKey").read[String].map(value => PrivateKey(Base16.decode(value))) and
+      (JsPath \ "publicKey").read[String].map(value => PublicKey(Base16.decode(value))) and
       (JsPath \ "balance").read[Long] and
       (JsPath \ "baseTarget").read[Long] and
       (JsPath \ "delay").read[Long] and
       (JsPath \ "height").read[Int] and
       (JsPath \ "time").read[Long] and
-      (JsPath \ "vrf").read[String].map(value => ByteStr(Base58.decode(value))) and
-      (JsPath \ "genSig").read[String].map(value => ByteStr(Base58.decode(value)))
+      (JsPath \ "vrf").read[String].map(value => ByteStr(Base16.decode(value))) and
+      (JsPath \ "genSig").read[String].map(value => ByteStr(Base16.decode(value)))
   )(Input.apply)
 
-  implicit val privateKeyWrites: Writes[PrivateKey] = Writes(k => JsString(Base58.encode(k.arr)))
-  implicit val publicKeyWrites: Writes[PublicKey]   = Writes(k => JsString(Base58.encode(k.arr)))
-  implicit val byteStrWrites: Writes[ByteStr]       = Writes(bs => JsString(Base58.encode(bs.arr)))
+  implicit val privateKeyWrites: Writes[PrivateKey] = Writes(k => JsString(Base16.encode(k.arr)))
+  implicit val publicKeyWrites: Writes[PublicKey]   = Writes(k => JsString(Base16.encode(k.arr)))
+  implicit val byteStrWrites: Writes[ByteStr]       = Writes(bs => JsString(Base16.encode(bs.arr)))
 
   implicit val inputWrites: Writes[Input] = Json.writes[Input]
 

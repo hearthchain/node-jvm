@@ -31,6 +31,6 @@ class PkSt {
   val ctx = lazyContexts((ds, true, true, true)).value().evaluationContext(EnvironmentFunctionsBenchmark.environment)
 
   val wavesPk   = ByteStr(curve25519.generateKeypair._2)
-  val exprWaves = TestCompiler(V6).compileExpression(s"addressFromPublicKey(base58'$wavesPk')").expr
-  val exprEth   = TestCompiler(V6).compileExpression(s"addressFromPublicKey(base58'${PublicKey(wavesPk.arr ++ wavesPk.arr)}')").expr
+  val exprWaves = TestCompiler(V6).compileExpression(s"addressFromPublicKey(base16'$wavesPk')").expr
+  val exprEth   = TestCompiler(V6).compileExpression(s"addressFromPublicKey(base16'${PublicKey(wavesPk.arr ++ wavesPk.arr)}')").expr
 }

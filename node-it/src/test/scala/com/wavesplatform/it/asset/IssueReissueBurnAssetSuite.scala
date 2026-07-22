@@ -299,8 +299,8 @@ class IssueReissueBurnAssetSuite extends BaseFreeSpec {
         ai.quantity shouldBe simpleReissuableAsset.quantity
         ai.reissuable shouldBe true
       }
-      assertApiError(sender.assetsDetails(assetB), AssetDoesNotExist(IssuedAsset(ByteStr.decodeBase58(assetB).get)))
-      assertApiError(sender.assetsDetails(assetNft), AssetDoesNotExist(IssuedAsset(ByteStr.decodeBase58(assetNft).get)))
+      assertApiError(sender.assetsDetails(assetB), AssetDoesNotExist(IssuedAsset(ByteStr.decodeBase16(assetB).get)))
+      assertApiError(sender.assetsDetails(assetNft), AssetDoesNotExist(IssuedAsset(ByteStr.decodeBase16(assetNft).get)))
 
       sender.assertAssetBalance(addressStr, assetA, simpleReissuableAsset.quantity)
       sender.assetBalance(addressStr, assetB).balance shouldBe 0L
@@ -345,12 +345,12 @@ class IssueReissueBurnAssetSuite extends BaseFreeSpec {
       payments: Seq[InvokeScriptTransaction.Payment] = Seq.empty
   ): Transaction = {
     val args = function match {
-      case "transferAndBurn"    => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_LONG(count))
-      case "reissueIssueAndNft" => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet())
-      case "process11actions"   => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet())
-      case "burnAsset"          => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_LONG(count))
-      case "reissueAsset"      => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_BOOLEAN(isReissuable), CONST_LONG(count))
-      case "reissueAndReissue" => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_LONG(count))
+      case "transferAndBurn"    => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_LONG(count))
+      case "reissueIssueAndNft" => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet())
+      case "process11actions"   => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet())
+      case "burnAsset"          => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_LONG(count))
+      case "reissueAsset"      => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_BOOLEAN(isReissuable), CONST_LONG(count))
+      case "reissueAndReissue" => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_LONG(count))
       case _                   => Nil
     }
 
@@ -595,7 +595,7 @@ class IssueReissueBurnAssetSuite extends BaseFreeSpec {
        |@Callable(i)
        |func transferAndBurn(a: ByteVector, q: Int) = {
        |  [
-       |    ScriptTransfer(Address(fromBase58String("${miner.address}")), q, a),
+       |    ScriptTransfer(Address(fromBase16String("${miner.address}")), q, a),
        |    Burn(a, q)
        | ]
        |}

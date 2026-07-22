@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.Logger
 import com.wavesplatform.account.{Address, KeyPair, SeedKeyPair}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.explicitGet
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.generator.config.ConfigReaders
 import com.wavesplatform.generator.utils.{Gen, Universe}
 import com.wavesplatform.lang.ValidationError
@@ -299,7 +299,7 @@ class NarrowTransactionGenerator(
               } else
                 Terms.CONST_STRING(value).explicitGet()
             case "boolean" => Terms.CONST_BOOLEAN(value.toBoolean)
-            case "binary"  => Terms.CONST_BYTESTR(ByteStr.decodeBase58(value).get).explicitGet()
+            case "binary"  => Terms.CONST_BYTESTR(ByteStr.decodeBase16(value).get).explicitGet()
           }
 
           val asset = randomFrom(Universe.IssuedAssets.filter(a => script.paymentAssets.contains(a.name.toStringUtf8)))
@@ -328,10 +328,10 @@ class NarrowTransactionGenerator(
             ScriptSettings.Function.Arg(argType, value) <- function.args
           } yield argType.toLowerCase match {
             case "integer" | "int" | "long" | "int64" | "uint64" => Arg.Integer(value.toLong)
-            case "bigint" | "int256" | "uint256"                 => Arg.BigInteger(BigInt(Base58.decode(value)))
+            case "bigint" | "int256" | "uint256"                 => Arg.BigInteger(BigInt(Base16.decode(value)))
             case "string"                                        => Arg.Str(value)
             case "boolean" | "bool"                              => Arg.Bool(value.toBoolean)
-            case "binary"                                        => Arg.Bytes(ByteStr(Base58.decode(value)))
+            case "binary"                                        => Arg.Bytes(ByteStr(Base16.decode(value)))
           }
 
           val asset = randomFrom(Universe.IssuedAssets.filter(a => script.paymentAssets.contains(a.name.toStringUtf8)))

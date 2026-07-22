@@ -28,7 +28,7 @@ class InvokeWithTransferSmartassetSuite extends BaseTransactionSuite with Cancel
         |@Callable(inv)
         |func f(assetId: String) = {
         |    if (this.getInteger("y") == 1) then {
-        |     [ScriptTransfer(inv.caller, 1, fromBase58String(assetId))]
+        |     [ScriptTransfer(inv.caller, 1, fromBase16String(assetId))]
         |    } else
         |       nil
         |}

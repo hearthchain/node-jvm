@@ -39,7 +39,7 @@ class InvokePaymentsAvailabilitySuite extends BaseTransactionSuite {
            |{-# CONTENT_TYPE DAPP #-}
            |{-# SCRIPT_TYPE ACCOUNT #-}
            |
-           | let dApp2 = Address(base58'$dApp')
+           | let dApp2 = Address(base16'$dApp')
            |
            | @Callable(inv)
            | func default() = {
@@ -88,7 +88,7 @@ class InvokePaymentsAvailabilitySuite extends BaseTransactionSuite {
 
   test("payments availability in sync call") {
     val assetId = sender.issue(caller, quantity = issueAmount, waitForTx = true).id
-    val asset   = IssuedAsset(ByteStr.decodeBase58(assetId).get)
+    val asset   = IssuedAsset(ByteStr.decodeBase16(assetId).get)
     sender.setScript(proxyDApp, Some(syncDApp(callingDAppAddress)), waitForTx = true)
 
     sender.setScript(callingDApp, Some(dApp), waitForTx = true)

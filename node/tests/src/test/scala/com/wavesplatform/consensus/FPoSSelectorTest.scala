@@ -501,7 +501,7 @@ object FPoSSelectorTest {
         val genesisGenerators = accountsWithBalances.map { case ((signer, vrfKey), _) =>
           GenesisGeneratorSettings(
             ByteStr(signer.publicKey()).toString,
-            endorserKeyOf(signer).publicKey.base58,
+            endorserKeyOf(signer).publicKey.base16,
             ByteStr(vrfKey.publicKey()).toString
           )
         }

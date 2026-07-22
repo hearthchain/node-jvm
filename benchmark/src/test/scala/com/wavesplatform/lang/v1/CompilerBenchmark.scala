@@ -27,9 +27,9 @@ object CompilerBenchmark {
   class St {
     val scriptString: String =
       """
-        |let alicePubKey  = base58'B1Yz7fH1bJ2gVDjyJnuyKNTdMFARkKEpV'
-        |let bobPubKey    = base58'7hghYeWtiekfebgAcuCg9ai2NXbRreNzc'
-        |let cooperPubKey = base58'BVqYXrapgJP9atQccdBPAgJPwHDKkh6A8'
+        |let alicePubKey  = base16'B1Yz7fH1bJ2gVDjyJnuyKNTdMFARkKEpV'
+        |let bobPubKey    = base16'7hghYeWtiekfebgAcuCg9ai2NXbRreNzc'
+        |let cooperPubKey = base16'BVqYXrapgJP9atQccdBPAgJPwHDKkh6A8'
         |
         |let aliceSigned  = if(sigVerify(tx.bodyBytes, tx.proofs[0], alicePubKey  )) then 1 else 0
         |let bobSigned    = if(sigVerify(tx.bodyBytes, tx.proofs[1], bobPubKey    )) then 1 else 0

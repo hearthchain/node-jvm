@@ -34,9 +34,9 @@ class InvokePaymentsFeeSuite extends BaseTransactionSuite {
                     | {-# SCRIPT_TYPE ASSET       #-}
                     | {-# CONTENT_TYPE EXPRESSION #-}
                     |
-                    | !(sigVerify_32Kb(base58'', base58'', base58'') ||
-                    |   sigVerify_32Kb(base58'', base58'', base58'') ||
-                    |   sigVerify_32Kb(base58'', base58'', base58'')
+                    | !(sigVerify_32Kb(base16'', base16'', base16'') ||
+                    |   sigVerify_32Kb(base16'', base16'', base16'') ||
+                    |   sigVerify_32Kb(base16'', base16'', base16'')
                     |  )
                     |
                     """.stripMargin
@@ -54,9 +54,9 @@ class InvokePaymentsFeeSuite extends BaseTransactionSuite {
            | @Callable(i)
            | func default() =
            |   [
-           |     ScriptTransfer(i.caller, 1, base58'$assetId'),
-           |     Burn(base58'$assetId', 1),
-           |     Reissue(base58'$assetId', 1, false)
+           |     ScriptTransfer(i.caller, 1, base16'$assetId'),
+           |     Burn(base16'$assetId', 1),
+           |     Reissue(base16'$assetId', 1, false)
            |   ]
        """.stripMargin,
         ScriptEstimatorV3.latest
@@ -68,7 +68,7 @@ class InvokePaymentsFeeSuite extends BaseTransactionSuite {
 
   test(s"fee for asset scripts is not required after activation ${BlockchainFeatures.SynchronousCalls}") {
     val assetId = sender.issue(dApp, script = Some(verifier), waitForTx = true).id
-    val asset   = IssuedAsset(ByteStr.decodeBase58(assetId).get)
+    val asset   = IssuedAsset(ByteStr.decodeBase16(assetId).get)
 
     sender.transfer(dApp, callerAddress, 100, assetId = Some(assetId), fee = smartMinFee, waitForTx = true)
     sender.setScript(dApp, Some(dApp(assetId)), waitForTx = true)

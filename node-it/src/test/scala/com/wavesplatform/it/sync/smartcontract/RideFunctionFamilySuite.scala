@@ -14,7 +14,7 @@ class RideFunctionFamilySuite extends BaseTransactionSuite with CancelAfterFailu
      |{-# CONTENT_TYPE EXPRESSION #-}
      |{-# SCRIPT_TYPE ASSET #-}
      |  
-     |let a = base58''
+     |let a = base16''
      | 
      |sigVerify_8Kb(a, a, a) && sigVerify_16Kb(a, a, a) && rsaVerify_32Kb(SHA3512, a, a, a) && a == (blake2b256_64Kb(a) + keccak256_128Kb(a) + sha256(a))
      |""".stripMargin
@@ -25,7 +25,7 @@ class RideFunctionFamilySuite extends BaseTransactionSuite with CancelAfterFailu
      |{-# CONTENT_TYPE DAPP #-}
      |{-# SCRIPT_TYPE ACCOUNT #-}
      |  
-     |let a = base58''
+     |let a = base16''
      | 
      |func binary(value: ByteVector) = [ BinaryEntry("binary", value) ]
      |func boolean(value: Boolean) = [ BooleanEntry("boolean", value) ]

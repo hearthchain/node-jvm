@@ -21,7 +21,7 @@ class ScriptLogSuite extends BaseTransactionSuite with CancelAfterFailure {
 
   lazy val scriptSrc: String =
     s"""
-       |let self = Address(base58'$firstAddress')
+       |let self = Address(base16'$firstAddress')
        |
        |match tx {
        |	case dtx: DataTransaction =>

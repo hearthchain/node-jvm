@@ -93,7 +93,7 @@ class DebugApiRouteStateHashGenesisSpec
           // Note: "nextCommittedGeneratorsHash" and "committedGeneratorBalancesHash" fields are present
           "nextCommittedGeneratorsHash"    -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "committedGeneratorBalancesHash" -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "snapshotHash"                   -> "2ydpHRFSFwcaQ8s9hPyZwcmJFk4cKDNFcb3DRcvyrXZ9",
+          "snapshotHash"                   -> "1d5dd6df2796a3994ed13d8f3e4fd226597f7033ccaedca2033deebceb875f88",
           "blockId"                        -> genesisBlockHeader.id().toString,
           "baseTarget"                     -> genesisBlockHeader.header.baseTarget,
           "height"                         -> genesisHeight,

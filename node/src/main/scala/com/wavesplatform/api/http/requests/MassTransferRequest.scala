@@ -37,7 +37,7 @@ case class MassTransferRequest(
 ) extends TxBroadcastRequest[MassTransferTransaction] {
   def toTx: Either[ValidationError, MassTransferTransaction] =
     for {
-      _sender    <- PublicKey.fromBase58String(senderPublicKey)
+      _sender    <- PublicKey.fromBase16String(senderPublicKey)
       _transfers <- MassTransferTransaction.parseTransfersList(transfers)
       t <- MassTransferTransaction.create(
         version.getOrElse(1.toByte),

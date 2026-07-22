@@ -76,7 +76,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
         s"""
            |match tx {
            |  case _: SetAssetScriptTransaction => true
-           |  case t:  TransferTransaction => t.recipient == addressFromPublicKey(base58'${secondKeyPair.publicKey}')
+           |  case t:  TransferTransaction => t.recipient == addressFromPublicKey(base16'${secondKeyPair.publicKey}')
            |  case _ => false
            |}
          """.stripMargin
@@ -96,7 +96,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
         s"""
            |match tx {
            |  case _: SetAssetScriptTransaction => true
-           |  case t:  TransferTransaction => t.recipient != addressFromPublicKey(base58'${secondKeyPair.publicKey}') && t.recipient != addressFromPublicKey(base58'${firstKeyPair.publicKey}')
+           |  case t:  TransferTransaction => t.recipient != addressFromPublicKey(base16'${secondKeyPair.publicKey}') && t.recipient != addressFromPublicKey(base16'${firstKeyPair.publicKey}')
            |  case _ => false
            |}
          """.stripMargin
@@ -124,7 +124,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
         s"""
            |match tx {
            |  case _: SetAssetScriptTransaction => true
-           |  case t:  TransferTransaction => t.feeAssetId == base58'$feeAsset'
+           |  case t:  TransferTransaction => t.feeAssetId == base16'$feeAsset'
            |  case _ => false
            |}
          """.stripMargin
@@ -167,7 +167,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
            |match tx {
            |  case _: SetAssetScriptTransaction => true
            |  case t:  TransferTransaction => let issuer = extract(addressFromString("$firstAddress"))
-           |  isDefined(getInteger(issuer,toBase58String(t.id))) == true
+           |  isDefined(getInteger(issuer,toBase16String(t.id))) == true
            |  case _ => false
            |}
          """.stripMargin
@@ -180,7 +180,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
       from = secondKeyPair,
       to = thirdKeyPair.toAddress,
       amount = 1,
-      asset = IssuedAsset(ByteStr.decodeBase58(blackAsset).get),
+      asset = IssuedAsset(ByteStr.decodeBase16(blackAsset).get),
       fee = smartMinFee,
       feeAsset = Waves,
       attachment = ByteStr.empty,
@@ -192,7 +192,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
       from = secondKeyPair,
       to = thirdKeyPair.toAddress,
       amount = 1,
-      asset = IssuedAsset(ByteStr.decodeBase58(blackAsset).get),
+      asset = IssuedAsset(ByteStr.decodeBase16(blackAsset).get),
       fee = smartMinFee,
       feeAsset = Waves,
       attachment = ByteStr.empty,
@@ -220,7 +220,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
         s"""
            |match tx {
            |  case _ : SetAssetScriptTransaction => true
-           |  case b:  BurnTransaction => b.sender == addressFromPublicKey(base58'${secondKeyPair.publicKey}')
+           |  case b:  BurnTransaction => b.sender == addressFromPublicKey(base16'${secondKeyPair.publicKey}')
            |  case _ => false
            |}
          """.stripMargin
@@ -238,7 +238,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
         s"""
            |match tx {
            |  case _: SetAssetScriptTransaction => true
-           |  case b:  BurnTransaction => b.sender != addressFromPublicKey(base58'${secondKeyPair.publicKey}')
+           |  case b:  BurnTransaction => b.sender != addressFromPublicKey(base16'${secondKeyPair.publicKey}')
            |  case _ => false
            |}
          """.stripMargin
@@ -374,7 +374,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
         s"""
            |match tx {
            |  case _: SetAssetScriptTransaction => true
-           |  case r:  ReissueTransaction => r.sender == addressFromPublicKey(base58'${secondKeyPair.publicKey}')
+           |  case r:  ReissueTransaction => r.sender == addressFromPublicKey(base16'${secondKeyPair.publicKey}')
            |  case _ => false
            |}
          """.stripMargin
@@ -409,7 +409,7 @@ class AssetSupportedTransactionsSuite extends BaseTransactionSuite {
         s"""
            |match tx {
            |  case _: SetAssetScriptTransaction => true
-           |  case r:  ReissueTransaction => r.sender == addressFromPublicKey(base58'${secondKeyPair.publicKey}')
+           |  case r:  ReissueTransaction => r.sender == addressFromPublicKey(base16'${secondKeyPair.publicKey}')
            |  case _ => false
            |}""".stripMargin
       )

@@ -59,7 +59,7 @@ class MinerWithAccountScriptTestSuite extends BaseFunSuite {
   private def verifierScriptStr: String =
     s"""
        |match tx {
-       |    case t: TransferTransaction => t.recipient == Address(base58'$allowedRecipient')
+       |    case t: TransferTransaction => t.recipient == Address(base16'$allowedRecipient')
        |    case _ => true
        |}
        |""".stripMargin

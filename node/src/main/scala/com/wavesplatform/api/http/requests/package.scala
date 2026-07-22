@@ -7,7 +7,7 @@ import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{GenericError, Validation}
 import com.wavesplatform.transaction.{Asset, AssetIdStringLength, Proofs, TxValidationError, TxVersion}
-import com.wavesplatform.utils.base58Length
+import com.wavesplatform.utils.base16Length
 import play.api.libs.json.*
 
 package object requests {
@@ -15,27 +15,27 @@ package object requests {
   import cats.syntax.either.*
   import cats.syntax.traverse.*
 
-  val SignatureStringLength: Int = base58Length(SignatureLength)
-  val DigestStringLength: Int    = base58Length(DigestLength)
+  val SignatureStringLength: Int = base16Length(SignatureLength)
+  val DigestStringLength: Int    = base16Length(DigestLength)
 
-  def parseBase58(v: String, error: String, maxLength: Int): Validation[ByteStr] =
+  def parseBase16(v: String, error: String, maxLength: Int): Validation[ByteStr] =
     if (v.length > maxLength) Left(TxValidationError.GenericError(error))
-    else ByteStr.decodeBase58(v).toOption.toRight(TxValidationError.GenericError(error))
+    else ByteStr.decodeBase16(v).toOption.toRight(TxValidationError.GenericError(error))
 
-  def parseBase58(v: Option[String], error: String, maxLength: Int): Validation[ByteStr] =
-    v.fold[Either[ValidationError, ByteStr]](Right(ByteStr(Array.emptyByteArray)))(_v => parseBase58(_v, error, maxLength))
+  def parseBase16(v: Option[String], error: String, maxLength: Int): Validation[ByteStr] =
+    v.fold[Either[ValidationError, ByteStr]](Right(ByteStr(Array.emptyByteArray)))(_v => parseBase16(_v, error, maxLength))
 
-  def parseBase58ToOption(v: Option[String], error: String, maxLength: Int): Validation[Option[ByteStr]] =
+  def parseBase16ToOption(v: Option[String], error: String, maxLength: Int): Validation[Option[ByteStr]] =
     v.fold[Either[ValidationError, Option[ByteStr]]](Right(None)) { s =>
-      parseBase58(s, error, maxLength).map(b => Option(b))
+      parseBase16(s, error, maxLength).map(b => Option(b))
     }
 
-  def parseBase58ToIssuedAsset(v: String): Validation[IssuedAsset] =
-    parseBase58(v, "invalid.assetId", AssetIdStringLength)
+  def parseBase16ToIssuedAsset(v: String): Validation[IssuedAsset] =
+    parseBase16(v, "invalid.assetId", AssetIdStringLength)
       .map(IssuedAsset(_))
 
-  def parseBase58ToAsset(v: Option[String], err: String): Validation[Asset] =
-    parseBase58ToOption(v.filter(_.nonEmpty), err, AssetIdStringLength)
+  def parseBase16ToAsset(v: Option[String], err: String): Validation[Asset] =
+    parseBase16ToOption(v.filter(_.nonEmpty), err, AssetIdStringLength)
       .map {
         case Some(str) => IssuedAsset(str)
         case None      => Waves
@@ -67,7 +67,7 @@ package object requests {
       values.toList
         .traverse {
           case JsString(v) =>
-            JsSuccess(v).flatMap(s => ByteStr.decodeBase58(s).fold(e => JsError(JsonValidationError("invalid.base58", e.getMessage)), JsSuccess(_)))
+            JsSuccess(v).flatMap(s => ByteStr.decodeBase16(s).fold(e => JsError(JsonValidationError("invalid.base16", e.getMessage)), JsSuccess(_)))
           case _ => JsError("expected.string")
         }
         .flatMap(Proofs.create(_) match {

@@ -173,7 +173,7 @@ class InvokeScriptTransactionStateChangesSuite extends BaseTransactionSuite with
            |    ScriptTransfer(i.caller, 1, unit),
            |    IntegerEntry("a", 1),
            |    StringEntry("b", "a"),
-           |    BinaryEntry("c", base58'a'),
+           |    BinaryEntry("c", base16'a'),
            |    BooleanEntry("d", true),
            |    DeleteEntry("e"),
            |    ScriptTransfer(i.caller, 2, unit),
@@ -186,16 +186,16 @@ class InvokeScriptTransactionStateChangesSuite extends BaseTransactionSuite with
            |@Callable(i)
            |func order2() = {
            |  [
-           |    SponsorFee(base58'$assetSponsoredByDApp', 950),
+           |    SponsorFee(base16'$assetSponsoredByDApp', 950),
            |    Issue("asset #1", "", 100, 8, true, unit, 0),
-           |    Reissue(base58'$simpleAsset', 1, true),
-           |    Burn(base58'$simpleAsset', 3),
-           |    Reissue(base58'$assetSponsoredByDApp', 2, true),
-           |    SponsorFee(base58'$simpleAsset', 500),
-           |    Burn(base58'$assetSponsoredByDApp', 4),
+           |    Reissue(base16'$simpleAsset', 1, true),
+           |    Burn(base16'$simpleAsset', 3),
+           |    Reissue(base16'$assetSponsoredByDApp', 2, true),
+           |    SponsorFee(base16'$simpleAsset', 500),
+           |    Burn(base16'$assetSponsoredByDApp', 4),
            |    Issue("asset #2", "", 100, 8, true, unit, 0),
-           |    SponsorFee(base58'$assetSponsoredByDApp', 1000),
-           |    Reissue(base58'$simpleAsset', 3, true)
+           |    SponsorFee(base16'$assetSponsoredByDApp', 1000),
+           |    Reissue(base16'$simpleAsset', 3, true)
            |  ]
            |}
       """.stripMargin,
@@ -312,14 +312,14 @@ class InvokeScriptTransactionStateChangesSuite extends BaseTransactionSuite with
           |
           |@Callable(i)
           |func sendAsset(recipient: String, amount: Int, assetId: String) = {
-          |    TransferSet([ScriptTransfer(Address(recipient.fromBase58String()), amount, assetId.fromBase58String())])
+          |    TransferSet([ScriptTransfer(Address(recipient.fromBase16String()), amount, assetId.fromBase16String())])
           |}
           |
           |@Callable(i)
           |func writeAndSendWaves(value: Int, recipient: String, amount: Int) = {
           |    ScriptResult(
           |        WriteSet([DataEntry("result", value)]),
-          |        TransferSet([ScriptTransfer(Address(recipient.fromBase58String()), amount, unit)])
+          |        TransferSet([ScriptTransfer(Address(recipient.fromBase16String()), amount, unit)])
           |    )
           |}
       """.stripMargin,

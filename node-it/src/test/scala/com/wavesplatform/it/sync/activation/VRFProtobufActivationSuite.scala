@@ -3,7 +3,7 @@ package com.wavesplatform.it.sync.activation
 import com.typesafe.config.Config
 import com.wavesplatform.api.http.ApiError.{CustomValidationError, StateCheckFailed}
 import com.wavesplatform.block.Block
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
 import com.wavesplatform.features.BlockchainFeatures
@@ -51,7 +51,7 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
     val blockHeaderBeforeActivationHeight = sender.blockHeaderAt(height)
     blockBeforeActivationHeight.version.get shouldBe Block.ProtoBlockVersion
     blockHeaderBeforeActivationHeight.version.get shouldBe Block.ProtoBlockVersion
-    Base58.decode(blockBeforeActivationHeight.generationSignature.get).length shouldBe Block.GenerationSignatureLength
+    Base16.decode(blockBeforeActivationHeight.generationSignature.get).length shouldBe Block.GenerationSignatureLength
     blockBeforeActivationHeight.baseTarget shouldBe blockHeaderBeforeActivationHeight.baseTarget
   }
 
@@ -75,8 +75,8 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
     val height = sender.height
     sender.blockById(sender.blockAt(height).signature) shouldBe sender.blockAt(height)
     sender.blockAt(height).signature shouldBe sender.blockAt(height).id
-    Base58.decode(sender.blockAt(height).signature).length shouldBe crypto.SignatureLength
-    Base58.decode(sender.blockAt(height).id).length shouldBe crypto.SignatureLength
+    Base16.decode(sender.blockAt(height).signature).length shouldBe crypto.SignatureLength
+    Base16.decode(sender.blockAt(height).id).length shouldBe crypto.SignatureLength
   }
 
   test("not able to broadcast ExchangeTransaction with reversed buy/sell orders") {
@@ -123,8 +123,8 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
     val height = sender.height
     sender.blockById(sender.blockAt(height).id) shouldBe sender.blockAt(height)
     sender.blockAt(height).signature should not be sender.blockAt(height).id
-    Base58.decode(sender.blockAt(height).signature).length shouldBe crypto.SignatureLength
-    Base58.decode(sender.blockAt(height).id).length shouldBe crypto.DigestLength
+    Base16.decode(sender.blockAt(height).signature).length shouldBe crypto.SignatureLength
+    Base16.decode(sender.blockAt(height).id).length shouldBe crypto.DigestLength
   }
 
   test("able to broadcast UpdateAssetInfoTransaction if interval's reached before activation") {

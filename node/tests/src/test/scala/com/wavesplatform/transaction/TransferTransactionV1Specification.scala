@@ -2,7 +2,7 @@ package com.wavesplatform.transaction
 
 import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.Waves
@@ -16,13 +16,13 @@ class TransferTransactionV1Specification extends PropSpec {
   property("JSON format validation") {
     val js = Json.parse("""{
                         "type": 4,
-                        "id": "FLszEaqasJptohmP6zrXodBwjaEYq4jRP2BzdPPjvukk",
+                        "id": "d51b4da4cda91d23da663b127b74ea61e48d6def53cb126c4f1b9b1d4677f461",
                         "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                        "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                        "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
                         "fee": 100000,
                         "timestamp": 1526552510868,
-                        "signature": "eaV1i3hEiXyYQd6DQY7EnPg9XzpAvB9VA3bnpin2qJe4G36GZXaGnYKCgSf9xiQ61DcAwcBFzjSXh6FwCgazzFz",
-                        "proofs": ["eaV1i3hEiXyYQd6DQY7EnPg9XzpAvB9VA3bnpin2qJe4G36GZXaGnYKCgSf9xiQ61DcAwcBFzjSXh6FwCgazzFz"],
+                        "signature": "2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981",
+                        "proofs": ["2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981"],
                         "version": 1,
                         "recipient": "3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8",
                         "assetId": null,
@@ -36,15 +36,15 @@ class TransferTransactionV1Specification extends PropSpec {
     val recipient = Address.fromString("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8").explicitGet()
     val tx = TransferTransaction(
       1.toByte,
-      PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
+      PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
       recipient,
       Waves,
       TxPositiveAmount.unsafeFrom(1900000),
       Waves,
       TxPositiveAmount.unsafeFrom(100000),
-      ByteStr.decodeBase58("4t2Xazb2SX").get,
+      ByteStr.decodeBase16("66616c6166656c").get,
       1526552510868L,
-      Proofs(Seq(ByteStr.decodeBase58("eaV1i3hEiXyYQd6DQY7EnPg9XzpAvB9VA3bnpin2qJe4G36GZXaGnYKCgSf9xiQ61DcAwcBFzjSXh6FwCgazzFz").get)),
+      Proofs(Seq(ByteStr.decodeBase16("2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981").get)),
       AddressScheme.current.chainId
     )
 

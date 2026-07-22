@@ -4,7 +4,7 @@ import com.google.common.primitives.Longs
 import com.wavesplatform.api.http.ApiError.{ApiKeyNotValid, DataKeysNotSpecified, MissingSenderPrivateKey, TooBigArrayAllocation}
 import com.wavesplatform.api.http.{AddressApiRoute, RouteTimeout}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState
 import com.wavesplatform.db.WithState.AddrWithBalance
@@ -154,7 +154,7 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
 
     Get(routePath(s"/bls/$address")) ~> route ~> check {
       val r = responseAs[JsObject]
-      (r \ "blsPublicKey").as[String] shouldEqual expectedBlsPublicKey.base58
+      (r \ "blsPublicKey").as[String] shouldEqual expectedBlsPublicKey.base16
     }
   }
 

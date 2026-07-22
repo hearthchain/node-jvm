@@ -76,5 +76,5 @@ object SeveralAccountMiningSuite {
   )
 
   private def getNodeKeyPair(idx: Int): KeyPair =
-    KeyPair(PrivateKey(ByteStr.decodeBase58(Default(idx).getString("private-key")).get))
+    KeyPair(PrivateKey(ByteStr.decodeBase16(Default(idx).getString("private-key")).get))
 }

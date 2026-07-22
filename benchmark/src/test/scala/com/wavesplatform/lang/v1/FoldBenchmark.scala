@@ -48,9 +48,9 @@ class FoldSt {
   val ds  = DirectiveSet(V5, Account, Expression).fold(null, identity)
   val ctx = lazyContexts((ds, true, true, true)).value().evaluationContext(Common.emptyBlockchainEnvironment())
 
-  val function = "func f(acc: Boolean, elem: ByteVector) = acc && sigVerify(elem, base58'', base58'')"
+  val function = "func f(acc: Boolean, elem: ByteVector) = acc && sigVerify(elem, base16'', base16'')"
 
-  val singleCall = compile(s""" $function\n f(false, base58'') """)
+  val singleCall = compile(s""" $function\n f(false, base16'') """)
   val fold10     = foldN(10)
   val fold20     = foldN(20)
   val fold50     = foldN(50)
@@ -63,7 +63,7 @@ class FoldSt {
     compile(
       s"""
          | $function
-         | let arr = [${List.fill(n)("base58''").mkString(",")}]
+         | let arr = [${List.fill(n)("base16''").mkString(",")}]
          | fold(arr, false, "f")
        """.stripMargin
     )

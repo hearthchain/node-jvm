@@ -30,9 +30,9 @@ object TransactionFactory {
       } yield {
         val endorserKP = BlsKeyPair(k)
         overrides ++= Seq(
-          "commitmentSignature"   -> CommitToGenerationTransaction.mkPopSignature(endorserKP, Height(periodStart)).base58,
+          "commitmentSignature"   -> CommitToGenerationTransaction.mkPopSignature(endorserKP, Height(periodStart)).base16,
           "generationPeriodStart" -> periodStart,
-          "endorserPublicKey"     -> endorserKP.publicKey.base58
+          "endorserPublicKey"     -> endorserKP.publicKey.base16
         )
         overrides.result()
       }

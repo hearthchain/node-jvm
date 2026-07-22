@@ -198,7 +198,7 @@ class InvokeMultiplePaymentsSuite extends BaseTransactionSuite with CancelAfterF
          |{-# CONTENT_TYPE DAPP #-}
          |{-# SCRIPT_TYPE ACCOUNT #-}
          |
-         |func parse(asset: ByteVector|Unit) = if asset.isDefined() then asset.value() else base58''
+         |func parse(asset: ByteVector|Unit) = if asset.isDefined() then asset.value() else base16''
          |
          |@Callable(inv)
          |func default() = {
@@ -216,7 +216,7 @@ class InvokeMultiplePaymentsSuite extends BaseTransactionSuite with CancelAfterF
          |
          |@Callable(inv)
          |func f(toAlias: String) = {
-         | if (${"sigVerify(base58'', base58'', base58'') ||" * 8} true)
+         | if (${"sigVerify(base16'', base16'', base16'') ||" * 8} true)
          |  then {
          |    let pmt = inv.payments[0]
          |    #avoidbugcomment
@@ -230,8 +230,8 @@ class InvokeMultiplePaymentsSuite extends BaseTransactionSuite with CancelAfterF
     val script = ScriptCompiler.compile(source, ScriptEstimatorV2).explicitGet()._1.bytes().base64
     sender.setScript(dApp, Some(script), setScriptFee, waitForTx = true)
 
-    asset1 = IssuedAsset(ByteStr.decodeBase58(sender.issue(caller, waitForTx = true).id).get)
-    asset2 = IssuedAsset(ByteStr.decodeBase58(sender.issue(caller, waitForTx = true).id).get)
+    asset1 = IssuedAsset(ByteStr.decodeBase16(sender.issue(caller, waitForTx = true).id).get)
+    asset2 = IssuedAsset(ByteStr.decodeBase16(sender.issue(caller, waitForTx = true).id).get)
     sender.createAlias(caller, "recipientalias", smartMinFee, waitForTx = true)
   }
 }

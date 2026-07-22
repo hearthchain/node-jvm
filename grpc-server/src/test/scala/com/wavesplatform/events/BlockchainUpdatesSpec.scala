@@ -781,8 +781,8 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
         s"""
            | @Callable(i)
            | func default() = {
-           |   strict r = invoke(Address(base58'${TxHelpers.secondAddress}'), "default", [], [])
-           |   [ScriptTransfer(Address(base58'${TxHelpers.secondAddress}'), 1, unit)]
+           |   strict r = invoke(Address(base16'${TxHelpers.secondAddress}'), "default", [], [])
+           |   [ScriptTransfer(Address(base16'${TxHelpers.secondAddress}'), 1, unit)]
            | }
         """.stripMargin
       )
@@ -790,7 +790,7 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
         s"""
            | @Callable(i)
            | func default() = {
-           |   [ScriptTransfer(Address(base58'${TxHelpers.signer(2).toAddress}'), 1, unit)]
+           |   [ScriptTransfer(Address(base16'${TxHelpers.signer(2).toAddress}'), 1, unit)]
            | }
         """.stripMargin
       )

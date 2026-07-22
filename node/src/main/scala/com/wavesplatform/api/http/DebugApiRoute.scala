@@ -262,9 +262,9 @@ object DebugApiRoute {
         m.foldLeft[JsResult[Map[ByteStr, Long]]](JsSuccess(Map.empty)) {
           case (e: JsError, _) => e
           case (JsSuccess(m, _), (rawAssetId, JsNumber(count))) =>
-            (ByteStr.decodeBase58(rawAssetId), count) match {
+            (ByteStr.decodeBase16(rawAssetId), count) match {
               case (Success(assetId), count) if count.isValidLong => JsSuccess(m.updated(assetId, count.toLong))
-              case (Failure(_), _)                                => JsError(s"Can't parse '$rawAssetId' as base58 string")
+              case (Failure(_), _)                                => JsError(s"Can't parse '$rawAssetId' as base16 string")
               case (_, count)                                     => JsError(s"Invalid count of assets: $count")
             }
           case (_, (_, rawCount)) =>

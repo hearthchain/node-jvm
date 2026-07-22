@@ -62,7 +62,7 @@ class NoOrderProofsSuite extends BaseTransactionSuite {
         script = Some(
           ScriptCompiler.compile(
             s"""
-                let proof = base58'assetWProofs'
+                let proof = base16'assetWProofs'
                 match tx {
                   case _: SetAssetScriptTransaction | TransferTransaction | ReissueTransaction | BurnTransaction => tx.proofs[0] == proof
                   case _ => false
@@ -78,7 +78,7 @@ class NoOrderProofsSuite extends BaseTransactionSuite {
       2.toByte,
       firstKeyPair.publicKey,
       thirdKeyPair.toAddress,
-      IssuedAsset(ByteStr.decodeBase58(assetWProofs).get),
+      IssuedAsset(ByteStr.decodeBase16(assetWProofs).get),
       TxPositiveAmount.unsafeFrom(1),
       Waves,
       TxPositiveAmount.unsafeFrom(smartMinFee),
@@ -97,7 +97,7 @@ class NoOrderProofsSuite extends BaseTransactionSuite {
       .create(
         2.toByte,
         firstKeyPair.publicKey,
-        IssuedAsset(ByteStr.decodeBase58(assetWProofs).get),
+        IssuedAsset(ByteStr.decodeBase16(assetWProofs).get),
         1,
         smartMinFee,
         System.currentTimeMillis + 10.minutes.toMillis,

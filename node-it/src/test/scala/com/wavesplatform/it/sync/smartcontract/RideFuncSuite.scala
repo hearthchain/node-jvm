@@ -36,7 +36,7 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
       s"""
          |match tx {
          |  case _: SetScriptTransaction => true
-         |  case _ => assetBalance(tx.sender, base58'$asset') > 0
+         |  case _ => assetBalance(tx.sender, base16'$asset') > 0
          |}
       """.stripMargin
 
@@ -65,7 +65,7 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
           2.toByte,
           firstKeyPair.publicKey,
           pkNewAddress.toAddress,
-          IssuedAsset(ByteStr.decodeBase58(asset).get),
+          IssuedAsset(ByteStr.decodeBase16(asset).get),
           100000000,
           Waves,
           smartMinFee,
@@ -92,7 +92,7 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
       s"""
          |match tx {
          |  case _: SetScriptTransaction => true
-         |  case _ => assetBalance(tx.sender, base58'$asset') >= 900000000 && wavesBalance(tx.sender) >500000000
+         |  case _ => assetBalance(tx.sender, base16'$asset') >= 900000000 && wavesBalance(tx.sender) >500000000
          |}
       """.stripMargin
 
@@ -125,7 +125,7 @@ class RideFuncSuite extends BaseTransactionSuite with CancelAfterFailure {
           2.toByte,
           firstKeyPair.publicKey,
           pkNewAddress.toAddress,
-          IssuedAsset(ByteStr.decodeBase58(asset).get),
+          IssuedAsset(ByteStr.decodeBase16(asset).get),
           800000000,
           Waves,
           smartMinFee,

@@ -22,7 +22,7 @@ object Gen {
   def script(complexity: Boolean = true, estimator: ScriptEstimator): Script = {
     val s = if (complexity) s"""
                                |${(for (b <- 1 to 10) yield {
-                                s"let a$b = blake2b256(base58'') != base58'' && keccak256(base58'') != base58'' && sha256(base58'') != base58'' && sigVerify(base58'333', base58'123', base58'567')"
+                                s"let a$b = blake2b256(base16'') != base16'' && keccak256(base16'') != base16'' && sha256(base16'') != base16'' && sigVerify(base16'333', base16'123', base16'567')"
                               }).mkString("\n")}
                                |
                                |${(for (b <- 1 to 10) yield { s"a$b" }).mkString("&&")} || true
@@ -56,7 +56,7 @@ object Gen {
 
     val src =
       s"""
-         |let oracle = Address(base58'${oracle.toAddress}')
+         |let oracle = Address(base16'${oracle.toAddress}')
          |
          |match tx {
          |  case _: SetScriptTransaction => true
@@ -73,7 +73,7 @@ object Gen {
     val accountsWithIndexes = owners.zipWithIndex
     val keyLets =
       accountsWithIndexes map { case (acc, i) =>
-        s"let accountPK$i = base58'${acc.publicKey}'"
+        s"let accountPK$i = base16'${acc.publicKey}'"
       } mkString "\n"
 
     val signedLets =

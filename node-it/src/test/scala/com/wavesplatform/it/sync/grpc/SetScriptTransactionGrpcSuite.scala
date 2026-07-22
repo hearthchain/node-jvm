@@ -31,8 +31,8 @@ class SetScriptTransactionGrpcSuite extends GrpcBaseTransactionSuite {
         s"""
         match tx {
           case _: Transaction => {
-            let A = base58'${secondAcc.publicKey}'
-            let B = base58'${thirdAcc.publicKey}'
+            let A = base16'${secondAcc.publicKey}'
+            let B = base16'${thirdAcc.publicKey}'
             let AC = sigVerify(tx.bodyBytes,tx.proofs[0],A)
             let BC = sigVerify(tx.bodyBytes,tx.proofs[1],B)
             AC && BC

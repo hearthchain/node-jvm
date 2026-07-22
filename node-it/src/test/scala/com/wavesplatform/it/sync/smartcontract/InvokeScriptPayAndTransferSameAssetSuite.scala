@@ -53,7 +53,7 @@ class InvokeScriptPayAndTransferSameAssetSuite extends BaseTransactionSuite with
           |{-# STDLIB_VERSION 3 #-}
           |{-# CONTENT_TYPE DAPP #-}
           |
-          |let receiver = Address(base58'$receiverAddress')
+          |let receiver = Address(base16'$receiverAddress')
           |
           |@Callable(i)
           |func resendPayment() = {
@@ -137,7 +137,7 @@ class InvokeScriptPayAndTransferSameAssetSuite extends BaseTransactionSuite with
     sender.accountBalances(receiverAddress)._1 shouldBe receiverInitBalance + 1
   }
 
-  def issued(assetId: String): Asset = IssuedAsset(ByteStr.decodeBase58(assetId).get)
+  def issued(assetId: String): Asset = IssuedAsset(ByteStr.decodeBase16(assetId).get)
 
   def invoke(func: String, amount: Long, asset: Asset = Waves, fee: Long = 500000): String = {
     sender

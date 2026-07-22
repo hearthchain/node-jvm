@@ -3,7 +3,7 @@ package com.wavesplatform.it.asset
 import com.wavesplatform.account.KeyPair
 import com.wavesplatform.api.grpc.AssetInfoResponse
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncGrpcApi.*
 import com.wavesplatform.it.api.{BurnInfoResponse, IssueInfoResponse, ReissueInfoResponse, StateChangesDetails}
@@ -217,7 +217,7 @@ class GrpcIssueReissueBurnAssetSuite extends AnyFreeSpec with GrpcBaseTransactio
       val acc     = createDapp(script(nftAsset))
       val txIssue = issue(acc, CallableMethod, nftAsset, invocationCost(1))
       val assetId = validateIssuedAssets(acc, txIssue, nftAsset, method = CallableMethod)
-      sender.nftList(acc, 2).map(r => Base58.encode(r.assetId.toByteArray)) shouldBe Seq(assetId)
+      sender.nftList(acc, 2).map(r => Base16.encode(r.assetId.toByteArray)) shouldBe Seq(assetId)
       burn(acc, CallableMethod, assetId, 1)
       sender.nftList(acc, 1) shouldBe empty
     }
@@ -244,7 +244,7 @@ class GrpcIssueReissueBurnAssetSuite extends AnyFreeSpec with GrpcBaseTransactio
 
   def createDapp(scriptParts: String*): KeyPair = {
     val script  = scriptParts.mkString(" ")
-    val address = KeyPair.fromSeed(Base58.encode(Random.nextString(10).getBytes())).explicitGet()
+    val address = KeyPair.fromSeed(Base16.encode(Random.nextString(10).getBytes())).explicitGet()
     val compiledScript = ScriptCompiler
       .compile(
         script,
@@ -278,12 +278,12 @@ class GrpcIssueReissueBurnAssetSuite extends AnyFreeSpec with GrpcBaseTransactio
       fee: Long = invokeFee
   ): String = {
     val args = function match {
-      case "transferAndBurn"    => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_LONG(count))
-      case "reissueIssueAndNft" => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet())
-      case "process11actions"   => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet())
-      case "burnAsset"          => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_LONG(count))
-      case "reissueAsset"      => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_BOOLEAN(isReissuable), CONST_LONG(count))
-      case "reissueAndReissue" => List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet(), CONST_LONG(count))
+      case "transferAndBurn"    => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_LONG(count))
+      case "reissueIssueAndNft" => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet())
+      case "process11actions"   => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet())
+      case "burnAsset"          => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_LONG(count))
+      case "reissueAsset"      => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_BOOLEAN(isReissuable), CONST_LONG(count))
+      case "reissueAndReissue" => List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet(), CONST_LONG(count))
       case _                   => Nil
     }
 
@@ -518,7 +518,7 @@ class GrpcIssueReissueBurnAssetSuite extends AnyFreeSpec with GrpcBaseTransactio
        |@Callable(i)
        |func transferAndBurn(a: ByteVector, q: Int) = {
        |  [
-       |    ScriptTransfer(Address(fromBase58String("${miner.address}")), q, a),
+       |    ScriptTransfer(Address(fromBase16String("${miner.address}")), q, a),
        |    Burn(a, q)
        | ]
        |}

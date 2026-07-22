@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync.smartcontract
 
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.*
@@ -29,19 +29,19 @@ class TransferTxFromProtoSuite extends BaseTransactionSuite {
        |@Callable(i)
        |func foo(txProtoBytes: ByteVector) = {
        |    let transferTx = transferTransactionFromProto(txProtoBytes).value()
-       |    let transferTxAttachment = transferTx.attachment.toBase58String()
-       |    let assetId = if (!transferTx.assetId.isDefined()) then {"WAVES"} else {transferTx.assetId.value().toBase58String()}
-       |    let feeAssetId = if (!transferTx.feeAssetId.isDefined()) then {"WAVES"} else {transferTx.feeAssetId.value().toBase58String()}
+       |    let transferTxAttachment = transferTx.attachment.toBase16String()
+       |    let assetId = if (!transferTx.assetId.isDefined()) then {"WAVES"} else {transferTx.assetId.value().toBase16String()}
+       |    let feeAssetId = if (!transferTx.feeAssetId.isDefined()) then {"WAVES"} else {transferTx.feeAssetId.value().toBase16String()}
        |[
        |IntegerEntry("amount", transferTx.amount),
-       |StringEntry("senderPublicKey", transferTx.senderPublicKey.toBase58String()),
-       |StringEntry("sender", transferTx.sender.bytes.toBase58String()),
-       |StringEntry("recipient", addressFromRecipient(transferTx.recipient).bytes.toBase58String()),
+       |StringEntry("senderPublicKey", transferTx.senderPublicKey.toBase16String()),
+       |StringEntry("sender", transferTx.sender.bytes.toBase16String()),
+       |StringEntry("recipient", addressFromRecipient(transferTx.recipient).bytes.toBase16String()),
        |StringEntry("assetId", assetId),
        |StringEntry("attachment", transferTxAttachment),
        |IntegerEntry("fee", transferTx.fee),
        |StringEntry("feeAssetId", feeAssetId),
-       |StringEntry("id", transferTx.id.toBase58String()),
+       |StringEntry("id", transferTx.id.toBase16String()),
        |IntegerEntry("version", transferTx.version),
        |BinaryEntry("bodyBytes",transferTx.bodyBytes)
        |]
@@ -81,7 +81,7 @@ class TransferTxFromProtoSuite extends BaseTransactionSuite {
     sender.getDataByKey(dAppAddress, "id").value shouldBe transferTx.id().toString
     sender.getDataByKey(dAppAddress, "assetId").value shouldBe "WAVES"
     sender.getDataByKey(dAppAddress, "feeAssetId").value shouldBe "WAVES"
-    sender.getDataByKey(dAppAddress, "attachment").value shouldBe Base58.encode("WAVES transfer".getBytes)
+    sender.getDataByKey(dAppAddress, "attachment").value shouldBe Base16.encode("WAVES transfer".getBytes)
     sender.getDataByKey(dAppAddress, "senderPublicKey").value shouldBe transferTx.sender.toString
     sender.getDataByKey(dAppAddress, "sender").value shouldBe transferTx.sender.toAddress.toString
     sender.getDataByKey(dAppAddress, "recipient").value shouldBe transferTx.recipient.toString
@@ -96,9 +96,9 @@ class TransferTxFromProtoSuite extends BaseTransactionSuite {
       version = TxVersion.V3,
       from = source,
       to = recipient.toAddress,
-      asset = IssuedAsset(ByteStr.decodeBase58(assetId).get),
+      asset = IssuedAsset(ByteStr.decodeBase16(assetId).get),
       amount = 10000,
-      feeAsset = IssuedAsset(ByteStr.decodeBase58(assetId).get),
+      feeAsset = IssuedAsset(ByteStr.decodeBase16(assetId).get),
       fee = minFee,
       attachment = ByteStr("Some Attachment".getBytes),
       timestamp = System.currentTimeMillis()

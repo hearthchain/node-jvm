@@ -20,7 +20,7 @@ package object settings {
   }
 
   implicit val byteStrReader: ConfigReader[ByteStr] =
-    ConfigReader.fromString(str => ByteStr.decodeBase58(str).toEither.left.map(e => CannotConvert(str, "ByteStr", e.getMessage)))
+    ConfigReader.fromString(str => ByteStr.decodeBase16(str).toEither.left.map(e => CannotConvert(str, "ByteStr", e.getMessage)))
   implicit val preactivatedFeaturesReader: ConfigReader[Map[Short, Int]] = genericMapReader(catchReadError(_.toShort))
 
   implicit val privateKeyReader: ConfigReader[PrivateKey] = ConfigReader[ByteStr].map(PrivateKey(_))

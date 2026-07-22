@@ -92,7 +92,7 @@ package object api {
       com.wavesplatform.account.Address
         .fromString(addrStr)
         .fold(err => JsError(err.toString), addr => JsSuccess(addr))
-    case _ => JsError("Expected base58 encoded address")
+    case _ => JsError("Expected base16 encoded address")
   }
 
   implicit val dstMapReads: Reads[Map[com.wavesplatform.account.Address, Long]] = Reads { json =>

@@ -39,7 +39,7 @@ abstract class Node(val config: Config) extends AutoCloseable {
   }
 
   val keyPair: KeyPair     = KeyPair.fromSeed(config.getString("account-seed")).explicitGet()
-  val publicKey: PublicKey = PublicKey.fromBase58String(config.getString("public-key")).explicitGet()
+  val publicKey: PublicKey = PublicKey.fromBase16String(config.getString("public-key")).explicitGet()
   val address: String      = config.getString("address")
 
   def nodeExternalPort(internalPort: Int): Int

@@ -22,7 +22,7 @@ class InvokeSmartAssetFailSuite extends BaseTransactionSuite {
       |{-# CONTENT_TYPE DAPP #-}
       |{-# SCRIPT_TYPE ACCOUNT #-}
       |
-      |let bob = addressFromPublicKey(base58'BzFTfc4TB9s25d8b3sfhptj4STZafEM2FNkR5kQ8mJeA')
+      |let bob = addressFromPublicKey(base16'BzFTfc4TB9s25d8b3sfhptj4STZafEM2FNkR5kQ8mJeA')
       |
       |@Callable(i)
       |func some(fail: Boolean) = {
@@ -55,7 +55,7 @@ class InvokeSmartAssetFailSuite extends BaseTransactionSuite {
     """.stripMargin
 
   test("extracted funcs") {
-    val assetId = ByteStr.decodeBase58(sender.issue(caller, waitForTx = true).id).get
+    val assetId = ByteStr.decodeBase16(sender.issue(caller, waitForTx = true).id).get
     val data    = List(BinaryDataEntry("assetId", assetId))
     val dataFee = calcDataFee(data, TxVersion.V2)
     sender.putData(dApp, data, fee = dataFee, waitForTx = true)

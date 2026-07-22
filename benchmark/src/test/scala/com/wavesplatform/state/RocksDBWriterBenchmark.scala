@@ -5,7 +5,7 @@ import com.wavesplatform.account.*
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.api.common.CommonBlocksApi
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.database
 import com.wavesplatform.database.{DBExt, Keys, RDB, RocksDBWriter}
@@ -52,7 +52,7 @@ object RocksDBWriterBenchmark {
 
   @State(Scope.Benchmark)
   class TransactionByIdSt extends BaseSt {
-    val allTxs: Vector[ByteStr] = load(benchSettings.restTxsFile)(x => ByteStr(Base58.tryDecodeWithLimit(x).get))
+    val allTxs: Vector[ByteStr] = load(benchSettings.restTxsFile)(x => ByteStr(Base16.tryDecodeWithLimit(x).get))
   }
 
   @State(Scope.Benchmark)
@@ -62,7 +62,7 @@ object RocksDBWriterBenchmark {
 
   @State(Scope.Benchmark)
   class BlocksByIdSt extends BaseSt {
-    val allBlocks: Vector[ByteStr] = load(benchSettings.blocksFile)(x => ByteStr(Base58.tryDecodeWithLimit(x).get))
+    val allBlocks: Vector[ByteStr] = load(benchSettings.blocksFile)(x => ByteStr(Base16.tryDecodeWithLimit(x).get))
   }
 
   @State(Scope.Benchmark)

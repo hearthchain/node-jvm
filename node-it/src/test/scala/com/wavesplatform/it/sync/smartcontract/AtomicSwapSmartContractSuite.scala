@@ -43,7 +43,7 @@ class AtomicSwapSmartContractSuite extends BaseTransactionSuite with CancelAfter
   private lazy val swapBC1: KeyPair  = sender.createKeyPair()
 
   private val secretText = "some secret message from Alice"
-  private val shaSecret  = "BN6RTYGWcwektQfSFzH8raYo9awaLgQ7pLyWLQY4S4F5"
+  private val shaSecret  = "99fc3252656801e4ffc26dca48dafebd07103218eebf2208ac45e0f2bccaa654"
 
   test("step1 - Balances initialization") {
     val toAliceBC1TxId = sender.transfer(sender.keyPair, AliceBC1.toAddress.toString, 10 * transferAmount, minFee).id
@@ -56,12 +56,12 @@ class AtomicSwapSmartContractSuite extends BaseTransactionSuite with CancelAfter
   test("step2 - Create and setup smart contract for swapBC1") {
     val beforeHeight = sender.height
     val scriptText = s"""
-    let Bob = Address(base58'${BobBC1.toAddress}')
-    let Alice = Address(base58'${AliceBC1.toAddress}')
+    let Bob = Address(base16'${BobBC1.toAddress}')
+    let Alice = Address(base16'${AliceBC1.toAddress}')
 
     match tx {
       case ttx: TransferTransaction =>
-        let txToBob = (ttx.recipient == Bob) && (sha256(ttx.proofs[0]) == base58'$shaSecret') && ((20 + $beforeHeight) >= height)
+        let txToBob = (ttx.recipient == Bob) && (sha256(ttx.proofs[0]) == base16'$shaSecret') && ((20 + $beforeHeight) >= height)
         let backToAliceAfterHeight = ((height >= (21 + $beforeHeight)) && (ttx.recipient == Alice))
 
         txToBob || backToAliceAfterHeight

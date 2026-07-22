@@ -101,7 +101,7 @@ class DebugApiRouteStateHashSpec
           "sponsorshipHash"   -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "aliasHash"         -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           // Note: "nextCommittedGeneratorsHash" and "committedGeneratorBalancesHash" fields are not present
-          "snapshotHash" -> "GfGLptLRk1pw9fcYL3qyCzN7XWsnqftkGmX4zsWnHvoD",
+          "snapshotHash" -> "e8acb8c0d1c27ca91c83fca4e61f510265031f70781b48d50cf0cb75dd721a5c",
           "blockId"      -> beforeFinalityHeader.id().toString,
           "baseTarget"   -> beforeFinalityHeader.header.baseTarget,
           "height"       -> beforeFinalityHeight,
@@ -152,7 +152,7 @@ class DebugApiRouteStateHashSpec
           "aliasHash"                      -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "nextCommittedGeneratorsHash"    -> "0c081cdc089066b9679d6a6abe7e30f415dca425a8d4442062748a73013a5aa9", // Note: non-empty
           "committedGeneratorBalancesHash" -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "snapshotHash"                   -> "88DmToc9xC1dtxk2QYbx5Y42YwA6woGC9PFJ6DYioCqr",
+          "snapshotHash"                   -> "69db4f333cd9bc49822a6c14562fa5453587bcb61f2c08b165feaa74b9fe293d",
           "blockId"                        -> afterGeneratingBalanceUpdateHeader.id().toString,
           "baseTarget"                     -> afterGeneratingBalanceUpdateHeader.header.baseTarget,
           "height"                         -> afterGeneratingBalanceUpdateHeight,
@@ -189,7 +189,7 @@ class DebugApiRouteStateHashSpec
           "aliasHash"                      -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "nextCommittedGeneratorsHash"    -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "committedGeneratorBalancesHash" -> "ea4322a8f09a9d010956932ebde7b98a703f5679b85df9c29a44d0de254f705e", // Note: non-empty
-          "snapshotHash"                   -> "rNcJukRBu5xcLBKPzdK9qyTgRsPdmhYMbsaSBSXiY49",
+          "snapshotHash"                   -> "0ca5e48bffded10293ab5f99715583e0c029579c2b5e4735e933998fd496befa",
           "blockId"                        -> headerOnGenerationPeriod.id().toString,
           "baseTarget"                     -> headerOnGenerationPeriod.header.baseTarget,
           "height"                         -> heightOnGenerationPeriod,

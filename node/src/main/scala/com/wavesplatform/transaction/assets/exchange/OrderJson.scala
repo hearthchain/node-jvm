@@ -2,7 +2,7 @@ package com.wavesplatform.transaction.assets.exchange
 
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.crypto.SignatureLength
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals}
@@ -18,9 +18,9 @@ object OrderJson {
 
   implicit val byteArrayReads: Reads[Array[Byte]] = {
     case JsString(s) =>
-      Base58.tryDecodeWithLimit(s) match {
+      Base16.tryDecodeWithLimit(s) match {
         case Success(bytes) => JsSuccess(bytes)
-        case Failure(_)     => JsError(JsPath, JsonValidationError("error.incorrect.base58"))
+        case Failure(_)     => JsError(JsPath, JsonValidationError("error.incorrect.base16"))
       }
     case _ => JsError(JsPath, JsonValidationError("error.expected.jsstring"))
   }
@@ -28,16 +28,16 @@ object OrderJson {
   implicit val optionByteArrayReads: Reads[Option[Array[Byte]]] = {
     case JsString(s) if s.isEmpty => JsSuccess(Option.empty[Array[Byte]])
     case JsString(s) if s.nonEmpty =>
-      Base58.tryDecodeWithLimit(s) match {
+      Base16.tryDecodeWithLimit(s) match {
         case Success(bytes) => JsSuccess(Some(bytes))
-        case Failure(_)     => JsError(Seq(JsPath() -> Seq(JsonValidationError("error.incorrect.base58"))))
+        case Failure(_)     => JsError(Seq(JsPath() -> Seq(JsonValidationError("error.incorrect.base16"))))
       }
     case _ => JsError(Seq(JsPath() -> Seq(JsonValidationError("error.expected.jsstring"))))
   }
 
   implicit lazy val accountPublicKeyReads: Reads[PublicKey] = Reads {
     case JsString(s) =>
-      Base58.tryDecodeWithLimit(s) match {
+      Base16.tryDecodeWithLimit(s) match {
         case Success(bytes) if PublicKey.isValidSize(bytes.length) => JsSuccess(PublicKey(bytes))
         case _                                                     => JsError(Seq(JsPath() -> Seq(JsonValidationError("error.incorrectAccount"))))
       }

@@ -136,8 +136,8 @@ class NFTBalanceSuite extends BaseFreeSpec {
       Await.result(assertion, 10.seconds)
     }
 
-    "returns error on wrong base58 in after" in {
-      val assertion = getNFTPage(node, issuer.toAddress.toString, 100, Some("wr0ngbase58str1ng"))
+    "returns error on wrong base16 in after" in {
+      val assertion = getNFTPage(node, issuer.toAddress.toString, 100, Some("wr0ngbase16str1ng"))
         .map(_ => org.scalatest.Assertions.fail("BadRequest expected"))
         .recoverWith { case ex: Throwable =>
           Future.successful {

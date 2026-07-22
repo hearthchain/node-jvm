@@ -55,7 +55,7 @@ class SmartGenerator(settings: SmartGenerator.Settings, val accounts: Seq[KeyPai
       val seller          = randomFrom(accounts).get
       val buyer           = randomFrom(accounts).get
       val asset           = randomFrom(settings.assets.toSeq)
-      val tradeAssetIssue = ByteStr.decodeBase58(asset.get).toOption
+      val tradeAssetIssue = ByteStr.decodeBase16(asset.get).toOption
       val pair            = AssetPair(Waves, Asset.fromCompatId(tradeAssetIssue))
       val sellOrder = Order.sell(TxVersion.V2, seller, matcher.publicKey, pair, 100000000L, 1, ts, ts + 30.days.toMillis, 0.003.waves).explicitGet()
       val buyOrder  = Order.buy(TxVersion.V2, buyer, matcher.publicKey, pair, 100000000L, 1, ts, ts + 1.day.toMillis, 0.003.waves).explicitGet()

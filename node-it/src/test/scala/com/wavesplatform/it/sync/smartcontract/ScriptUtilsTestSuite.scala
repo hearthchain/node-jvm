@@ -13,9 +13,9 @@ class ScriptUtilsTestSuite extends BaseTransactionSuite with CancelAfterFailure 
     val scriptText =
       s"""{-# STDLIB_VERSION 3 #-}
         |{-# CONTENT_TYPE EXPRESSION #-}
-        |let bytes = base58'AAAAAAAAAAAAAA'
-        |let sig = base58'AAAAAAAAAAAAAA'
-        |let pbk = base58'AAAAAAAAAAAAAA'
+        |let bytes = base16'AAAAAAAAAAAAAA'
+        |let sig = base16'AAAAAAAAAAAAAA'
+        |let pbk = base16'AAAAAAAAAAAAAA'
         |${"if (" * (blockCount + 1)}sigVerify(bytes, sig, pbk))
         |${s"${separator}then sigVerify(bytes, sig, pbk)\n${separator}else false)\n" * blockCount}${separator}then sigVerify(bytes, sig, pbk)
         |${separator}else false""".stripMargin

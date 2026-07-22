@@ -2,10 +2,10 @@ package com.wavesplatform.account
 
 import com.google.common.collect.Interners
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.crypto.*
 import com.wavesplatform.transaction.TxValidationError.InvalidAddress
-import com.wavesplatform.utils.base58Length
+import com.wavesplatform.utils.base16Length
 import play.api.libs.json.{Format, Writes}
 
 opaque type PublicKey = ByteStr
@@ -13,7 +13,7 @@ opaque type PublicKey = ByteStr
 object PublicKey {
   private val interner = Interners.newWeakInterner[PublicKey]()
 
-  private val KeyStringLength: Int = base58Length(KeyLength)
+  private val KeyStringLength: Int = base16Length(KeyLength)
 
   def isValidSize(length: Int): Boolean = length == KeyLength || length == EthereumKeyLength
 
@@ -25,10 +25,10 @@ object PublicKey {
   def apply(publicKey: Array[Byte]): PublicKey =
     apply(ByteStr(publicKey))
 
-  def fromBase58String(base58: String): Either[InvalidAddress, PublicKey] =
+  def fromBase16String(base16: String): Either[InvalidAddress, PublicKey] =
     (for {
-      _     <- Either.cond(base58.length <= KeyStringLength, (), "Bad public key string length")
-      bytes <- Base58.tryDecodeWithLimit(base58).toEither.left.map(ex => s"Unable to decode base58: ${ex.getMessage}")
+      _     <- Either.cond(base16.length <= KeyStringLength, (), "Bad public key string length")
+      bytes <- Base16.tryDecodeWithLimit(base16).toEither.left.map(ex => s"Unable to decode base16: ${ex.getMessage}")
     } yield PublicKey(bytes)).left.map(err => InvalidAddress(s"Invalid sender: $err"))
 
   def unapply(arg: Array[Byte]): Option[PublicKey] =

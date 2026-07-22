@@ -50,13 +50,13 @@ class UpdateAssetInfoTransactionSuite extends BaseTransactionSuite with CancelAf
  
     @Callable(i)
     func isAssetInfoCorrect(id: String, name: String, description: String, quantity: Int, decimals: Int, issuer: String, issuerPublicKey: ByteVector, reissuable: Boolean, scripted: Boolean) = {
-      let isCorrect = match assetInfo(fromBase58String(id)) {
+      let isCorrect = match assetInfo(fromBase16String(id)) {
         case a:Asset => a.name == name &&
           a.description == description &&
           a.quantity == quantity &&
-          a.id == fromBase58String(id) &&
+          a.id == fromBase16String(id) &&
           a.decimals == decimals &&
-          a.issuer == Address(fromBase58String(issuer)) &&
+          a.issuer == Address(fromBase16String(issuer)) &&
           a.issuerPublicKey == issuerPublicKey &&
           a.reissuable == reissuable &&
           a.scripted == scripted &&
@@ -316,7 +316,7 @@ class UpdateAssetInfoTransactionSuite extends BaseTransactionSuite with CancelAf
   }
 
   test("not able to update info of not-issued asset") {
-    val notIssuedAssetId = "BzARFPgBqWFu6MHGxwkPVKmaYAzyShu495Ehsgru72Wz"
+    val notIssuedAssetId = "a3399fda7de21af8d42730ac63ed19deeb212937c1741658e0d53dc70bdad67f"
     assertApiError(sender.updateAssetInfo(issuer, notIssuedAssetId, "updatedName", "updatedDescription", minFee)) { error =>
       error.id shouldBe StateCheckFailed.Id
       error.message shouldBe "State check failed. Reason: Referenced assetId not found"
@@ -341,7 +341,7 @@ class UpdateAssetInfoTransactionSuite extends BaseTransactionSuite with CancelAf
                          |{-# CONTENT_TYPE EXPRESSION #-}
                          |{-# SCRIPT_TYPE ASSET #-}
 
-                         |match assetInfo(fromBase58String("$smartAssetId1")) {
+                         |match assetInfo(fromBase16String("$smartAssetId1")) {
                          |case a:Asset =>
                          | a.name == "smartAsset" &&
                          | this.name == "smartAsset" &&
@@ -349,11 +349,11 @@ class UpdateAssetInfoTransactionSuite extends BaseTransactionSuite with CancelAf
                          | this.description == "description" &&
                          | a.quantity == $someAssetAmount &&
                          | a.quantity == $someAssetAmount &&
-                         | this.id == fromBase58String("$smartAssetId1") &&
+                         | this.id == fromBase16String("$smartAssetId1") &&
                          | a.decimals == 8 &&
                          | this.decimals == 8 &&
-                         | a.issuer == Address(fromBase58String("${issuer.toAddress.toString}")) &&
-                         | this.issuer == Address(fromBase58String("${issuer.toAddress.toString}")) &&
+                         | a.issuer == Address(fromBase16String("${issuer.toAddress.toString}")) &&
+                         | this.issuer == Address(fromBase16String("${issuer.toAddress.toString}")) &&
                          | a.issuerPublicKey == this.issuerPublicKey &&
                          | a.reissuable == true &&
                          | this.reissuable == true &&

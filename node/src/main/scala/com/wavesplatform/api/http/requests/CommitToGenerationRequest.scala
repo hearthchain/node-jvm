@@ -30,7 +30,7 @@ case class CommitToGenerationRequest(
     for {
       blsSignature <- BlsSignature(commitmentSignature)
       blsPk        <- BlsPublicKey(endorserPublicKey)
-      senderPk     <- PublicKey.fromBase58String(senderPublicKey)
+      senderPk     <- PublicKey.fromBase16String(senderPublicKey)
       tx <- CommitToGenerationTransaction.create(
         version.getOrElse(1.toByte),
         senderPk,

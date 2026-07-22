@@ -47,10 +47,10 @@ final case class CommitToGenerationTransaction(
   override val json: Coeval[JsObject] =
     Coeval.evalOnce(
       BaseTxJson.toJson(this) ++ Json.obj(
-        "endorserPublicKey"      -> endorserPublicKey.base58,
+        "endorserPublicKey"      -> endorserPublicKey.base16,
         "vrfPublicKey"           -> vrfPublicKey.toString,
         "generationPeriodStart"  -> generationPeriodStart,
-        "commitmentSignature"    -> commitmentSignature.base58,
+        "commitmentSignature"    -> commitmentSignature.base16,
         "vrfCommitmentSignature" -> vrfCommitmentSignature.toString
       )
     )

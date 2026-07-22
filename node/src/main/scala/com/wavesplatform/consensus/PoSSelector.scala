@@ -3,7 +3,7 @@ package com.wavesplatform.consensus
 import cats.syntax.either.*
 import com.wavesplatform.block.{Block, BlockHeader}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.consensus.nxt.NxtLikeConsensusBlockData
 import com.wavesplatform.crypto
 import com.wavesplatform.features.BlockchainFeatures

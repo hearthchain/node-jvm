@@ -39,8 +39,8 @@ class SetScriptTransactionSuite extends BaseTransactionSuite with CancelAfterFai
         s"""
         match tx {
           case _: Transaction => {
-            let A = base58'${acc1.publicKey}'
-            let B = base58'${acc2.publicKey}'
+            let A = base16'${acc1.publicKey}'
+            let B = base16'${acc2.publicKey}'
             let AC = sigVerify(tx.bodyBytes,tx.proofs[0],A)
             let BC = sigVerify(tx.bodyBytes,tx.proofs[1],B)
             AC && BC

@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync.grpc
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncGrpcApi.*
 import com.wavesplatform.it.sync.*
@@ -72,7 +72,7 @@ class InvokeScriptPayAndTransferAssetGrpcSuite extends GrpcBaseTransactionSuite 
          |{-# STDLIB_VERSION 3 #-}
          |{-# CONTENT_TYPE DAPP #-}
          |
-         |let receiver = Address(base58'${receiver.toAddress.toString}')
+         |let receiver = Address(base16'${receiver.toAddress.toString}')
          |
          |@Callable(i)
          |func resendPayment() = {
@@ -161,7 +161,7 @@ class InvokeScriptPayAndTransferAssetGrpcSuite extends GrpcBaseTransactionSuite 
   }
 
   def invoke(func: String, amount: Long, assetId: String = "WAVES", fee: Long = 500000): PBSignedTransaction = {
-    val assetIdByteSting = if (assetId == "WAVES") ByteString.EMPTY else ByteString.copyFrom(Base58.decode(assetId))
+    val assetIdByteSting = if (assetId == "WAVES") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(assetId))
     sender.broadcastInvokeScript(
       caller,
       Recipient().withPublicKeyHash(dAppAddress),

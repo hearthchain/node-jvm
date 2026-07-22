@@ -78,7 +78,7 @@ trait ApiMarshallers extends JsonFormats {
     }
 
   implicit val byteStrUnmarshaller: Unmarshaller[String, ByteStr] = Unmarshaller.strict[String, ByteStr] { s =>
-    ByteStr.decodeBase58(s).get
+    ByteStr.decodeBase16(s).get
   }
 
   // preserve support for extracting plain strings from requests

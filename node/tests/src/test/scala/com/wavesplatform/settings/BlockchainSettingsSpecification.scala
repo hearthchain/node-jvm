@@ -42,18 +42,18 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |      genesis {
           |        timestamp = 1460678400000
           |        block-timestamp = 1460678400000
-          |        signature = "BASE58BLKSGNATURE"
+          |        signature = "021a89a98f742fc15c313e3049"
           |        initial-base-target = 153722867
           |        average-block-delay = 60s
           |        assets = [
-          |          {id = "BASE58ASSETXYZ", issuer = "BASE58ISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
+          |          {id = "b4e393d26c2a3f66159e", issuer = "BASE58ISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
           |        ]
           |        generators = [
           |          {public-key = "BASE58PUBLICKEY", endorser-public-key = "BASE58BLSKEY", vrf-public-key = "BASE58VRFKEY"}
           |        ]
           |        balances = [
           |          {recipient = "ADDRESS1", waves = 50000000000001},
-          |          {recipient = "ADDRESS2", waves = 49999999999999, assets {BASE58ASSETXYZ = 1000}}
+          |          {recipient = "ADDRESS2", waves = 49999999999999, assets {b4e393d26c2a3f66159e = 1000}}
           |        ]
           |      }
           |    }
@@ -76,13 +76,13 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.votingInterval should be(10000)
     settings.genesisSettings.blockTimestamp should be(1460678400000L)
     settings.genesisSettings.timestamp should be(1460678400000L)
-    settings.genesisSettings.signature should be(ByteStr.decodeBase58("BASE58BLKSGNATURE").toOption)
+    settings.genesisSettings.signature should be(ByteStr.decodeBase16("021a89a98f742fc15c313e3049").toOption)
     settings.genesisSettings.initialBaseTarget should be(153722867)
     settings.genesisSettings.averageBlockDelay should be(60.seconds)
     settings.genesisSettings.assets should be(
       Seq(
         GenesisAssetSettings(
-          ByteStr.decodeBase58("BASE58ASSETXYZ").get,
+          ByteStr.decodeBase16("b4e393d26c2a3f66159e").get,
           "BASE58ISSUERKEY",
           "Asset",
           decimals = 4,
@@ -95,7 +95,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.genesisSettings.balances should be(
       Seq(
         GenesisBalanceSettings("ADDRESS1", 50000000000001L),
-        GenesisBalanceSettings("ADDRESS2", 49999999999999L, Map("BASE58ASSETXYZ" -> 1000L))
+        GenesisBalanceSettings("ADDRESS2", 49999999999999L, Map("b4e393d26c2a3f66159e" -> 1000L))
       )
     )
     // Derived from the genesis balances rather than configured

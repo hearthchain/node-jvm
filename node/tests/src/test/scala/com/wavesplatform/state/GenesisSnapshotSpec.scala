@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithDomain
@@ -33,7 +33,7 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
   private def vrfKey(i: Int): VrfKey         = VrfKey.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(i)))
 
   private def generatorSettings(generator: SigningKey, blsKey: BlsKeyPair, vrf: VrfKey): GenesisGeneratorSettings =
-    GenesisGeneratorSettings(ByteStr(generator.publicKey()).toString, blsKey.publicKey.base58, ByteStr(vrf.publicKey()).toString)
+    GenesisGeneratorSettings(ByteStr(generator.publicKey()).toString, blsKey.publicKey.base16, ByteStr(vrf.publicKey()).toString)
 
   private def settingsWith(
       base: WavesSettings = DeterministicFinality,
@@ -216,7 +216,7 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
     "committed generator does not have enough balance" in {
       val generator = TxHelpers.signer(1005)
       val settings = settingsWith(
-        generators = Seq(GenesisGeneratorSettings(Base58.encode(generator.publicKey()), blsKeyOf(generator).publicKey.base58, Base58.encode(vrfKey(1005).publicKey()))),
+        generators = Seq(GenesisGeneratorSettings(Base16.encode(generator.publicKey()), blsKeyOf(generator).publicKey.base16, Base16.encode(vrfKey(1005).publicKey()))),
         balances = Seq(GenesisBalanceSettings(generator.toAddress.toString, 5.waves))
       )
       

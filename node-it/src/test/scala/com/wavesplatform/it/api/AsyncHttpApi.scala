@@ -8,7 +8,7 @@ import com.wavesplatform.api.http.requests.{IssueRequest, TransferRequest}
 import com.wavesplatform.api.http.{ConnectReq, DebugMessage, RollbackParams, `X-Api-Key`}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.common.utils.{Base58, Base64}
+import com.wavesplatform.common.utils.{Base16, Base64}
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.features.api.{ActivationStatus, FinalityStatus, activationStatusFormat}
 import com.wavesplatform.it.Node
@@ -430,7 +430,7 @@ object AsyncHttpApi extends Assertions {
         LeaseCancelTransaction(
           version,
           sender.publicKey,
-          ByteStr.decodeBase58(leaseId).get,
+          ByteStr.decodeBase16(leaseId).get,
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
           Proofs.empty,
@@ -492,7 +492,7 @@ object AsyncHttpApi extends Assertions {
         SetAssetScriptTransaction(
           version,
           sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
+          IssuedAsset(ByteStr.decodeBase16(assetId).get),
           script.map(s => ScriptReader.fromBytes(Base64.decode(s)).explicitGet()),
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
@@ -519,7 +519,7 @@ object AsyncHttpApi extends Assertions {
           func.map(fn => FUNCTION_CALL(FunctionHeader.User(fn), args)),
           payment,
           TxPositiveAmount.unsafeFrom(fee),
-          feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase58(aid).get)).getOrElse(Asset.Waves),
+          feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase16(aid).get)).getOrElse(Asset.Waves),
           System.currentTimeMillis(),
           Proofs.empty,
           AddressScheme.current.chainId
@@ -539,7 +539,7 @@ object AsyncHttpApi extends Assertions {
           caller.publicKey,
           expression,
           TxPositiveAmount.unsafeFrom(fee),
-          feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase58(aid).get)).getOrElse(Asset.Waves),
+          feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase16(aid).get)).getOrElse(Asset.Waves),
           System.currentTimeMillis(),
           Proofs.empty,
           AddressScheme.current.chainId
@@ -563,7 +563,7 @@ object AsyncHttpApi extends Assertions {
         func.map(fn => FUNCTION_CALL(FunctionHeader.User(fn), args)),
         payment,
         TxPositiveAmount.unsafeFrom(fee),
-        feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase58(aid).get)).getOrElse(Asset.Waves),
+        feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase16(aid).get)).getOrElse(Asset.Waves),
         System.currentTimeMillis(),
         Proofs.empty,
         AddressScheme.current.chainId
@@ -585,12 +585,12 @@ object AsyncHttpApi extends Assertions {
       val tx = UpdateAssetInfoTransaction(
         version,
         sender.publicKey,
-        IssuedAsset(ByteStr(Base58.decode(assetId))),
+        IssuedAsset(ByteStr(Base16.decode(assetId))),
         name,
         description,
         timestamp.getOrElse(System.currentTimeMillis()),
         TxPositiveAmount.unsafeFrom(fee),
-        if (feeAssetId.isDefined) IssuedAsset(ByteStr(Base58.decode(feeAssetId.get))) else Waves,
+        if (feeAssetId.isDefined) IssuedAsset(ByteStr(Base16.decode(feeAssetId.get))) else Waves,
         Proofs.empty,
         AddressScheme.current.chainId
       ).signWith(sender.privateKey)
@@ -608,7 +608,7 @@ object AsyncHttpApi extends Assertions {
         ReissueTransaction(
           version,
           sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
+          IssuedAsset(ByteStr.decodeBase16(assetId).get),
           TxPositiveAmount.unsafeFrom(quantity),
           reissuable,
           TxPositiveAmount.unsafeFrom(fee),
@@ -623,7 +623,7 @@ object AsyncHttpApi extends Assertions {
         BurnTransaction(
           version,
           sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
+          IssuedAsset(ByteStr.decodeBase16(assetId).get),
           TxNonNegativeAmount.unsafeFrom(quantity),
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
@@ -662,7 +662,7 @@ object AsyncHttpApi extends Assertions {
         SponsorFeeTransaction(
           version,
           sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
+          IssuedAsset(ByteStr.decodeBase16(assetId).get),
           minSponsoredAssetFee.map(TxPositiveAmount.unsafeFrom),
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
@@ -966,7 +966,7 @@ object AsyncHttpApi extends Assertions {
     }
 
     implicit val assetMapReads: Reads[VectorMap[IssuedAsset, Long]] = implicitly[Reads[Map[String, Long]]].map(_.map { case (k, v) =>
-      IssuedAsset(ByteStr.decodeBase58(k).get) -> v
+      IssuedAsset(ByteStr.decodeBase16(k).get) -> v
     }.to(VectorMap))
     implicit val leaseBalanceFormat: Reads[LeaseBalance] = Json.reads[LeaseBalance]
     implicit val portfolioFormat: Reads[Portfolio]       = Json.reads[Portfolio]

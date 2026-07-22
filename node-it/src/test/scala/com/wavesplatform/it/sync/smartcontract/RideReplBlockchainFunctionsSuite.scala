@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets
 import com.typesafe.config.Config
 import com.wavesplatform.account.Alias
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.NodeConfigs
 import com.wavesplatform.it.api.SyncHttpApi.*
@@ -100,7 +100,7 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
   }
 
   test("assetBalance()") {
-    assert(s"this.assetBalance(base58'$assetId')", "= 700")
+    assert(s"this.assetBalance(base16'$assetId')", "= 700")
   }
 
   test("wavesBalance()") {
@@ -120,14 +120,14 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
   test("getBinary()") {
     assert(
       """this.getBinary("bin").value()""",
-      s" base58\'${Base58.encode("binary".getBytes)}\'"
+      s" base16\'${Base16.encode("binary".getBytes)}\'"
     )
   }
 
   test("getBinaryValue()") {
     assert(
       """this.getBinaryValue("bin")""",
-      s" base58\'${Base58.encode("binary".getBytes)}\'"
+      s" base16\'${Base16.encode("binary".getBytes)}\'"
     )
   }
 
@@ -159,7 +159,7 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
 
   test("assetInfo()") {
     assert(
-      s"assetInfo(base58'$assetId').value().issuer.toString()",
+      s"assetInfo(base16'$assetId').value().issuer.toString()",
       s""""${alice.toAddress}""""
     )
   }
@@ -174,12 +174,12 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
          |BlockInfo(
          |	baseTarget = ${bi.baseTarget.get}
          |	generator = Address(
-         |		bytes = base58'${bi.generator}'
+         |		bytes = base16'${bi.generator}'
          |	)
          |	timestamp = ${bi.timestamp}
-         |	vrf = base58'${bi.vrf.get}'
-         |	generationSignature = base58'${bi.generationSignature.get}'
-         |	generatorPublicKey = base58'${bi.generatorPublicKey}'
+         |	vrf = base16'${bi.vrf.get}'
+         |	generationSignature = base16'${bi.generationSignature.get}'
+         |	generatorPublicKey = base16'${bi.generatorPublicKey}'
          |	height = ${bi.height}
          |	rewards = []
          |)
@@ -188,7 +188,7 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
   }
 
   test("transactionHeightById()") {
-    assert(s"transactionHeightById(base58'$dataTxId').value() > 0", "true")
+    assert(s"transactionHeightById(base16'$dataTxId').value() > 0", "true")
   }
 
   test("transferTransactionById()") {
@@ -199,7 +199,7 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
         val bodyBytes = TxHelpers.transfer(
             from = alice,
             to = Alias.createWithChainId(alias, chainId.toByte).explicitGet(),
-            asset = IssuedAsset(ByteStr.decodeBase58(assetId).get),
+            asset = IssuedAsset(ByteStr.decodeBase16(assetId).get),
             amount = transferAmount,
             feeAsset = Waves,
             fee = responseTx.fee,
@@ -210,7 +210,7 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
           .bodyBytes
           .value()
 
-        execute(s"let transferTx$version = transferTransactionById(base58'$transferTxId').value()")
+        execute(s"let transferTx$version = transferTransactionById(base16'$transferTxId').value()")
         assert(
           s"transferTx$version",
           s"""
@@ -219,18 +219,18 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
                |		alias = "$alias"
                |	)
                |	timestamp = ${responseTx.timestamp}
-               |	bodyBytes = base58'${Base58.encode(bodyBytes)}'
-               |	assetId = base58'$assetId'
+               |	bodyBytes = base16'${Base16.encode(bodyBytes)}'
+               |	assetId = base16'$assetId'
                |	feeAssetId = Unit
                |	amount = 100
                |	version = $version
-               |	id = base58'$transferTxId'
-               |	senderPublicKey = base58'${alice.publicKey}'
-               |	attachment = base58'${ByteStr(attachment.getBytes(StandardCharsets.UTF_8))}'
+               |	id = base16'$transferTxId'
+               |	senderPublicKey = base16'${alice.publicKey}'
+               |	attachment = base16'${ByteStr(attachment.getBytes(StandardCharsets.UTF_8))}'
                |	sender = Address(
-               |		bytes = base58'${responseTx.sender.get}'
+               |		bytes = base16'${responseTx.sender.get}'
                |	)
-               |	proofs = [base58'${responseTx.proofs.get.head}', base58'', base58'', base58'', base58'', base58'', base58'', base58'']
+               |	proofs = [base16'${responseTx.proofs.get.head}', base16'', base16'', base16'', base16'', base16'', base16'', base16'']
                |	fee = ${responseTx.fee}
                |)
             """.trim.stripMargin
@@ -240,7 +240,7 @@ class RideReplBlockchainFunctionsSuite extends BaseTransactionSuite {
 
   test("addressFromPublicKey()") {
     assert(
-      s"addressFromPublicKey(base58'${alice.publicKey}').value().toString()",
+      s"addressFromPublicKey(base16'${alice.publicKey}').value().toString()",
       s""""${alice.toAddress}""""
     )
   }

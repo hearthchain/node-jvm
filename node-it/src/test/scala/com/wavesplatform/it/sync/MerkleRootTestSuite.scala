@@ -3,7 +3,7 @@ package com.wavesplatform.it.sync
 import com.typesafe.config.{Config, ConfigFactory}
 import com.wavesplatform.api.http.ApiError.{CustomValidationError, InvalidIds}
 import com.wavesplatform.block.Block
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.crypto.Blake2b256
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.BaseFreeSpec
@@ -41,23 +41,23 @@ class MerkleRootTestSuite extends BaseFreeSpec with ActivationStatusRequest with
     miner.getMerkleProofPost(txId1, txId2, txId3).map(resp => resp.id) should contain theSameElementsAs Seq(txId1, txId2, txId3)
     miner.getMerkleProof(txId1, txId2, txId3).map(resp => resp.transactionIndex) should contain theSameElementsAs Seq(0, 1, 2)
     miner.getMerkleProofPost(txId1, txId2, txId3).map(resp => resp.transactionIndex) should contain theSameElementsAs Seq(0, 1, 2)
-    miner.getMerkleProof(txId3).map(resp => resp.merkleProof.head).head shouldBe Base58.encode(Blake2b256.hash(Array(0.toByte)))
-    miner.getMerkleProofPost(txId3).map(resp => resp.merkleProof.head).head shouldBe Base58.encode(Blake2b256.hash(Array(0.toByte)))
-    assert(Base58.tryDecode(miner.getMerkleProof(txId1).head.merkleProof.head).isSuccess)
-    assert(Base58.tryDecode(miner.getMerkleProofPost(txId1).head.merkleProof.head).isSuccess)
+    miner.getMerkleProof(txId3).map(resp => resp.merkleProof.head).head shouldBe Base16.encode(Blake2b256.hash(Array(0.toByte)))
+    miner.getMerkleProofPost(txId3).map(resp => resp.merkleProof.head).head shouldBe Base16.encode(Blake2b256.hash(Array(0.toByte)))
+    assert(Base16.tryDecode(miner.getMerkleProof(txId1).head.merkleProof.head).isSuccess)
+    assert(Base16.tryDecode(miner.getMerkleProofPost(txId1).head.merkleProof.head).isSuccess)
   }
 
   "error raised if transaction id is not valid" in {
     assertApiError(
-      miner.getMerkleProof("FCymvrY43ddiKKTkznawWasoMbWd1LWyX8DUrwAAbcUA"),
+      miner.getMerkleProof("d315337e60e85d3e1c32010124db2c88fc5c02c88b82bbb28a8e7efc8d22f693"),
       CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
     )
     assertApiError(
-      miner.getMerkleProofPost("FCymvrY43ddiKKTkznawWasoMbWd1LWyX8DUrwAAbcUA"),
+      miner.getMerkleProofPost("d315337e60e85d3e1c32010124db2c88fc5c02c88b82bbb28a8e7efc8d22f693"),
       CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
     )
 
-    val invalidId = "FCym43ddiKKT000kznawWasoMbWd1LWyX8DUrwAAbcUA" // id is invalid because base58 cannot contain "0"
+    val invalidId = "FCym43ddiKKT000kznawWasoMbWd1LWyX8DUrwAAbcUA" // id is invalid because base16 cannot contain "0"
     assertApiError(
       miner.getMerkleProof(invalidId),
       InvalidIds(Seq(invalidId))
@@ -71,7 +71,7 @@ class MerkleRootTestSuite extends BaseFreeSpec with ActivationStatusRequest with
   "merkle proof api returns only existent txs when existent and inexistent ids passed" in {
     val txId1        = miner.broadcastTransfer(miner.keyPair, miner.address, transferAmount, minFee, None, None, waitForTx = true).id
     val txId2        = miner.broadcastTransfer(miner.keyPair, miner.address, transferAmount, minFee, None, None, waitForTx = true).id
-    val inexistentTx = "FCym43ddiKKT3d4kznawWasoMbWd1LWyX8DUrwAAbcUA"
+    val inexistentTx = "d3152f1f2bbd92c1dd3051f6d10716db51c08acb7c41d8250d9edfacad22f693"
     miner.getMerkleProof(txId1, txId2, inexistentTx).map(resp => resp.id) should contain theSameElementsAs Seq(txId1, txId2)
     miner.getMerkleProofPost(txId1, txId2, inexistentTx).map(resp => resp.id) should contain theSameElementsAs Seq(txId1, txId2)
   }

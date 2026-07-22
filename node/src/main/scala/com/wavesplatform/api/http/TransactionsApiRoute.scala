@@ -11,7 +11,7 @@ import com.wavesplatform.api.http.ApiError.*
 import com.wavesplatform.block.Block
 import com.wavesplatform.block.Block.TransactionProof
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.network.TransactionPublisher
 import com.wavesplatform.settings.RestAPISettings
 import com.wavesplatform.state.{Blockchain, Height}
@@ -51,7 +51,7 @@ case class TransactionsApiRoute(
   def addressWithLimit: Route = {
     (get & path("address" / AddrSegment / "limit" / IntNumber) & parameter("after".?)) { (address, limit, maybeAfter) =>
       val after =
-        maybeAfter.map(s => ByteStr.decodeBase58(s).getOrElse(throw ApiException(CustomValidationError(s"Unable to decode transaction id $s"))))
+        maybeAfter.map(s => ByteStr.decodeBase16(s).getOrElse(throw ApiException(CustomValidationError(s"Unable to decode transaction id $s"))))
       if (limit > settings.transactionsByAddressLimit) throw ApiException(TooBigArrayAllocation)
 
       val improvedSerializer = serializer.copy(blockchain = compositeBlockchain())
@@ -68,7 +68,7 @@ case class TransactionsApiRoute(
 
   private def readTransactionMeta(id: String): Either[ApiError, TransactionMeta] =
     for {
-      id   <- ByteStr.decodeBase58(id).toEither.leftMap(err => CustomValidationError(err.toString))
+      id   <- ByteStr.decodeBase16(id).toEither.leftMap(err => CustomValidationError(err.toString))
       meta <- commonApi.transactionById(id).toRight(ApiError.TransactionDoesNotExist)
     } yield meta
 
@@ -96,7 +96,7 @@ case class TransactionsApiRoute(
       complete(
         for {
           _    <- Either.cond(rawIds.nonEmpty, (), InvalidTransactionId("Transaction ID was not specified"))
-          ids  <- rawIds.toSeq.traverse(ByteStr.decodeBase58(_).toEither.leftMap(err => CustomValidationError(err.toString)))
+          ids  <- rawIds.toSeq.traverse(ByteStr.decodeBase16(_).toEither.leftMap(err => CustomValidationError(err.toString)))
           meta <- ids.traverse(readSnapshot)
         } yield meta
       )
@@ -130,7 +130,7 @@ case class TransactionsApiRoute(
         if (ids.toSeq.length > settings.transactionsByAddressLimit)
           complete(TooBigArrayAllocation)
         else {
-          ids.map(id => ByteStr.decodeBase58(id).toEither.leftMap(_ => id)).toList.separate match {
+          ids.map(id => ByteStr.decodeBase16(id).toEither.leftMap(_ => id)).toList.separate match {
             case (Nil, ids) =>
               val results = ids.toSet.map((id: ByteStr) => id -> loadTransactionStatus(id)).toMap
               complete(ids.map(id => results(id)))
@@ -209,7 +209,7 @@ case class TransactionsApiRoute(
   }
 
   private def merkleProof(encodedIds: List[String]): ToResponseMarshallable =
-    encodedIds.map(id => ByteStr.decodeBase58(id).toEither.leftMap(_ => id)).separate match {
+    encodedIds.map(id => ByteStr.decodeBase16(id).toEither.leftMap(_ => id)).separate match {
       case (Nil, txIds) =>
         commonApi.transactionProofs(txIds) match {
           case Nil    => CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
@@ -265,16 +265,16 @@ object TransactionsApiRoute {
     Json.obj(
       "id"               -> mi.id.toString,
       "transactionIndex" -> mi.transactionIndex,
-      "merkleProof"      -> mi.digests.map(d => s"${Base58.encode(d)}")
+      "merkleProof"      -> mi.digests.map(d => s"${Base16.encode(d)}")
     )
   }
 
   implicit val transactionProofReads: Reads[TransactionProof] = Reads { jsv =>
     for {
       encoded          <- (jsv \ "id").validate[String]
-      id               <- ByteStr.decodeBase58(encoded).fold(_ => JsError(InvalidSignature.message), JsSuccess(_))
+      id               <- ByteStr.decodeBase16(encoded).fold(_ => JsError(InvalidSignature.message), JsSuccess(_))
       transactionIndex <- (jsv \ "transactionIndex").validate[Int]
-      merkleProof      <- (jsv \ "merkleProof").validate[List[String]].map(_.map(Base58.decode))
+      merkleProof      <- (jsv \ "merkleProof").validate[List[String]].map(_.map(Base16.decode))
     } yield TransactionProof(id, transactionIndex, merkleProof)
   }
 

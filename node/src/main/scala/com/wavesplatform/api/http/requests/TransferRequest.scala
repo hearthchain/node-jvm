@@ -24,7 +24,7 @@ case class TransferRequest(
     for {
       validRecipient <- Address.fromString(recipient)
       validProofs    <- toProofs(signature, proofs)
-      validSender    <- PublicKey.fromBase58String(senderPublicKey)
+      validSender    <- PublicKey.fromBase16String(senderPublicKey)
       tx <- TransferTransaction.create(
         version,
         validSender,

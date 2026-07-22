@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync.smartcontract
 
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
 import com.wavesplatform.it.api.SyncHttpApi.*
@@ -29,9 +29,9 @@ class BigStringSuite extends BaseTransactionSuite with CancelAfterFailure {
     miner.assertBalances(firstAddress, balance1 + 10 * transferAmount, eff1 + 10 * transferAmount)
 
     val scriptText = s"""
-        let pkA = base58'${acc0.publicKey}'
-        let pkB = base58'${acc1.publicKey}'
-        let pkC = base58'${acc2.publicKey}'
+        let pkA = base16'${acc0.publicKey}'
+        let pkB = base16'${acc1.publicKey}'
+        let pkC = base16'${acc2.publicKey}'
 
         let a0 = "йцукенгшщзхъфывапролдячсмитьбюйцукпврарвараравртавтрвапваппвпавп"
         ${(for (b <- 1 to 20) yield { "let a" + b + "=a" + (b - 1) + "+a" + (b - 1) }).mkString("\n")}
@@ -73,7 +73,7 @@ class BigStringSuite extends BaseTransactionSuite with CancelAfterFailure {
 
     assertBadRequestAndMessage(sender.signedBroadcast(signedLeasing.json()).id, "String size = 32768 exceeds 32767 bytes")
 
-    val leasingId = Base58.encode(unsignedLeasing.id().arr)
+    val leasingId = Base16.encode(unsignedLeasing.id().arr)
 
     nodes.waitForHeightArise()
     nodes(0).findTransactionInfo(leasingId) shouldBe None

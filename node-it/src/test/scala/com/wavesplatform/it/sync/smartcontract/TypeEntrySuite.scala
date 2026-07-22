@@ -16,7 +16,7 @@ class TypeEntrySuite extends BaseTransactionSuite {
 
   private def caller = thirdKeyPair
 
-  private val base58String = "49ReVPc83oQRqoWuuTkBC"
+  private val base16String = "49ReVPc83oQRqoWuuTkBC"
   private var firstAssetId = ""
 
   protected override def beforeAll(): Unit = {
@@ -28,7 +28,7 @@ class TypeEntrySuite extends BaseTransactionSuite {
          |{-# CONTENT_TYPE EXPRESSION #-}
          |{-# SCRIPT_TYPE ASSET #-}
          |
-         |getBinaryValue(addressFromStringValue(""), "bin") == fromBase58String("$base58String").value()
+         |getBinaryValue(addressFromStringValue(""), "bin") == fromBase16String("$base16String").value()
          |  && getIntegerValue(addressFromStringValue(""), "int") == 1
          |  && getBooleanValue(addressFromStringValue(""), "bool") == true
          |  && getStringValue(addressFromStringValue(""), "str") == "string"
@@ -42,7 +42,7 @@ class TypeEntrySuite extends BaseTransactionSuite {
          |{-# STDLIB_VERSION 4 #-}
          |{-# CONTENT_TYPE DAPP #-}
          |{-# SCRIPT_TYPE ACCOUNT #-}
-         |let binary = fromBase58String("$base58String").value()
+         |let binary = fromBase16String("$base16String").value()
          |let boolean = true
          |let integer = 1
          |let string = "string"
@@ -68,7 +68,7 @@ class TypeEntrySuite extends BaseTransactionSuite {
          |    DeleteEntry("bool"),
          |    DeleteEntry("int"),
          |    DeleteEntry("str"),
-         |    Burn(fromBase58String("$firstAssetId"), 1000)
+         |    Burn(fromBase16String("$firstAssetId"), 1000)
          |  ]
          |}
          |
@@ -80,7 +80,7 @@ class TypeEntrySuite extends BaseTransactionSuite {
          |    DeleteEntry("bool"),
          |    DeleteEntry("int"),
          |    DeleteEntry("str"),
-         |    Burn(fromBase58String("$firstAssetId"), 1000)
+         |    Burn(fromBase16String("$firstAssetId"), 1000)
          |  ]
          |}
          |
@@ -103,7 +103,7 @@ class TypeEntrySuite extends BaseTransactionSuite {
          |{-# CONTENT_TYPE EXPRESSION #-}
          |{-# SCRIPT_TYPE ACCOUNT #-}
          |
-         |getBinaryValue(addressFromStringValue("${firstDApp.toAddress.toString}"), "bin") == fromBase58String("$base58String").value()
+         |getBinaryValue(addressFromStringValue("${firstDApp.toAddress.toString}"), "bin") == fromBase16String("$base16String").value()
          |  && getIntegerValue(addressFromStringValue("${firstDApp.toAddress.toString}"), "int") == 1
          |  && getBooleanValue(addressFromStringValue("${firstDApp.toAddress.toString}"), "bool") == true
          |  && getStringValue(addressFromStringValue("${firstDApp.toAddress.toString}"), "str") == "string"
@@ -164,7 +164,7 @@ class TypeEntrySuite extends BaseTransactionSuite {
       waitForTx = true
     )
     sender.getDataByKey(firstDApp.toAddress.toString, "str").value shouldBe "string"
-    s"${sender.getDataByKey(firstDApp.toAddress.toString, "bin").value}" shouldBe base58String
+    s"${sender.getDataByKey(firstDApp.toAddress.toString, "bin").value}" shouldBe base16String
     sender.getDataByKey(firstDApp.toAddress.toString, "bool").value shouldBe true
     sender.getDataByKey(firstDApp.toAddress.toString, "int").value shouldBe 1
     sender.getDataByKey(firstDApp.toAddress.toString, "check").value shouldBe true

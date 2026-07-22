@@ -37,7 +37,7 @@ trait CustomDirectives extends Directives with ApiMarshallers with ScorexLogging
 
   implicit class AnyParamStrDirectiveValidationExt(dir: Directive1[Iterable[String]]) {
     def massValidateIds: Directive1[Vector[ByteStr]] =
-      dir.massValidate(str => Validated.fromTry(ByteStr.decodeBase58(str)).leftMap(_ => str)).flatMap {
+      dir.massValidate(str => Validated.fromTry(ByteStr.decodeBase16(str)).leftMap(_ => str)).flatMap {
         case Validated.Valid(a)   => provide(a)
         case Validated.Invalid(e) => complete(ApiError.InvalidIds(e.toList))
       }

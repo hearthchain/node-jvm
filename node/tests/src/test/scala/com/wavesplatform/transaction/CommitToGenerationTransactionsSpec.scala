@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import tech.hearth.crypto.{Crypto, VrfKey}
 import com.wavesplatform.account.{AddressScheme, PrivateKey, PublicKey}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsPublicKey}
 import com.wavesplatform.db.WithDomain
@@ -25,35 +25,35 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
 
   private val origTx = CommitToGenerationTransaction(
     version = TxVersion.V1,
-    sender = PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
-    endorserPublicKey = BlsPublicKey(Base58.decode("6CagLT3FjEcaNHPYCaG2dcfEfzDj6ynVeZbxbLHkHdfzvbfBmBMkkatTYcBXD9cHMU")).explicitGet(),
+    sender = PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
+    endorserPublicKey = BlsPublicKey(Base16.decode("8dbf77df79479e11e99011f5ebc66b0d160ceddf2fcecfade325f07e96213f0d5d47a9af5a7ce3314f532e6aa03a33db")).explicitGet(),
     generationPeriodStart = Height(3000),
     timestamp = 1526287561757L,
     fee = TxPositiveAmount.unsafeFrom(100000000),
     commitmentSignature = sig,
     vrfPublicKey = vrfPk,
     vrfCommitmentSignature = vrfSig,
-    proofs = Proofs(ByteStr.decodeBase58("28kE1uN1pX2bwhzr9UHw5UuB9meTFEDFgeunNgy6nZWpHX4pzkGYotu8DhQ88AdqUG6Yy5wcXgHseKPBUygSgRMJ").get),
+    proofs = Proofs(ByteStr.decodeBase16("38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81").get),
     chainId = AddressScheme.current.chainId
   )
 
   "JSON parsing" in {
     val js = Json.parse(s"""{
-      "id": "FEjd4wn3HMmEvayqGVoBGHcf7uxn2GhR1zhKxL72935a",
+      "id": "d3885c34c3e4ced4f69d85c1953a88b1ae953b933351b3034c73eb05d2a0f9a1",
       "type": 19,
       "version": 1,
       "fee": 100000000,
       "feeAssetId": null,
       "timestamp": 1526287561757,
       "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-      "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+      "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
       "generationPeriodStart": 3000,
-      "endorserPublicKey": "6CagLT3FjEcaNHPYCaG2dcfEfzDj6ynVeZbxbLHkHdfzvbfBmBMkkatTYcBXD9cHMU",
+      "endorserPublicKey": "8dbf77df79479e11e99011f5ebc66b0d160ceddf2fcecfade325f07e96213f0d5d47a9af5a7ce3314f532e6aa03a33db",
       "vrfPublicKey": "$vrfPk",
       "commitmentSignature": "$sig",
       "vrfCommitmentSignature": "$vrfSig",
       "proofs": [
-        "28kE1uN1pX2bwhzr9UHw5UuB9meTFEDFgeunNgy6nZWpHX4pzkGYotu8DhQ88AdqUG6Yy5wcXgHseKPBUygSgRMJ"
+        "38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81"
       ],
       "chainId": 84
     }""")
@@ -71,7 +71,7 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
   }
 
   "Expected BLS key and PoP" in {
-    val wavesPk = PrivateKey(ByteStr.decodeBase58("7UR2CZi6Gv6v1yqmgcPDD98ZtosvtHnNZRxvrHA2Tuyn").get)
+    val wavesPk = PrivateKey(ByteStr.decodeBase16("602bf6b32b3fc64a60093314116817796498787fa834d0d8cc033dd2c85c916d").get)
 
     val blsKp = BlsKeyPair.fromSeed(wavesPk.arr)
     blsKp.publicKey.byteStr.base64Raw shouldBe "jrugi0W0es2WxuHoptQtchqwactZsldOGucYObZrEIOpxbWmhL8dodvpnzA+2qUf"

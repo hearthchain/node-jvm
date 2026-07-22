@@ -36,16 +36,16 @@ import org.scalatest.Informing
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPropertyChecks with Informing {
-  private val publicKey         = PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet()
+  private val publicKey         = PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet()
   private val ts: Long          = 1526287561757L
   private val tsOrderFrom: Long = 1526992336241L
   private val tsOrderTo: Long   = 1529584336241L
 
   private lazy val buyV2 = Order(
     TxVersion.V2,
-    OrderAuthentication(PublicKey.fromBase58String("BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ").explicitGet()),
-    PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-    AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+    OrderAuthentication(PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet()),
+    PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+    AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
     OrderType.BUY,
     TxExchangeAmount.unsafeFrom(2),
     TxOrderPrice.unsafeFrom(60.waves),
@@ -56,9 +56,9 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
 
   private lazy val buyV1 = Order(
     TxVersion.V1,
-    OrderAuthentication(PublicKey.fromBase58String("BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ").explicitGet()),
-    PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-    AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+    OrderAuthentication(PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet()),
+    PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+    AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
     OrderType.BUY,
     TxExchangeAmount.unsafeFrom(2),
     TxOrderPrice.unsafeFrom(60.waves),
@@ -69,9 +69,9 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
 
   private lazy val sell = Order(
     TxVersion.V1,
-    OrderAuthentication(PublicKey.fromBase58String("7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV").explicitGet()),
-    PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-    AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+    OrderAuthentication(PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet()),
+    PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+    AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
     OrderType.SELL,
     TxExchangeAmount.unsafeFrom(3),
     TxOrderPrice.unsafeFrom(50.waves),
@@ -91,7 +91,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       1,
       1,
       tsOrderFrom,
-      Proofs(ByteStr.decodeBase58("5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa").get)
+      Proofs(ByteStr.decodeBase16("db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d").get)
     )
     .explicitGet()
 
@@ -106,7 +106,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       1,
       1,
       tsOrderFrom,
-      Proofs(Seq(ByteStr.decodeBase58("5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa").get))
+      Proofs(Seq(ByteStr.decodeBase16("db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d").get))
     )
     .explicitGet()
 
@@ -114,11 +114,11 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       1.toByte,
       publicKey,
-      IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get),
+      IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get),
       10000000000L,
       burnFee,
       ts,
-      Proofs(ByteStr.decodeBase58("uapJcAJQryBhWThU43rYgMNmvdT7kY747vx5BBgxr2KvaeTRx8Vsuh4yu1JxBymU9LnAoo1zjQcPrWSuhi6dVPE").get)
+      Proofs(ByteStr.decodeBase16("2d5879ade04e17578da8d2ec810e56b52809ef2944e4767cae4bd9046770fdc5463ef1978a66a1f36979360579085b1637219a065c918e0316f23f6fa30d2589").get)
     )
     .explicitGet()
 
@@ -126,11 +126,11 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       2.toByte,
       publicKey,
-      IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get),
+      IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get),
       10000000000L,
       burnFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("3NcEv6tcVMuXkTJwiqW4J3GMCTe8iSLY7neEfNZonp59eTQEZXYPQWs565CRUctDrvcbtmsRgWvnN7BnFZ1AVZ1H").get))
+      Proofs(Seq(ByteStr.decodeBase16("76aae510e4dd0b54dd1da7ef741e1ea08a118c54ae7ecf5e920781fe747a75c3ad4f68f9a3592ed0f440eb3ad215910e0b45bb2d0a309ed5c461e114ba431280").get))
     )
     .explicitGet()
 
@@ -141,7 +141,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       "myalias",
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase58("CC1jQ4qkuVfMvB2Kpg2Go6QKXJxUFC8UUswUxBsxwisrR8N5s3Yc8zA6dhjTwfWKfdouSTAnRXCxTXb3T6pJq3T").get)
+      Proofs(ByteStr.decodeBase16("09a65421fdb0632908bf6e157ae78f19f8cf4cf479bcb30c14aca7d75788cdcf10a7df9d6b6d2de0d1c4290be4a4f0495f05985d1a1cce62d6aa1f93b8bffb86").get)
     )
     .explicitGet()
 
@@ -152,7 +152,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       "myalias",
       minFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("26U7rQTwpdma5GYSZb5bNygVCtSuWL6DKet1Nauf5J57v19mmfnq434YrkKYJqvYt2ydQBUT3P7Xgj5ZVDVAcc5k").get))
+      Proofs(Seq(ByteStr.decodeBase16("36bb64f8a1fc8faa30938b2ed138a0466ff6913d1d4e08a7071a0d891a677350789b20ff7f9c326eec9953c7f38f19b40a34db58c10d346f7e71312a2b708c87").get))
     )
     .explicitGet()
 
@@ -163,7 +163,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       List(IntegerDataEntry("int", 24), BooleanDataEntry("bool", true), BinaryDataEntry("blob", ByteStr.decodeBase64("YWxpY2U=").get)),
       minFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("32mNYSefBTrkVngG5REkmmGAVv69ZvNhpbegmnqDReMTmXNyYqbECPgHgXrX2UwyKGLFS45j7xDFyPXjF8jcfw94").get))
+      Proofs(Seq(ByteStr.decodeBase16("658e5bb4a9c2e9a93821b87c68d4417bf955136dd4f4551fcf82e49d4ec8d8f13702699a6d3a85cec3d78dce11cc69cd06a41e10b995bd3dc50ef0b5eb0f6b8b").get))
     )
     .explicitGet()
 
@@ -178,7 +178,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     script = None,
     TxPositiveAmount.unsafeFrom(issueFee),
     ts,
-    Proofs(ByteStr.decodeBase58("28kE1uN1pX2bwhzr9UHw5UuB9meTFEDFgeunNgy6nZWpHX4pzkGYotu8DhQ88AdqUG6Yy5wcXgHseKPBUygSgRMJ").get),
+    Proofs(ByteStr.decodeBase16("38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81").get),
     AddressScheme.current.chainId
   )
 
@@ -193,7 +193,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     None,
     TxPositiveAmount.unsafeFrom(issueFee),
     ts,
-    Proofs(Seq(ByteStr.decodeBase58("43TCfWBa6t2o2ggsD4bU9FpvH3kmDbSBWKE1Z6B5i5Ax5wJaGT2zAvBihSbnSS3AikZLcicVWhUk1bQAMWVzTG5g").get)),
+    Proofs(Seq(ByteStr.decodeBase16("982a50240551cb4b2eb74963ca54319df33bcb06b532fac5986254b0c668cf311bdafb965dab3dea5b94a5b06e03ff42a6740bc68083620cc58e44ee16d4b28b").get)),
     AddressScheme.current.chainId
   )
 
@@ -201,10 +201,10 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       1.toByte,
       publicKey,
-      ByteStr.decodeBase58("EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY").get,
+      ByteStr.decodeBase16("c905697322ae74647ff72b38bf23de8c9db40276abb2195676c78a260edcec0f").get,
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase58("4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3").get)
+      Proofs(ByteStr.decodeBase16("ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280").get)
     )
     .explicitGet()
 
@@ -212,10 +212,10 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       2.toByte,
       publicKey,
-      ByteStr.decodeBase58("DJWkQxRyJNqWhq9qSQpK2D4tsrct6eZbjSv3AH4PSha6").get,
+      ByteStr.decodeBase16("b6c8c0ec67cb74ea16339e5cba54e274310234597b193fa49035e1013b205dc7").get,
       minFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("3h5SQLbCzaLoTHUeoCjXUHB6qhNUfHZjQQVsWTRAgTGMEdK5aeULMVUfDq63J56kkHJiviYTDT92bLGc8ELrUgvi").get))
+      Proofs(Seq(ByteStr.decodeBase16("86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f").get))
     )
     .explicitGet()
 
@@ -227,7 +227,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       10000000,
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase58("iy3TmfbFds7pc9cDDqfjEJhfhVyNtm3GcxoVz8L3kJFvgRPUmiqqKLMeJGYyN12AhaQ6HvE7aF1tFgaAoCCgNJJ").get)
+      Proofs(ByteStr.decodeBase16("2430aa66d62717e1c622ffb58b335b0b584534e3a04afccf913df74a1f1a0798c89d3f07cc340c9318e4ec966663ba2a497bfbdb8037468d4787466b2fd91687").get)
     )
     .explicitGet()
 
@@ -239,7 +239,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       10000000,
       minFee,
       ts,
-      Proofs(ByteStr.decodeBase58("5Fr3yLwvfKGDsFLi8A8JbHqToHDojrPbdEGx9mrwbeVWWoiDY5pRqS3rcX1rXC9ud52vuxVdBmGyGk5krcgwFu9q").get)
+      Proofs(ByteStr.decodeBase16("d4ded0a3a798decf46459c701e03b6db01cc2c93d1445f6973a3cb5172247f89997a9729cec3d3f288a5a46484434c012e99ed76b1abfa3c31bee1097afc9c80").get)
     )
     .explicitGet()
 
@@ -253,8 +253,8 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
         .explicitGet(),
       2.waves,
       ts,
-      ByteStr.decodeBase58("59QuUcqP6p").get,
-      Proofs(Seq(ByteStr.decodeBase58("FXMNu3ecy5zBjn9b69VtpuYRwxjCbxdkZ3xZpLzB8ZeFDvcgTkmEDrD29wtGYRPtyLS3LPYrL2d5UM6TpFBMUGQ").get))
+      ByteStr.decodeBase16("6d617373706179").get,
+      Proofs(Seq(ByteStr.decodeBase16("0c863b41d8c03da0d9c07a645c120477b5d0644fc4ee2862fffbf7462cdda96d9a9693340d6249e8f7322ce39c61b781bcb271e3d5efdae0938083081088b289").get))
     )
     .explicitGet()
 
@@ -262,12 +262,12 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       1.toByte,
       publicKey,
-      IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get),
+      IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get),
       100000000L,
       true,
       1.waves,
       ts,
-      Proofs(ByteStr.decodeBase58("3LnRMrjkk7RoV35PTwcdB4yW2rqUqXaKAh8DnPk5tNWABvhVQ9oqdTk3zM8b9AbGtry7WEcQZtevfK92DCFaa6hA").get)
+      Proofs(ByteStr.decodeBase16("75181d1b61ed9fcd77ea1377209fafb8e91432c62802f23efe08345444b16a477e3c45e919633a7438dbb0f2de226365371669b30fe8f712c6b61c87f3878385").get)
     )
     .explicitGet()
 
@@ -275,12 +275,12 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       2.toByte,
       publicKey,
-      IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get),
+      IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get),
       100000000L,
       true,
       1.waves,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("4DFEtUwJ9gjMQMuEXipv2qK7rnhhWEBqzpC3ZQesW1Kh8D822t62e3cRGWNU3N21r7huWnaty95wj2tZxYSvCfro").get))
+      Proofs(Seq(ByteStr.decodeBase16("a09c6e2c09d8f1b76ccd2d45eab80fbdc564a02937738ba80ca1155cb5e7b95eb2fb3bbc47f28c67ed512ded60b5669c3cddb9c0fb09974a28db35162d919488").get))
     )
     .explicitGet()
 
@@ -288,19 +288,19 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       1.toByte,
       publicKey,
-      IssuedAsset(ByteStr.decodeBase58("DUyJyszsWcmZG7q2Ctk1hisDeGBPB8dEzyU8Gs5V2j3n").get),
+      IssuedAsset(ByteStr.decodeBase16("b976984b007a70e0e55fc9e311ff681de900ebe11388453e44569de5ce0279f1").get),
       Some(Script.fromBase64String("base64:AQkAAGcAAAACAHho/EXujJiPAJUhuPXZYac+rt2jYg==").explicitGet()),
       1.waves,
       ts,
       Proofs(
         Seq(
           "5sRtXKcdDa",
-          "9Zfe5aw9D7rRR3nvU3QuAjCNT7pdwRXwvBFxHmdt2WtWwiEwffn",
+          "ff80ff9f0eff6a64807f99125e2a0101b5bc0101fab47f29000a4c017112005dff7f804401",
           "",
           "3C",
-          "24jboCkAEFrsBKNh6z8FFyJP8YhejsrBwt7JdHVhiCk7DCc3Zxsc4g6PYG8tsLXmK",
+          "8012577fff4c01ff85497f80ffb300007f95ffb0bc01820a99009da010008b167f09b58200fdff92db80ae0056017a",
           ""
-        ).map(ByteStr.decodeBase58(_).get)
+        ).map(ByteStr.decodeBase16(_).get)
       )
     )
     .explicitGet()
@@ -312,7 +312,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       None,
       setScriptFee,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("tcTr672rQ5gXvcA9xCGtQpkHC8sAY1TDYqDcQG7hQZAeHcvvHFo565VEv1iD1gVa3ZuGjYS7hDpuTnQBfY2dUhY").get))
+      Proofs(Seq(ByteStr.decodeBase16("2c81fb0e22374a9d9824f8a7b5c2b9c61d83b082f24ff0eb8baa4ce0088cf06ced11abf963163a4ac491e4097dd1856c285d0670d44d0dd052e3d5115b913c8b").get))
     )
     .explicitGet()
 
@@ -320,11 +320,11 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       1.toByte,
       publicKey,
-      IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get),
+      IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get),
       Some(100000),
       1.waves,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("3QrF81WkwGhbNvKcwpAVyBPL1MLuAG5qmR6fmtK9PTYQoFKGsFg1Rtd2kbMBuX2ZfiFX58nR1XwC19LUXZUmkXE7").get))
+      Proofs(Seq(ByteStr.decodeBase16("7899b9c4712c424c901ef829951e7c661c1d68640b098de87b8accadb912e580ef59189b751d5c82315c4d656fea66412d5b293a019dd5bd13a3c2b13ee2d488").get))
     )
     .explicitGet()
 
@@ -339,7 +339,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     TxPositiveAmount.unsafeFrom(minFee),
     ByteStr.empty,
     ts,
-    Proofs(Seq(ByteStr.decodeBase58("eaV1i3hEiXyYQd6DQY7EnPg9XzpAvB9VA3bnpin2qJe4G36GZXaGnYKCgSf9xiQ61DcAwcBFzjSXh6FwCgazzFz").get)),
+    Proofs(Seq(ByteStr.decodeBase16("2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981").get)),
     recipient.chainId
   )
 
@@ -353,26 +353,26 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     TxPositiveAmount.unsafeFrom(minFee),
     ByteStr.empty,
     ts,
-    Proofs(Seq(ByteStr.decodeBase58("4bfDaqBcnK3hT8ywFEFndxtS1DTSYfncUqd4s5Vyaa66PZHawtC73rDswUur6QZu5RpqM7L9NFgBHT1vhCoox4vi").get)),
+    Proofs(Seq(ByteStr.decodeBase16("b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f").get)),
     recipient.chainId
   )
 
   private lazy val invokeScript = InvokeScriptTransaction
     .create(
       1.toByte,
-      PublicKey.fromBase58String("BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ").explicitGet(),
-      PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet().toAddress,
+      PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet(),
+      PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet().toAddress,
       Some(
         Terms.FUNCTION_CALL(
           function = FunctionHeader.User("testfunc"),
           args = List(TRUE)
         )
       ),
-      Seq(InvokeScriptTransaction.Payment(7, IssuedAsset(ByteStr.decodeBase58("73pu8pHFNpj9tmWuYjqnZ962tXzJvLGX86dxjZxGYhoK").get))),
+      Seq(InvokeScriptTransaction.Payment(7, IssuedAsset(ByteStr.decodeBase16("59df714ead8fb10b68e31153ad01994117652cb3c960c6e32c57e7dec28a5846").get))),
       smartMinFee,
       Waves,
       ts,
-      Proofs(Seq(ByteStr.decodeBase58("4bfDaqBcnK3hT8ywFEFndxtS1DTSYfncUqd4s5Vyaa66PZHawtC73rDswUur6QZu5RpqM7L9NFgBHT1vhCoox4vi").get)),
+      Proofs(Seq(ByteStr.decodeBase16("b3f084c843db00e0c71e7786ce28ffc68111a3a579b924bd1989eae601ae6ced7edbd62d605b073e57146db283792ae497313f472d6d4adc871954ea3ff1738f").get)),
       AddressScheme.current.chainId
     )
     .explicitGet()

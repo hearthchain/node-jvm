@@ -46,7 +46,7 @@ class ReplTest extends BaseTransactionSuite with FailedTransactionSuiteLike[Stri
            |@Callable(i)
            |func default() = {
            |  let action = valueOrElse(getString(this, "crash"), "no")
-           |  let check = ${"sigVerify(base58'', base58'', base58'') ||" * 10} true
+           |  let check = ${"sigVerify(base16'', base16'', base16'') ||" * 10} true
            |
            |  if (action == "yes")
            |  then {
@@ -102,7 +102,7 @@ class ReplTest extends BaseTransactionSuite with FailedTransactionSuiteLike[Stri
       List[DataEntry[?]](
         IntegerDataEntry("int", 100500L),
         StringDataEntry("str", "text"),
-        BinaryDataEntry("bin", ByteStr(Base58.decode("r1Mw3j9J"))),
+        BinaryDataEntry("bin", ByteStr(Base16.decode("62696e617279"))),
         BooleanDataEntry("bool", true)
       ),
       1.waves,
@@ -116,49 +116,49 @@ class ReplTest extends BaseTransactionSuite with FailedTransactionSuiteLike[Stri
 
     await(repl.execute(""" this.getInteger("int") """)) shouldBe Right("res1: Int|Unit = 100500")
     await(repl.execute(""" this.getString("str") """)) shouldBe Right("""res2: String|Unit = "text"""")
-    await(repl.execute(""" this.getBinary("bin") """)) shouldBe Right("res3: ByteVector|Unit = base58'r1Mw3j9J'")
+    await(repl.execute(""" this.getBinary("bin") """)) shouldBe Right("res3: ByteVector|Unit = base16'r1Mw3j9J'")
     await(repl.execute(""" this.getBoolean("bool") """)) shouldBe Right("res4: Boolean|Unit = true")
 
     await(repl.execute(""" height """)).explicitGet() should fullyMatch regex "res5: Int = \\d+".r
 
-    await(repl.execute(s""" transferTransactionById(base58'${trans.id}') """)).explicitGet() should fullyMatch regex
+    await(repl.execute(s""" transferTransactionById(base16'${trans.id}') """)).explicitGet() should fullyMatch regex
       s"""
           |res6: TransferTransaction\\|Unit = TransferTransaction\\(
           |	recipient = Address\\(
-          |		bytes = base58'${issuer.toAddress}'
+          |		bytes = base16'${issuer.toAddress}'
           |	\\)
           |	timestamp = ${trans.timestamp}
-          |	bodyBytes = base58'[$Base58Alphabet]+'
+          |	bodyBytes = base16'[0-9a-f]+'
           |	assetId = Unit
           |	feeAssetId = Unit
           |	amount = ${trans.amount.get}
           |	version = ${trans.version.get}
-          |	id = base58'${trans.id}'
-          |	senderPublicKey = base58'[$Base58Alphabet]+'
-          |	attachment = base58''
+          |	id = base16'${trans.id}'
+          |	senderPublicKey = base16'[0-9a-f]+'
+          |	attachment = base16''
           |	sender = Address\\(
-          |		bytes = base58'${trans.sender.get}'
+          |		bytes = base16'${trans.sender.get}'
           |	\\)
-          |	proofs = \\[base58'[$Base58Alphabet]+', base58'', base58'', base58'', base58'', base58'', base58'', base58''\\]
+          |	proofs = \\[base16'[0-9a-f]+', base16'', base16'', base16'', base16'', base16'', base16'', base16''\\]
           |	fee = ${trans.fee}
           |\\)
         """.trim.stripMargin
 
-    await(repl.execute(s""" transactionHeightById(base58'$assetId') """)) shouldBe
+    await(repl.execute(s""" transactionHeightById(base16'$assetId') """)) shouldBe
       Right(s"res7: Int|Unit = $height")
 
-    await(repl.execute(s""" assetInfo(base58'$assetId') """)) shouldBe
+    await(repl.execute(s""" assetInfo(base16'$assetId') """)) shouldBe
       Right(
         s"""
           |res8: Asset|Unit = Asset(
           |	description = "description"
           |	issuer = Address(
-          |		bytes = base58'${issuer.toAddress}'
+          |		bytes = base16'${issuer.toAddress}'
           |	)
           |	scripted = true
-          |	issuerPublicKey = base58'${issuer.publicKey}'
+          |	issuerPublicKey = base16'${issuer.publicKey}'
           |	minSponsoredFee = Unit
-          |	id = base58'$assetId'
+          |	id = base16'$assetId'
           |	decimals = 1
           |	reissuable = true
           |	name = "asset"
@@ -172,12 +172,12 @@ class ReplTest extends BaseTransactionSuite with FailedTransactionSuiteLike[Stri
           |res9: BlockInfo\\|Unit = BlockInfo\\(
           |	baseTarget = \\d+
           |	generator = Address\\(
-          |		bytes = base58'[$Base58Alphabet]+${"" /*miner.address*/}'
+          |		bytes = base16'[0-9a-f]+${"" /*miner.address*/}'
           |	\\)
           |	timestamp = \\d+
-          |	vrf = base58'[$Base58Alphabet]+'
-          |	generationSignature = base58'[$Base58Alphabet]+'
-          |	generatorPublicKey = base58'[$Base58Alphabet]+${"" /*miner.publicKey*/}'
+          |	vrf = base16'[0-9a-f]+'
+          |	generationSignature = base16'[0-9a-f]+'
+          |	generatorPublicKey = base16'[0-9a-f]+${"" /*miner.publicKey*/}'
           |	height = $height
           |	rewards = \\[\\]
           |\\)
@@ -186,7 +186,7 @@ class ReplTest extends BaseTransactionSuite with FailedTransactionSuiteLike[Stri
     await(
       repl.execute(
         s""" addressFromRecipient(Alias("aaaa")) ==
-          addressFromRecipient(Address(base58'${miner.address}'))
+          addressFromRecipient(Address(base16'${miner.address}'))
       """
       )
     ) shouldBe
@@ -195,36 +195,36 @@ class ReplTest extends BaseTransactionSuite with FailedTransactionSuiteLike[Stri
     await(
       repl.execute(
         s""" assetBalance(
-            Address(base58'${issuer.toAddress}'),
-            base58'$assetId'
+            Address(base16'${issuer.toAddress}'),
+            base16'$assetId'
           )
        """
       )
     ).explicitGet() shouldBe "res11: Int = 1000"
 
-    await(repl.execute(s""" wavesBalance(Address(base58'${sample.toAddress}')).regular """)) shouldBe Right(s"res12: Int = ${100.waves}")
+    await(repl.execute(s""" wavesBalance(Address(base16'${sample.toAddress}')).regular """)) shouldBe Right(s"res12: Int = ${100.waves}")
     await(repl.execute(""" this.wavesBalance() """))
       .explicitGet() should fullyMatch regex "res13: BalanceDetails = BalanceDetails\\(\\s+available = \\d+\\s+regular = \\d+\\s+generating = \\d+\\s+effective = \\d+\\s+\\)".r
 
     /* It function removed from node API. Wait native protobufs implementation. */
-//    await(repl.execute(s""" transferTransactionFromProto(base58'3nec5yth17jNrNgA7dfbbmzJTKysfVyrbkAH5A8w8ncBtWYGgfxEn5hGMnNKQyacgGxuoT9DQdbufGBybzPEpR4SFSbM2o1rxgLUtocDdzLWdbSAUKKHM7f2fsCDqEExkGF2f7Se6Tfi44y3yuNMTYAKrfShEBrKGzCgbEaJtLoZo4bPdnX5V6K2eWCBFnmFjUjA947TckxnNGboh7CL6') """)) shouldBe Right(
+//    await(repl.execute(s""" transferTransactionFromProto(base16'3nec5yth17jNrNgA7dfbbmzJTKysfVyrbkAH5A8w8ncBtWYGgfxEn5hGMnNKQyacgGxuoT9DQdbufGBybzPEpR4SFSbM2o1rxgLUtocDdzLWdbSAUKKHM7f2fsCDqEExkGF2f7Se6Tfi44y3yuNMTYAKrfShEBrKGzCgbEaJtLoZo4bPdnX5V6K2eWCBFnmFjUjA947TckxnNGboh7CL6') """)) shouldBe Right(
 //      s"""|res15: TransferTransaction|Unit = TransferTransaction(
 //          |	recipient = Address(
-//          |		bytes = base58'3HdNRU6DwZBy3ZYAmNEkncQFJFCN5DCY1FQ'
+//          |		bytes = base16'3HdNRU6DwZBy3ZYAmNEkncQFJFCN5DCY1FQ'
 //          |	)
 //          |	timestamp = 15872737
-//          |	bodyBytes = base58'VgZFeoUbnDNf9w4VBwyTUPxNvhPXJwZGnqinAeszLjngHW3MGWU1y2PemPTfVvtvzvGmGieCjNqpCkVspycSPdbpVLX9CkxzdZ6HR1MxoMNWamXHESqhmy'
+//          |	bodyBytes = base16'VgZFeoUbnDNf9w4VBwyTUPxNvhPXJwZGnqinAeszLjngHW3MGWU1y2PemPTfVvtvzvGmGieCjNqpCkVspycSPdbpVLX9CkxzdZ6HR1MxoMNWamXHESqhmy'
 //          |	assetId = Unit
 //          |	feeAssetId = Unit
 //          |	amount = 27603095
 //          |	version = 1
-//          |	id = base58'EmfqfvR3CcaSitJ5AoZdrKs6AAEcWeivNi3aUT9YZaXG'
-//          |	senderPublicKey = base58'CgQJiVQ73HQRgVZErv1Uri5n6ZGKSbvrXaRgsMhj8LN6'
-//          |	attachment = base58''
+//          |	id = base16'EmfqfvR3CcaSitJ5AoZdrKs6AAEcWeivNi3aUT9YZaXG'
+//          |	senderPublicKey = base16'CgQJiVQ73HQRgVZErv1Uri5n6ZGKSbvrXaRgsMhj8LN6'
+//          |	attachment = base16''
 //          |	sender = Address(
-//          |		bytes = base58'3HiHQ7gWXJZuLCtBStKjjgB8J8ZkixPuGuN'
+//          |		bytes = base16'3HiHQ7gWXJZuLCtBStKjjgB8J8ZkixPuGuN'
 //          |	)
-//          |	proofs = [base58'5op9X8DV9c5tBmDnwZo7baGqTo2dqdH5oxvS5WL4EBJKPJKLsCA2c3mvMHjmSFwf3Yf1VLoCiT2TbicV5vr5kBft', base58'', base58'', base58'', base58'', base58'', base58'', base58'']
+//          |	proofs = [base16'5op9X8DV9c5tBmDnwZo7baGqTo2dqdH5oxvS5WL4EBJKPJKLsCA2c3mvMHjmSFwf3Yf1VLoCiT2TbicV5vr5kBft', base16'', base16'', base16'', base16'', base16'', base16'', base16'']
 //          |	fee = 87195628
 //          |)""".stripMargin)
   }

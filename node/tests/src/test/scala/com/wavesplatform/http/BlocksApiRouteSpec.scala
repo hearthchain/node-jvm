@@ -9,7 +9,7 @@ import com.wavesplatform.api.http.{BlocksApiRoute, CustomJson, RouteTimeout}
 import com.wavesplatform.block.serialization.BlockHeaderSerializer
 import com.wavesplatform.block.{Block, BlockEndorsement, BlockHeader, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.explicitGet
 import com.wavesplatform.crypto.bls.BlsSignature
 import com.wavesplatform.db.WithDomain
@@ -74,12 +74,12 @@ class BlocksApiRouteSpec
   )
 
   private val testBlsSignature1Str =
-    "x99KGXzbggNGNcwzLXLYDKUWsv8b5aU8S7ZqEyN6XNQygZQT1TSvQtxbHFYEg1YAyUpNtrMVnC3ZJpGbaD1exSfArs63KxRa1dZ5WQAHuGKo1HLDKcCwamAtK3QZpRc31u5"
-  private val testBlsSignature1 = BlsSignature(Base58.decode(testBlsSignature1Str)).explicitGet()
+    "a01226a56751a56071d1d2460dcec34f4b033a2ad1b69b2cfe8434f289cce3226f8b397a4169058835ca85e9a93015400394596869eee4ec9eda416bfd98776d7dcb9670ff79063ab390c477afc1bcb12145a50bee5375e8bcbc11372a62410c"
+  private val testBlsSignature1 = BlsSignature(Base16.decode(testBlsSignature1Str)).explicitGet()
 
   private val testBlsSignature2Str =
-    "zXSA7BYmQeMmA7xyxb7XuctvkAVa5bNytzmSMmvHXYwZwnf1JnFxDLugfeXAn7ywEnXJGk6y87y6XxRBN2yw3xqBSn39EajJNCjDVNBoCWm8DUr6T6TMxwv4Dd5y6MebeAs"
-  private val testBlsSignature2 = BlsSignature(Base58.decode(testBlsSignature2Str)).explicitGet()
+    "a6fe148efe533a3c1cbf3a9a46265db9e87d7f9d71bd4f8cf4fe3f1ec3679f9a9847341599045e4e1fef5fcc914121900de3833c44dcad8d15727dd843c6bca3cc3ba8f069f6859e440e0eaeb96dd810b7c0ba5e09fa7130ac6fd0a3a3d904d0"
+  private val testBlsSignature2 = BlsSignature(Base16.decode(testBlsSignature2Str)).explicitGet()
 
   private val finalizedBlockHeaderJson =
     BlockHeaderSerializer.toJson(finalizedBlock.header, finalizedBlock.bytes().length, 0, finalizedBlock.signature) ++ Json.obj(

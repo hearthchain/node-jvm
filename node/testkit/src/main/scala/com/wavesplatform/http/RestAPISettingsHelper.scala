@@ -2,7 +2,7 @@ package com.wavesplatform.http
 
 import com.typesafe.config.ConfigFactory
 import com.wavesplatform.api.http.`X-Api-Key`
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.crypto
 import com.wavesplatform.settings.*
 import pureconfig.ConfigSource
@@ -18,7 +18,7 @@ trait RestAPISettingsHelper {
   lazy val MaxAssetIdsPerRequest     = 100
 
   lazy val restAPISettings = {
-    val keyHash = Base58.encode(crypto.secureHash(apiKey.getBytes("UTF-8")))
+    val keyHash = Base16.encode(crypto.secureHash(apiKey.getBytes("UTF-8")))
     val config = ConfigFactory
       .parseString(
         s"""waves.rest-api {

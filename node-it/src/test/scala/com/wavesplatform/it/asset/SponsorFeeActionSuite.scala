@@ -300,7 +300,7 @@ class SponsorFeeActionSuite extends BaseFreeSpec {
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', 1000)
+           |    SponsorFee(base16'$assetId', 1000)
            |]
         """.stripMargin,
         dApp
@@ -324,7 +324,7 @@ class SponsorFeeActionSuite extends BaseFreeSpec {
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', -1)
+           |    SponsorFee(base16'$assetId', -1)
            |]
         """.stripMargin,
         dApp
@@ -349,7 +349,7 @@ class SponsorFeeActionSuite extends BaseFreeSpec {
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', 1000)
+           |    SponsorFee(base16'$assetId', 1000)
            |]
         """.stripMargin
       )
@@ -376,7 +376,7 @@ class SponsorFeeActionSuite extends BaseFreeSpec {
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', 1000)
+           |    SponsorFee(base16'$assetId', 1000)
            |]
         """.stripMargin,
         dApp

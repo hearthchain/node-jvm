@@ -12,7 +12,7 @@ object MassTransferTxSerializer {
   def toJson(tx: MassTransferTransaction): JsObject = {
     import tx.*
     BaseTxJson.toJson(tx) ++ Json.obj(
-      "assetId"       -> assetId.maybeBase58Repr,
+      "assetId"       -> assetId.maybeBase16Repr,
       "attachment"    -> attachment,
       "transferCount" -> transfers.size,
       "totalAmount"   -> transfers.map(_.amount.value).sum,

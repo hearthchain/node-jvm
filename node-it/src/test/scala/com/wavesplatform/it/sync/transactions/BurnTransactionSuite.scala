@@ -189,7 +189,7 @@ class BurnTransactionSuite extends BaseTransactionSuite {
     val issuedAssetId =
       sender.issue(firstKeyPair, "name", "description", issueAmount, decimals, reissuable = false, fee = issueFee, waitForTx = true).id
 
-    val tx = TxHelpers.burn(asset = IssuedAsset(ByteStr.decodeBase58(issuedAssetId).get), amount = 1, fee = minFee, sender = firstKeyPair, version = TxVersion.V1)
+    val tx = TxHelpers.burn(asset = IssuedAsset(ByteStr.decodeBase16(issuedAssetId).get), amount = 1, fee = minFee, sender = firstKeyPair, version = TxVersion.V1)
     val json = tx.json() - "amount" ++ Json.obj("quantity" -> 1L)
     sender.signedBroadcast(json, waitForTx = true).id
   }

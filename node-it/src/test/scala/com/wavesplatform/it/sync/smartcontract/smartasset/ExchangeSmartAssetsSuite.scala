@@ -48,7 +48,7 @@ class ExchangeSmartAssetsSuite extends BaseTransactionSuite with CancelAfterFail
           s"""{-# SCRIPT_TYPE ASSET #-}
              |match tx {
              |case _: SetAssetScriptTransaction => true
-             |case e: ExchangeTransaction => e.sender == addressFromPublicKey(base58'${acc2.publicKey}')
+             |case e: ExchangeTransaction => e.sender == addressFromPublicKey(base16'${acc2.publicKey}')
              |case _ => false}""".stripMargin,
           estimator
         )
@@ -62,7 +62,7 @@ class ExchangeSmartAssetsSuite extends BaseTransactionSuite with CancelAfterFail
       .issue(firstKeyPair, "SmartAsset", "TestCoin", someAssetAmount, 0, reissuable = false, issueFee, 2, s, waitForTx = true)
       .id
 
-    val smartPair = AssetPair(IssuedAsset(ByteStr.decodeBase58(sAsset).get), Waves)
+    val smartPair = AssetPair(IssuedAsset(ByteStr.decodeBase16(sAsset).get), Waves)
 
     for (
       (contr1, contr2, mcontr) <- Seq(
@@ -85,7 +85,7 @@ class ExchangeSmartAssetsSuite extends BaseTransactionSuite with CancelAfterFail
           s"""{-# SCRIPT_TYPE ASSET #-}
              |match tx {
              |case _: SetAssetScriptTransaction => true
-             |case e: ExchangeTransaction => e.sender == addressFromPublicKey(base58'${acc1.publicKey}')
+             |case e: ExchangeTransaction => e.sender == addressFromPublicKey(base16'${acc1.publicKey}')
              |case _ => false}""".stripMargin,
           estimator
         )
@@ -121,8 +121,8 @@ class ExchangeSmartAssetsSuite extends BaseTransactionSuite with CancelAfterFail
       ScriptCompiler
         .compile(
           s"""{-# SCRIPT_TYPE ASSET #-}
-             |let assetA = base58'$assetA'
-             |let assetB = base58'$assetB'
+             |let assetA = base16'$assetA'
+             |let assetB = base16'$assetB'
              |match tx {
              |case _: SetAssetScriptTransaction => true
              |case e: ExchangeTransaction => (e.sellOrder.assetPair.priceAsset == assetA || e.sellOrder.assetPair.amountAsset == assetA) && (e.sellOrder.assetPair.priceAsset == assetB || e.sellOrder.assetPair.amountAsset == assetB)
@@ -139,8 +139,8 @@ class ExchangeSmartAssetsSuite extends BaseTransactionSuite with CancelAfterFail
     sender.setAssetScript(assetB, secondKeyPair, setAssetScriptFee, script, waitForTx = true)
 
     val smartAssetPair = AssetPair(
-      amountAsset = IssuedAsset(ByteStr.decodeBase58(assetA).get),
-      priceAsset = IssuedAsset(ByteStr.decodeBase58(assetB).get)
+      amountAsset = IssuedAsset(ByteStr.decodeBase16(assetA).get),
+      priceAsset = IssuedAsset(ByteStr.decodeBase16(assetB).get)
     )
 
     sender.signedBroadcast(
@@ -165,7 +165,7 @@ class ExchangeSmartAssetsSuite extends BaseTransactionSuite with CancelAfterFail
 
     withClue("try to use incorrect assetPair") {
       val incorrectSmartAssetPair = AssetPair(
-        amountAsset = IssuedAsset(ByteStr.decodeBase58(assetA).get),
+        amountAsset = IssuedAsset(ByteStr.decodeBase16(assetA).get),
         priceAsset = Waves
       )
 
@@ -189,7 +189,7 @@ class ExchangeSmartAssetsSuite extends BaseTransactionSuite with CancelAfterFail
           .issue(firstKeyPair, "assetA", "TestCoin", someAssetAmount, 0, reissuable = false, issueFee, 2, i, waitForTx = true)
           .id
 
-        val smartPair = AssetPair(IssuedAsset(ByteStr.decodeBase58(asset).get), Waves)
+        val smartPair = AssetPair(IssuedAsset(ByteStr.decodeBase16(asset).get), Waves)
 
         sender.signedBroadcast(exchangeTx(smartPair, smartMatcherFee, smartMatcherFee, ntpTime, 2, 3, acc1, acc0, acc2), waitForTx = true)
       }

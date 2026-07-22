@@ -1,7 +1,7 @@
 package com.wavesplatform.lang.v1
 
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.Curve25519
 import com.wavesplatform.lang.v1.EnvironmentFunctionsBenchmark.{curve25519}
@@ -33,10 +33,10 @@ class ScriptEvaluatorBenchmark {
   def signatures(st: Signatures, bh: Blackhole): Unit = bh.consume(eval(st.expr))
 
   @Benchmark
-  def base58encode(st: Base58Perf, bh: Blackhole): Unit = bh.consume(eval(st.encode))
+  def base16encode(st: Base16Perf, bh: Blackhole): Unit = bh.consume(eval(st.encode))
 
   @Benchmark
-  def base58decode(st: Base58Perf, bh: Blackhole): Unit = bh.consume(eval(st.decode))
+  def base16decode(st: Base16Perf, bh: Blackhole): Unit = bh.consume(eval(st.decode))
 
   @Benchmark
   def stringConcat(st: Concat, bh: Blackhole): Unit = bh.consume(eval(st.strings))
@@ -90,13 +90,13 @@ class NestedBlocks {
 }
 
 @State(Scope.Benchmark)
-class Base58Perf {
+class Base16Perf {
   val encode: EXPR = {
-    val base58Count = 120
-    val sum = (1 to base58Count).foldRight[EXPR](CONST_LONG(0)) { case (i, e) =>
+    val base16Count = 120
+    val sum = (1 to base16Count).foldRight[EXPR](CONST_LONG(0)) { case (i, e) =>
       FUNCTION_CALL(PureContext.sumLong, List(REF("v" + i), e))
     }
-    (1 to base58Count)
+    (1 to base16Count)
       .map { i =>
         val b = new Array[Byte](64)
         Random.nextBytes(b)
@@ -112,17 +112,17 @@ class Base58Perf {
   }
 
   val decode: EXPR = {
-    val base58Count = 60
-    val sum = (1 to base58Count).foldRight[EXPR](CONST_LONG(0)) { case (i, e) =>
+    val base16Count = 60
+    val sum = (1 to base16Count).foldRight[EXPR](CONST_LONG(0)) { case (i, e) =>
       FUNCTION_CALL(PureContext.sumLong, List(REF("v" + i), e))
     }
-    (1 to base58Count)
+    (1 to base16Count)
       .map { i =>
         val b = new Array[Byte](64)
         Random.nextBytes(b)
         LET(
           "v" + i,
-          FUNCTION_CALL(PureContext.sizeBytes, List(FUNCTION_CALL(Native(FROMBASE58), List(CONST_STRING(Base58.encode(b)).explicitGet()))))
+          FUNCTION_CALL(PureContext.sizeBytes, List(FUNCTION_CALL(Native(FROMBASE58), List(CONST_STRING(Base16.encode(b)).explicitGet()))))
         )
       }
       .foldRight[EXPR](sum) { case (let, e) => BLOCK(let, e) }

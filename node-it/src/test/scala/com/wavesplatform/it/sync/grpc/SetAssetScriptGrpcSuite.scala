@@ -55,7 +55,7 @@ class SetAssetScriptGrpcSuite extends GrpcBaseTransactionSuite {
               TestCompiler.DefaultVersion.compileAsset(
                 s"""
                    |match tx {
-                   |  case s: SetAssetScriptTransaction => s.sender == addressFromPublicKey(base58'${secondAcc.publicKey}')
+                   |  case s: SetAssetScriptTransaction => s.sender == addressFromPublicKey(base16'${secondAcc.publicKey}')
                    |  case _ => false
                    |}
                """.stripMargin
@@ -125,7 +125,7 @@ class SetAssetScriptGrpcSuite extends GrpcBaseTransactionSuite {
       Code.INVALID_ARGUMENT
     )
     assertGrpcError(
-      sender.setAssetScript(firstAcc, "9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz", Right(Some(script)), setAssetScriptFee),
+      sender.setAssetScript(firstAcc, "808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9", Right(Some(script)), setAssetScriptFee),
       "Referenced assetId not found",
       Code.INVALID_ARGUMENT
     )

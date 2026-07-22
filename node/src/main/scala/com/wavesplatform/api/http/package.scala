@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.Logger
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.api.http.ApiError.{InvalidAssetId, InvalidBlockId, InvalidPublicKey, InvalidSignature, InvalidTransactionId, WrongJson}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.crypto
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.Asset.IssuedAsset
@@ -64,7 +64,7 @@ package object http {
         val txJson  = jsv ++ Json.obj("version" -> version)
 
         PublicKey
-          .fromBase58String(senderPk)
+          .fromBase16String(senderPk)
           .flatMap { senderPk =>
             TransactionFactory.parseRequest(txJson ++ Json.obj("senderPublicKey" -> senderPk.toString))
           }
@@ -83,8 +83,8 @@ package object http {
     }
   }
 
-  private def base58Segment(requiredLength: Option[Int], error: String => ApiError): PathMatcher1[ByteStr] = Segment.map { str =>
-    ByteStr.decodeBase58(str) match {
+  private def base16Segment(requiredLength: Option[Int], error: String => ApiError): PathMatcher1[ByteStr] = Segment.map { str =>
+    ByteStr.decodeBase16(str) match {
       case Success(value) if requiredLength.forall(_ == value.arr.length) => value
       case _                                                              => throw ApiException(error(str))
     }
@@ -92,9 +92,9 @@ package object http {
 
   private def idOrHash(error: String => ApiError): PathMatcher1[Coeval[ByteStr]] = Segment.map { str =>
     // Throwing exceptions during a route parsing can prevent the default fallback to 404, see BlocksApiRoute
-    // Here we parse a Base58 segment only when the value is needed
+    // Here we parse a Base16 segment only when the value is needed
     Coeval.evalOnce {
-      ByteStr.decodeBase58(str) match {
+      ByteStr.decodeBase16(str) match {
         case Success(value) =>
           if (value.arr.length == crypto.DigestLength || value.arr.length == crypto.SignatureLength) value
           else
@@ -110,9 +110,9 @@ package object http {
   val TransactionId: PathMatcher1[Coeval[ByteStr]] = idOrHash(InvalidTransactionId.apply)
   val BlockId: PathMatcher1[Coeval[ByteStr]]       = idOrHash(InvalidBlockId.apply)
 
-  val AssetId: PathMatcher1[IssuedAsset] = base58Segment(Some(crypto.DigestLength), _ => InvalidAssetId).map(IssuedAsset(_))
+  val AssetId: PathMatcher1[IssuedAsset] = base16Segment(Some(crypto.DigestLength), _ => InvalidAssetId).map(IssuedAsset(_))
 
-  val Signature: PathMatcher1[ByteStr] = base58Segment(Some(crypto.SignatureLength), _ => InvalidSignature)
+  val Signature: PathMatcher1[ByteStr] = base16Segment(Some(crypto.SignatureLength), _ => InvalidSignature)
 
   val AddrSegment: PathMatcher1[Address] = Segment.map { str =>
     (for {
@@ -120,7 +120,7 @@ package object http {
     } yield addr).fold(ae => throw ApiException(ApiError.fromValidationError(ae)), identity)
   }
 
-  val PublicKeySegment: PathMatcher1[PublicKey] = base58Segment(Some(crypto.KeyLength), _ => InvalidPublicKey).map(s => PublicKey(s))
+  val PublicKeySegment: PathMatcher1[PublicKey] = base16Segment(Some(crypto.KeyLength), _ => InvalidPublicKey).map(s => PublicKey(s))
 
   val jsonRejectionHandler: RejectionHandler = RejectionHandler
     .newBuilder()

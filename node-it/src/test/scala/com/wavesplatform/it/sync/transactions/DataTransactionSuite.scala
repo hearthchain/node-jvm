@@ -5,7 +5,7 @@ import com.typesafe.config.Config
 import com.wavesplatform.account.{AddressScheme, KeyPair}
 import com.wavesplatform.api.http.ApiError.{CustomValidationError, TooBigArrayAllocation}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.NodeConfigs
@@ -372,7 +372,7 @@ class DataTransactionSuite extends BaseTransactionSuite with EitherValues {
       )
       nodes.foreach(_.ensureTxDoesntExist(id(noProof)))
 
-      val badProof = request ++ Json.obj("proofs" -> Seq(Base58.encode(Array.fill(64)(Random.nextInt().toByte))))
+      val badProof = request ++ Json.obj("proofs" -> Seq(Base16.encode(Array.fill(64)(Random.nextInt().toByte))))
       assertBadRequestAndResponse(sender.postJson("/transactions/broadcast", badProof), "Proof doesn't validate as signature")
       nodes.foreach(_.ensureTxDoesntExist(id(badProof)))
 

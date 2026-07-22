@@ -25,7 +25,7 @@ class ScriptExecutionErrorSuite extends BaseTransactionSuite with CancelAfterFai
       """
         |match tx {
         |  case t : TransferTransaction =>
-        |    let res = if isDefined(t.assetId) then extract(t.assetId) == base58'' else isDefined(t.assetId) == false
+        |    let res = if isDefined(t.assetId) then extract(t.assetId) == base16'' else isDefined(t.assetId) == false
         |    res
         |  case _: SetScriptTransaction => true
         |  case _ => throw("Your transaction has incorrect type.")

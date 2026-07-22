@@ -43,7 +43,7 @@ class RideUpdateAssetInfoTxSuite extends BaseTransactionSuite with CancelAfterFa
        |      uai.id.size() == 32
        |      && uai.version == 1
        |      && uai.sender == this
-       |      && uai.senderPublicKey == base58'${firstKeyPair.publicKey.toString}'
+       |      && uai.senderPublicKey == base16'${firstKeyPair.publicKey.toString}'
        |      && uai.name == "$name"
        |      && uai.description == "$description"
        |      && uai.fee == $fee
@@ -65,7 +65,7 @@ class RideUpdateAssetInfoTxSuite extends BaseTransactionSuite with CancelAfterFa
        |    uai.id.size() == 32
        |    && uai.version == 1
        |    && uai.sender == this
-       |    && uai.senderPublicKey == base58'${secondKeyPair.publicKey.toString}'
+       |    && uai.senderPublicKey == base16'${secondKeyPair.publicKey.toString}'
        |    && uai.name == "$name"
        |    && uai.description == "$description"
        |    && uai.fee == $fee
@@ -111,8 +111,8 @@ class RideUpdateAssetInfoTxSuite extends BaseTransactionSuite with CancelAfterFa
 
     val issue1 = sender.issue(dApp, script = Some(scriptAsset), waitForTx = true)
     val issue2 = sender.issue(smartAcc, script = Some(scriptAsset), waitForTx = true)
-    asset1 = IssuedAsset(ByteStr.decodeBase58(issue1.id).get)
-    asset2 = IssuedAsset(ByteStr.decodeBase58(issue2.id).get)
+    asset1 = IssuedAsset(ByteStr.decodeBase16(issue1.id).get)
+    asset2 = IssuedAsset(ByteStr.decodeBase16(issue2.id).get)
 
     sender.setScript(dApp, Some(scriptDApp), waitForTx = true)
     sender.setScript(smartAcc, Some(scriptAcc), waitForTx = true)

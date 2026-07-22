@@ -2,18 +2,18 @@ package com.wavesplatform.transaction
 
 import com.google.common.primitives.Bytes
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.serialization.Deser
 import com.wavesplatform.transaction.TxValidationError.{GenericError, ToBigProof, TooManyProofs, UsupportedProofVersion}
-import com.wavesplatform.utils.base58Length
+import com.wavesplatform.utils.base16Length
 import monix.eval.Coeval
 
 import scala.util.Try
 
 case class Proofs(proofs: Seq[ByteStr]) {
   val bytes: Coeval[Array[Byte]]  = Coeval.evalOnce(Bytes.concat(Array(Proofs.Version), Deser.serializeArrays(proofs.map(_.arr))))
-  val base58: Coeval[Seq[String]] = Coeval.evalOnce(proofs.map(p => Base58.encode(p.arr)))
+  val base16: Coeval[Seq[String]] = Coeval.evalOnce(proofs.map(p => Base16.encode(p.arr)))
   def toSignature: ByteStr        = proofs.headOption.getOrElse(ByteStr.empty)
   override def toString: String   = s"Proofs(${proofs.mkString(", ")})"
   def add(proof: ByteStr): Proofs = Proofs(proofs :+ proof)
@@ -23,7 +23,7 @@ object Proofs {
   val Version: TxVersion      = 1: Byte
   val MaxProofs: Int          = 8
   val MaxProofSize: Int       = 64
-  val MaxProofStringSize: Int = base58Length(MaxProofSize)
+  val MaxProofStringSize: Int = base16Length(MaxProofSize)
 
   lazy val empty = new Proofs(Nil)
 

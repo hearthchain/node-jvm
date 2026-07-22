@@ -49,7 +49,7 @@ class InvokeSelfPaymentSuite extends BaseFunSuite with CancelAfterFailure {
         |
         |@Callable(inv)
         |func paySelf(asset: String) = {
-        |  let id = if asset == "WAVES" then unit else fromBase58String(asset)
+        |  let id = if asset == "WAVES" then unit else fromBase16String(asset)
         |  [ ScriptTransfer(this, 1, id) ]
         |}
       """.stripMargin
@@ -66,7 +66,7 @@ class InvokeSelfPaymentSuite extends BaseFunSuite with CancelAfterFailure {
         |
         |@Callable(inv)
         |func paySelf(asset: String) = {
-        |  let id = if asset == "WAVES" then unit else fromBase58String(asset)
+        |  let id = if asset == "WAVES" then unit else fromBase16String(asset)
         |  TransferSet([ ScriptTransfer(this, 1, id) ])
         |}
       """.stripMargin

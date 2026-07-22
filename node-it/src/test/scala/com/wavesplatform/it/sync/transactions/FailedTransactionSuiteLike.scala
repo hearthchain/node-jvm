@@ -112,7 +112,7 @@ trait FailedTransactionSuiteLike[T] extends ScorexLogging { matchers: Matchers =
                    |match tx {
                    |  case _: SetAssetScriptTransaction => true
                    |  case _ =>
-                   |    let check = ${"sigVerify(base58'', base58'', base58'') ||" * 16} false
+                   |    let check = ${"sigVerify(base16'', base16'', base16'') ||" * 16} false
                    |    if (check) then false else $result
                    |}
                    |""".stripMargin,
@@ -143,7 +143,7 @@ trait FailedTransactionSuiteLike[T] extends ScorexLogging { matchers: Matchers =
                    |match (tx) {
                    |  case _: SetScriptTransaction => true
                    |  case _ =>
-                   |    let check = ${"sigVerify(base58'', base58'', base58'') ||" * 16} false
+                   |    let check = ${"sigVerify(base16'', base16'', base16'') ||" * 16} false
                    |    if (check) then false else $r
                    |}
                    |""".stripMargin,
@@ -217,7 +217,7 @@ trait FailedTransactionSuiteLike[T] extends ScorexLogging { matchers: Matchers =
                      |match tx {
                      |  case _: SetAssetScriptTransaction => true
                      |  case _ =>
-                     |    let check = ${"sigVerify(base58'', base58'', base58'') ||" * 16} false
+                     |    let check = ${"sigVerify(base16'', base16'', base16'') ||" * 16} false
                      |    if (check) then false else $result
                      |}
                      |""".stripMargin,

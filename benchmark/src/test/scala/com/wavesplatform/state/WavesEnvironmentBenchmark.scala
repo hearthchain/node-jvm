@@ -4,7 +4,7 @@ import cats.Id
 import com.typesafe.config.ConfigFactory
 import com.wavesplatform.account.{AddressOrAlias, AddressScheme, Alias}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.database.{RDB, RocksDBWriter}
 import com.wavesplatform.lang.directives.DirectiveSet
@@ -84,7 +84,7 @@ object WavesEnvironmentBenchmark {
 
   @State(Scope.Benchmark)
   class TransactionByIdSt extends BaseSt {
-    val allTxs: Vector[Array[Byte]] = load(benchSettings.restTxsFile)(x => Base58.tryDecodeWithLimit(x).get)
+    val allTxs: Vector[Array[Byte]] = load(benchSettings.restTxsFile)(x => Base16.tryDecodeWithLimit(x).get)
   }
 
   @State(Scope.Benchmark)
@@ -97,7 +97,7 @@ object WavesEnvironmentBenchmark {
 
   @State(Scope.Benchmark)
   class AccountBalanceOfAssetSt extends AccountBalanceOfWavesSt {
-    val assets: Vector[Array[Byte]] = load(benchSettings.assetsFile)(x => Base58.tryDecodeWithLimit(x).get)
+    val assets: Vector[Array[Byte]] = load(benchSettings.assetsFile)(x => Base16.tryDecodeWithLimit(x).get)
   }
 
   @State(Scope.Benchmark)
@@ -109,13 +109,13 @@ object WavesEnvironmentBenchmark {
 
   @State(Scope.Benchmark)
   class TransferFromProtoSt extends BaseSt {
-    val transferTxBytesBase58: String =
-      "3nec7yqpNKXGsmPw7eTRUi8WPEaRmHfnHHSc8NZJggjsMp7SKGyLNnFk5NmZLTHQXaXqUEiSWqfPaXznZ3Drh" +
-        "8siJpCzS9AtSTUKS7yYBFUrj4jeQZM5axqbJHeYgLoDNwCXUcfwNdQ2XfQceSoYx6cEDc4MrXsA4GGnXWvoPD" +
-        "TKrX8EQCtcwJ8QbErSZEhK5Gv3EVjrC16i5v92ok9WS"
+    val transferTxBytesBase16: String =
+      "2ed29fb960cbcd65c747838d77a27a0cab3e6eb5925b1bbfae10381cac1ade7579b2483eec3de494c5db95dc50f08e400c033f69702dc3ac9f25aba770a2" +
+        "844a54ced4bf1b0aa6fdaa24d4893776522df01f403eb8d2b123535066394c27f3b2fcb95caddd3bfec5f1ce1b208d3505b5e38fe18120b8b2a503893718" +
+        "06be6b488eee39fa00f024d29677e240feb71b8272efa094f5076e53e2be5383"
 
     val transferTxBytes: Array[Byte] =
-      Base58.decode(transferTxBytesBase58)
+      Base16.decode(transferTxBytesBase16)
   }
 
   @State(Scope.Benchmark)

@@ -49,7 +49,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
           smartCaller,
           dAppAddress,
           Some("spendMaxFee"),
-          payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+          payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
           fee = 0.05299999.waves
         ),
       AssertiveApiError(
@@ -63,7 +63,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
         smartCaller,
         dAppAddress,
         Some("spendMaxFee"),
-        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
         fee = 5300000
       )
       ._1
@@ -82,7 +82,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
           smartCaller,
           dAppAddress,
           Some("get10ofAsset1"),
-          payment = Seq(Payment(amountLessThanVerifierLimit, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+          payment = Seq(Payment(amountLessThanVerifierLimit, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
           fee = smartMinFee + smartFee + smartFee // scripted asset + dApp
         )
         ._1
@@ -100,7 +100,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
           caller,
           dAppAddress,
           Some("payAsset2GetAsset1"),
-          payment = Seq(Payment(amountGreaterThanAccountScriptLimit, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+          payment = Seq(Payment(amountGreaterThanAccountScriptLimit, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
           fee = smartMinFee
         )
         ._1
@@ -118,7 +118,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
           caller,
           dAppAddress,
           Some("payAsset2GetAsset1"),
-          payment = Seq(Payment(amountGreaterThanAccountScriptLimit, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+          payment = Seq(Payment(amountGreaterThanAccountScriptLimit, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
           fee = smartMinFee + smartFee
         ),
       AssertiveApiError(
@@ -136,7 +136,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
         caller,
         dAppAddress,
         Some("payAsset2GetAsset1"),
-        payment = Seq(Payment(amountGreaterThanAccountScriptLimit, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+        payment = Seq(Payment(amountGreaterThanAccountScriptLimit, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
         fee = smartMinFee + smartFee + smartFee
       )
       ._1
@@ -154,7 +154,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
           caller,
           dAppAddress,
           Some("payAsset1GetAsset2"),
-          payment = Seq(Payment(amountGreaterThanDAppScriptLimit, IssuedAsset(ByteStr.decodeBase58(asset1).get))),
+          payment = Seq(Payment(amountGreaterThanDAppScriptLimit, IssuedAsset(ByteStr.decodeBase16(asset1).get))),
           fee = smartMinFee + smartFee + smartFee
         ),
       AssertiveApiError(TransactionNotAllowedByAssetScript.Id, "Transaction is not allowed by token-script")
@@ -170,7 +170,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
           caller,
           dAppAddress,
           Some("payAsset2GetAsset1"),
-          payment = Seq(Payment(amountLessThanDAppScriptLimit, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+          payment = Seq(Payment(amountLessThanDAppScriptLimit, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
           fee = smartMinFee + smartFee + smartFee
         ),
       AssertiveApiError(ScriptExecutionError.Id, s"Error while executing dApp: need payment in 15+ tokens of asset2 $asset2")
@@ -185,7 +185,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
         caller,
         dAppAddress,
         Some("payAsset2GetAsset3"),
-        payment = Seq(Payment(amountGreaterThanDAppScriptLimit, IssuedAsset(ByteStr.decodeBase58(asset2).get))),
+        payment = Seq(Payment(amountGreaterThanDAppScriptLimit, IssuedAsset(ByteStr.decodeBase16(asset2).get))),
         fee = smartMinFee + smartFee + smartFee
       ),
       AssertiveApiError(TransactionNotAllowedByAssetScript.Id, "Transaction is not allowed by token-script")
@@ -322,16 +322,16 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
              |{-# STDLIB_VERSION 3 #-}
              |{-# CONTENT_TYPE DAPP #-}
              |
-             |let asset1 = base58'$asset1'
-             |let asset2 = base58'$asset2'
-             |let asset3 = base58'$asset3'
+             |let asset1 = base16'$asset1'
+             |let asset2 = base16'$asset2'
+             |let asset3 = base16'$asset3'
              |
              |@Callable(i)
              |func payAsset1GetAsset2() = {
              |  let pay = extract(i.payment)
              |  if (pay.assetId == asset1 && pay.amount > 15) then
              |    TransferSet([ScriptTransfer(i.caller, 15, asset2)])
-             |  else throw("need payment in 15+ tokens of asset1 " + toBase58String(asset1))
+             |  else throw("need payment in 15+ tokens of asset1 " + toBase16String(asset1))
              |}
              |
              |@Callable(i)
@@ -340,9 +340,9 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
              |  if (pay.assetId == asset2 && pay.amount > 15) then
              |    TransferSet([ScriptTransfer(i.caller, 15, asset1)])
              |  else {
-             |    if (${"sigVerify(base58'', base58'', base58'') ||" * 16} true)
+             |    if (${"sigVerify(base16'', base16'', base16'') ||" * 16} true)
              |    then
-             |       throw("need payment in 15+ tokens of asset2 " + toBase58String(asset2))
+             |       throw("need payment in 15+ tokens of asset2 " + toBase16String(asset2))
              |    else
              |       throw("unexpected")
              |  }
@@ -352,7 +352,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
              |  let pay = extract(i.payment)
              |  if (pay.assetId == asset2 && pay.amount > 15) then
              |    TransferSet([ScriptTransfer(i.caller, 15, asset3)])
-             |  else throw("need payment in 15+ tokens of asset2 " + toBase58String(asset2))
+             |  else throw("need payment in 15+ tokens of asset2 " + toBase16String(asset2))
              |}
              |
              |@Callable(i)
@@ -375,7 +375,7 @@ class InvokeScriptWithSmartAccountAndAssetSuite extends BaseTransactionSuite wit
              |      ScriptTransfer(i.caller, 11, asset1),
              |      ScriptTransfer(i.caller, 11, asset1)
              |    ])
-             |  else throw("need payment in asset2 " + toBase58String(asset2))
+             |  else throw("need payment in asset2 " + toBase16String(asset2))
              |}
              |
              |@Callable(i)

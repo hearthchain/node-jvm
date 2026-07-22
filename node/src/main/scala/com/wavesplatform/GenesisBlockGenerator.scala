@@ -161,7 +161,7 @@ object GenesisBlockGenerator {
     val genesisGenerators: Seq[GenesisGeneratorSettings] = minerShares.map { case (addrInfo, _) =>
       GenesisGeneratorSettings(
         ByteStr(addrInfo.signingKey.publicKey()).toString,
-        addrInfo.blsKey.publicKey.base58,
+        addrInfo.blsKey.publicKey.base16,
         ByteStr(addrInfo.vrfKey.publicKey()).toString
       )
     }

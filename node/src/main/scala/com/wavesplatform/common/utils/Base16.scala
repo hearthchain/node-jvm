@@ -3,7 +3,7 @@ package com.wavesplatform.common.utils
 import java.util.HexFormat
 
 object Base16 extends BaseXXEncDec {
-  // 140-byte payloads (the largest base58-encoded values, e.g. attachments) are 280 hex chars.
+  // 140-byte payloads (the largest encoded values, e.g. attachments) are 280 hex chars.
   override val defaultDecodeLimit: Int = 280
 
   private val format = HexFormat.of()

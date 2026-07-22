@@ -45,7 +45,7 @@ object GenesisSnapshot {
       _ <- checkNoDuplicates(settings.map(_.id.toString), "asset id")
       assets <- settings.toList.traverse { a =>
         for {
-          issuer <- PublicKey.fromBase58String(a.issuer).leftMap(e => GenericError(s"Genesis asset ${a.id}: invalid issuer: $e"))
+          issuer <- PublicKey.fromBase16String(a.issuer).leftMap(e => GenericError(s"Genesis asset ${a.id}: invalid issuer: $e"))
           _      <- Either.cond(a.quantity > 0, (), GenericError(s"Genesis asset ${a.id}: quantity must be greater than 0, got ${a.quantity}"))
           decimalsError = GenericError(s"Genesis asset ${a.id}: ${TxDecimals.errMsg}, got ${a.decimals}")
           _ <- Either.cond(a.decimals.isValidByte, (), decimalsError)
@@ -73,7 +73,7 @@ object GenesisSnapshot {
           _       <- checkNoDuplicates(b.assets.keys.toSeq, s"asset id in the balance of $address")
           assetEntries <- b.assets.toList.traverse { case (id, amount) =>
             for {
-              assetId <- ByteStr.decodeBase58(id).toEither.leftMap(e => GenericError(s"Genesis balance $address: invalid asset id $id: $e"))
+              assetId <- ByteStr.decodeBase16(id).toEither.leftMap(e => GenericError(s"Genesis balance $address: invalid asset id $id: $e"))
               asset = IssuedAsset(assetId)
               _ <- Either.cond(knownAssets(asset), (), GenericError(s"Genesis balance $address: unknown asset $id"))
               _ <- Either.cond(amount > 0, (), GenericError(s"Genesis balance $address: amount of $id must be greater than 0, got $amount"))
@@ -124,15 +124,15 @@ object GenesisSnapshot {
         _ <- checkNoDuplicates(settings.map(_.vrfPublicKey), "genesis generator VRF public key")
         generators <- settings.toList.traverse { g =>
           for {
-            publicKey <- PublicKey.fromBase58String(g.publicKey).leftMap(e => GenericError(s"Genesis generator ${g.publicKey}: $e"))
+            publicKey <- PublicKey.fromBase16String(g.publicKey).leftMap(e => GenericError(s"Genesis generator ${g.publicKey}: $e"))
             rawEndorserKey <- ByteStr
-              .decodeBase58(g.endorserPublicKey)
+              .decodeBase16(g.endorserPublicKey)
               .toEither
               .leftMap(e => GenericError(s"Genesis generator ${g.publicKey}: invalid endorser public key: $e"))
             endorserKey <- BlsPublicKey(rawEndorserKey).leftMap(e => GenericError(s"Genesis generator ${g.publicKey}: invalid endorser key: $e"))
             _           <- endorserKey.validated.leftMap(e => GenericError(s"Genesis generator ${g.publicKey}: invalid endorser public key: $e"))
             vrfKey <- ByteStr
-              .decodeBase58(g.vrfPublicKey)
+              .decodeBase16(g.vrfPublicKey)
               .toEither
               .leftMap(e => GenericError(s"Genesis generator ${g.publicKey}: invalid VRF public key: $e"))
             _ <- Either.cond(

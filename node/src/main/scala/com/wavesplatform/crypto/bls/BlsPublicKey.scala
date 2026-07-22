@@ -11,7 +11,7 @@ object BlsPublicKey {
   extension (self: BlsPublicKey) {
     def byteStr: ByteStr = self
     def arr: Array[Byte] = byteStr.arr
-    def base58: String   = byteStr.toString
+    def base16: String   = byteStr.toString
 
     /** We need this once when adding a new endorser
       */

@@ -114,7 +114,7 @@ class HttpScriptAssetActionLimitsSuite extends ScriptAssetActionLimitsSuite {
           acc,
           acc.toAddress.toString,
           Some(s"process${actionsLimit + 1}actions"),
-          List(CONST_BYTESTR(ByteStr.decodeBase58(issue.id).get).explicitGet()),
+          List(CONST_BYTESTR(ByteStr.decodeBase16(issue.id).get).explicitGet()),
           fee = smartMinFee + issueFee * (actionsLimit + 1),
           waitForTx = true
         )

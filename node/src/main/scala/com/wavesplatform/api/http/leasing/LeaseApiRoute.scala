@@ -4,7 +4,7 @@ import com.wavesplatform.api.common.{CommonAccountsApi, LeaseInfo}
 import com.wavesplatform.api.http.*
 import com.wavesplatform.api.http.ApiError.{InvalidIds, TransactionDoesNotExist}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.network.TransactionPublisher
 import com.wavesplatform.settings.RestAPISettings
 import com.wavesplatform.state.Blockchain
@@ -58,7 +58,7 @@ case class LeaseApiRoute(
   private def leasingInfosMap(ids: Iterable[String]): Either[InvalidIds, Map[String, LeaseInfo]] = {
     val infos = ids.map(id =>
       (for {
-        id <- Base58.tryDecodeWithLimit(id).toOption
+        id <- Base16.tryDecodeWithLimit(id).toOption
         li <- commonAccountApi.leaseInfo(ByteStr(id))
       } yield li).toRight(id)
     )

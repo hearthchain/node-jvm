@@ -2,7 +2,7 @@ package com.wavesplatform.it.sync.smartcontract
 
 import com.wavesplatform.api.http.ApiError.ScriptExecutionError
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.{issueFee, setScriptFee, smartFee}
@@ -44,7 +44,7 @@ class PaymentValidationSuite extends BaseTransactionSuite {
         caller,
         dApp.toAddress.toString,
         func = Some("write"),
-        payment = Seq(Payment(1000L, IssuedAsset(ByteStr(Base58.decode(smartAssetId))))),
+        payment = Seq(Payment(1000L, IssuedAsset(ByteStr(Base16.decode(smartAssetId))))),
         fee = issueFee
       )
     ) { err =>

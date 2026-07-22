@@ -6,7 +6,7 @@ import com.typesafe.config.Config
 import com.wavesplatform.account.*
 import com.wavesplatform.api.http.requests.TransferRequest
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.TransferSending.Req
 import com.wavesplatform.it.api.AsyncHttpApi.*
@@ -58,7 +58,7 @@ trait TransferSending extends ScorexLogging {
     val srcDest = balances.toSeq
       .map { case (config, _) =>
         val accountSeed = config.getString("account-seed")
-        (config, KeyPair(Base58.decode(accountSeed)))
+        (config, KeyPair(Base16.decode(accountSeed)))
       }
 
     val sourceAndDest = (1 to n).map { _ =>
@@ -108,7 +108,7 @@ trait TransferSending extends ScorexLogging {
       .map { case (x, i) =>
         createSignedTransferRequest(
           TxHelpers.transfer(
-            KeyPair(Base58.decode(x.senderSeed)),
+            KeyPair(Base16.decode(x.senderSeed)),
             AddressOrAlias.fromString(x.targetAddress).explicitGet(),
             x.amount,
             Waves,

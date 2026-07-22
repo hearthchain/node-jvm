@@ -27,9 +27,9 @@ class LeaseSmartContractsTestSuite extends BaseTransactionSuite with CancelAfter
     miner.assertBalances(firstAddress, balance1 + 10 * transferAmount, eff1 + 10 * transferAmount)
 
     val scriptText = s"""
-        let pkA = base58'${acc0.publicKey}'
-        let pkB = base58'${acc1.publicKey}'
-        let pkC = base58'${acc2.publicKey}'
+        let pkA = base16'${acc0.publicKey}'
+        let pkB = base16'${acc1.publicKey}'
+        let pkC = base16'${acc2.publicKey}'
 
         match tx {
           case ltx: LeaseTransaction => sigVerify(ltx.bodyBytes,ltx.proofs[0],pkA) && sigVerify(ltx.bodyBytes,ltx.proofs[2],pkC)
@@ -75,7 +75,7 @@ class LeaseSmartContractsTestSuite extends BaseTransactionSuite with CancelAfter
         .create(
           version = 2.toByte,
           sender = acc0.publicKey,
-          leaseId = ByteStr.decodeBase58(leasingId).get,
+          leaseId = ByteStr.decodeBase16(leasingId).get,
           fee = minFee + 0.2.waves,
           timestamp = System.currentTimeMillis(),
           proofs = Proofs.empty

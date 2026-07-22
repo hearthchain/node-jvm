@@ -53,7 +53,7 @@ class TransferNFTSuite extends BaseTransactionSuite with NTPTime {
          |
          |@Callable(i)
          |func nftPaymentTransferToThirdAddress(address: String) = {
-         |    let thirdAddress = Address(fromBase58String(address))
+         |    let thirdAddress = Address(fromBase16String(address))
          |    let pmt = i.payments[0];
          |    [ ScriptTransfer(thirdAddress, pmt.amount, pmt.assetId) ]
          |}
@@ -69,8 +69,8 @@ class TransferNFTSuite extends BaseTransactionSuite with NTPTime {
          |
          |@Callable(i)
          |func transferFromDappToAddress(address: String) = {
-         |    let recipient = Address(fromBase58String(address))
-         |    [ ScriptTransfer(recipient, 1, base58'$nftAsset') ]
+         |    let recipient = Address(fromBase16String(address))
+         |    [ ScriptTransfer(recipient, 1, base16'$nftAsset') ]
          |}
          |
          |@Verifier(t)

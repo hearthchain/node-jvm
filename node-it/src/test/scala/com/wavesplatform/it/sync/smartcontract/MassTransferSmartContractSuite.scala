@@ -30,7 +30,7 @@ class MassTransferSmartContractSuite extends BaseTransactionSuite with CancelAft
        |    let totalAmountToGov = commonAmount == 2000000000
        |    let massTxSize = size(ttx.transfers) == 2
        |
-       |    let accountPK = base58'${notMiner.publicKey}'
+       |    let accountPK = base16'${notMiner.publicKey}'
        |    let accSig = sigVerify(ttx.bodyBytes,ttx.proofs[0],accountPK)
        |
        |    let txToUsers = (massTxSize && totalAmountToUsers)
@@ -64,7 +64,7 @@ class MassTransferSmartContractSuite extends BaseTransactionSuite with CancelAft
       Seq(thirdKeyPair.toAddress -> 4 * transferAmount, secondKeyPair.toAddress -> 4 * transferAmount),
       fee = calcMassTransferFee(2) + smartFee
     )
-    val toUsersID = ByteStr.decodeBase58(notMiner.signedBroadcast(signedToUsers.json(), waitForTx = true).id).get
+    val toUsersID = ByteStr.decodeBase16(notMiner.signedBroadcast(signedToUsers.json(), waitForTx = true).id).get
 
     val transfersToGov = Seq(firstKeyPair.toAddress -> transferAmount, fourthAddress -> transferAmount)
     // make transfer with incorrect time

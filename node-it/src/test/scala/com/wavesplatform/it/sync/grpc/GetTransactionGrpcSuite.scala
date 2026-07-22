@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync.grpc
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncGrpcApi.*
 import com.wavesplatform.it.sync.*
@@ -20,9 +20,9 @@ class GetTransactionGrpcSuite extends GrpcBaseTransactionSuite {
     val transactionBySenderRecipientAndId =
       sender.getTransaction(sender = firstAddress, recipient = Some(Recipient().withPublicKeyHash(secondAddress)), id = txId).getWavesTransaction
 
-    transactionBySenderAndId.senderPublicKey shouldBe ByteString.copyFrom(Base58.decode(firstAcc.publicKey.toString))
+    transactionBySenderAndId.senderPublicKey shouldBe ByteString.copyFrom(Base16.decode(firstAcc.publicKey.toString))
     transactionByRecipientAndId.getTransfer.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
-    transactionBySenderRecipientAndId.senderPublicKey shouldBe ByteString.copyFrom(Base58.decode(firstAcc.publicKey.toString))
+    transactionBySenderRecipientAndId.senderPublicKey shouldBe ByteString.copyFrom(Base16.decode(firstAcc.publicKey.toString))
     transactionBySenderRecipientAndId.getTransfer.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
   }
 

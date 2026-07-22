@@ -41,14 +41,14 @@ class EnvironmentFunctionsBenchmark {
   def random_bytes_500_test(): Array[Byte] = randomBytes(DataBytesLength)
 
   @Benchmark
-  def base58_decode_full_test(): Either[String, Array[Byte]] =
-    Global.base58Decode(Global.base58Encode(randomBytes(Base58BytesLength)).explicitGet())
+  def base16_decode_full_test(): Either[String, Array[Byte]] =
+    Global.base16Decode(Global.base16Encode(randomBytes(Base16BytesLength)).explicitGet())
 
   @Benchmark
-  def base58_encode_test(): String = hashTest(Base58BytesLength, Global.base58Encode(_).explicitGet())
+  def base16_encode_test(): String = hashTest(Base16BytesLength, Global.base16Encode(_).explicitGet())
 
   @Benchmark
-  def base58_26_encode_test(): String = hashTest(26, Global.base58Encode(_).explicitGet()) // for addressFromString_full_test
+  def base16_26_encode_test(): String = hashTest(26, Global.base16Encode(_).explicitGet()) // for addressFromString_full_test
 
   @Benchmark
   def base16_decode_test(): Array[Byte] = Global.base16Decode(string32Kb).explicitGet()
@@ -95,7 +95,7 @@ class EnvironmentFunctionsBenchmark {
 object EnvironmentFunctionsBenchmark {
 
   val ChainId: Byte     = 'P'
-  val Base58BytesLength = Global.MaxBase58Bytes
+  val Base16BytesLength = Global.MaxBase16Bytes
   val DataBytesLength   = 512
   val SeedBytesLength   = 128
 

@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync.grpc
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncGrpcApi.*
 import com.wavesplatform.it.sync.*
@@ -24,7 +24,7 @@ class SponsorFeeTransactionGrpcSuite extends GrpcBaseTransactionSuite {
 
   test("able to make transfer with sponsored fee") {
     for (v <- sponsorFeeTxSupportedVersions) {
-      val minerWavesBalance  = sender.wavesBalance(ByteString.copyFrom(Base58.decode(miner.address)))
+      val minerWavesBalance  = sender.wavesBalance(ByteString.copyFrom(Base16.decode(miner.address)))
       val minerBalanceHeight = sender.height
 
       val sponsoredAssetId = PBTransactions
@@ -36,7 +36,7 @@ class SponsorFeeTransactionGrpcSuite extends GrpcBaseTransactionSuite {
         .id()
         .toString
 
-      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base58.decode(sponsoredAssetId)), token))
+      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base16.decode(sponsoredAssetId)), token))
       sender.broadcastSponsorFee(sponsor, sponsoredAssetMinFee, fee = sponsorReducedFee, version = v, waitForTx = true)
 
       sender.broadcastTransfer(
@@ -75,7 +75,7 @@ class SponsorFeeTransactionGrpcSuite extends GrpcBaseTransactionSuite {
 
       val height = nodes.head.waitForHeightArise()
       val reward = (height - minerBalanceHeight) * 600000000L
-      sender.wavesBalance(ByteString.copyFrom(Base58.decode(miner.address))).available shouldBe
+      sender.wavesBalance(ByteString.copyFrom(Base16.decode(miner.address))).available shouldBe
         minerWavesBalance.available + reward + sponsorReducedFee + issueFee + minFee + FeeValidation.FeeUnit * smallFee / minSponsorFee
     }
   }
@@ -91,7 +91,7 @@ class SponsorFeeTransactionGrpcSuite extends GrpcBaseTransactionSuite {
         .id()
         .toString
 
-      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base58.decode(sponsoredAssetId)), token))
+      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base16.decode(sponsoredAssetId)), token))
       assertGrpcError(
         sender.broadcastSponsorFee(alice, sponsoredAssetMinFee, fee = sponsorReducedFee, version = v),
         "Asset was issued by other address",
@@ -111,14 +111,14 @@ class SponsorFeeTransactionGrpcSuite extends GrpcBaseTransactionSuite {
         .id()
         .toString
 
-      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base58.decode(sponsoredAssetId)), token))
+      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base16.decode(sponsoredAssetId)), token))
       sender.broadcastSponsorFee(alice, sponsoredAssetMinFee, fee = sponsorReducedFee, version = v, waitForTx = true)
 
       /** Cancel sponsorship by sponsor None amount of sponsored asset. As it is optional to pass all parameters to PB objects (Amount(assetId:
         * ByteString, amount: Long) in this case), we can simply pass unspecific (None) amount by creating Amount(assetId: ByteString).
         * SponsorFeeTransaction with that kind of Amount will cancel sponsorship.
         */
-      val sponsoredAssetNullMinFee = Some(Amount(ByteString.copyFrom(Base58.decode(sponsoredAssetId))))
+      val sponsoredAssetNullMinFee = Some(Amount(ByteString.copyFrom(Base16.decode(sponsoredAssetId))))
       sender.broadcastSponsorFee(alice, sponsoredAssetNullMinFee, fee = sponsorReducedFee, version = v, waitForTx = true)
 
       assertGrpcError(
@@ -157,10 +157,10 @@ class SponsorFeeTransactionGrpcSuite extends GrpcBaseTransactionSuite {
         waitForTx = true
       )
 
-      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base58.decode(sponsoredAssetId)), token))
+      val sponsoredAssetMinFee = Some(Amount.of(ByteString.copyFrom(Base16.decode(sponsoredAssetId)), token))
       sender.broadcastSponsorFee(sponsor, sponsoredAssetMinFee, fee = sponsorReducedFee, version = v, waitForTx = true)
 
-      val sponsoredAssetUpdatedMinFee = Some(Amount(ByteString.copyFrom(Base58.decode(sponsoredAssetId)), largeFee))
+      val sponsoredAssetUpdatedMinFee = Some(Amount(ByteString.copyFrom(Base16.decode(sponsoredAssetId)), largeFee))
       sender.broadcastSponsorFee(sponsor, sponsoredAssetUpdatedMinFee, fee = sponsorReducedFee, version = v, waitForTx = true)
 
       assertGrpcError(

@@ -125,7 +125,7 @@ class GrpcScriptAssetActionLimitsSuite extends ScriptAssetActionLimitsSuite with
           Some(
             FUNCTION_CALL(
               FunctionHeader.User(s"process${actionsLimit + 1}actions"),
-              List(CONST_BYTESTR(ByteStr.decodeBase58(assetId).get).explicitGet())
+              List(CONST_BYTESTR(ByteStr.decodeBase16(assetId).get).explicitGet())
             )
           ),
           fee = smartMinFee + issueFee * (actionsLimit + 1),

@@ -59,9 +59,9 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
           |{-# STDLIB_VERSION 3 #-}
           |{-# CONTENT_TYPE DAPP #-}
           |
-          |let dAppAsset = base58'$dAppAsset'
-          |let callerAsset = base58'$callerAsset'
-          |let smartAsset = base58'$smartAsset'
+          |let dAppAsset = base16'$dAppAsset'
+          |let callerAsset = base16'$callerAsset'
+          |let smartAsset = base16'$smartAsset'
           |
           |@Callable(i)
           |func payCallerGetDAppAsset() = {
@@ -78,7 +78,7 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
           |      ScriptTransfer(i.caller, 1, dAppAsset),
           |      ScriptTransfer(i.caller, 1, dAppAsset)
           |    ])
-          |  else throw("need payment in callerAsset " + toBase58String(callerAsset))
+          |  else throw("need payment in callerAsset " + toBase16String(callerAsset))
           |}
           |
           |@Callable(i)
@@ -96,7 +96,7 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
           |      ScriptTransfer(i.caller, 1, smartAsset),
           |      ScriptTransfer(i.caller, 1, smartAsset)
           |    ])
-          |  else throw("need payment in smartAsset " + toBase58String(smartAsset))
+          |  else throw("need payment in smartAsset " + toBase16String(smartAsset))
           |}
         """.stripMargin,
         estimator
@@ -113,8 +113,8 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
           |
           |@Verifier(tx)
           |func verify() = {
-          |  let callerAsset = base58'$callerAsset'
-          |  let smartAsset = base58'$smartAsset'
+          |  let callerAsset = base16'$callerAsset'
+          |  let smartAsset = base16'$smartAsset'
           |  match (tx) {
           |    case tx:InvokeScriptTransaction =>
           |      let pay = extract(tx.payment)
@@ -153,7 +153,7 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
         caller,
         dAppAddress,
         Some("payCallerGetDAppAsset"),
-        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase58(callerAsset).get))),
+        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase16(callerAsset).get))),
         fee = feeAmount - 1,
         feeAssetId = Some(dAppAsset)
       ),
@@ -166,7 +166,7 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
           caller,
           dAppAddress,
           Some("spendMaxFee"),
-          payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase58(smartAsset).get))),
+          payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase16(smartAsset).get))),
           fee = smartFeeAmount - 1,
           feeAssetId = Some(dAppAsset)
         ),
@@ -178,7 +178,7 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
         caller,
         dAppAddress,
         Some("payCallerGetDAppAsset"),
-        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase58(callerAsset).get))),
+        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase16(callerAsset).get))),
         fee = feeAmount,
         feeAssetId = Some(dAppAsset),
         waitForTx = true
@@ -189,7 +189,7 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
         caller,
         dAppAddress,
         Some("spendMaxFee"),
-        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase58(smartAsset).get))),
+        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase16(smartAsset).get))),
         fee = smartFeeAmount,
         feeAssetId = Some(dAppAsset),
         waitForTx = true
@@ -216,7 +216,7 @@ class InvokeScriptWithSponsorshipSuite extends BaseTransactionSuite with CancelA
         dApp,
         dAppAddress,
         Some("payCallerGetDAppAsset"),
-        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase58(callerAsset).get))),
+        payment = Seq(Payment(paymentAmount, IssuedAsset(ByteStr.decodeBase16(callerAsset).get))),
         fee = feeAmount,
         feeAssetId = Some(dAppAsset),
         waitForTx = true

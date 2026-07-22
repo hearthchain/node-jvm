@@ -5,7 +5,7 @@ import com.wavesplatform.account.{AddressScheme, PublicKey}
 import com.wavesplatform.api.http.ApiError.WrongJson
 import com.wavesplatform.api.http.requests.TransferRequest
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
 import com.wavesplatform.it.api.SyncHttpApi.*
@@ -184,7 +184,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
           "recipient"  -> secondAddress,
           "assetId"    -> issueId,
           "amount"     -> 1.waves,
-          "attachment" -> Base58.encode("asset transfer".getBytes("UTF-8"))
+          "attachment" -> Base16.encode("asset transfer".getBytes("UTF-8"))
         ),
         usesProofs = isProof,
         version = v
@@ -200,7 +200,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
           "sender"     -> sender.address,
           "recipient"  -> secondAddress,
           "amount"     -> transferAmount,
-          "attachment" -> Base58.encode("falafel".getBytes("UTF-8"))
+          "attachment" -> Base16.encode("falafel".getBytes("UTF-8"))
         ),
         usesProofs = Option(v).nonEmpty,
         version = v
@@ -215,7 +215,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
         "version"    -> 1,
         "sender"     -> sender.address,
         "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, 1.waves), Transfer(thirdAddress, 2.waves))),
-        "attachment" -> Base58.encode("masspay".getBytes("UTF-8"))
+        "attachment" -> Base16.encode("masspay".getBytes("UTF-8"))
       ),
       usesProofs = true,
       version = 1
@@ -374,11 +374,11 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     assert(signedRequestResponse.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
     val signedRequestJson = Json.parse(signedRequestResponse.getResponseBody)
     val signedRequest     = signedRequestJson.as[TransferRequest]
-    assert(PublicKey.fromBase58String(signedRequest.senderPublicKey).explicitGet() == firstAddress.publicKey)
+    assert(PublicKey.fromBase16String(signedRequest.senderPublicKey).explicitGet() == firstAddress.publicKey)
     assert(signedRequest.recipient == secondAddress)
     assert(signedRequest.fee == minFee)
     assert(signedRequest.amount == transferAmount)
-    val signature = Base58.tryDecodeWithLimit((signedRequestJson \ "signature").as[String]).get
+    val signature = Base16.tryDecodeWithLimit((signedRequestJson \ "signature").as[String]).get
     val tx        = signedRequest.toTx.explicitGet()
     val keyPair   = sender.keyPair
     assert(crypto.verify(ByteStr(signature), tx.bodyBytes(), keyPair.publicKey))

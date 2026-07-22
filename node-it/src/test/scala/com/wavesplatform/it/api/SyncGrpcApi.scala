@@ -4,7 +4,7 @@ import com.google.protobuf.ByteString
 import com.wavesplatform.account.{AddressScheme, KeyPair}
 import com.wavesplatform.api.grpc.BalanceResponse.WavesBalances
 import com.wavesplatform.api.grpc.{TransactionStatus as PBTransactionStatus, *}
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.Node
 import com.wavesplatform.it.api.SyncHttpApi.RequestAwaitTime
@@ -44,7 +44,7 @@ object SyncGrpcApi extends Assertions {
   }
 
   implicit def stringAsBytes(str: String): ByteString = {
-    ByteString.copyFrom(Base58.decode(str))
+    ByteString.copyFrom(Base16.decode(str))
   }
 
   implicit def keyPairAsBytes(kp: KeyPair): ByteString = {
@@ -176,9 +176,9 @@ object SyncGrpcApi extends Assertions {
     }
 
     def assetsBalance(address: ByteString, assetIds: Seq[String] = Nil): Map[String, Long] = {
-      val pbAssetIds = assetIds.map(a => ByteString.copyFrom(Base58.decode(a)))
+      val pbAssetIds = assetIds.map(a => ByteString.copyFrom(Base16.decode(a)))
       val balances   = accounts.getBalances(BalancesRequest.of(address, pbAssetIds))
-      balances.map(b => Base58.encode(b.getAsset.assetId.toByteArray) -> b.getAsset.amount).toMap
+      balances.map(b => Base16.encode(b.getAsset.assetId.toByteArray) -> b.getAsset.amount).toMap
     }
 
     def nftList(address: ByteString, limit: Int, after: ByteString = ByteString.EMPTY): Seq[NFTResponse] = {
@@ -203,7 +203,7 @@ object SyncGrpcApi extends Assertions {
     }
 
     def getTransactionSeq(ids: Seq[String], sender: ByteString = ByteString.EMPTY, recipient: Option[Recipient] = None): List[TransactionResponse] = {
-      transactions.getTransactions(TransactionsRequest(sender, recipient, ids.map(id => ByteString.copyFrom(Base58.decode(id))))).toList
+      transactions.getTransactions(TransactionsRequest(sender, recipient, ids.map(id => ByteString.copyFrom(Base16.decode(id))))).toList
     }
 
     def waitForTransaction(txId: String): PBSignedTransaction =
@@ -212,7 +212,7 @@ object SyncGrpcApi extends Assertions {
     def waitForTxAndHeightArise(txId: String): Unit = {
       @tailrec
       def recWait(): Unit = {
-        val status        = getStatuses(TransactionsByIdRequest.of(Seq(ByteString.copyFrom(Base58.decode(txId))))).head
+        val status        = getStatuses(TransactionsByIdRequest.of(Seq(ByteString.copyFrom(Base16.decode(txId))))).head
         val currentHeight = this.height
 
         if (status.status.isConfirmed && currentHeight > status.height)
@@ -396,14 +396,14 @@ object SyncGrpcApi extends Assertions {
     }
 
     def blockSeqByAddress(address: String, fromHeight: Int, toHeight: Int): Seq[VanillaBlock] = {
-      val filter = BlockRangeRequest.Filter.GeneratorAddress(ByteString.copyFrom(Base58.decode(address)))
+      val filter = BlockRangeRequest.Filter.GeneratorAddress(ByteString.copyFrom(Base16.decode(address)))
       blockSeq(fromHeight, toHeight, filter)
     }
 
     def getStatuses(request: TransactionsByIdRequest): Seq[PBTransactionStatus] = sync(async(n).getStatuses(request))
 
     def getStatus(txId: String): PBTransactionStatus = {
-      val request = TransactionsByIdRequest.of(Seq(ByteString.copyFrom(Base58.decode(txId))))
+      val request = TransactionsByIdRequest.of(Seq(ByteString.copyFrom(Base16.decode(txId))))
       sync(async(n).getStatuses(request)).head
     }
   }

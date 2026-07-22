@@ -2,7 +2,7 @@ package com.wavesplatform.it.sync
 
 import com.typesafe.config.Config
 import com.wavesplatform.account.KeyPair
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.BaseFunSuite
 import com.wavesplatform.it.NodeConfigs.*
@@ -243,7 +243,7 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
         "fee"             -> 100000,
         "timestamp"       -> System.currentTimeMillis(),
         "version"         -> 1,
-        "senderPublicKey" -> Base58.encode(new Array[Byte](32))
+        "senderPublicKey" -> Base16.encode(new Array[Byte](32))
       )
     sender.calculateFee(tx, amountsAsStrings = true).feeAmount shouldBe minFee
   }

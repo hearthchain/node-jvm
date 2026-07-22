@@ -17,9 +17,9 @@ package object smartcontract {
        |match tx {
        |  case _: ExchangeTransaction =>
        |    # Crypto context
-       |    let bks = blake2b256(base58'') != base58'' && keccak256(base58'') != base58'' && sha256(base58'') != base58''
-       |    let sig = sigVerify(base58'333', base58'123', base58'567') != true
-       |    let str58 = fromBase58String(toBase58String(tx.id)) == tx.id
+       |    let bks = blake2b256(base16'') != base16'' && keccak256(base16'') != base16'' && sha256(base16'') != base16''
+       |    let sig = sigVerify(base16'333', base16'123', base16'567') != true
+       |    let str58 = fromBase16String(toBase16String(tx.id)) == tx.id
        |    let str64 = fromBase64String(toBase64String(tx.id)) == tx.id
        |    bks && sig && str58 && str64
        |  ${if (accountScript) "case _: SetScriptTransaction => true" else ""}
@@ -36,15 +36,15 @@ package object smartcontract {
        |    let sumString = "ha" + "-" +"ha" == "ha-ha"
        |    let body = ext.bodyBytes
        |    let sumByteVector = body + ext.bodyBytes == body + body
-       |    let eqUnion = ext.sender != Address(base58'')
+       |    let eqUnion = ext.sender != Address(base16'')
        |    let basic = longAll && sumString && sumByteVector && eqUnion
        |    let nePrim = 1000 != 999 && "ha" +"ha" != "ha-ha" && ext.bodyBytes != base64'hahaha'
-       |    let dtx = extract(transactionById(base58'${dtx.id().toString}'))
+       |    let dtx = extract(transactionById(base16'${dtx.id().toString}'))
        |    let neDataEntryAndGetElement = match dtx {
        |       case ddtx : DataTransaction => ddtx.data[0] != DataEntry("ha", true)
        |       case _ => false
        |    }
-       |    let neOptionAndExtractHeight = extract(transactionHeightById(base58'${dtx.id().toString}')) > 0
+       |    let neOptionAndExtractHeight = extract(transactionHeightById(base16'${dtx.id().toString}')) > 0
        |    let ne = nePrim && neDataEntryAndGetElement && neOptionAndExtractHeight
        |    let gteLong = 1000 > 999 && 1000 >= 999
        |    let getListSize = match dtx {
@@ -53,8 +53,8 @@ package object smartcontract {
        |    }
        |    let unary = -1 == -1 && false == !true
        |    let frAction = fraction(12, 3, 4) == 9
-       |    let bytesOps = size(ext.bodyBytes) != 0 && take(ext.bodyBytes, 1) != base58'ha' && drop(ext.bodyBytes, 1) != base58'ha' &&
-       |    takeRight(ext.bodyBytes, 1) != base58'ha' && dropRight(ext.bodyBytes, 1) != base58'ha'
+       |    let bytesOps = size(ext.bodyBytes) != 0 && take(ext.bodyBytes, 1) != base16'ha' && drop(ext.bodyBytes, 1) != base16'ha' &&
+       |    takeRight(ext.bodyBytes, 1) != base16'ha' && dropRight(ext.bodyBytes, 1) != base16'ha'
        |    let strOps = size("haha") != 0 && take("haha", 1) != "" && drop("haha", 0) != "" && takeRight("haha", 1) != "" &&
        |    dropRight("haha", 0) != ""
        |    let pure = basic && ne && gteLong && getListSize && unary && frAction #&& bytesOps && strOps
@@ -73,7 +73,7 @@ package object smartcontract {
        | match tx {
        |  case ext : ExchangeTransaction =>
        |    # Waves context
-       |    let dtx = extract(transactionById(base58'${dtx.id().toString}'))
+       |    let dtx = extract(transactionById(base16'${dtx.id().toString}'))
        |    let entries = match dtx {
        |       case d: DataTransaction =>
        |         let int = extract(getInteger(d.data, "${dtx.data(0).key}"))
@@ -90,10 +90,10 @@ package object smartcontract {
        |         let dataByIndex = toBytes(d0) == base64'abcdef' || toBytes(d1) == base64'ghijkl' ||
        |                       isDefined(d2) || toBytes(extract(d3)) == base64'mnopqr'
        |
-       |         let add = Address(base58'${dtx.sender.toAddress}')
+       |         let add = Address(base16'${dtx.sender.toAddress}')
        |         let long = extract(getInteger(add,"${dtx.data(0).key}")) == ${dtx.data(0).value}
        |         let bool1 = extract(getBoolean(add,"${dtx.data(1).key}")) == ${dtx.data(1).value}
-       |         let bin = extract(getBinary(add,"${dtx.data(2).key}")) ==  base58'${dtx.data(2).value}'
+       |         let bin = extract(getBinary(add,"${dtx.data(2).key}")) ==  base16'${dtx.data(2).value}'
        |         let str1 = extract(getString(add,"${dtx.data(3).key}")) == "${dtx.data(3).value}"
        |
        |         long && bool1 && bin && str1 && dataByKey && dataByIndex
@@ -101,9 +101,9 @@ package object smartcontract {
        |     }
        |
        |     let aFromPK = addressFromPublicKey(ext.senderPublicKey) == ext.sender
-       |     let aFromStr = addressFromString("${dtx.sender.toAddress}") == Address(base58'${dtx.sender.toAddress}')
+       |     let aFromStr = addressFromString("${dtx.sender.toAddress}") == Address(base16'${dtx.sender.toAddress}')
        |
-       |     #case t1: TransferTransaction => addressFromRecipient(t1.recipient) == Address(base58'')
+       |     #case t1: TransferTransaction => addressFromRecipient(t1.recipient) == Address(base16'')
        |
        |     let balances = assetBalance(ext.sender, unit) > 0 && wavesBalance(ext.sender) != 0
        |

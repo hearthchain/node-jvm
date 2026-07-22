@@ -2,7 +2,7 @@ package com.wavesplatform.http
 
 import com.wavesplatform.api.http.ApiError.TooBigArrayAllocation
 import com.wavesplatform.api.http.utils.UtilsApiRoute
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.crypto
 import com.wavesplatform.utils.{EmptyBlockchain, Schedulers, Time}
 import io.netty.util.HashedWheelTimer
@@ -40,7 +40,7 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
 
   routePath("/seed") in {
     Get(routePath("/seed")) ~> route ~> check {
-      val seed = Base58.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
+      val seed = Base16.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
       seed.get.length shouldEqual UtilsApiRoute.DefaultSeedSize
     }
   }
@@ -50,7 +50,7 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
       Get(routePath(s"/seed/$l")) ~> route should produce(TooBigArrayAllocation)
     } else {
       Get(routePath(s"/seed/$l")) ~> route ~> check {
-        val seed = Base58.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
+        val seed = Base16.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
         seed.get.length shouldEqual l
       }
     }
@@ -68,7 +68,7 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
         Post(uri, s) ~> route ~> check {
           val r = responseAs[JsObject]
           (r \ "message").as[String] shouldEqual s
-          (r \ "hash").as[String] shouldEqual Base58.encode(f(s))
+          (r \ "hash").as[String] shouldEqual Base16.encode(f(s))
         }
       }
     }

@@ -40,7 +40,7 @@ class AcceptFailedScriptActivationSuite extends BaseTransactionSuite with NTPTim
          |{-# STDLIB_VERSION 3 #-}
          |{-# CONTENT_TYPE DAPP #-}
          |
-         |let asset = base58'$asset'
+         |let asset = base16'$asset'
          |
          |@Callable(i)
          |func transfer() = {
@@ -49,7 +49,7 @@ class AcceptFailedScriptActivationSuite extends BaseTransactionSuite with NTPTim
          |
          |@Callable(i)
          |func error() = {
-         |  let check = ${"sigVerify(base58'', base58'', base58'') ||" * 16} true
+         |  let check = ${"sigVerify(base16'', base16'', base16'') ||" * 16} true
          |  if (check)
          |    then throw("Error in DApp")
          |    else throw("Error in DApp")
@@ -222,7 +222,7 @@ class AcceptFailedScriptActivationSuite extends BaseTransactionSuite with NTPTim
             callerKP,
             dApp,
             Some("write"),
-            payment = Seq(InvokeScriptTransaction.Payment(1L, IssuedAsset(ByteStr.decodeBase58(asset).get))),
+            payment = Seq(InvokeScriptTransaction.Payment(1L, IssuedAsset(ByteStr.decodeBase16(asset).get))),
             fee = minInvokeFee
           )
           ._1
@@ -249,7 +249,7 @@ class AcceptFailedScriptActivationSuite extends BaseTransactionSuite with NTPTim
             callerKP,
             dApp,
             Some("write"),
-            payment = Seq(InvokeScriptTransaction.Payment(callerAssetBalance + 1, IssuedAsset(ByteStr.decodeBase58(asset).get))),
+            payment = Seq(InvokeScriptTransaction.Payment(callerAssetBalance + 1, IssuedAsset(ByteStr.decodeBase16(asset).get))),
             fee = minInvokeFee
           )
           ._1
@@ -373,7 +373,7 @@ class AcceptFailedScriptActivationSuite extends BaseTransactionSuite with NTPTim
           ts,
           ts + 2.days.toMillis,
           smartMatcherFee,
-          matcherFeeAssetId = IssuedAsset(ByteStr.decodeBase58(feeAsset).get)
+          matcherFeeAssetId = IssuedAsset(ByteStr.decodeBase16(feeAsset).get)
         )
         .explicitGet()
       val sell =
@@ -388,7 +388,7 @@ class AcceptFailedScriptActivationSuite extends BaseTransactionSuite with NTPTim
             ts,
             ts + 2.days.toMillis,
             smartMatcherFee,
-            matcherFeeAssetId = IssuedAsset(ByteStr.decodeBase58(feeAsset).get)
+            matcherFeeAssetId = IssuedAsset(ByteStr.decodeBase16(feeAsset).get)
           )
           .explicitGet()
       (buy, sell)
@@ -469,7 +469,7 @@ object AcceptFailedScriptActivationSuite {
          |match tx {
          |  case _: SetAssetScriptTransaction => true
          |  case _ =>
-         |   let check = ${"sigVerify(base58'', base58'', base58'') ||" * 16} false
+         |   let check = ${"sigVerify(base16'', base16'', base16'') ||" * 16} false
          |   if (check) then false else $result
          |}
          |""".stripMargin

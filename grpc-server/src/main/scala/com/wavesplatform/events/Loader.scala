@@ -3,7 +3,7 @@ package com.wavesplatform.events
 import com.wavesplatform.api.common.CommonBlocksApi
 import com.wavesplatform.api.grpc.*
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.database.{DBExt, DBResource}
 import com.wavesplatform.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
 import com.wavesplatform.events.protobuf.BlockchainUpdated.Append.Body
@@ -30,7 +30,7 @@ class Loader(db: RocksDB, blocksApi: CommonBlocksApi, target: Option[(Int, ByteS
     for ((h, id) <- target if h == fromHeight.toInt + buffer.size - 1; u <- buffer.lastOption) {
       require(
         u.id.toByteArray.sameElements(id.arr),
-        s"Stored update ${Base58.encode(u.id.toByteArray)} at ${u.height} does not match target $id at $h"
+        s"Stored update ${Base16.encode(u.id.toByteArray)} at ${u.height} does not match target $id at $h"
       )
     }
 

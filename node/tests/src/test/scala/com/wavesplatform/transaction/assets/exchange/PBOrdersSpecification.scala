@@ -3,7 +3,7 @@ package com.wavesplatform.transaction.assets.exchange
 import com.google.protobuf.ByteString
 import com.wavesplatform.TestValues
 import com.wavesplatform.account.AddressScheme
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import tech.hearth.protobuf.order.AssetPair as PBAssetPair
 import com.wavesplatform.protobuf.transaction.{PBAmounts, PBOrder, PBOrders}
@@ -73,7 +73,7 @@ class PBOrdersSpecification extends FlatSpec {
     val signed = PBOrders
       .vanilla(
         protoOrder.copy(
-          proofs = Seq(ByteString.copyFrom(Base58.decode("4FbthG8Dq2kmkNykEdjawdXKQkwRFyD1rXQGCiFH8ThL5ZDceqM2USnRzCRiNwpQfXCwhNzS9c5RQ8wuQsSAxRSu")))
+          proofs = Seq(ByteString.copyFrom(Base16.decode("a2a49109c977ba45f29a40d32259c3944f33c348ef6b27e68054d5c8348dfe63e11e1a2dadc057d5aca0612ad132ee01a899e3bd32d240d059bf691fc10c6006")))
         )
       ).explicitGet()
     signed.firstProofIsValidSignatureAfterV6 shouldBe Symbol("right")
@@ -82,7 +82,7 @@ class PBOrdersSpecification extends FlatSpec {
       .vanilla(
         protoOrder.copy(
           version = Order.V4,
-          proofs = Seq(ByteString.copyFrom(Base58.decode("wx7L8EBk9hWmu9oZtFFWjpikJEin7TsXtiSv4K5Nw4g1pD86EEzpuV32hiaqoJECQCa9YuonprmrSqjA1rEKX5Z")))
+          proofs = Seq(ByteString.copyFrom(Base16.decode("2f630dd7728251552b23f5b56e4d6472377cf9368da151539b12b24fffb3abe367dbcad68c144c52c2183c2f619e425da1ee754ebb28be1d661ca3328968c400")))
         )
       ).explicitGet()
 

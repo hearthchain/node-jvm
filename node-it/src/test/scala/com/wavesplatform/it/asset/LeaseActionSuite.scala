@@ -63,15 +63,15 @@ class LeaseActionSuite extends BaseTransactionSuite {
     val invokeId     = sender.invokeScript(invoker, dAppAddress, Some("lease"), Nil, fee = invokeFee, waitForTx = true)._1.id
     val invokeHeight = sender.transactionStatus(invokeId).height.get
 
-    val recipient     = Recipient.Address(ByteStr.decodeBase58(invokerAddress).get)
-    val leaseActionId = Lease.calculateId(Lease(recipient, dAppLeaseAmount, 0), ByteStr.decodeBase58(invokeId).get).toString
+    val recipient     = Recipient.Address(ByteStr.decodeBase16(invokerAddress).get)
+    val leaseActionId = Lease.calculateId(Lease(recipient, dAppLeaseAmount, 0), ByteStr.decodeBase16(invokeId).get).toString
 
     sender.activeLeases(dAppAddress) should contain theSameElementsAs Seq(
       LeaseInfo(leaseTxId, leaseTxId, dAppAddress, invokerAddress, txLeaseAmount, leaseTxHeight),
       LeaseInfo(leaseActionId, invokeId, dAppAddress, invokerAddress, dAppLeaseAmount, invokeHeight)
     )
 
-    val leaseTxIdParam = List(CONST_BYTESTR(ByteStr.decodeBase58(leaseTxId).get).explicitGet())
+    val leaseTxIdParam = List(CONST_BYTESTR(ByteStr.decodeBase16(leaseTxId).get).explicitGet())
     sender.invokeScript(dAppAcc, dAppAddress, Some("leaseCancel"), leaseTxIdParam, fee = invokeFee, waitForTx = true)
     sender.activeLeases(dAppAddress) shouldBe Seq(
       LeaseInfo(leaseActionId, invokeId, dAppAddress, invokerAddress, dAppLeaseAmount, invokeHeight)

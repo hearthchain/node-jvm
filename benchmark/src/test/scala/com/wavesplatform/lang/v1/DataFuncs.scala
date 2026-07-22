@@ -134,51 +134,51 @@ class DataFuncs {
 
   @Benchmark
   def decode58_16b(st: StrSt16b, bh: Blackhole): Unit =
-    bh.consume(Base58.decode(st.message))
+    bh.consume(Base16.decode(st.message))
 
   @Benchmark
   def decode58_128bb(st: StrSt128b, bh: Blackhole): Unit =
-    bh.consume(Base58.decode(st.message))
+    bh.consume(Base16.decode(st.message))
 
   @Benchmark
   def decode58_256Kb(st: StrSt256b, bh: Blackhole): Unit =
-    bh.consume(Base58.decode(st.message))
+    bh.consume(Base16.decode(st.message))
 
   @Benchmark
   def decode58_512b(st: StrSt512b, bh: Blackhole): Unit =
-    bh.consume(Base58.decode(st.message))
+    bh.consume(Base16.decode(st.message))
 
   @Benchmark
   def decode58_768b(st: StrSt768b, bh: Blackhole): Unit =
-    bh.consume(Base58.decode(st.message))
+    bh.consume(Base16.decode(st.message))
 
   @Benchmark
   def decode58_896b(st: StrSt896b, bh: Blackhole): Unit =
-    bh.consume(Base58.decode(st.message))
+    bh.consume(Base16.decode(st.message))
 
   @Benchmark
   def encode58_16b(st: StrSt16b, bh: Blackhole): Unit =
-    bh.consume(Base58.encode(st.bmessage))
+    bh.consume(Base16.encode(st.bmessage))
 
   @Benchmark
   def encode58_128bb(st: StrSt128b, bh: Blackhole): Unit =
-    bh.consume(Base58.encode(st.bmessage))
+    bh.consume(Base16.encode(st.bmessage))
 
   @Benchmark
   def encode58_256Kb(st: StrSt256b, bh: Blackhole): Unit =
-    bh.consume(Base58.encode(st.bmessage))
+    bh.consume(Base16.encode(st.bmessage))
 
   @Benchmark
   def encode58_512b(st: StrSt512b, bh: Blackhole): Unit =
-    bh.consume(Base58.encode(st.bmessage))
+    bh.consume(Base16.encode(st.bmessage))
 
   @Benchmark
   def encode58_768b(st: StrSt768b, bh: Blackhole): Unit =
-    bh.consume(Base58.encode(st.bmessage))
+    bh.consume(Base16.encode(st.bmessage))
 
   @Benchmark
   def encode58_896b(st: StrSt896b, bh: Blackhole): Unit =
-    bh.consume(Base58.encode(st.bmessage))
+    bh.consume(Base16.encode(st.bmessage))
 
 }
 

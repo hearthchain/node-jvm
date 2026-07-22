@@ -1,6 +1,6 @@
 package com.wavesplatform.common.state
 
-import com.wavesplatform.common.utils.{Base16, Base58, Base64}
+import com.wavesplatform.common.utils.{Base16, Base64}
 
 import scala.util.Try
 
@@ -79,10 +79,6 @@ object ByteStr {
   def fill(size: Int)(b: Int): ByteStr = ByteStr(Array.fill(size)(b.toByte))
 
   def decodeBase16(s: String): Try[ByteStr] = Base16.tryDecodeWithLimit(s).map { bs =>
-    ByteStr(bs)
-  }
-
-  def decodeBase58(s: String): Try[ByteStr] = Base58.tryDecodeWithLimit(s).map { bs =>
     ByteStr(bs)
   }
 

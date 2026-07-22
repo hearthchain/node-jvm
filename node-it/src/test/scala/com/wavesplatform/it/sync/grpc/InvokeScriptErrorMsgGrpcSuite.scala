@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync.grpc
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.common.utils.Base58
+import com.wavesplatform.common.utils.Base16
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncGrpcApi.*
 import com.wavesplatform.it.sync.*
@@ -63,7 +63,7 @@ class InvokeScriptErrorMsgGrpcSuite extends GrpcBaseTransactionSuite {
       .id()
       .toString
 
-    val payments = Seq(Amount.of(ByteString.copyFrom(Base58.decode(asset1)), 10))
+    val payments = Seq(Amount.of(ByteString.copyFrom(Base16.decode(asset1)), 10))
     assertGrpcError(
       sender.broadcastInvokeScript(
         caller,

@@ -332,7 +332,7 @@ class GrpcSponsorFeeActionSuite extends AnyFreeSpec with GrpcBaseTransactionSuit
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', 1000)
+           |    SponsorFee(base16'$assetId', 1000)
            |]
         """.stripMargin,
         dApp
@@ -361,7 +361,7 @@ class GrpcSponsorFeeActionSuite extends AnyFreeSpec with GrpcBaseTransactionSuit
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', -1)
+           |    SponsorFee(base16'$assetId', -1)
            |]
         """.stripMargin,
         dApp
@@ -392,7 +392,7 @@ class GrpcSponsorFeeActionSuite extends AnyFreeSpec with GrpcBaseTransactionSuit
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', 1000)
+           |    SponsorFee(base16'$assetId', 1000)
            |]
         """.stripMargin
       )
@@ -424,7 +424,7 @@ class GrpcSponsorFeeActionSuite extends AnyFreeSpec with GrpcBaseTransactionSuit
            |
            |@Callable(i)
            |func sponsorAsset() = [
-           |    SponsorFee(base58'$assetId', 1000)
+           |    SponsorFee(base16'$assetId', 1000)
            |]
         """.stripMargin,
         dApp

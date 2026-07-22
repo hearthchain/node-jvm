@@ -374,7 +374,7 @@ class RideV4ActivationSuite extends BaseTransactionSuite with CancelAfterFailure
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     val assetId = sender.issue(smartAccV3, quantity = 1000, waitForTx = true).id
-    asset = IssuedAsset(ByteStr.decodeBase58(assetId).get)
+    asset = IssuedAsset(ByteStr.decodeBase16(assetId).get)
     sender.setScript(smartAccV3, Some(dAppV3.compiled), waitForTx = true)
   }
 }
