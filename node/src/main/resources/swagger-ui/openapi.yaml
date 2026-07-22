@@ -3470,7 +3470,7 @@ components:
     Hash:
       type: string
       pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
-      example: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+      example: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
     Signature:
       type: string
     AmountString:
@@ -3525,13 +3525,13 @@ components:
         - $ref: '#/components/schemas/Alias'
     PublicKey:
       type: string
-      example: 2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY
+      example: 18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71
     BlsPublicKey:
       type: string
-      example: 6CagLT3FjEcaNHPYCaG2dcfEfzDj6ynVeZbxbLHkHdfzvbfBmBMkkatTYcBXD9cHMU
+      example: 8dbf77df79479e11e99011f5ebc66b0d160ceddf2fcecfade325f07e96213f0d5d47a9af5a7ce3314f532e6aa03a33db
     BlsSignature:
       type: string
-      example: oJUBPLXnqejpwkkifzBbyQp63mPwypYq9GV7eAYqQGAvsE2LxU6csrrwLWgK1HdW28Ygku7vfkcMW1TCDCFymVXoqi7SpCwWGp3P6gegHusSPBsuVQQiQ5BWTYpUpSJjiBL
+      example: 866931dd65be36cdea5240c2c4fe7dd75956c3e060845b83661bdb2d62b7a09e896e0bb3900172f2d5c018cb426d94d6001c75cc1d868994d5a78db41c60d2c4fe40dd19ef2d8b684111ad6586e33817dec91fc492d2687c3c943d08dc16c89b
     GeneratorIndex:
       type: integer
       format: int32
@@ -5713,7 +5713,7 @@ components:
                 $ref: '#/components/schemas/RideFunctionCallArg'
         id:
           type: [ string, 'null' ]
-          example: "C8AgSFP8y91XUTpGtEQAQyjsSemxoY61ocGM852DFKF6"
+          example: "a54691252218f4f4ff80dee9757475177d2a8a3f0ae41f252736a69f82af68c9"
         fee:
           type: [ number, 'null' ]
           example: 500000
@@ -5725,7 +5725,7 @@ components:
           example: "3Mds6m8XZf4biC72NRkFx2kyoBdC9UvYRUR"
         senderPublicKey:
           type: [ string, 'null' ]
-          example: "3T9fL3XpeaHYbumohePPUmeuUqhyEeyzifi9vKouV8QoNtAT6kYV1oPAe9e2KCVquPcyXJpr2QwUiQKEUQPGZnc6"
+          example: "7a958cf0437733423c6daf70ffd7f5ef16726d1c63c67b1422f8c18cd1bc1455aa18d6c6344861586d1b448e7d8cf037c6ad2af204b863976c2a8728044d5c37"
         payment:
           type: array
           items:

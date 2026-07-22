@@ -67,7 +67,8 @@ class TransactionsRouteSpec
 
   private val route = seal(transactionsApiRoute.route)
 
-  private val invalidBase16Gen = alphaNumStr.map(_ + "zz")
+  // Appends an invalid hex char, padding to even length so decoding always fails on the char, not the length
+  private val invalidBase16Gen = alphaNumStr.map(s => s + (if (s.length % 2 == 0) "zz" else "z"))
 
   routePath("/calculateFee") - {
     "waves" in {
