@@ -20,7 +20,8 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
 
 ## Conventions
 
-- In-repo skills live in `.claude/skills/`: `scala-conventions`, `engineering-philosophy`, `running-tdd-cycles`, `committing-changes`, `reviewing-changes`, `shell-discipline`. They are the source of truth for code style, TDD, and review; `scala-conventions` is grounded in this repo's actual tooling.
+- In-repo skills live in `.claude/skills/`: `scala-conventions`, `engineering-philosophy`, `running-tdd-cycles`, `committing-changes`, `reviewing-changes`. They are the source of truth for code style, TDD, and review; `scala-conventions` is grounded in this repo's actual tooling.
+- In-repo review subagents live in `.claude/agents/` (code-reviewer, security-auditor, architect-review, acceptance-auditor). Each runs one pass of `reviewing-changes` in a clean context for an independent, reproducible verdict; `/review` launches all four in parallel and aggregates.
 - Comments are short and explain why, not what.
 - Every `.md` file carries YAML frontmatter with `purpose:` (SKILL.md files use skill frontmatter, `name:` + `description:`, instead); paragraphs are single unwrapped lines.
 - No em-dash (U+2014) in any file.
@@ -29,7 +30,6 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
 ## PR workflow
 
 - Default branch is `hearth-chain`. Never push to it; feature branch + PR, human merges.
-- All commits must be authored and committed by `swell-a2a <swell_ai@pm.me>`; the repo-local `git config` sets this and the author-guard hook enforces it. After a fresh clone: `git config user.name swell-a2a && git config user.email swell_ai@pm.me && cp .githooks/pre-commit .git/hooks/pre-commit`.
-- Before pushing: `sbt compilePR` locally; fix formatting with `sbt scalafmtAll`, never by hand-matching the checker.
+- Before pushing: `sbt compilePR` locally; fix formatting with `sbt scalafmtAll`, never by hand-matching the checker. Then run `/review` and fix Critical/Major findings in the same branch.
 - After pushing: watch `gh pr checks` until green; a red check is yours to fix or explicitly hand over.
 - On a mistake repeated twice, encode the rule (lint config, test, CI, or this file); never just fix the instance.
