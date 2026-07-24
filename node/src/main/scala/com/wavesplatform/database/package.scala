@@ -238,6 +238,10 @@ package object database {
   def writeBlockMeta(data: pb.BlockMeta): Array[Byte] = data.toByteArray
 
   def readBlockMeta(bs: Array[Byte]): pb.BlockMeta = pb.BlockMeta.parseFrom(bs)
+  
+  def writeCarryFee(data: pb.CarryFee): Array[Byte] = data.toByteArray
+  
+  def readCarryFee(bs: Array[Byte]): pb.CarryFee = pb.CarryFee.parseFrom(bs)
 
   def readTransactionHNSeqAndType(bs: Array[Byte]): (Height, Seq[(Byte, TxNum, Int)]) = {
     val ndi          = newDataInput(bs)

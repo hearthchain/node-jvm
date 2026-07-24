@@ -16,10 +16,7 @@ import scala.concurrent.duration.DurationInt
 class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLogging {
   import com.wavesplatform.it.NodeConfigs.*
   override val nodeConfigs: Seq[Config] = Seq(
-    BiggestMiner.quorum(0).preactivatedFeatures(
-      BlockchainFeatures.FairPoS,
-      BlockchainFeatures.DeterministicFinality
-    )
+    BiggestMiner.quorum(0)
   )
 
   private def node            = dockerNodes().last

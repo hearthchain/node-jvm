@@ -12,8 +12,7 @@ object ExchangeTxSerializer {
       "amount"         -> amount.value,
       "price"          -> price.value,
       "buyMatcherFee"  -> buyMatcherFee,
-      "sellMatcherFee" -> sellMatcherFee,
-      "version"        -> version
+      "sellMatcherFee" -> sellMatcherFee
     )
   }
 

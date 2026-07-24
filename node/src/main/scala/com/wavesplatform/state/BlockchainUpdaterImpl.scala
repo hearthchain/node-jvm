@@ -94,7 +94,7 @@ class BlockchainUpdaterImpl(
     readLock(ngState.map { ng =>
       val (_, _, totalFee) = ng.bestLiquidSnapshotAndFees
       val b                = ng.bestLiquidBlock
-      val vrf              = if (b.header.version >= Block.ProtoBlockVersion) hitSource(height) else None
+      val vrf              = hitSource(height)
       BlockMeta.fromBlock(b, height, totalFee, ng.reward, vrf)
     })
 
@@ -152,43 +152,8 @@ class BlockchainUpdaterImpl(
     }
   }
 
-  def computeNextReward: Option[Long] = {
-    val settings   = this.settings.rewardsSettings
-    val nextHeight = Height(this.height + 1)
-
-    if (height == 0 && rocksdb.featureActivationHeight(BlockchainFeatures.ConsensusImprovements).exists(_ <= Height(1)))
-      None
-    else
-      rocksdb
-        .featureActivationHeight(BlockchainFeatures.BlockReward)
-        .filter(_ <= nextHeight)
-        .flatMap { activatedAt =>
-          val mayBeReward     = lastBlockReward
-          val mayBeTimeToVote = nextHeight - activatedAt
-          val modifiedTerm    = settings.termAfterCappedRewardFeature // CappedReward is active
-
-          mayBeReward match {
-            case Some(reward) if mayBeTimeToVote > 0 && mayBeTimeToVote % modifiedTerm == 0 =>
-              Some((blockRewardVotes(this.height).filter(_ >= 0), reward))
-            case None if mayBeTimeToVote >= 0 =>
-              Some((Seq(), settings.initial))
-            case _ => None
-          }
-        }
-        .flatMap { case (votes, currentReward) =>
-          val lt        = votes.count(_ < currentReward)
-          val gt        = votes.count(_ > currentReward)
-          val threshold = settings.votingInterval / 2 + 1
-
-          if (lt >= threshold)
-            Some(math.max(currentReward - settings.minIncrement, 0))
-          else if (gt >= threshold)
-            Some(currentReward + settings.minIncrement)
-          else
-            Some(currentReward)
-        }
-        .orElse(lastBlockReward)
-  }
+  def computeNextReward: Option[Long] =
+    Option.when(height > 0)(settings.rewardsSettings.initial)
 
   /** Referenced blockchain for mining or appending new block that references the latest block in blockchain or a microblock
     * @return
@@ -230,9 +195,7 @@ class BlockchainUpdaterImpl(
       val notImplementedFeatures: Set[Short] = rocksdb.activatedFeaturesAt(height).diff(BlockchainFeatures.implemented)
 
       Either
-        .cond(
-          !wavesSettings.featuresSettings.autoShutdownOnUnsupportedFeature || notImplementedFeatures.isEmpty,
-          (),
+        .raiseWhen(wavesSettings.featuresSettings.autoShutdownOnUnsupportedFeature && notImplementedFeatures.nonEmpty)(
           GenericError(s"UNIMPLEMENTED ${displayFeatures(notImplementedFeatures)} ACTIVATED ON BLOCKCHAIN, UPDATE THE NODE IMMEDIATELY")
         )
         .flatMap[ValidationError, BlockApplyResult](_ =>
@@ -636,29 +599,21 @@ class BlockchainUpdaterImpl(
     }
   }
 
-  override def blockRewardVotes(height: Int): Seq[Long] = readLock {
-    activatedFeatures.get(BlockchainFeatures.BlockReward.id) match {
-      case Some(activatedAt) if activatedAt <= Height(height) =>
-        ngState match {
-          case None => rocksdb.blockRewardVotes(height)
-          case Some(ng) =>
-            val innerVotes = rocksdb.blockRewardVotes(height)
-            val modifyTerm = activatedFeatures.get(BlockchainFeatures.CappedReward.id).exists(_ <= Height(height))
-            if (height == this.height && settings.rewardsSettings.votingWindow(activatedAt.toInt, height, modifyTerm).contains(height))
-              innerVotes :+ ng.base.header.rewardVote
-            else innerVotes
-        }
-      case _ => Seq()
-    }
-  }
-
   override def wavesAmount(height: Int): BigInt = readLock {
     ngState match {
       case Some(ng) if this.height == height =>
-        val parentConflictEndorsements = rocksdb.lastBlockHeader.flatMap(_.header.finalizationVoting).fold(0)(_.conflict.size)
-        rocksdb.wavesAmount(height - 1) +
-          BigInt(ng.reward.getOrElse(0L)) * this.blockRewardBoost(Height(height)) -
-          parentConflictEndorsements * CommitToGenerationTransaction.DepositInWavelets
+        if (height == 1) {
+          ng.bestLiquidSnapshot.balances.collect { case ((_, Asset.Waves), b) => b }.sum + ng.reward.getOrElse(0L)
+        } else {
+          val parentConflictEndorsements = rocksdb.lastBlockHeader.flatMap(_.header.finalizationVoting).fold(0)(_.conflict.size)
+          val prevWavesAmount            = rocksdb.wavesAmount(height - 1)
+          val ngReward                   = BigInt(ng.reward.getOrElse(0L))
+          val rewardBoost                = this.blockRewardBoost(Height(height))
+          println(s"$prevWavesAmount + $ngReward * $rewardBoost = ${prevWavesAmount + ngReward * rewardBoost}")
+          prevWavesAmount +
+            ngReward * rewardBoost -
+            parentConflictEndorsements * CommitToGenerationTransaction.DepositInWavelets
+        }
       case _ =>
         rocksdb.wavesAmount(height)
     }

@@ -36,7 +36,6 @@ class LeaseCancelTransactionSpecification extends PropSpec {
 
     val tx = LeaseCancelTransaction
       .create(
-        1.toByte,
         PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
         ByteStr.decodeBase58("EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY").get,
         1000000,
@@ -68,7 +67,6 @@ class LeaseCancelTransactionSpecification extends PropSpec {
 
     val tx = LeaseCancelTransaction
       .create(
-        2.toByte,
         PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
         ByteStr.decodeBase58("DJWkQxRyJNqWhq9qSQpK2D4tsrct6eZbjSv3AH4PSha6").get,
         1000000,

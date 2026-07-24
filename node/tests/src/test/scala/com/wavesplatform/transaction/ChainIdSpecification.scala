@@ -44,7 +44,6 @@ class ChainIdSpecification extends PropSpec {
     forAll(txParams) { case (_, sender, amount, fee, ts) =>
       validateFromOtherNetwork(
         TransferTransaction(
-          TxVersion.V3,
           PublicKey(sender.publicKey),
           sender.toAddress,
           Waves,
@@ -64,7 +63,7 @@ class ChainIdSpecification extends PropSpec {
     forAll(txParams) { case (_, sender, amount, fee, ts) =>
       validateFromOtherNetwork(
         LeaseTransaction
-          .create(1, otherChainId, PublicKey(sender.publicKey), sender.toAddress, amount.value, fee.value, ts, Proofs.empty)
+          .create(otherChainId, PublicKey(sender.publicKey), sender.toAddress, amount.value, fee.value, ts, Proofs.empty)
           .explicitGet()
           .signWith(sender)
       )
@@ -76,7 +75,6 @@ class ChainIdSpecification extends PropSpec {
       val pair = AssetPair(Waves, IssuedAsset(ByteStr(bytes32gen.sample.get)))
       validateFromOtherNetwork(
         ExchangeTransaction(
-          TxVersion.V3,
           TxHelpers.sell(Order.V3, sender, PublicKey(sender.publicKey), pair, amount.value, amount.value, ts, ts + ts, fee.value).explicitGet(),
           TxHelpers.buy(Order.V3, sender, PublicKey(sender.publicKey), pair, amount.value, amount.value, ts, ts + ts, fee.value).explicitGet(),
           TxExchangeAmount.unsafeFrom(amount.value),
@@ -96,7 +94,6 @@ class ChainIdSpecification extends PropSpec {
     forAll(txParams) { case (_, sender, _, fee, ts) =>
       validateFromOtherNetwork(
         LeaseCancelTransaction(
-          TxVersion.V3,
           PublicKey(sender.publicKey),
           ByteStr(bytes32gen.sample.get),
           fee,
@@ -112,7 +109,7 @@ class ChainIdSpecification extends PropSpec {
     forAll(txParams) { case (_, sender, amount, fee, ts) =>
       validateFromOtherNetwork(
         MassTransferTransaction(
-          TxVersion.V2,
+          
           PublicKey(sender.publicKey),
           Waves,
           Seq(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(amount.value))),
@@ -135,7 +132,6 @@ class ChainIdSpecification extends PropSpec {
           timestamp = ts,
           fee = fee.value,
           chainId = otherChainId,
-          version = version
         )
       )
     }

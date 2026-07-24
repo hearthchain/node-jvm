@@ -2,7 +2,6 @@ package com.wavesplatform.mining
 
 import com.wavesplatform.TestValues
 import com.wavesplatform.block.Block
-import com.wavesplatform.block.Block.ProtoBlockVersion
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
@@ -30,7 +29,7 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
   "Micro block miner" should "generate microblocks in flat interval" in {
     val scheduler = Schedulers.singleThread("test")
     val acc       = TestValues.keyPair
-    val settings  = domainSettingsWithFS(TestFunctionalitySettings.withFeatures(BlockchainFeatures.NG))
+    val settings  = domainSettingsWithFS(TestFunctionalitySettings.Enabled)
     withDomain(settings, Seq(AddrWithBalance(acc.toAddress, TestValues.bigMoney))) { d =>
       val utxPool = new UtxPoolImpl(ntpTime, d.blockchainUpdater, settings.utxSettings, settings.maxTxErrorLogSize, settings.minerSettings.enable)
       val microBlockMiner = new MicroBlockMinerImpl(
@@ -79,7 +78,6 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
 
       val baseBlock = Block
         .buildAndSign(
-          3,
           TestValues.timestamp,
           d.lastBlockId,
           d.lastBlock.header.baseTarget,
@@ -87,7 +85,6 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
           txs = Nil,
           acc,
           featureVotes = Nil,
-          rewardVote = 0,
           stateHash = None,
           challengedHeader = None,
           finalizationVoting = None
@@ -167,7 +164,7 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
         utxEvents.collect { case _: UtxEvent.TxAdded => () }
       )
 
-      val block      = d.appendBlock(ProtoBlockVersion)
+      val block      = d.appendBlock()
       val constraint = OneDimensionalMiningConstraint(5, TxEstimators.one, "limit")
       microBlockMiner
         .generateMicroBlockSequence(defaultSigner, block, constraint, 0)

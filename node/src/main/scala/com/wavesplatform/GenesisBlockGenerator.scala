@@ -53,7 +53,7 @@ object GenesisBlockGenerator {
 
     private val features: Map[Short, Int] =
       preActivatedFeatures
-        .getOrElse(List(BlockchainFeatures.FairPoS.id.toInt, BlockchainFeatures.BlockV5.id.toInt))
+        .getOrElse(List())
         .map(f => f.toShort -> 0)
         .toMap
 
@@ -178,7 +178,6 @@ object GenesisBlockGenerator {
       // The genesis block carries no transactions, so its signature covers the header only
       val genesis = Block
         .buildAndSign(
-          version = 1,
           timestamp = timestamp,
           reference = reference,
           baseTarget,
@@ -186,7 +185,6 @@ object GenesisBlockGenerator {
           txs = Seq.empty,
           signer = genesisSigner,
           featureVotes = Seq.empty,
-          rewardVote = -1L,
           stateHash = None,
           challengedHeader = None,
           finalizationVoting = None
@@ -204,12 +202,7 @@ object GenesisBlockGenerator {
     }
 
     def calcInitialBaseTarget(): Long = {
-      val posCalculator =
-        if (settings.preActivated(BlockchainFeatures.FairPoS))
-          if (settings.preActivated(BlockchainFeatures.BlockV5)) FairPoSCalculator.fromSettings(settings.functionalitySettings)
-          else FairPoSCalculator.V1
-        else NxtPoSCalculator
-
+      val posCalculator  = FairPoSCalculator.fromSettings(settings.functionalitySettings)
       val hitSourceCache = TrieMap[(VrfKey, ByteStr), (BigInt, ByteStr)]()
 
       def getHitWithSource(account: VrfKey, hitSource: ByteStr): (BigInt, ByteStr) =

@@ -43,7 +43,7 @@ object StateSyntheticBenchmark {
       for {
         amount    <- Gen.choose(1L, waves(1))
         recipient <- accountGen
-      } yield TransferTransaction.create(1.toByte, sender.publicKey, recipient.toAddress, Waves, amount, Waves, 100000, ByteStr.empty, ts, Proofs.empty).map(_.signWith(sender.privateKey)).explicitGet()
+      } yield TransferTransaction.create(sender.publicKey, recipient.toAddress, Waves, amount, Waves, 100000, ByteStr.empty, ts, Proofs.empty).map(_.signWith(sender.privateKey)).explicitGet()
   }
 
   @State(Scope.Benchmark)
@@ -58,7 +58,7 @@ object StateSyntheticBenchmark {
         recipient: KeyPair <- accountGen
         amount             <- Gen.choose(1L, waves(1))
       } yield TransferTransaction
-        .create(2.toByte, sender.publicKey, recipient.toAddress, Waves, amount, Waves, 1000000, ByteStr.empty, ts, Proofs.empty)
+        .create(sender.publicKey, recipient.toAddress, Waves, amount, Waves, 1000000, ByteStr.empty, ts, Proofs.empty)
         .map(_.signWith(sender.privateKey))
         .explicitGet()
 
@@ -73,7 +73,7 @@ object StateSyntheticBenchmark {
       val setScriptBlock = nextBlock(
         Seq(
           SetScriptTransaction
-            .create(1.toByte, richAccount.publicKey, Some(ExprScript(typedScript).explicitGet()), 1000000, System.currentTimeMillis(), Proofs.empty)
+            .create(richAccount.publicKey, Some(ExprScript(typedScript).explicitGet()), 1000000, System.currentTimeMillis(), Proofs.empty)
             .map(_.signWith(richAccount.privateKey))
             .explicitGet()
         )

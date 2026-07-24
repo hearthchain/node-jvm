@@ -40,8 +40,8 @@ trait RxScheduler extends BeforeAndAfterAll { suite: Suite =>
   def block(id: Int): Block = TestBlock.create(Seq.empty).block.copy(signature = byteStr(id))
 
   def microBlock(total: Int, prev: Int): MicroBlock = {
-    val tx = TransferTransaction.create(1.toByte, PublicKey(signer.publicKey), signer.toAddress, Waves, 1, Waves, 1, ByteStr.empty, 1, Proofs.empty).map(_.signWith(signer)).explicitGet()
-    MicroBlock.buildAndSign(3.toByte, signer, Seq(tx), byteStr(prev), byteStr(total), None, None).explicitGet()
+    val tx = TransferTransaction.create(PublicKey(signer.publicKey), signer.toAddress, Waves, 1, Waves, 1, ByteStr.empty, 1, Proofs.empty).map(_.signWith(signer)).explicitGet()
+    MicroBlock.buildAndSign(signer, Seq(tx), byteStr(prev), byteStr(total), None, None).explicitGet()
   }
 
   override protected def afterAll(): Unit = {

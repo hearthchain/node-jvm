@@ -29,10 +29,9 @@ object GenerationPeriod {
     from(h, functionalitySettings.generationPeriodLength)
 
   def from(h: Height, generationPeriodLength: Int): GenerationPeriod =
-    GenerationPeriod(Height((h.toInt / generationPeriodLength) * generationPeriodLength + 1), generationPeriodLength)
+    GenerationPeriod(Height(((h.toInt - 1) / generationPeriodLength) * generationPeriodLength + 1), generationPeriodLength)
 
   def enclosedPeriods(
-      activation: Height,
       generationPeriodLength: Int,
       start: Height,
       end: Height

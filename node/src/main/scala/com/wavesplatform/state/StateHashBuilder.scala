@@ -9,7 +9,6 @@ import com.wavesplatform.state.StateHash.Section
 import com.wavesplatform.state.StateHashBuilder.Result
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import org.bouncycastle.crypto.digests.Blake2bDigest
-import tech.hearth.crypto.Hex
 
 import scala.collection.mutable
 

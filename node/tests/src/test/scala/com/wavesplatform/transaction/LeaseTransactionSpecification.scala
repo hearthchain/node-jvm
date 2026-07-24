@@ -12,7 +12,6 @@ class LeaseTransactionSpecification extends PropSpec {
   property("JSON format validation for LeaseTransaction") {
     val tx = LeaseTransaction
       .create(
-        1,
         AddressScheme.current.chainId,
         PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
         Address.fromString("3NCBMxgdghg4tUhEEffSXy11L6hUi6fcBpd").explicitGet(),

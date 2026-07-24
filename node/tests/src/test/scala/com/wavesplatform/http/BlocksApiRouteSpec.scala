@@ -48,8 +48,8 @@ class BlocksApiRouteSpec
   private val route = blocksApiRoute.route
 
   private val testBlock1     = TestBlock.create(Nil).block
-  private val testBlock2     = TestBlock.create(Nil, Block.ProtoBlockVersion).block
-  private val finalizedBlock = TestBlock.create(Nil, Block.ProtoBlockVersion).block
+  private val testBlock2     = TestBlock.create(Nil).block
+  private val finalizedBlock = TestBlock.create(Nil).block
 
   private val testBlock1Json = testBlock1.json() ++ Json.obj("height" -> 1, "totalFee" -> 0L)
   private val testBlock2Json = testBlock2.json() ++ Json.obj(
@@ -291,17 +291,17 @@ class BlocksApiRouteSpec
   routePath("/delay/{blockId}/{number}") in {
     val blocks = Vector(
       Block(
-        BlockHeader(1, 0, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, 0, ByteStr.empty, None, None, None),
+        BlockHeader(0, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, ByteStr.empty, None, None, None),
         ByteStr(Random.nextBytes(64)),
         Nil
       ),
       Block(
-        BlockHeader(1, 1000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, 0, ByteStr.empty, None, None, None),
+        BlockHeader(1000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, ByteStr.empty, None, None, None),
         ByteStr(Random.nextBytes(64)),
         Nil
       ),
       Block(
-        BlockHeader(1, 2000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, 0, ByteStr.empty, None, None, None),
+        BlockHeader(2000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, ByteStr.empty, None, None, None),
         ByteStr(Random.nextBytes(64)),
         Nil
       )
@@ -427,13 +427,12 @@ class BlocksApiRouteSpec
 
     val sender = TxHelpers.signer(1)
     val issuer = TxHelpers.signer(2)
-    withDomain(TransactionStateSnapshot, balances = AddrWithBalance.enoughBalances(sender, issuer)) { d =>
+    withDomain(TransactionStateSnapshot, balances = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender, issuer)) { d =>
       val attachment = ByteStr.fill(32)(1)
       val exchange =
         TxHelpers.exchangeFromOrders(
           TxHelpers.order(OrderType.BUY, Waves, ???, version = Order.V4, attachment = Some(attachment)),
           TxHelpers.order(OrderType.SELL, Waves, ???, version = Order.V4, sender = issuer),
-          version = TxVersion.V3
         )
 
       val exchangeBlock = d.appendBlock(exchange)
@@ -480,10 +479,6 @@ class BlocksApiRouteSpec
             .copy(daoAddress = Some(daoAddress.toString)),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
-      )
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 3,
-        BlockchainFeatures.CappedReward            -> 4
       )
 
     withDomain(settingsWithFeatures) { d =>
@@ -581,14 +576,9 @@ class BlocksApiRouteSpec
     val daoAddress = TxHelpers.address(3002)
 
     val settings = DomainPresets.ConsensusImprovements
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 0,
-        BlockchainFeatures.CappedReward            -> 0,
-        BlockchainFeatures.BoostBlockReward        -> 5
-      )
       .configure(fs => fs.copy(blockRewardBoostPeriod = 10, daoAddress = Some(daoAddress.toString)))
 
-    withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves))) { d =>
+    withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves)), generators = Seq(miner)) { d =>
       val route = new BlocksApiRoute(d.settings.restAPISettings, d.blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler)).route
 
       def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(

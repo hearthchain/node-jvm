@@ -28,14 +28,6 @@ class BlockChallengeSuite extends BaseFunSuite with TransferSending {
     NodeConfigs.newBuilder
       .overrideBase(_.quorum(4))
       .overrideBase(_.minAssetInfoUpdateInterval(0))
-      .overrideBase(
-        _.preactivatedFeatures(
-          BlockchainFeatures.SynchronousCalls.id.toInt      -> Height(0),
-          BlockchainFeatures.RideV6.id.toInt                -> Height(0),
-          BlockchainFeatures.ConsensusImprovements.id.toInt -> Height(0),
-          BlockchainFeatures.LightNode.id.toInt             -> Height(0)
-        )
-      )
       .overrideBase(_.raw("waves.blockchain.custom.functionality.light-node-block-fields-absence-interval = 0"))
       .withDefault(1)
       .withSpecial(1, _.lightNode)
@@ -76,7 +68,6 @@ class BlockChallengeSuite extends BaseFunSuite with TransferSending {
     val challengedHeader = challengingBlock.challengedHeader.get
     challengedHeader.headerSignature shouldBe challengedBlock.signature.toString
     challengedHeader.features shouldBe challengedBlock.header.featureVotes.toSet
-    challengedHeader.desiredReward shouldBe challengedBlock.header.rewardVote
     challengedHeader.stateHash shouldBe challengedBlock.header.stateHash.map(_.toString)
     challengedHeader.generator shouldBe challengedBlock.header.generator.toAddress.toString
     challengedHeader.generatorPublicKey shouldBe challengedBlock.header.generator.toString
@@ -113,7 +104,6 @@ class BlockChallengeSuite extends BaseFunSuite with TransferSending {
 
     Block
       .buildAndSign(
-        version = version,
         timestamp = lastBlock.timestamp + validBlockDelay,
         reference = ByteStr.decodeBase58(lastBlock.id).get,
         baseTarget = baseTarget,
@@ -121,7 +111,6 @@ class BlockChallengeSuite extends BaseFunSuite with TransferSending {
         txs = txs,
         signer = signer,
         featureVotes = Seq(22),
-        rewardVote = 1000000000L,
         stateHash = Some(ByteStr.fill(32)(1)),
         challengedHeader = None,
         finalizationVoting = None

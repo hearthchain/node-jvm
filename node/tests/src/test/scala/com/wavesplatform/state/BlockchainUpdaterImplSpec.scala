@@ -35,7 +35,7 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
       f: (CompleteBlockchainUpdater, SigningKey) => Unit
   ): Unit = {
     val master = TxHelpers.signer(1)
-    withDomain(if (enableNg) NG else SettingsFromDefaultConfig, Seq(AddrWithBalance(master.toAddress))) { d =>
+    withDomain(if (enableNg) NG else SettingsFromDefaultConfig, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, master)) { d =>
       d.triggers = d.triggers :+ triggers
 
       val (account, blocks) = setup(ntpTime, d.lastBlockId)
@@ -49,7 +49,7 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
   }
 
   def createTransfer(master: SigningKey, recipient: Address, ts: Long): TransferTransaction =
-    TxHelpers.transfer(master, recipient, ENOUGH_AMT / 5, fee = 1000000, timestamp = ts, version = TxVersion.V1)
+    TxHelpers.transfer(master, recipient, ENOUGH_AMT / 5, fee = 1000000, timestamp = ts)
 
   def commonPreconditions(ts: Long, genesisBlockId: ByteStr): (SigningKey, List[Block]) = {
     val master    = TxHelpers.signer(1)
@@ -160,7 +160,7 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
       }
 
       "block, then 2 microblocks, then block referencing previous microblock" in
-        withDomain(NG, Seq(AddrWithBalance(TxHelpers.signer(1).toAddress))) { d =>
+        withDomain(NG, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, TxHelpers.signer(1))) { d =>
         def preconditions(ts: Long): Seq[Transaction] = {
           val master    = TxHelpers.signer(1)
           val recipient = TxHelpers.signer(2)
@@ -242,7 +242,11 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
     val currentBlockSender = TxHelpers.signer(1)
     val anotherBlockSender = TxHelpers.signer(2)
 
-    withDomain(ConsensusImprovements, AddrWithBalance.enoughBalances(currentBlockSender, anotherBlockSender)) { d =>
+    withDomain(
+      ConsensusImprovements,
+      AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, currentBlockSender, anotherBlockSender),
+      generators = Seq(TxHelpers.defaultSigner, currentBlockSender, anotherBlockSender)
+    ) { d =>
       val parent = d.appendBlock()
 
       val betterBlock  = d.createBlock(generator = anotherBlockSender, ref = Some(parent.id()))

@@ -3,7 +3,7 @@ package com.wavesplatform.database
 import com.google.common.primitives.{Ints, Longs}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto.bls.BlsPublicKey
-import com.wavesplatform.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
+import com.wavesplatform.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta, CarryFee as PBCarryFee}
 import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.Asset.IssuedAsset
@@ -123,7 +123,7 @@ object Keys {
   def dataAt(addressId: AddressId, key: String)(height: Height): Key[DataNode] =
     Key(DataHistory, hBytes(addressId.toByteArray ++ key.utf8Bytes, height), readDataNode(key), writeDataNode)
 
-  def carryFee(height: Height): Key[Long] = Key(CarryFee, h(height), Option(_).fold(0L)(Longs.fromByteArray), Longs.toByteArray)
+  def carryFee(height: Height): Key[PBCarryFee] = Key(CarryFee, h(height), readCarryFee, writeCarryFee)
 
   val safeRollbackHeight: Key[Height] = heightKey(SafeRollbackHeight)
   val lastCleanupHeight: Key[Height]  = heightKey(LastCleanupHeight)

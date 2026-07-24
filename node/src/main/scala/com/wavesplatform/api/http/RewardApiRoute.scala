@@ -25,20 +25,15 @@ case class RewardApiRoute(blockchain: Blockchain) extends ApiRoute {
 
   def getRewards(height: Height): Either[ValidationError, RewardStatus] =
     for {
-      _ <- Either.cond(height.toInt <= blockchain.height, (), GenericError(s"Invalid height: $height"))
-      activatedAt <- blockchain
-        .featureActivationHeight(BlockchainFeatures.BlockReward)
-        .filter(_ <= height)
-        .toRight(GenericError("Block reward feature is not activated yet"))
+      _      <- Either.cond(height.toInt <= blockchain.height, (), GenericError(s"Invalid height: $height"))
       reward <- blockchain.blockReward(height.toInt).toRight(GenericError(s"No information about rewards at height = $height"))
       amount              = blockchain.wavesAmount(height.toInt)
       rewardsSettings     = blockchain.settings.rewardsSettings
       funcSettings        = blockchain.settings.functionalitySettings
-      nextCheck           = rewardsSettings.nearestTermEnd(activatedAt, height, modifyTerm = true) // CappedReward is active
+      nextCheck           = rewardsSettings.nearestTermEnd(Height(1), height, modifyTerm = true) // CappedReward is active
       votingIntervalStart = nextCheck - rewardsSettings.votingInterval + 1
       votingThreshold     = rewardsSettings.votingInterval / 2 + 1
-      votes               = blockchain.blockRewardVotes(height.toInt).filter(_ >= 0)
-      term                = rewardsSettings.termAfterCappedRewardFeature                           // CappedReward is active
+      term                = rewardsSettings.termAfterCappedRewardFeature                         // CappedReward is active
     } yield RewardStatus(
       height,
       amount,
@@ -49,7 +44,7 @@ case class RewardApiRoute(blockchain: Blockchain) extends ApiRoute {
       votingIntervalStart,
       rewardsSettings.votingInterval,
       votingThreshold,
-      RewardVotes(votes.count(_ > reward), votes.count(_ < reward)),
+      RewardVotes(0, 0),
       funcSettings.daoAddress
     )
 }

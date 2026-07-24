@@ -1,6 +1,7 @@
 package com.wavesplatform.database
 
 import cats.implicits.catsSyntaxNestedBitraverse
+import cats.syntax.either.*
 import com.google.common.cache.CacheBuilder
 import com.google.common.collect.MultimapBuilder
 import com.google.common.hash.{BloomFilter, Funnels}
@@ -16,9 +17,10 @@ import com.wavesplatform.common.utils.Base64
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database
-import com.wavesplatform.database.protobuf.{BlockMetaExt, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
+import com.wavesplatform.database.protobuf.{BlockMetaExt, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta, CarryFee as PBCarryFee}
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.protobuf.block.PBBlocks
+import com.wavesplatform.protobuf.transaction.PBAmounts
 import com.wavesplatform.protobuf.{PBSnapshots, toByteString, toPublicKey}
 import com.wavesplatform.settings.{BlockchainSettings, DBSettings}
 import com.wavesplatform.state.*
@@ -27,6 +29,7 @@ import com.wavesplatform.transaction.CommitToGenerationTransaction.DepositInWave
 import com.wavesplatform.transaction.assets.*
 import com.wavesplatform.transaction.assets.exchange.ExchangeTransaction
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
+import com.wavesplatform.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, *}
 import com.wavesplatform.utils.ScorexLogging
 import io.netty.util.concurrent.DefaultThreadFactory
@@ -190,7 +193,17 @@ class RocksDBWriter(
   override protected def loadTxs(height: Height): Seq[Transaction] =
     loadTransactions(height, rdb).map(_._2)
 
-  override def carryFee(refId: Option[ByteStr]): Long = writableDB.get(Keys.carryFee(Height(height)))
+  override def carryFee(refId: Option[ByteStr]): Long = 0
+//    writableDB
+//      .get(Keys.carryFee(Height(height)))
+//      .carryFee
+//      .map(PBAmounts.toAssetAndAmount)
+//      .foldLeft(Portfolio.empty.asRight[String]) {
+//        case (Right(p), amt) => p.combine(Portfolio.build(amt))
+//        case (left, _)       => left
+//      }
+//      .flatMap(BlockFee(_))
+//      .explicitGet()
 
   protected override def loadBalance(req: (Address, Asset)): CurrentBalance =
     addressId(req._1).fold(CurrentBalance.Unavailable) { addressId =>
@@ -296,14 +309,11 @@ class RocksDBWriter(
   }
 
   override def wavesAmount(height: Int): BigInt =
-    if (this.isFeatureActivated(BlockchainFeatures.BlockReward, height))
-      loadBlockMeta(Height(height)).fold(settings.genesisSettings.initialBalance)(_.totalWavesAmount)
-    else settings.genesisSettings.initialBalance
+    loadBlockMeta(Height(height)).fold(settings.genesisSettings.initialBalance)(_.totalWavesAmount)
 
   override def blockReward(height: Int): Option[Long] =
-    if (this.isFeatureActivated(BlockchainFeatures.ConsensusImprovements, height) && height == 1) None
-    else if (this.isFeatureActivated(BlockchainFeatures.BlockReward, height)) loadBlockMeta(Height(height)).map(_.reward)
-    else None
+    if (height == 1) None
+    else loadBlockMeta(Height(height)).map(_.reward)
 
   private def updateHistory(rw: RW, key: Key[Seq[Height]], threshold: Height, kf: Height => Key[?]): Seq[Array[Byte]] =
     updateHistory(rw, rw.get(key), key, threshold, kf)
@@ -638,7 +648,8 @@ class RocksDBWriter(
       rw.put(Keys.issuedAssets(Height(height)), snapshot.assetStatics.keySet.toSeq)
       rw.put(Keys.updatedAssets(Height(height)), updatedAssetSet.toSeq)
 
-      rw.put(Keys.carryFee(Height(height)), carry)
+      // todo: store actual carry fee
+//      rw.put(Keys.carryFee(Height(height)), carry)
       expiredKeys += Keys.carryFee(threshold - 1).keyBytes
 
       rw.put(Keys.blockStateHash(Height(height)), computedBlockStateHash)
@@ -656,8 +667,7 @@ class RocksDBWriter(
                 )
               )(_.totalHash)
 
-        val deterministicFinalityActivated = this.isFeatureActivated(BlockchainFeatures.DeterministicFinality, height)
-        val newStateHash                   = stateHash.createStateHash(prevStateHash)
+        val newStateHash = stateHash.createStateHash(prevStateHash)
         rw.put(Keys.stateHash(Height(height)), Some(newStateHash))
       }
     }
@@ -961,6 +971,9 @@ class RocksDBWriter(
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
             val num = TxNum(idx.toShort)
             (tx: @unchecked) match {
+              case _: TransferTransaction | _: MassTransferTransaction =>
+              // balances already restored
+
               case _: LeaseTransaction | _: LeaseCancelTransaction =>
               // leases already restored
 
@@ -1190,9 +1203,7 @@ class RocksDBWriter(
     val toHeight = Height(to.flatMap(this.heightOf).getOrElse(this.height))
 
     val depositPeriods = for {
-      activation <- this.featureActivationHeight(BlockchainFeatures.DeterministicFinality)
       r <- GenerationPeriod.enclosedPeriods(
-        activation,
         this.settings.functionalitySettings.generationPeriodLength,
         Height(from),
         toHeight
@@ -1365,21 +1376,6 @@ class RocksDBWriter(
       .view
       .mapValues(_.size)
       .toMap
-  }
-
-  override def blockRewardVotes(height: Int): Seq[Long] = readOnly { db =>
-    activatedFeatures.get(BlockchainFeatures.BlockReward.id) match {
-      case Some(activatedAt) if activatedAt <= Height(height) =>
-        val modifyTerm = activatedFeatures.get(BlockchainFeatures.CappedReward.id).exists(_ <= Height(height))
-        settings.rewardsSettings
-          .votingWindow(activatedAt.toInt, height, modifyTerm)
-          .flatMap { h =>
-            db.get(Keys.blockMetaAt(Height(h)))
-              .flatMap(_.header)
-              .map(_.rewardVote)
-          }
-      case _ => Seq()
-    }
   }
 
   def loadStateHash(height: Height): Option[StateHash] = readOnly { db =>

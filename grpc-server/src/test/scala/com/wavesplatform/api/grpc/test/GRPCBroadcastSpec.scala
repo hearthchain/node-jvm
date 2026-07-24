@@ -51,7 +51,7 @@ class GRPCBroadcastSpec extends FlatSpec with WithDomain with ParallelTestExecut
       val ethBuyOrder  = ethBuyOrderSigned(testAsset, buyerEthAccount, TxHelpers.timestamp)
       val ethSellOrder = ethSellOrderSigned(testAsset, sellerEthAccount, TxHelpers.timestamp)
 
-      val transaction = TxHelpers.exchange(ethBuyOrder, ethSellOrder, TxHelpers.matcher, price = 100, version = TxVersion.V3)
+      val transaction = TxHelpers.exchange(ethBuyOrder, ethSellOrder, TxHelpers.matcher, price = 100)
       Await.result(grpcApi.broadcast(PBTransactions.protobuf(transaction)), 10.seconds)
     }
   }

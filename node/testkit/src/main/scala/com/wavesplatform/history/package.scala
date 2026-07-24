@@ -31,9 +31,7 @@ package object history {
   val config   = ConfigFactory.load()
   val settings = WavesSettings.fromRootConfig(config)
 
-  val MicroblocksActivatedAt0WavesSettings: WavesSettings        = settingsWithFeatures(BlockchainFeatures.NG)
-  val DataAndMicroblocksActivatedAt0WavesSettings: WavesSettings = settingsWithFeatures(BlockchainFeatures.DataTransaction, BlockchainFeatures.NG)
-  val TransfersV2ActivatedAt0WavesSettings: WavesSettings        = settingsWithFeatures(BlockchainFeatures.SmartAccounts)
+  val MicroblocksActivatedAt0WavesSettings: WavesSettings = settingsWithFeatures()
 
   def settingsWithFeatures(features: BlockchainFeature*): WavesSettings = {
     val blockchainSettings = DefaultBlockchainSettings.copy(
@@ -49,10 +47,10 @@ package object history {
 
   val defaultSigner          = TestValues.keyPair
   val defaultVrfKey          = TxHelpers.defaultVrfKey
-  val generationSignature    = ByteStr(new Array[Byte](Block.GenerationSignatureLength))
+  val generationSignature    = ByteStr(new Array[Byte](Block.GenerationVRFSignatureLength))
   val generationVRFSignature = ByteStr(new Array[Byte](Block.GenerationVRFSignatureLength))
 
-  def correctGenerationSignature(version: Byte): ByteStr = if (version < Block.ProtoBlockVersion) generationSignature else generationVRFSignature
+  def correctGenerationSignature(): ByteStr = generationVRFSignature
 
   def buildBlockOfTxs(refTo: ByteStr, txs: Seq[Transaction]): Block =
     buildBlockOfTxs(refTo, txs, txs.headOption.fold(0L)(_.timestamp))
@@ -70,15 +68,13 @@ package object history {
   ): Block =
     Block
       .buildAndSign(
-        version = version,
         timestamp = timestamp,
         reference = refTo,
         baseTarget = bTarget,
-        generationSignature = correctGenerationSignature(version),
+        generationSignature = correctGenerationSignature(),
         txs = txs,
         signer = signer,
         featureVotes = Seq.empty,
-        rewardVote = -1L,
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = None
@@ -96,7 +92,6 @@ package object history {
     val newTotalBlock = customBuildBlockOfTxs(totalRefTo, prevTotal.transactionData ++ txs, signer, version, ts)
     val nonSigned = MicroBlock
       .buildAndSign(
-        version,
         generator = signer,
         transactionData = txs,
         reference = prevTotal.id(),
@@ -112,7 +107,6 @@ package object history {
     val newTotalBlock = buildBlockOfTxs(totalRefTo, prevTotal.transactionData ++ txs)
     val nonSigned = MicroBlock
       .buildAndSign(
-        3.toByte,
         generator = signer,
         transactionData = txs,
         reference = prevTotal.id(),

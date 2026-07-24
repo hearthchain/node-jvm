@@ -134,7 +134,6 @@ class BlockchainGenerator(wavesSettings: WavesSettings) extends ScorexLogging {
             case ForgeAttemptResult.Success(block, _) =>
               for {
                 blockWithTxs <- Block.buildAndSign(
-                  block.header.version,
                   block.header.timestamp,
                   block.header.reference,
                   block.header.baseTarget,
@@ -142,7 +141,6 @@ class BlockchainGenerator(wavesSettings: WavesSettings) extends ScorexLogging {
                   correctedTimeTxs,
                   genBlock.signer,
                   block.header.featureVotes,
-                  block.header.rewardVote,
                   block.header.stateHash,
                   block.header.challengedHeader,
                   block.header.finalizationVoting
@@ -157,18 +155,16 @@ class BlockchainGenerator(wavesSettings: WavesSettings) extends ScorexLogging {
       }
       result match {
         case Right(_) =>
-          if (blockchain.isFeatureActivated(BlockchainFeatures.NG) && blockchain.liquidBlockMeta.nonEmpty) {
+          if (blockchain.liquidBlockMeta.nonEmpty) {
             val lastHeader = blockchain.lastBlockHeader.get.header
             val pseudoBlock = Block(
               BlockHeader(
-                blockchain.blockVersionAt(blockchain.height),
                 time.correctedTime() + settings.blockchainSettings.genesisSettings.averageBlockDelay.toMillis,
                 blockchain.lastBlockId.get,
                 lastHeader.baseTarget,
                 lastHeader.generationSignature,
                 lastHeader.generator,
                 featureVotes = Nil,
-                rewardVote = 0,
                 transactionsRoot = ByteStr.empty,
                 stateHash = None,
                 challengedHeader = None,
@@ -221,7 +217,6 @@ object BlockchainGenerator {
   case class GenBlock(
       txs: Seq[GenTx],
       signer: KeyPair = TxHelpers.defaultSigner,
-      version: Byte = Block.ProtoBlockVersion
   )
   case class GenTx(
       tx: Transaction,

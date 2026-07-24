@@ -372,7 +372,6 @@ class PoSSuite extends BaseFunSuite {
 
     Block
       .buildAndSign(
-        version = version,
         timestamp = lastBlockTS + validBlockDelay,
         reference = ByteStr(lastBlockId),
         baseTarget = baseTarget,
@@ -380,7 +379,6 @@ class PoSSuite extends BaseFunSuite {
         txs = Nil,
         signer = signerPK,
         featureVotes = Seq.empty,
-        rewardVote = -1L,
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = None

@@ -204,7 +204,7 @@ class NarrowTransactionGenerator(
               sender <- accountByAddress(lease.sender.toAddress.toString)
               tx <- logOption(
                 LeaseCancelTransaction
-                  .create(2.toByte, sender.publicKey, lease.id(), 500000L, timestamp, Proofs.empty)
+                  .create(sender.publicKey, lease.id(), 500000L, timestamp, Proofs.empty)
                   .map(_.signWith(sender.privateKey))
               )
             } yield tx

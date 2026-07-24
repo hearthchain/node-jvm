@@ -1,7 +1,6 @@
 package com.wavesplatform.state.reader
 
 import com.wavesplatform.TestValues
-import com.wavesplatform.block.Block.ProtoBlockVersion
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures.*
@@ -32,7 +31,7 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
   }
 
   property("Negative generating balance case") {
-    val fs  = Enabled.copy(preActivatedFeatures = Map(SmartAccounts.id -> 0, SmartAccountTrading.id -> 0))
+    val fs  = Enabled
     val Fee = 100000
     val setup = {
       val master = TxHelpers.signer(1)
@@ -179,9 +178,9 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
     val initBalance = ENOUGH_AMT
 
     val settings = DeterministicFinality.configure(_.copy(generationPeriodLength = 3))
-    withDomain(settings, balances = AddrWithBalance.enoughBalances(account1, account2)) { d =>
+    withDomain(settings, balances = AddrWithBalance.enoughBalances(account1, account2), generators = Seq(account2)) { d =>
       def appendBlock(txs: Transaction*): Unit = {
-        val block = d.createBlock(txs, strictTime = true, generator = account2, version = ProtoBlockVersion)
+        val block = d.createBlock(txs, strictTime = true, generator = account2)
         d.appender.appendBlock(block)
       }
 

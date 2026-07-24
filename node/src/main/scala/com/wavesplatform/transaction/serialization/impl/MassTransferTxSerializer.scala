@@ -16,8 +16,7 @@ object MassTransferTxSerializer {
       "attachment"    -> attachment,
       "transferCount" -> transfers.size,
       "totalAmount"   -> transfers.map(_.amount.value).sum,
-      "transfers"     -> transfersJson(transfers),
-      "version"       -> version
+      "transfers"     -> transfersJson(transfers)
     )
   }
 

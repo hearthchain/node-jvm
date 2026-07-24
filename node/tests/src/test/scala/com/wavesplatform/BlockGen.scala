@@ -1,7 +1,7 @@
 package com.wavesplatform
 
 import com.wavesplatform.block.Block
-import com.wavesplatform.block.Block.{GenerationSignatureLength, GenerationVRFSignatureLength, ProtoBlockVersion}
+import com.wavesplatform.block.Block.GenerationVRFSignatureLength
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.transaction.Transaction
@@ -19,17 +19,16 @@ trait BlockGen extends TransactionGen { suite: Suite =>
     signer       <- accountGen
   } yield (transactions, signer)
 
-  def versionedBlockGen(txs: Seq[Transaction], signer: SigningKey, version: Byte): Gen[Block] =
-    byteArrayGen(Block.BlockIdLength).flatMap(ref => versionedBlockGen(ByteStr(ref), txs, signer, version))
+  def versionedBlockGen(txs: Seq[Transaction], signer: SigningKey): Gen[Block] =
+    byteArrayGen(Block.BlockIdLength).flatMap(ref => versionedBlockGen(ByteStr(ref), txs, signer))
 
-  def versionedBlockGen(reference: ByteStr, txs: Seq[Transaction], signer: SigningKey, version: Byte): Gen[Block] =
+  def versionedBlockGen(reference: ByteStr, txs: Seq[Transaction], signer: SigningKey): Gen[Block] =
     for {
       baseTarget <- Gen.posNum[Long]
-      genSig     <- if (version < ProtoBlockVersion) byteArrayGen(GenerationSignatureLength) else byteArrayGen(GenerationVRFSignatureLength)
+      genSig     <- byteArrayGen(GenerationVRFSignatureLength)
       timestamp  <- timestampGen
     } yield Block
       .buildAndSign(
-        version,
         if (txs.isEmpty) timestamp else txs.map(_.timestamp).max,
         reference,
         baseTarget,
@@ -37,14 +36,13 @@ trait BlockGen extends TransactionGen { suite: Suite =>
         txs,
         signer,
         featureVotes = Seq.empty,
-        rewardVote = -1L,
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = None
       )
       .explicitGet()
 
-  def blockGen(txs: Seq[Transaction], signer: SigningKey): Gen[Block] = versionedBlockGen(txs, signer, 1)
+  def blockGen(txs: Seq[Transaction], signer: SigningKey): Gen[Block] = versionedBlockGen(txs, signer)
 
   val randomSignerBlockGen: Gen[Block] = for {
     (transactions, signer) <- blockParamGen

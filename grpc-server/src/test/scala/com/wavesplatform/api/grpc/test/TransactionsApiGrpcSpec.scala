@@ -218,7 +218,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
     val resender        = TxHelpers.signer(3)
     val recipient       = TxHelpers.signer(4)
     withDomain(
-      TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)),
+      TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(sender)
     ) { d =>
       val grpcApi          = getGrpcApi(d)

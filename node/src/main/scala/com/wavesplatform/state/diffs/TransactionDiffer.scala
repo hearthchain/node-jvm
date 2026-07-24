@@ -107,15 +107,11 @@ object TransactionDiffer {
               _ <- validateOrder(blockchain, etx.sellOrder, etx.sellMatcherFee)
 
               // Balance overflow check
-              _ <-
-                if (blockchain.height >= blockchain.settings.functionalitySettings.estimatorSumOverflowFixHeight)
-                  for {
-                    portfolios <- ExchangeTransactionDiff.getPortfolios(blockchain, etx)
-                    snapshot   <- StateSnapshot.build(blockchain, portfolios)
-                    _          <- validateBalance(blockchain, etx.tpe, snapshot)
-                  } yield portfolios
-                else
-                  Right(())
+              _ <- for {
+                portfolios <- ExchangeTransactionDiff.getPortfolios(blockchain, etx)
+                snapshot   <- StateSnapshot.build(blockchain, portfolios)
+                _          <- validateBalance(blockchain, etx.tpe, snapshot)
+              } yield portfolios
             } yield ()
           case _ => Right(())
         }

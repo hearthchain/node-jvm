@@ -32,10 +32,10 @@ class MicroBlockSpecification extends FunSuite {
   test("MicroBlock with txs bytes/parse roundtrip, with finalizationVoting") {
     val ts = System.currentTimeMillis() - 5000
     val tr: TransferTransaction =
-      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = Waves, fee = 2, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts + 1, version = 1.toByte)
+      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = Waves, fee = 2, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts + 1)
     val assetId = IssuedAsset(ByteStr(Array.fill(AssetIdLength)(Random.nextInt(100).toByte)))
     val tr2: TransferTransaction =
-      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = assetId, fee = 2, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts + 2, version = 1.toByte)
+      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = assetId, fee = 2, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts + 2)
 
     val transactions = Seq(tr, tr2)
 
@@ -58,7 +58,7 @@ class MicroBlockSpecification extends FunSuite {
     )
 
     val microBlock =
-      MicroBlock.buildAndSign(3.toByte, sender, transactions, prevResBlockSig, totalResBlockSig, Some(stateHash), finalizationVoting).explicitGet()
+      MicroBlock.buildAndSign(sender, transactions, prevResBlockSig, totalResBlockSig, Some(stateHash), finalizationVoting).explicitGet()
     val totalBlockId       = ByteStr(Array.fill(Block.BlockIdLength)(1.toByte))
     val signedMicroBlockPb = PBMicroBlocks.protobuf(microBlock, totalBlockId)
     val parsedBlock        = PBMicroBlocks.vanilla(SignedMicroBlock.parseFrom(signedMicroBlockPb.toByteArray)).get.microblock
@@ -146,7 +146,6 @@ class MicroBlockSpecification extends FunSuite {
     val totalResSignature  = decode("3ta68P5LdLHWKuKcDvASsjcCMEQsm1ySrpxYZwqmzCHiAWHgrYJE1ZmaTsh3ytPqY73545EUPDaGfVdrguTqVTHg")
 
     val microBlock = MicroBlock(
-      version = 5.toByte,
       sender = senderPublicKey,
       transactionData = Seq(transaction),
       reference = referenceSignature,
@@ -165,17 +164,17 @@ class MicroBlockSpecification extends FunSuite {
 
   test("MicroBlock cannot be created with zero transactions") {
     val transactions       = Seq.empty[TransferTransaction]
-    val eitherBlockOrError = MicroBlock.buildAndSign(3.toByte, sender, transactions, prevResBlockSig, totalResBlockSig, None, None)
+    val eitherBlockOrError = MicroBlock.buildAndSign(sender, transactions, prevResBlockSig, totalResBlockSig, None, None)
 
     eitherBlockOrError should produce("cannot create empty MicroBlock")
   }
 
   test("MicroBlock cannot contain more than Miner.MaxTransactionsPerMicroblock") {
     val transaction =
-      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = Waves, fee = 1000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = System.currentTimeMillis(), version = 1.toByte)
+      TxHelpers.transfer(from = sender, to = gen.toAddress, amount = 5, asset = Waves, fee = 1000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = System.currentTimeMillis())
     val transactions = Seq.fill(Miner.MaxTransactionsPerMicroblock + 1)(transaction)
 
-    val eitherBlockOrError = MicroBlock.buildAndSign(3.toByte, sender, transactions, prevResBlockSig, totalResBlockSig, None, None)
+    val eitherBlockOrError = MicroBlock.buildAndSign(sender, transactions, prevResBlockSig, totalResBlockSig, None, None)
     eitherBlockOrError should produce("too many txs in MicroBlock")
   }
 }

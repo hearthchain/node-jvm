@@ -163,7 +163,6 @@ class MicroBlockMinerImpl(
       for {
         signedBlock <- Block
           .buildAndSign(
-            version = blockchainUpdater.currentBlockVersion,
             timestamp = accumulatedBlock.header.timestamp,
             reference = accumulatedBlock.header.reference,
             baseTarget = accumulatedBlock.header.baseTarget,
@@ -171,7 +170,6 @@ class MicroBlockMinerImpl(
             txs = accumulatedBlock.transactionData ++ unconfirmed,
             signer = signingKey,
             featureVotes = accumulatedBlock.header.featureVotes,
-            rewardVote = accumulatedBlock.header.rewardVote,
             stateHash = if (blockchainUpdater.supportsLightNodeBlockFields()) stateHash else None,
             challengedHeader = None,
             finalizationVoting = FinalizationVoting.combine(accumulatedBlock.header.finalizationVoting, currentFinalizationVoting)
@@ -179,7 +177,6 @@ class MicroBlockMinerImpl(
           .leftMap(BlockBuildError.apply)
         microBlock <- MicroBlock
           .buildAndSign(
-            signedBlock.header.version,
             signingKey,
             unconfirmed,
             accumulatedBlock.id(),

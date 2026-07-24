@@ -7,22 +7,12 @@ enablePlugins(
   JDebPackaging,
   SystemdPlugin,
   VersionObject,
-  JavaAgent,
   PublishedModule
 )
 
 libraryDependencies ++= Dependencies.node.value
 
-instrumentation := false
 debArchitecture := Arm64
-
-javaAgents ++= {
-  if (instrumentation.value) {
-    Dependencies.kanela
-  } else {
-    Seq.empty
-  }
-}
 
 homepage := Some(url("https://waves.tech/"))
 developers := List(

@@ -25,7 +25,7 @@ object BaseSuite {
   /** Addresses are bech32m, so rendering or parsing one needs a process-wide default network. Tests run on the 'T'
     * scheme, see TestRocksDB.createTestBlockchainSettings. A node has to do the same at startup.
     */
-  def configureDefaultNetwork(): Unit = Address.Network.setDefault(Address.Network.TESTNET)
+  def configureDefaultNetwork(): Unit = Address.setDefaultHrp("thrth")
 }
 
 abstract class FunSuite extends funsuite.AnyFunSuite with BaseSuite

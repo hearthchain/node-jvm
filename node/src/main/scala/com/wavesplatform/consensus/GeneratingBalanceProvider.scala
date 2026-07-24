@@ -12,25 +12,17 @@ object GeneratingBalanceProvider {
   private val FirstDepth  = 50
   private val SecondDepth = 1000
 
-  def minMiningBalance(blockchain: Blockchain, height: Height): Long = {
-    val activated = blockchain.activatedFeatures.get(BlockchainFeatures.SmallerMinimalGeneratingBalance.id).exists(height >= _)
-    if (activated) MinimalEffectiveBalanceForGenerator2
-    else MinimalEffectiveBalanceForGenerator1
-  }
+  def minMiningBalance(blockchain: Blockchain, height: Height): Long = MinimalEffectiveBalanceForGenerator2
 
   def isMiningAllowed(blockchain: Blockchain, height: Height, generatingBalance: Long): Boolean =
-    generatingBalance >= MinimalEffectiveBalanceForGenerator1
-      || blockchain.activatedFeatures
-        .get(BlockchainFeatures.SmallerMinimalGeneratingBalance.id)
-        .exists(height >= _) && generatingBalance >= MinimalEffectiveBalanceForGenerator2
+    generatingBalance >= MinimalEffectiveBalanceForGenerator2
 
   def isGeneratingBalanceValid(blockchain: Blockchain, height: Height, timestampMs: Long, balance: Long): Boolean =
-    timestampMs < blockchain.settings.functionalitySettings.minimalGeneratingBalanceAfter
-      || isMiningAllowed(blockchain, height, balance)
+    isMiningAllowed(blockchain, height, balance)
 
   def balance(blockchain: Blockchain, account: Address, blockId: Option[BlockId] = None): Long = {
     val height = blockId.flatMap(blockchain.heightOf).getOrElse(blockchain.height)
-    val depth  = if (height >= blockchain.settings.functionalitySettings.generationBalanceDepthFrom50To1000AfterHeight) SecondDepth else FirstDepth
+    val depth  = SecondDepth
 
     val maybeChallengedMiner = blockchain.blockHeader(height + 1).flatMap(_.header.challengedHeader).map(_.generator.toAddress)
     blockchain.effectiveBalance(account, depth, blockId) + maybeChallengedMiner.map(blockchain.effectiveBalance(_, depth, blockId)).getOrElse(0L)

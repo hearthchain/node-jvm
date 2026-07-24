@@ -46,7 +46,7 @@ object BlockMeta {
     BlockMeta(
       block.header,
       block.signature,
-      if (block.header.version >= Block.ProtoBlockVersion) Some(protoHeaderHash(block.header)) else None,
+      Some(protoHeaderHash(block.header)),
       height,
       block.bytes().length,
       block.transactionData.length,

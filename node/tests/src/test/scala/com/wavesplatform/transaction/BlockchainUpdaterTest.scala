@@ -146,7 +146,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       b.height shouldBe height
       // The test harness pre-activates DeterministicFinality so that it can commit a generator; these tests are about
       // voting on features 1..4, so it is not part of what they assert.
-      def underTest(fs: Map[Short, Height]): Map[Short, Height] = fs - BlockchainFeatures.DeterministicFinality.id
+      def underTest(fs: Map[Short, Height]): Map[Short, Height] = fs
       withClue("approved:") {
         underTest(b.approvedFeatures) shouldBe approvedFeatures
       }

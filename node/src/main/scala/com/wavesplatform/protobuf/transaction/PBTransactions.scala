@@ -25,12 +25,11 @@ object PBTransactions {
       fee: Long = 0L,
       feeAssetId: VanillaAssetId = Waves,
       timestamp: Long = 0L,
-      version: Int = 0,
       proofsArray: Seq[com.wavesplatform.common.state.ByteStr] = Nil,
       data: com.wavesplatform.protobuf.transaction.Transaction.Data = com.wavesplatform.protobuf.transaction.Transaction.Data.Empty
   ): SignedTransaction =
     new SignedTransaction(
-      Some(Transaction(chainId, sender.toByteString, Some((feeAssetId, fee): Amount), timestamp, version, data)),
+      Some(Transaction(chainId, sender.toByteString, Some((feeAssetId, fee): Amount), timestamp, data)),
       proofsArray.map(bs => ByteString.copyFrom(bs.arr))
     )
 
@@ -41,7 +40,6 @@ object PBTransactions {
         for {
           proofs <- Proofs.create(signedTx.proofs.map(_.toByteStr))
           tx <- createVanilla(
-            parsedTx.version,
             parsedTx.chainId.toByte,
             parsedTx.senderPublicKey,
             feeAmount,
@@ -55,7 +53,6 @@ object PBTransactions {
     }
 
   private def createVanilla(
-      version: Int,
       chainId: Byte,
       sender: ByteString,
       feeAmount: Long,
@@ -70,7 +67,6 @@ object PBTransactions {
         for {
           address <- recipient.toAddress(chainId)
           tx <- vt.transfer.TransferTransaction.create(
-            version.toByte,
             sender.toPublicKey,
             address,
             amount.vanillaAssetId,
@@ -86,18 +82,17 @@ object PBTransactions {
       case Data.Lease(LeaseTransactionData(Some(recipient), amount, `empty`)) =>
         for {
           address <- recipient.toAddress(chainId)
-          tx      <- vt.lease.LeaseTransaction.create(version.toByte, chainId, sender.toPublicKey, address, amount, feeAmount, timestamp, proofs)
+          tx      <- vt.lease.LeaseTransaction.create(chainId, sender.toPublicKey, address, amount, feeAmount, timestamp, proofs)
         } yield tx
 
       case Data.LeaseCancel(LeaseCancelTransactionData(leaseId, `empty`)) =>
-        vt.lease.LeaseCancelTransaction.create(version.toByte, sender.toPublicKey, leaseId.toByteStr, feeAmount, timestamp, proofs, chainId)
+        vt.lease.LeaseCancelTransaction.create(sender.toPublicKey, leaseId.toByteStr, feeAmount, timestamp, proofs, chainId)
 
       case Data.Exchange(ExchangeTransactionData(amount, price, buyMatcherFee, sellMatcherFee, Seq(order1, order2), `empty`)) =>
         for {
           order1 <- PBOrders.vanilla(order1)
           order2 <- PBOrders.vanilla(order2)
           tx <- vt.assets.exchange.ExchangeTransaction.create(
-            version.toByte,
             order1,
             order2,
             amount,
@@ -120,7 +115,6 @@ object PBTransactions {
             }
           }
           tx <- vt.transfer.MassTransferTransaction.create(
-            version.toByte,
             sender.toPublicKey,
             PBAmounts.toVanillaAssetId(mt.assetId),
             parsedTransfers,
@@ -146,7 +140,6 @@ object PBTransactions {
           sig   <- BlsSignature(commitmentSignature.toByteArray)
           blsPk <- BlsPublicKey(endorserPublicKey.toByteStr)
           tx <- CommitToGenerationTransaction.create(
-            version.toByte,
             sender.toPublicKey,
             blsPk,
             vrfPublicKey.toByteStr,
@@ -172,7 +165,7 @@ object PBTransactions {
       case tx: vt.transfer.TransferTransaction =>
         import tx.*
         val data = TransferTransactionData(Some(recipient.toPB), Some((assetId, amount.value)), attachment.toByteString)
-        PBTransactions.create(sender, chainId, fee.value, feeAssetId, timestamp, version, proofs, Data.Transfer(data))
+        PBTransactions.create(sender, chainId, fee.value, feeAssetId, timestamp, proofs, Data.Transfer(data))
 
       case tx: vt.assets.exchange.ExchangeTransaction =>
         import tx.*
@@ -183,25 +176,25 @@ object PBTransactions {
           sellMatcherFee,
           Seq(PBOrders.protobuf(order1), PBOrders.protobuf(order2))
         )
-        PBTransactions.create(tx.sender, chainId, fee.value, tx.feeAssetId, timestamp, version, proofs, Data.Exchange(data))
+        PBTransactions.create(tx.sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.Exchange(data))
 
       case tx: vt.lease.LeaseTransaction =>
         import tx.*
         val data = LeaseTransactionData(Some(recipient.toPB), amount.value)
-        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, version.value, proofs, Data.Lease(data))
+        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.Lease(data))
 
       case tx: vt.lease.LeaseCancelTransaction =>
         import tx.*
         val data = LeaseCancelTransactionData(leaseId.toByteString)
-        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, version, proofs, Data.LeaseCancel(data))
+        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.LeaseCancel(data))
 
-      case tx @ MassTransferTransaction(version, sender, assetId, transfers, fee, timestamp, attachment, proofs, chainId) =>
+      case tx @ MassTransferTransaction(sender, assetId, transfers, fee, timestamp, attachment, proofs, chainId) =>
         val data = MassTransferTransactionData(
           PBAmounts.toPBAssetId(assetId),
           transfers.map(pt => MassTransferTransactionData.Transfer(Some(pt.address.toPB), pt.amount.value)),
           attachment.toByteString
         )
-        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, version, proofs, Data.MassTransfer(data))
+        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.MassTransfer(data))
 
       case tx: CommitToGenerationTransaction =>
         import tx.*
@@ -214,7 +207,7 @@ object PBTransactions {
             vrfCommitmentSignature = vrfCommitmentSignature.toByteString
           )
         )
-        PBTransactions.create(sender, chainId, fee.value, Waves, timestamp, tx.version, proofs.proofs, data)
+        PBTransactions.create(sender, chainId, fee.value, Waves, timestamp, proofs.proofs, data)
 
       case _ =>
         throw new IllegalArgumentException(s"Unsupported transaction: $tx")

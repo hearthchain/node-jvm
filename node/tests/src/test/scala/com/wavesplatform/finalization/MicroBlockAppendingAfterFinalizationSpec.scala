@@ -16,11 +16,10 @@ class MicroBlockAppendingAfterFinalizationSpec extends BaseFinalizationSpec {
   private val generator2Addr = generator2.toAddress
   private val generator2Idx  = GeneratorIndex(1)
 
-  private val baseSettings = DomainPresets.DeterministicFinality.addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+  private val baseSettings = DomainPresets.DeterministicFinality
   private val defaultSettings = baseSettings.configure(
     _.copy(
       generationPeriodLength = 2,
-      lightNodeBlockFieldsAbsenceInterval = 0,
       maxValidEndorsers = 1
     )
   )

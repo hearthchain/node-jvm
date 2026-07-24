@@ -24,7 +24,6 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
   private val vrfSig      = CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, Height(3000))
 
   private val origTx = CommitToGenerationTransaction(
-    version = TxVersion.V1,
     sender = PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
     endorserPublicKey = BlsPublicKey(Base58.decode("6CagLT3FjEcaNHPYCaG2dcfEfzDj6ynVeZbxbLHkHdfzvbfBmBMkkatTYcBXD9cHMU")).explicitGet(),
     generationPeriodStart = Height(3000),

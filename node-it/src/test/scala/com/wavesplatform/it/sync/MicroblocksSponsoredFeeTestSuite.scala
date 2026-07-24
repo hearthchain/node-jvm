@@ -74,5 +74,5 @@ class MicroblocksSponsoredFeeTestSuite extends BaseFreeSpec with ScorexLogging {
         |}""".stripMargin),
     Default(1).notMiner,
     Default(2).notMiner
-  ).map(_.preactivatedFeatures((BlockchainFeatures.BlockReward, Height(1000000))))
+  )
 }

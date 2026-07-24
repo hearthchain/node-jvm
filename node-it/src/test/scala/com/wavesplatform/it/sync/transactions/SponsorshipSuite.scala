@@ -22,8 +22,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
   import com.wavesplatform.it.NodeConfigs.*
   override protected def nodeConfigs: Seq[Config] =
     Seq(Miners.head.quorum(0), NotMiner).map(
-      _.preactivatedFeatures(BlockchainFeatures.BlockReward -> Height(10000))
-        .overrides(s"""waves.blockchain.custom.functionality {
+      _.overrides(s"""waves.blockchain.custom.functionality {
                       |  blocks-for-feature-activation = 1
                       |  feature-check-blocks-period = 1
                       |}""".stripMargin)
@@ -103,7 +102,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
       sender.transfer(sponsor, aliceAddress, sponsorAssetTotal / 2, minFee, Some(firstSponsorAssetId), None, waitForTx = true).id
     secondTransferTxToAlice = // A-4
       sender.transfer(sponsor, aliceAddress, sponsorAssetTotal / 2, minFee, Some(secondSponsorAssetId), None, waitForTx = true).id
-    firstSponsorTxId = sender.sponsorAsset(sponsor, firstSponsorAssetId, baseFee = Token, fee = sponsorReducedFee, version = TxVersion.V1).id   // A-5
+    firstSponsorTxId = sender.sponsorAsset(sponsor, firstSponsorAssetId, baseFee = Token, fee = sponsorReducedFee).id   // A-5
     secondSponsorTxId = sender.sponsorAsset(sponsor, secondSponsorAssetId, baseFee = Token, fee = sponsorReducedFee, version = TxVersion.V2).id // A-6
   }
 
@@ -254,7 +253,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
     "cancel sponsorship" - {
 
       "cancel" in {
-        val cancelFirstSponsorTxId  = sender.cancelSponsorship(sponsor, firstSponsorAssetId, fee = issueFee, version = TxVersion.V1).id
+        val cancelFirstSponsorTxId  = sender.cancelSponsorship(sponsor, firstSponsorAssetId, fee = issueFee).id
         val cancelSecondSponsorTxId = sender.cancelSponsorship(sponsor, secondSponsorAssetId, fee = issueFee, version = TxVersion.V2).id
         nodes.waitForHeightAriseAndTxPresent(cancelFirstSponsorTxId)
         nodes.waitForHeightAriseAndTxPresent(cancelSecondSponsorTxId)
@@ -297,7 +296,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
       }
 
       "cancel sponsorship again" in {
-        val cancelSponsorshipTxId1 = sender.cancelSponsorship(sponsor, firstSponsorAssetId, fee = issueFee, version = TxVersion.V1).id
+        val cancelSponsorshipTxId1 = sender.cancelSponsorship(sponsor, firstSponsorAssetId, fee = issueFee).id
         val cancelSponsorshipTxId2 = sender.cancelSponsorship(sponsor, firstSponsorAssetId, fee = issueFee, version = TxVersion.V2).id
         nodes.waitForHeightArise()
         nodes.waitForTransaction(cancelSponsorshipTxId1)
@@ -308,7 +307,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
     "set sponsopship again" - {
 
       "set sponsorship and check new asset details, min sponsored fee changed" in {
-        val setAssetSponsoredTx1 = sender.sponsorAsset(sponsor, firstSponsorAssetId, fee = issueFee, baseFee = TinyFee, version = TxVersion.V1).id
+        val setAssetSponsoredTx1 = sender.sponsorAsset(sponsor, firstSponsorAssetId, fee = issueFee, baseFee = TinyFee).id
         val setAssetSponsoredTx2 = sender.sponsorAsset(sponsor, secondSponsorAssetId, fee = issueFee, baseFee = TinyFee, version = TxVersion.V2).id
         nodes.waitForHeightAriseAndTxPresent(setAssetSponsoredTx1)
         nodes.waitForHeightAriseAndTxPresent(setAssetSponsoredTx2)
@@ -360,7 +359,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
       }
 
       "change sponsorship fee in active sponsored asset" in {
-        val setAssetSponsoredTx1 = sender.sponsorAsset(sponsor, firstSponsorAssetId, fee = issueFee, baseFee = LargeFee, version = TxVersion.V1).id
+        val setAssetSponsoredTx1 = sender.sponsorAsset(sponsor, firstSponsorAssetId, fee = issueFee, baseFee = LargeFee).id
         val setAssetSponsoredTx2 = sender.sponsorAsset(sponsor, secondSponsorAssetId, fee = issueFee, baseFee = LargeFee, version = TxVersion.V2).id
         nodes.waitForHeightArise()
         nodes.waitForHeightAriseAndTxPresent(setAssetSponsoredTx1)
@@ -452,7 +451,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
             waitForTx = true
           )
           .id
-      val sponsorTxId1 = sender.sponsorAsset(sponsor, firstSponsorAssetId2, baseFee = Token, fee = sponsorReducedFee, version = TxVersion.V1).id
+      val sponsorTxId1 = sender.sponsorAsset(sponsor, firstSponsorAssetId2, baseFee = Token, fee = sponsorReducedFee).id
       val sponsorTxId2 = sender.sponsorAsset(sponsor, secondSponsorAssetId2, baseFee = Token, fee = sponsorReducedFee, version = TxVersion.V2).id
       sender.transfer(sponsor, aliceAddress, sponsorAssetTotal / 2, minFee, Some(firstSponsorAssetId2), None, waitForTx = true).id
       sender.transfer(sponsor, aliceAddress, sponsorAssetTotal / 2, minFee, Some(secondSponsorAssetId2), None, waitForTx = true).id
@@ -518,7 +517,7 @@ class SponsorshipSuite extends BaseFreeSpec with IntegrationSuiteWithThreeAddres
           )
           .id
       val firstSponsorshipTxId =
-        miner.sponsorAsset(miner.keyPair, firstMinersAsset, baseFee = Token, fee = sponsorReducedFee, version = TxVersion.V1).id
+        miner.sponsorAsset(miner.keyPair, firstMinersAsset, baseFee = Token, fee = sponsorReducedFee).id
       val secondSponsorshipTxId =
         miner.sponsorAsset(miner.keyPair, secondMinersAsset, baseFee = Token, fee = sponsorReducedFee, version = TxVersion.V2).id
       nodes.waitForHeightAriseAndTxPresent(firstSponsorshipTxId)

@@ -5,13 +5,7 @@ import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatures}
 object TestFunctionalitySettings {
   val Enabled = FunctionalitySettings(
     featureCheckBlocksPeriod = 10000,
-    blocksForFeatureActivation = 9000,
-    preActivatedFeatures = Map(
-      BlockchainFeatures.SmartAccounts.id -> 0,
-      BlockchainFeatures.SmartAssets.id   -> 0,
-      BlockchainFeatures.FairPoS.id       -> 0,
-      BlockchainFeatures.Ride4DApps.id    -> 0
-    ),
+    blocksForFeatureActivation = 9000
   )
 
   def withFeatures(features: BlockchainFeature*): FunctionalitySettings =

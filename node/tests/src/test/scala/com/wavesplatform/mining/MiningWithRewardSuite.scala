@@ -51,14 +51,12 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       } yield {
         blockchain.balance(account.toAddress) should be(newBalance)
         blockchain.height should be(3)
-        blockchain.blockHeader(2).get.header.version should be(Block.ProtoBlockVersion)
-        blockchain.blockHeader(3).get.header.version should be(Block.ProtoBlockVersion)
       }
     }
   }
 
   it should "generate valid empty block of version 4 after block of version 3" in {
-    withEnv(Seq((ts, reference, _) => TestBlock.create(time = ts, ref = reference, txs = Nil, version = Block.ProtoBlockVersion).block)) {
+    withEnv(Seq((ts, reference, _) => TestBlock.create(time = ts, ref = reference, txs = Nil).block)) {
       case Env(_, account, miner, blockchain) =>
         val generateBlock = generateBlockTask(miner)(account)
         val oldBalance    = blockchain.balance(account.toAddress)
@@ -75,14 +73,14 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     val bps: Seq[BlockProducer] = Seq((ts, reference, account) => {
       val recipient1 = createAccount.toAddress
       val recipient2 = createAccount.toAddress
-      val tx1 = TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts, version = 2.toByte)
-      val tx2 = TxHelpers.transfer(from = account, to = recipient2, amount = 5 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts, version = 2.toByte)
-      TestBlock.create(time = ts, ref = reference, txs = Seq(tx1, tx2), version = Block.ProtoBlockVersion).block
+      val tx1 = TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
+      val tx2 = TxHelpers.transfer(from = account, to = recipient2, amount = 5 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
+      TestBlock.create(time = ts, ref = reference, txs = Seq(tx1, tx2)).block
     })
 
     val txs: Seq[TransactionProducer] = Seq((ts, account) => {
       val recipient1 = createAccount.toAddress
-      TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts, version = 2.toByte)
+      TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
     })
 
     withEnv(bps, txs) { case Env(_, account, miner, blockchain) =>
@@ -97,7 +95,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     }
 
     // Test for empty key block with NG
-    withEnv(bps, txs, settingsWithFeatures(BlockchainFeatures.NG, BlockchainFeatures.SmartAccounts)) { case Env(_, account, miner, _) =>
+    withEnv(bps, txs, settingsWithFeatures()) { case Env(_, account, miner, _) =>
       val block = forgeBlock(miner)(account).explicitGet().newBlock
       Task(block.transactionData shouldBe empty)
     }
@@ -195,9 +193,7 @@ object MiningWithRewardSuite {
     val minerSettings: MinerSettings =
       commonSettings.minerSettings.copy(quorum = 0, intervalAfterLastBlockThenGenerationIsAllowed = 1 hour)
 
-    val functionalitySettings: FunctionalitySettings =
-      Enabled
-        .copy(preActivatedFeatures = Enabled.preActivatedFeatures + (BlockchainFeatures.BlockReward.id -> 0))
+    val functionalitySettings: FunctionalitySettings = Enabled
     val blockchainSettings: BlockchainSettings =
       commonSettings.blockchainSettings
         .copy(functionalitySettings = functionalitySettings)

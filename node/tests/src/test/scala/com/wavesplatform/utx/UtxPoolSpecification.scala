@@ -64,13 +64,7 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
     val settings = origSettings.copy(
       blockchainSettings = BlockchainSettings(
         'T',
-        FunctionalitySettings.TESTNET.copy(preActivatedFeatures =
-          Map(
-            BlockchainFeatures.MassTransfer.id  -> 0,
-            BlockchainFeatures.SmartAccounts.id -> 0,
-            BlockchainFeatures.Ride4DApps.id    -> 0
-          )
-        ),
+        FunctionalitySettings.TESTNET,
         genesisSettings,
         RewardsSettings.TESTNET
       ),
@@ -98,7 +92,7 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
       amount    <- chooseNum(1L, (maxAmount * 0.9).toLong)
       recipient <- accountGen
       fee       <- chooseNum(extraFee, (maxAmount * 0.1).toLong)
-    } yield TxHelpers.transfer(from = sender, to = recipient.toAddress, amount = amount, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty, version = 1.toByte))
+    } yield TxHelpers.transfer(from = sender, to = recipient.toAddress, amount = amount, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty))
       .label("transferTransaction")
 
   private def withState[A](test: (SigningKey, Long, BlockchainUpdaterImpl) => A): A = {
@@ -259,16 +253,16 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
     }
 
   private def transfer(sender: SigningKey) =
-    TxHelpers.transfer(from = sender, to = TxHelpers.address(2), amount = 1, asset = Waves, fee = extraFee, feeAsset = Waves, attachment = ByteStr.empty, version = 1.toByte)
+    TxHelpers.transfer(from = sender, to = TxHelpers.address(2), amount = 1, asset = Waves, fee = extraFee, feeAsset = Waves, attachment = ByteStr.empty)
 
   private def transferWithRecipient(sender: SigningKey, recipient: PublicKey) =
-    TxHelpers.transfer(from = sender, to = recipient.toAddress, amount = 1, asset = Waves, fee = extraFee, feeAsset = Waves, attachment = ByteStr.empty, version = 1.toByte)
+    TxHelpers.transfer(from = sender, to = recipient.toAddress, amount = 1, asset = Waves, fee = extraFee, feeAsset = Waves, attachment = ByteStr.empty)
 
   private def massTransferWithRecipients(sender: SigningKey, recipients: Seq[PublicKey], maxAmount: Long) = {
     val amount    = maxAmount / (recipients.size + 1)
     val transfers = recipients.map(r => ParsedTransfer(r.toAddress, TxNonNegativeAmount.unsafeFrom(amount)))
     val minFee    = FeeValidation.FeeConstants(TransactionType.Transfer) + FeeValidation.FeeConstants(TransactionType.MassTransfer) * transfers.size
-    TxHelpers.massTransfer(sender, transfers.map(t => (t.address, t.amount.value)), Waves, minFee, version = 1.toByte)
+    TxHelpers.massTransfer(sender, transfers.map(t => (t.address, t.amount.value)), Waves, minFee)
   }
 
   private def utxTest(utxSettings: UtxSettings, txCount: Int = 10)(f: (Seq[TransferTransaction], UtxPool, TestTime) => Unit): Unit = {
@@ -411,10 +405,10 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
       val initialAmount = 10000.waves
       val minerBalance  = initialAmount + 0.001.waves * 2
 
-      withDomain(DomainPresets.NG, balances = Seq(AddrWithBalance(blockMiner.toAddress, minerBalance))) { d =>
-        val transfer1 = TxHelpers.transfer(blockMiner, recipient.toAddress, version = 1.toByte, amount = initialAmount, fee = 0.001.waves)
-        val transfer2 = TxHelpers.transfer(blockMiner, recipient.toAddress, version = 1.toByte, amount = 0.0004.waves, fee = 0.001.waves)
-        d.appendBlock(d.createBlock(generator = blockMiner, version = Block.ProtoBlockVersion))
+      withDomain(DomainPresets.NG, balances = Seq(AddrWithBalance(blockMiner.toAddress, minerBalance)), generators = Seq(blockMiner)) { d =>
+        val transfer1 = TxHelpers.transfer(blockMiner, recipient.toAddress, amount = initialAmount, fee = 0.001.waves)
+        val transfer2 = TxHelpers.transfer(blockMiner, recipient.toAddress, amount = 0.0004.waves, fee = 0.001.waves)
+        d.appendBlock(d.createBlock(generator = blockMiner))
         d.utxPool.addTransaction(transfer1, verify = true)
         d.utxPool.addTransaction(transfer2, verify = true)
 
@@ -482,8 +476,8 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
           secondAcc <- accountGen
           ts = System.currentTimeMillis()
           fee <- smallFeeGen
-          validTransfer = TxHelpers.transfer(from = richAcc, to = secondAcc.toAddress, amount = 1L, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts, version = TxVersion.V1)
-          invalidTransfer = TxHelpers.transfer(from = secondAcc, to = richAcc.toAddress, amount = 2L, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts, version = TxVersion.V1)
+          validTransfer = TxHelpers.transfer(from = richAcc, to = secondAcc.toAddress, amount = 1L, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
+          invalidTransfer = TxHelpers.transfer(from = secondAcc, to = richAcc.toAddress, amount = 2L, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
         } yield (richAcc, validTransfer, invalidTransfer)
 
         forAll(preconditions) { case (richAcc, validTransfer, invalidTransfer) =>

@@ -25,7 +25,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
   private val thisNodeAcc  = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
   private val otherNodeAcc = TxHelpers.defaultSigner
 
-  private val baseSettings = DomainPresets.DeterministicFinality.addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+  private val baseSettings = DomainPresets.DeterministicFinality
   private val defaultSettings = baseSettings
     .copy(minerSettings = baseSettings.minerSettings.copy(quorum = 0, microBlockInterval = 100.millis))
     .configure(_.copy(generationPeriodLength = 2))

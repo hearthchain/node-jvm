@@ -112,14 +112,16 @@ class BlockDifferTest extends FreeSpec with WithDomain {
       "genesis block" in {
         val balances = (1 to 10).map(idx => AddrWithBalance(TxHelpers.address(idx), 100.waves))
 
-        withDomain(TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)), balances) { d =>
+        val withMiner = AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: balances
+
+        withDomain(TransactionStateSnapshot, withMiner) { d =>
           d.lastBlock.header.stateHash shouldBe defined
           d.lastBlock.transactionData shouldBe empty
           d.blockchain.height shouldBe 1
           balances.foreach { case AddrWithBalance(address, amount, _) => d.blockchain.balance(address) shouldBe amount }
         }
 
-        withDomain(DomainPresets.RideV6, balances) { d =>
+        withDomain(DomainPresets.RideV6, withMiner) { d =>
           d.lastBlock.header.stateHash shouldBe None
           d.blockchain.height shouldBe 1
           balances.foreach { case AddrWithBalance(address, amount, _) => d.blockchain.balance(address) shouldBe amount }
@@ -128,8 +130,9 @@ class BlockDifferTest extends FreeSpec with WithDomain {
 
       "arbitrary block/microblock" in
         withDomain(
-          TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)),
-          Seq(AddrWithBalance(TxHelpers.address(1)))
+          TransactionStateSnapshot,
+          Seq(AddrWithBalance(TxHelpers.signer(2).toAddress), AddrWithBalance(TxHelpers.address(1))),
+          generators = Seq(TxHelpers.signer(2))
         ) { d =>
           val genesis = d.lastBlock
 
@@ -223,7 +226,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
 
     "result of txs validation should be equal the result of snapshot apply" in {
       val sender = TxHelpers.signer(1)
-      withDomain(DomainPresets.TransactionStateSnapshot, AddrWithBalance.enoughBalances(sender)) { d =>
+      withDomain(DomainPresets.TransactionStateSnapshot, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)) { d =>
         (1 to 5).map { idx =>
           val liquid = d.liquidState.get.liquidBlockOf(d.lastBlock.id()).get
           val refBlockchain = SnapshotBlockchain(
@@ -271,7 +274,8 @@ class BlockDifferTest extends FreeSpec with WithDomain {
       val settings = DomainPresets.TransactionStateSnapshot
       withDomain(
         settings.copy(minerSettings = settings.minerSettings.copy(quorum = 0)),
-        AddrWithBalance.enoughBalances(sender, minerAcc),
+        AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender, minerAcc),
+        generators = Seq(TxHelpers.defaultSigner, minerAcc)
       ) { d =>
         d.appendBlock()
         d.testTime.setTime(d.lastBlock.header.timestamp)
@@ -302,7 +306,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
     val features: Seq[Short] = Seq[Short](2)
 
     val paymentTxs = (1 to numPayments).map { _ =>
-      TxHelpers.transfer(from, to.toAddress, 10000, fee = TransactionFee, version = TxVersion.V1)
+      TxHelpers.transfer(from, to.toAddress, 10000, fee = TransactionFee)
     }
 
     // The block at height 1 is empty: it used to hold the genesis transaction, which the genesis snapshot replaces

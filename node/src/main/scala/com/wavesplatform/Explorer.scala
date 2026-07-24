@@ -328,7 +328,6 @@ object Explorer extends ScorexLogging {
         case "SH" =>
           val targetHeight = Height(argument(1, "height").toInt)
           log.info(s"Loading state hash at $targetHeight")
-          val deterministicFinalityActivated = reader.isFeatureActivated(BlockchainFeatures.DeterministicFinality, targetHeight.toInt)
           rdb.db.get(Keys.stateHash(targetHeight)).foreach { sh =>
             println(StateHash.toJson(sh).toString())
           }

@@ -14,7 +14,6 @@ import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
 final case class LeaseTransaction(
-    version: LeaseTransaction.Version,
     sender: PublicKey,
     recipient: Address,
     amount: TxPositiveAmount,
@@ -34,13 +33,9 @@ final case class LeaseTransaction(
 }
 
 object LeaseTransaction {
-  type Version = Int Refined (Equal[1])
-  object Version extends RefinedTypeOps[Version, Int]
-
   implicit val validator: TxValidator[LeaseTransaction] = LeaseTxValidator
 
   def create(
-      version: Int,
       chainId: Byte,
       sender: PublicKey,
       recipient: Address,
@@ -50,10 +45,9 @@ object LeaseTransaction {
       proofs: Proofs
   ): Either[ValidationError, LeaseTransaction] = {
     for {
-      fee     <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      amount  <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, "waves"))
-      version <- Version(version)(TxValidationError.UnsupportedTypeAndVersion(TransactionType.Lease.id.toByte, version))
-      tx      <- LeaseTransaction(version, sender, recipient, amount, fee, timestamp, proofs, chainId).validatedEither
+      fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
+      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, "waves"))
+      tx     <- LeaseTransaction(sender, recipient, amount, fee, timestamp, proofs, chainId).validatedEither
     } yield tx
 
   }

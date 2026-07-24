@@ -104,11 +104,11 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
 
   def createLease(sender: SigningKey, amount: Long, fee: Long, timestamp: Long, recipient: Address): Gen[LeaseTransaction] = {
     val v1 = LeaseTransaction
-      .create(1.toByte, AddressScheme.current.chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
+      .create(AddressScheme.current.chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
     val v2 = LeaseTransaction
-      .create(2.toByte, AddressScheme.current.chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
+      .create(AddressScheme.current.chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
     Gen.oneOf(v1, v2)
@@ -116,11 +116,11 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
 
   def createLeaseCancel(sender: SigningKey, leaseId: ByteStr, cancelFee: Long, timestamp: Long): Gen[LeaseCancelTransaction] = {
     val v1 = LeaseCancelTransaction
-      .create(1.toByte, PublicKey(sender.publicKey), leaseId, cancelFee, timestamp + 1, Proofs.empty)
+      .create(PublicKey(sender.publicKey), leaseId, cancelFee, timestamp + 1, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
     val v2 = LeaseCancelTransaction
-      .create(2.toByte, PublicKey(sender.publicKey), leaseId, cancelFee, timestamp + 1, Proofs.empty)
+      .create(PublicKey(sender.publicKey), leaseId, cancelFee, timestamp + 1, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
     Gen.oneOf(v1, v2)
@@ -167,7 +167,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     for {
       (_, _, _, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(1.toByte, PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -175,7 +175,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     for {
       (_, _, _, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(2.toByte, PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -184,7 +184,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       amount                                    <- Gen.choose(1L, maxAmount)
       (_, _, _, _, _, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(1.toByte, PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -192,7 +192,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     for {
       (_, _, _, amount, _, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(1.toByte, PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -210,13 +210,13 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       timestamp: Long
   ): Either[ValidationError, TransferTransaction] =
     TransferTransaction
-      .create(1.toByte, PublicKey(sender.publicKey), recipient, Waves, amount, Waves, fee, ByteStr.empty, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, fee, ByteStr.empty, timestamp, Proofs.empty)
       .map(_.signWith(sender))
 
   val transferV1Gen: Gen[TransferTransaction] = (for {
     (assetId, sender, recipient, amount, timestamp, feeAssetId, feeAmount, attachment) <- transferParamGen
   } yield TransferTransaction
-    .create(1.toByte, PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+    .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
     .map(_.signWith(sender))
     .explicitGet())
     .label("transferTransaction")
@@ -224,7 +224,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
   val transferV2Gen: Gen[TransferTransaction] = (for {
     (assetId, sender, recipient, amount, timestamp, feeAssetId, feeAmount, attachment) <- transferParamGen
   } yield TransferTransaction
-    .create(2.toByte, PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+    .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
     .map(_.signWith(sender))
     .explicitGet(
     ))
@@ -391,7 +391,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       val sellFee = (BigInt(matcherFee) * BigInt(matchedAmount) / BigInt(amount2)).longValue
       val trans =
         ExchangeTransaction
-          .create(1.toByte, o1, o2, matchedAmount, price, buyFee, sellFee, (buyFee + sellFee) / 2, expiration - 100)
+          .create(o1, o2, matchedAmount, price, buyFee, sellFee, (buyFee + sellFee) / 2, expiration - 100)
           .map(_.signWith(matcher))
           .explicitGet()
 
@@ -441,7 +441,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       val o2 = mkO2(seller, PublicKey(matcher.publicKey), assetPair, amount2, price, timestamp, expiration, matcherFee)
 
       ExchangeTransaction
-        .create(2.toByte, o1, o2, matchedAmount, price, buyFee, sellFee, (buyFee + sellFee) / 2, expiration - 100)
+        .create(o1, o2, matchedAmount, price, buyFee, sellFee, (buyFee + sellFee) / 2, expiration - 100)
         .map(_.signWith(matcher))
         .explicitGet()
     }

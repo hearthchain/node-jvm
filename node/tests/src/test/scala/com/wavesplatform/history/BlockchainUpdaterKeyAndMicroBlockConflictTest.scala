@@ -109,7 +109,6 @@ class BlockchainUpdaterKeyAndMicroBlockConflictTest
         base = Seq(transfer1),
         micros = Seq(Seq(transfer2)),
         signer = richAccount,
-        version = 3,
         timestamp = blockTime
       )
 
@@ -118,7 +117,6 @@ class BlockchainUpdaterKeyAndMicroBlockConflictTest
         base = Seq(transfer3),
         micros = Nil,
         signer = secondAccount,
-        version = 3,
         timestamp = blockTime
       )
 
@@ -171,7 +169,6 @@ class BlockchainUpdaterKeyAndMicroBlockConflictTest
         base = Nil,
         micros = Seq(Seq(leaseCancel)),
         signer = richAccount,
-        version = 3,
         timestamp = blockTime
       )
 

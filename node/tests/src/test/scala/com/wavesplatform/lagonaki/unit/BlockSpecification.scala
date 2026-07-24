@@ -20,7 +20,7 @@ class BlockSpecification extends PropSpec {
   val blockGen = for {
     baseTarget          <- arbitrary[Long]
     reference           <- byteArrayGen(Block.BlockIdLength).map(r => ByteStr(r))
-    generationSignature <- byteArrayGen(Block.GenerationSignatureLength)
+    generationSignature <- byteArrayGen(Block.GenerationVRFSignatureLength)
     assetBytes          <- byteArrayGen(AssetIdLength)
     assetId = IssuedAsset(ByteStr(assetBytes))
     sender                    <- accountGen
@@ -35,13 +35,12 @@ class BlockSpecification extends PropSpec {
     for {
       baseTarget                              <- arbitrary[Long]
       reference                               <- byteArrayGen(Block.BlockIdLength).map(r => ByteStr(r))
-      generationSignature                     <- byteArrayGen(Block.GenerationSignatureLength)
+      generationSignature                     <- byteArrayGen(Block.GenerationVRFSignatureLength)
       sender                                  <- accountGen
       recipient                               <- accountGen
       paymentTransaction: TransferTransaction <- wavesTransferGeneratorP(time, sender, recipient.toAddress)
     } yield Block
       .buildAndSign(
-        3.toByte,
         time,
         reference,
         baseTarget,
@@ -49,7 +48,6 @@ class BlockSpecification extends PropSpec {
         Seq.fill(amt)(paymentTransaction),
         recipient,
         featureVotes = Seq.empty,
-        rewardVote = -1L,
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = None
@@ -57,12 +55,10 @@ class BlockSpecification extends PropSpec {
       .explicitGet()
 
   property(s"feature flags limit is ${Block.MaxFeaturesInBlock}") {
-    val version           = 3.toByte
     val supportedFeatures = (0 to Block.MaxFeaturesInBlock * 2).map(_.toShort)
 
     forAll(blockGen) { case (baseTarget, reference, generationSignature, recipient, transactionData) =>
       Block.buildAndSign(
-        version,
         time,
         reference,
         baseTarget,
@@ -70,7 +66,6 @@ class BlockSpecification extends PropSpec {
         transactionData,
         recipient,
         supportedFeatures,
-        rewardVote = -1L,
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = None
@@ -83,14 +78,12 @@ class BlockSpecification extends PropSpec {
     forAll(blockGen) { case (baseTarget, reference, generationSignature, _, transactionData) =>
       val block = Block
         .create(
-          version = 3.toByte,
           time,
           reference,
           baseTarget,
           generationSignature,
           weakAccount,
           featureVotes = Seq.empty,
-          rewardVote = -1L,
           transactionData,
           stateHash = None,
           challengedHeader = None,
@@ -102,11 +95,11 @@ class BlockSpecification extends PropSpec {
   }
 
   ignore("sign time for 60k txs") {
-    forAll(randomTransactionsGen(60000), accountGen, byteArrayGen(Block.BlockIdLength), byteArrayGen(Block.GenerationSignatureLength)) {
+    forAll(randomTransactionsGen(60000), accountGen, byteArrayGen(Block.BlockIdLength), byteArrayGen(Block.GenerationVRFSignatureLength)) {
       case (txs, acc, ref, gs) =>
         val (block, _) =
           Instrumented.withTimeMillis(
-            Block.buildAndSign(3.toByte, 1, ByteStr(ref), 1, ByteStr(gs), txs, acc, Seq.empty, -1L, None, None, None).explicitGet()
+            Block.buildAndSign(1, ByteStr(ref), 1, ByteStr(gs), txs, acc, Seq.empty, None, None, None).explicitGet()
           )
         val (bytes, _) = Instrumented.withTimeMillis(block.bytes().dropRight(crypto.SignatureLength))
         val (hash, _)  = Instrumented.withTimeMillis(crypto.fastHash(bytes))

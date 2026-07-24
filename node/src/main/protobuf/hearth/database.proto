@@ -120,3 +120,7 @@ message LeaseDetails {
 message LeaseIds {
   repeated bytes ids = 1;
 }
+
+message CarryFee {
+  repeated Amount carry_fee = 1;
+}

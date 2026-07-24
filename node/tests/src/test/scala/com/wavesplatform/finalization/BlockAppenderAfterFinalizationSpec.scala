@@ -23,11 +23,10 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
   protected val notCommittedGeneratorAddr = notCommittedGenerator.toAddress
 
   private val defaultSettings = DomainPresets.DeterministicFinality
-    .addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+
     .configure(
       _.copy(
         generationPeriodLength = 2,
-        lightNodeBlockFieldsAbsenceInterval = 0
       )
     )
 

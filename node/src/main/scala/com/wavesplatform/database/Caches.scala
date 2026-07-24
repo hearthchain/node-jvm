@@ -244,13 +244,13 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     val newMeta = PBBlockMeta(
       Some(PBBlocks.protobuf(block.header)),
       ByteString.copyFrom(block.signature.arr),
-      if (block.header.version >= Block.ProtoBlockVersion) ByteString.copyFrom(block.id().arr) else ByteString.EMPTY,
+      ByteString.copyFrom(block.id().arr),
       newHeight.toInt,
       block.bytes().length,
       block.transactionData.size,
       totalFee,
       reward.getOrElse(0),
-      if (block.header.version >= Block.ProtoBlockVersion) ByteString.copyFrom(hitSource.arr) else ByteString.EMPTY,
+      ByteString.copyFrom(hitSource.arr),
       ByteString.copyFrom(newScore.toByteArray),
       totalWavesAmount
     )

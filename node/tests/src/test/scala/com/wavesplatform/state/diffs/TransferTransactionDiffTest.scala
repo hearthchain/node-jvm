@@ -13,7 +13,10 @@ class TransferTransactionDiffTest extends PropSpec with WithDomain {
     val senderKp  = TxHelpers.secondSigner
     val recipient = TxHelpers.address(2)
 
-    withDomain(DomainPresets.mostRecent.copy(rewardsSettings = RewardsVotingSettings(None)), AddrWithBalance.enoughBalances(senderKp)) { d =>
+    withDomain(
+      DomainPresets.mostRecent.copy(rewardsSettings = RewardsVotingSettings(None)),
+      AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, senderKp)
+    ) { d =>
       val wavesTransfer = TxHelpers.transfer(senderKp, recipient)
       d.appendAndAssertSucceed(wavesTransfer)
       val rewardFee = 6.waves - wavesTransfer.fee.value * 3 / 5

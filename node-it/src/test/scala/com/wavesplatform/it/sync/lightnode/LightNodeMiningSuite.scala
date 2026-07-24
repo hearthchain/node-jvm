@@ -1,7 +1,6 @@
 package com.wavesplatform.it.sync.lightnode
 
 import com.typesafe.config.Config
-import com.wavesplatform.features.BlockchainFeatures.LightNode
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.{BaseFunSuite, NodeConfigs, TransferSending}
 import com.wavesplatform.state.Height
@@ -10,7 +9,6 @@ import com.wavesplatform.test.NumericExt
 class LightNodeMiningSuite extends BaseFunSuite with TransferSending {
   override def nodeConfigs: Seq[Config] =
     NodeConfigs.newBuilder
-      .overrideBase(_.preactivatedFeatures(LightNode.id.toInt -> Height(2)))
       .overrideBase(_.raw("waves.blockchain.custom.functionality.light-node-block-fields-absence-interval = 2"))
       .withDefault(1)
       .withSpecial(1, _.lightNode)

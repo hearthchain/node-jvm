@@ -13,7 +13,6 @@ case class ExchangeRequest(
     price: Long,
     buyMatcherFee: Long,
     sellMatcherFee: Long,
-    version: Option[TxVersion] = None,
     sender: Option[String] = None,
     fee: Option[Long] = None,
     timestamp: Option[TxTimestamp] = None,
@@ -24,7 +23,6 @@ case class ExchangeRequest(
     for {
       validProofs <- toProofs(signature, proofs)
       tx <- ExchangeTransaction.create(
-        version.getOrElse(1.toByte),
         order1,
         order2,
         amount,

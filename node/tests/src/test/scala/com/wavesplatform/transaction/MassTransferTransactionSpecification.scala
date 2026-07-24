@@ -62,44 +62,44 @@ class MassTransferTransactionSpecification extends PropSpec {
     val (_, _, assetId, _, fee, transfers, attachment, proofs) = massTransfers.head
 
     val tooManyTransfers   = List.fill(MaxTransferCount + 1)(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(1L)))
-    val tooManyTransfersEi = create(1.toByte, PublicKey(sender.publicKey), asset, tooManyTransfers, fee, timestamp, attachment, proofs)
+    val tooManyTransfersEi = create(PublicKey(sender.publicKey), asset, tooManyTransfers, fee, timestamp, attachment, proofs)
     tooManyTransfersEi shouldBe Left(GenericError(s"Number of transfers ${tooManyTransfers.length} is greater than $MaxTransferCount"))
 
     val oneHalf    = Long.MaxValue / 2 + 1
     val overflow   = List.fill(2)(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(oneHalf)))
-    val overflowEi = create(1.toByte, PublicKey(sender.publicKey), assetId, overflow, fee, timestamp, attachment, proofs)
+    val overflowEi = create(PublicKey(sender.publicKey), assetId, overflow, fee, timestamp, attachment, proofs)
     overflowEi shouldBe Left(TxValidationError.OverflowError)
 
     val feeOverflow   = List(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(oneHalf)))
-    val feeOverflowEi = create(1.toByte, PublicKey(sender.publicKey), assetId, feeOverflow, oneHalf, timestamp, attachment, proofs)
+    val feeOverflowEi = create(PublicKey(sender.publicKey), assetId, feeOverflow, oneHalf, timestamp, attachment, proofs)
     feeOverflowEi shouldBe Left(TxValidationError.OverflowError)
 
     val longAttachment   = ByteStr(Array.fill(TransferTransaction.MaxAttachmentSize + 1)(1: Byte))
-    val longAttachmentEi = create(1.toByte, PublicKey(sender.publicKey), assetId, transfers, fee, timestamp, longAttachment, proofs)
+    val longAttachmentEi = create(PublicKey(sender.publicKey), assetId, transfers, fee, timestamp, longAttachment, proofs)
     longAttachmentEi shouldBe Left(
       TxValidationError.TooBigInBytes(
         s"Invalid attachment. Length ${TransferTransaction.MaxAttachmentSize + 1} bytes exceeds maximum of ${TransferTransaction.MaxAttachmentSize} bytes."
       )
     )
 
-    val noFeeEi = create(1.toByte, PublicKey(sender.publicKey), assetId, feeOverflow, 0, timestamp, attachment, proofs)
+    val noFeeEi = create(PublicKey(sender.publicKey), assetId, feeOverflow, 0, timestamp, attachment, proofs)
     noFeeEi shouldBe Left(TxValidationError.InsufficientFee)
 
-    val negativeFeeEi = create(1.toByte, PublicKey(sender.publicKey), assetId, feeOverflow, -100, timestamp, attachment, proofs)
+    val negativeFeeEi = create(PublicKey(sender.publicKey), assetId, feeOverflow, -100, timestamp, attachment, proofs)
     negativeFeeEi shouldBe Left(TxValidationError.InsufficientFee)
 
     val differentChainIds = Seq(
       ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(100)),
       ParsedTransfer(PublicKey(sender.publicKey).toAddress('?'.toByte), TxNonNegativeAmount.unsafeFrom(100))
     )
-    val invalidChainIdEi = create(1.toByte, PublicKey(sender.publicKey), assetId, differentChainIds, 100, timestamp, attachment, proofs)
+    val invalidChainIdEi = create(PublicKey(sender.publicKey), assetId, differentChainIds, 100, timestamp, attachment, proofs)
     invalidChainIdEi should produce("One of chain ids not match")
 
     val otherChainIds = Seq(
       ParsedTransfer(PublicKey(sender.publicKey).toAddress('?'.toByte), TxNonNegativeAmount.unsafeFrom(100)),
       ParsedTransfer(PublicKey(sender.publicKey).toAddress('?'.toByte), TxNonNegativeAmount.unsafeFrom(100))
     )
-    val invalidOtherChainIdEi = create(1.toByte, PublicKey(sender.publicKey), assetId, otherChainIds, 100, timestamp, attachment, proofs)
+    val invalidOtherChainIdEi = create(PublicKey(sender.publicKey), assetId, otherChainIds, 100, timestamp, attachment, proofs)
     invalidOtherChainIdEi should produce("One of chain ids not match")
   }
 
@@ -140,7 +140,6 @@ class MassTransferTransactionSpecification extends PropSpec {
 
     val tx = MassTransferTransaction
       .create(
-        1.toByte,
         PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
         Waves,
         transfers,

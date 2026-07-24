@@ -141,7 +141,7 @@ class MinerImpl(
     val estimators = MiningConstraints(blockchainUpdater, blockchainUpdater.height, Some(minerSettings))
     val keyBlockStateHash = prevStateHash.flatMap { prevHash =>
       BlockDiffer
-        .createInitialBlockSnapshot(blockchainUpdater, reference, miner)
+        .createInitialBlockSnapshot(blockchainUpdater, reference, miner, None)
         .toOption
         .map { initSnapshot =>
           if (initSnapshot == StateSnapshot.empty) prevHash
@@ -172,7 +172,6 @@ class MinerImpl(
     val refBaseTarget  = refBlockHeader.header.baseTarget
     val height         = blockchain.height
     val newBlockHeight = Height(height + 1)
-    val version        = blockchain.nextBlockVersion
 
     val address = signingKey.toAddress
 
@@ -209,7 +208,6 @@ class MinerImpl(
         (unconfirmed, totalConstraint, stateHash) = packTransactionsForKeyBlock(address, reference, prevStateHash)
         block <- Block
           .buildAndSign(
-            version,
             blockTime,
             reference,
             consensusData.baseTarget,
@@ -217,7 +215,6 @@ class MinerImpl(
             unconfirmed,
             signingKey,
             blockFeatures(blockchain),
-            blockRewardVote(),
             if (blockchain.supportsLightNodeBlockFields(newBlockHeight.toInt)) stateHash else None,
             challengedHeader = None,
             finalizationVoting = None // Haven't voted in a key block
@@ -244,9 +241,6 @@ class MinerImpl(
       .filter(BlockchainFeatures.implemented)
       .sorted
   }
-
-  private def blockRewardVote(): Long =
-    settings.rewardsSettings.desired.getOrElse(-1L)
 
   def nextBlockGenerationTime(blockchain: Blockchain, signingKey: SigningKey, vrfKey: VrfKey): Either[String, Long] = {
     val balance = blockchain.generatingBalance(signingKey.toAddress)

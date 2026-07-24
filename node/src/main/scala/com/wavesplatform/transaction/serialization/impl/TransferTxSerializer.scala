@@ -12,8 +12,7 @@ object TransferTxSerializer {
       "assetId"    -> assetId.maybeBase58Repr,
       "feeAsset"   -> feeAssetId.maybeBase58Repr, // legacy v0.11.1 compat
       "amount"     -> amount.value,
-      "attachment" -> attachment,
-      "version"    -> tx.version
+      "attachment" -> attachment
     )
   }
 

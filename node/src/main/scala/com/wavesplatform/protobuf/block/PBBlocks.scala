@@ -14,14 +14,12 @@ import scala.util.Try
 object PBBlocks {
   def vanilla(header: PBBlock.Header): BlockHeader =
     BlockHeader(
-      header.version.toByte,
       header.timestamp,
       header.reference.toByteStr,
       header.baseTarget,
       header.generationSignature.toByteStr,
       header.generator.toPublicKey,
       header.featureVotes.map(_.toShort),
-      header.rewardVote,
       header.transactionsRoot.toByteStr,
       Option.unless(header.stateHash.isEmpty)(header.stateHash.toByteStr),
       header.challengedHeader.map { ch =>
@@ -31,7 +29,6 @@ object PBBlocks {
           ch.generationSignature.toByteStr,
           ch.featureVotes.map(_.toShort),
           ch.generator.toPublicKey,
-          ch.rewardVote,
           Option.unless(ch.stateHash.isEmpty)(ch.stateHash.toByteStr),
           ch.headerSignature.toByteStr,
           ch.finalizationVoting.map(PBFinalizationVotings.vanilla(_).get)
@@ -52,9 +49,7 @@ object PBBlocks {
     header.generationSignature.toByteString,
     header.featureVotes.map(_.toInt),
     header.timestamp,
-    header.version,
     ByteString.copyFrom(header.generator.arr),
-    header.rewardVote,
     header.transactionsRoot.toByteString,
     header.stateHash.getOrElse(ByteStr.empty).toByteString,
     header.challengedHeader.map { ch =>
@@ -64,7 +59,6 @@ object PBBlocks {
         ch.featureVotes.map(_.toInt),
         ch.timestamp,
         ch.generator.toByteString,
-        ch.rewardVote,
         ch.stateHash.getOrElse(ByteStr.empty).toByteString,
         ch.headerSignature.toByteString,
         ch.finalizationVoting.map(PBFinalizationVotings.protobuf)

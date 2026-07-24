@@ -35,7 +35,6 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
           ConsensusImprovements.blockchainSettings.rewardsSettings.copy(term = 100, termAfterCappedRewardFeature = 50, votingInterval = 10)
         )
     )
-    .setFeaturesHeight(BlockchainFeatures.BlockReward -> blockRewardActivationHeight, BlockchainFeatures.CappedReward -> 3)
 
   routePath("/rewards (NODE-855)") in {
     checkWithSettings(settingsWithoutAddresses)
@@ -157,14 +156,9 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
     val daoAddress = TxHelpers.address(3002)
 
     val settings = DomainPresets.ConsensusImprovements
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 0,
-        BlockchainFeatures.CappedReward            -> 0,
-        BlockchainFeatures.BoostBlockReward        -> 5
-      )
       .configure(fs => fs.copy(blockRewardBoostPeriod = 10, daoAddress = Some(daoAddress.toString)))
 
-    withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves))) { d =>
+    withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves)), generators = Seq(miner)) { d =>
       val route = new RewardApiRoute(d.blockchain).route
 
       def checkRewardAndShares(height: Int, expectedReward: Long)(

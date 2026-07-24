@@ -18,13 +18,13 @@ class FinalizationSuite extends BaseFinalizationSpec {
   // Only a committed generator may produce a block, and these tests mine with each of the nodes
   private val allNodes = Seq(node0Acc, node1Acc, node2Acc, node3Acc)
 
-  private val baseSettings = DomainPresets.DeterministicFinality.addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+  private val baseSettings = DomainPresets.DeterministicFinality
   private val defaultSettings = baseSettings
     .copy(minerSettings = baseSettings.minerSettings.copy(quorum = 0))
     .configure(_.copy(generationPeriodLength = 3))
 
   "finalized if got next block referenced votes in" - {
-    "block" in withDomain(defaultSettings, AddrWithBalance.enoughBalances(node0Acc, node1Acc), generators = allNodes) { d =>
+    "block" in withDomain(defaultSettings, AddrWithBalance.enoughBalances(allNodes*), generators = allNodes) { d =>
       val genesisBlockId = d.blockchain.lastBlockId.value
       d.finalizedHeightIsEmpty()
         .finalizedHeightAtPrevIsEmpty()
@@ -60,7 +60,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
     "microblock" in withDomain(
       defaultSettings,
-      AddrWithBalance.enoughBalances(node0Acc, node1Acc, node2Acc), generators = allNodes
+      AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
     ) { d =>
       val genesisBlockId = d.blockchain.lastBlockId.value
       d.appendBlock()
@@ -97,7 +97,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "finalized if replaced by better block with votes" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(node0Acc, node1Acc, node2Acc), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
     d.appendBlock()
@@ -134,7 +134,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "not finalized if replaced by better block without votes" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(node0Acc, node1Acc, node2Acc), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
     d.appendBlock()
@@ -172,7 +172,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "not finalized if not voted" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(node0Acc, node1Acc), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
   ) { d =>
     d.appendBlock()
 
@@ -196,7 +196,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "finalized if surpass maxRollback blocks even no votes" in withDomain(
     defaultSettings.copy(synchronizationSettings = defaultSettings.synchronizationSettings.copy(maxRollback = 2)),
-    AddrWithBalance.enoughBalances(node0Acc, node1Acc), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
   ) { d =>
     d.appendBlock()
 
@@ -221,7 +221,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
   "empty generator set" - {
     def test(settings: WavesSettings)(continue: Domain => Unit): Unit = withDomain(
       settings,
-      AddrWithBalance.enoughBalances(node0Acc, node1Acc, node2Acc), generators = allNodes
+      AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
     ) { d =>
       d.appendBlock()
 
@@ -313,7 +313,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "spending after voting doesn't affect finalization" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(node0Acc, node1Acc, node2Acc), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
     d.appendBlock()

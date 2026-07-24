@@ -18,14 +18,12 @@ import play.api.libs.json.*
 import tech.hearth.crypto.*
 
 case class BlockHeader(
-    version: Byte,
     timestamp: Long,
     reference: ByteStr,
     baseTarget: Long,
     generationSignature: ByteStr,
     generator: PublicKey,
     featureVotes: Seq[Short],
-    rewardVote: Long,
     transactionsRoot: ByteStr,
     stateHash: Option[ByteStr],
     challengedHeader: Option[ChallengedHeader],
@@ -40,7 +38,6 @@ case class ChallengedHeader(
     generationSignature: ByteStr,
     featureVotes: Seq[Short],
     generator: PublicKey,
-    rewardVote: Long,
     stateHash: Option[ByteStr],
     headerSignature: ByteStr,
     finalizationVoting: Option[FinalizationVoting]
@@ -63,8 +60,7 @@ case class Block(
   val blockScore: Coeval[BigInt] = header.score
 
   val bodyBytes: Coeval[Array[Byte]] = Coeval.evalOnce {
-    if (header.version < Block.ProtoBlockVersion) copy(signature = ByteStr.empty).bytes()
-    else PBBlocks.protobuf(this).header.get.toByteArray
+    PBBlocks.protobuf(this).header.get.toByteArray
   }
 
   protected val signedDescendants: Coeval[Seq[Signed]] = Coeval.evalOnce(transactionData.flatMap(_.cast[Signed]))
@@ -81,7 +77,6 @@ case class Block(
             generationSignature = ch.generationSignature,
             generator = ch.generator,
             featureVotes = ch.featureVotes,
-            rewardVote = ch.rewardVote,
             stateHash = ch.stateHash,
             challengedHeader = None,
             finalizationVoting = ch.finalizationVoting
@@ -92,7 +87,7 @@ case class Block(
 
   val signatureValid: Coeval[Boolean] = Coeval.evalOnce {
     crypto.verify(signature, bodyBytes(), header.generator) &&
-    (header.version < Block.ProtoBlockVersion || transactionsMerkleTree().transactionsRoot == header.transactionsRoot) &&
+    (transactionsMerkleTree().transactionsRoot == header.transactionsRoot) &&
     header.challengedHeader.forall { ch =>
       crypto.verify(
         ch.headerSignature,
@@ -110,53 +105,41 @@ case class Block(
 
   override def toString: String =
     s"Block(${id()},${header.reference},${header.generator.toAddress},${header.timestamp}," +
-      s"${header.featureVotes.mkString("[", ",", "]")}${if (header.rewardVote >= 0) s",${header.rewardVote}" else ""}" +
+      s"${header.featureVotes.mkString("[", ",", "]")}" +
       s"${header.finalizationVoting.fold("")(v => s",$v")})"
 }
 
 object Block {
-  def idFromHeader(h: BlockHeader, signature: ByteStr): ByteStr =
-    if (h.version >= ProtoBlockVersion) protoHeaderHash(h)
-    else signature
+  def idFromHeader(h: BlockHeader, signature: ByteStr): ByteStr = protoHeaderHash(h)
 
   def protoHeaderHash(h: BlockHeader): ByteStr = {
-    require(h.version >= ProtoBlockVersion)
     ByteStr(crypto.fastHash(PBBlocks.protobuf(h).toByteArray))
   }
-
-  def referenceLength(version: Byte): Int =
-    if (version >= ProtoBlockVersion) DigestLength
-    else SignatureLength
 
   def validateReferenceLength(length: Int): Boolean =
     length == DigestLength || length == SignatureLength
 
   def create(
-      version: Byte,
       timestamp: Long,
       reference: ByteStr,
       baseTarget: Long,
       generationSignature: ByteStr,
       generator: PublicKey,
       featureVotes: Seq[Short],
-      rewardVote: Long,
       transactionData: Seq[Transaction],
       stateHash: Option[ByteStr],
       challengedHeader: Option[ChallengedHeader],
       finalizationVoting: Option[FinalizationVoting]
   ): Block = {
-    val transactionsRoot = mkTransactionsRoot(version, transactionData)
     Block(
       BlockHeader(
-        version,
         timestamp,
         reference,
         baseTarget,
         generationSignature,
         generator,
         featureVotes,
-        rewardVote,
-        transactionsRoot,
+        mkTransactionsRoot(transactionData),
         stateHash,
         challengedHeader,
         finalizationVoting
@@ -176,14 +159,13 @@ object Block {
     signature = signature,
     transactionData = transactionData,
     header = base.header.copy(
-      transactionsRoot = mkTransactionsRoot(base.header.version, transactionData),
+      transactionsRoot = mkTransactionsRoot(transactionData),
       stateHash = stateHash,
       finalizationVoting = finalizationVoting
     )
   )
 
   def buildAndSign(
-      version: Byte,
       timestamp: Long,
       reference: ByteStr,
       baseTarget: Long,
@@ -191,20 +173,17 @@ object Block {
       txs: Seq[Transaction],
       signer: SigningKey,
       featureVotes: Seq[Short],
-      rewardVote: Long,
       stateHash: Option[ByteStr],
       challengedHeader: Option[ChallengedHeader],
       finalizationVoting: Option[FinalizationVoting]
   ): Either[GenericError, Block] =
     create(
-      version,
       timestamp,
       reference,
       baseTarget,
       generationSignature,
       PublicKey(signer.publicKey),
       featureVotes,
-      rewardVote,
       txs,
       stateHash,
       challengedHeader,
@@ -215,7 +194,7 @@ object Block {
   /** The genesis block has no transactions: its effect on the state is the predefined snapshot built from [[GenesisSettings]]. */
   def genesis(
       genesisSettings: GenesisSettings,
-      functionalitySettings: FunctionalitySettings,
+      functionalitySettings: FunctionalitySettings
   ): Either[ValidationError, Block] =
     for {
       snapshot <- GenesisSnapshot.build(genesisSettings, functionalitySettings)
@@ -223,14 +202,12 @@ object Block {
       timestamp  = genesisSettings.blockTimestamp
       // The state hash goes into the header before signing: the block is protobuf-serialized, so its body bytes cover it
       block = create(
-        GenesisBlockVersion,
         timestamp,
         GenesisReference,
         baseTarget,
         GenesisGenerationSignature,
         PublicKey(GenesisGenerator.publicKey),
         featureVotes = Seq(),
-        rewardVote = -1L,
         transactionData = Seq.empty,
         stateHash = Some(TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)),
         challengedHeader = None,
@@ -247,11 +224,12 @@ object Block {
   type TransactionsMerkleTree = Seq[Seq[Array[Byte]]]
   case class TransactionProof(id: ByteStr, transactionIndex: Int, digests: Seq[Array[Byte]])
 
+  val ReferenceLength: Int = DigestLength
+
   val MaxTransactionsPerBlockVer1Ver2: Int = 100
   val MaxTransactionsPerBlockVer3: Int     = 6000
   val MaxFeaturesInBlock: Int              = 64
   val BaseTargetLength: Int                = 8
-  val GenerationSignatureLength: Int       = 32
   // A hearth Ecvrf proof is Gamma(32) || c(16) || s(32); Waves' was 96
   val GenerationVRFSignatureLength: Int = 80
   val BlockIdLength: Int                = SignatureLength
@@ -263,13 +241,6 @@ object Block {
 
   /** The initial random beacon: the next block's VRF proof is verified against it. */
   val GenesisGenerationSignature: BlockId = ByteStr(new Array[Byte](GenerationVRFSignatureLength))
-
-  val ProtoBlockVersion: Byte  = 5
-
-  /** The genesis block is protobuf-serialized, so that its body bytes - and therefore its signature - cover the state
-    * hash and the consensus data, and so that its hit source is persisted for the next block to VRF sign against.
-    */
-  val GenesisBlockVersion: Byte = ProtoBlockVersion
 
   // Merkle
   implicit class BlockTransactionsRootOps(private val block: Block) extends AnyVal {

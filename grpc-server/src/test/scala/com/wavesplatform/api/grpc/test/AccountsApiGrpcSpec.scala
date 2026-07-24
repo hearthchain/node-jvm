@@ -189,7 +189,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     val sender          = TxHelpers.signer(1)
     val challengedMiner = TxHelpers.signer(2)
     withDomain(
-      TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)),
+      TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(sender)
     ) { d =>
       val grpcApi = getGrpcApi(d)
@@ -247,7 +247,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
 
   private def getLastBlockMinerReward(d: Domain): Long =
     BlockRewardCalculator
-      .getBlockRewardShares(
+      .rewardSharesAt(
         Height(d.blockchain.height),
         d.blockchain.settings.rewardsSettings.initial,
         d.blockchain.settings.functionalitySettings.daoAddressParsed.toOption.flatten,

@@ -15,7 +15,6 @@ import play.api.libs.json.JsObject
 import scala.util.chaining.scalaUtilChainingOps
 
 case class ExchangeTransaction(
-    version: TxVersion,
     order1: Order,
     order2: Order,
     amount: TxExchangeAmount,
@@ -64,7 +63,6 @@ object ExchangeTransaction {
   val typeId: TxType = 7: Byte
 
   def create(
-      version: TxVersion,
       order1: Order,
       order2: Order,
       amount: Long,
@@ -81,7 +79,6 @@ object ExchangeTransaction {
       amount <- TxExchangeAmount(amount)(GenericError(TxExchangeAmount.errMsg))
       price  <- TxExchangePrice(price)(GenericError(TxExchangePrice.errMsg))
       tx <- ExchangeTransaction(
-        version,
         order1,
         order2,
         amount,

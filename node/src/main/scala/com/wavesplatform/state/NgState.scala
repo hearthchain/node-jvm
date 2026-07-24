@@ -199,10 +199,8 @@ case class NgState(
     fullBlock.id()
   }
 
-  def createTransactionsRoot(microBlock: MicroBlock): ByteStr = {
-    val newTransactions = this.transactions ++ microBlock.transactionData
-    block.mkTransactionsRoot(base.header.version, newTransactions)
-  }
+  def createTransactionsRoot(microBlock: MicroBlock): ByteStr =
+    block.mkTransactionsRoot(this.transactions ++ microBlock.transactionData)
 
   private def forgeBlock(blockId: BlockId): Option[(forged: Block, discarded: DiscardedMicroBlocks)] =
     internalCaches.forgedBlocks.get(

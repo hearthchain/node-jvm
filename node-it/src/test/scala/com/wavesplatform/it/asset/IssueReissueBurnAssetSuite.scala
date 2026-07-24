@@ -325,7 +325,7 @@ class IssueReissueBurnAssetSuite extends BaseFreeSpec {
     nodes.waitForHeightAriseAndTxPresent(
       miner
         .signedBroadcast(
-          TxHelpers.setScript(acc = address, script = compiledScript, fee = setScriptFee, version = 1.toByte)
+          TxHelpers.setScript(acc = address, script = compiledScript, fee = setScriptFee)
             .json()
         )
         .id

@@ -8,7 +8,6 @@ import com.wavesplatform.transaction.lease.LeaseTransaction
 import play.api.libs.json.{Format, Json}
 
 case class LeaseRequest(
-    version: Option[Byte],
     chainId: Option[Byte],
     senderPublicKey: String,
     recipient: String,
@@ -24,7 +23,6 @@ case class LeaseRequest(
       validProofs    <- toProofs(signature, proofs)
       validSender    <- PublicKey.fromBase58String(senderPublicKey)
       tx <- LeaseTransaction.create(
-        version.getOrElse(1.toByte),
         chainId.getOrElse(AddressScheme.current.chainId),
         validSender,
         validRecipient,

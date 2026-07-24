@@ -29,8 +29,8 @@ class RollbackSpec extends FreeSpec with WithDomain {
   private def randomOp(sender: SigningKey, recipient: Address, amount: Long, op: Int, nextTs: => Long = nextTs) = {
     op match {
       case 1 =>
-        val lease       = TxHelpers.lease(sender, recipient, amount, fee = 100000L, timestamp = nextTs, version = TxVersion.V1)
-        val cancelLease = TxHelpers.leaseCancel(lease.id(), sender, fee = 1, timestamp = nextTs, version = TxVersion.V1)
+        val lease       = TxHelpers.lease(sender, recipient, amount, fee = 100000L, timestamp = nextTs)
+        val cancelLease = TxHelpers.leaseCancel(lease.id(), sender, fee = 1, timestamp = nextTs)
         List(lease, cancelLease)
       case 2 =>
         List(
@@ -42,11 +42,11 @@ class RollbackSpec extends FreeSpec with WithDomain {
             ),
             fee = 10000,
             timestamp = nextTs,
-            version = TxVersion.V1
+            
           )
         )
       case _ =>
-        List(TxHelpers.transfer(sender, recipient, amount, fee = 1000, timestamp = nextTs, version = TxVersion.V1))
+        List(TxHelpers.transfer(sender, recipient, amount, fee = 1000, timestamp = nextTs))
     }
   }
 
@@ -82,7 +82,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
       val sender    = TxHelpers.signer(1)
       val recipient = TxHelpers.signer(2)
       val txCount   = (1 to 10).toList
-      withDomain(createSettings(MassTransfer -> 0), Seq(AddrWithBalance(sender.toAddress))) { d =>
+      withDomain(createSettings(), Seq(AddrWithBalance(sender.toAddress))) { d =>
         val genesisSignature = d.lastBlockId
 
         val transferAmount = 100
@@ -147,7 +147,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
               .create(
                 nextTs,
                 d.lastBlockId,
-                Seq.fill(tc)(TxHelpers.transfer(sender, recipient.toAddress, transferAmount, fee = fee, version = TxVersion.V1))
+                Seq.fill(tc)(TxHelpers.transfer(sender, recipient.toAddress, transferAmount, fee = fee))
               )
               .block
           )
@@ -172,7 +172,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
         val genesisBlockId = d.lastBlockId
 
         val leaseAmount = initialBalance - 2
-        val lt          = TxHelpers.lease(sender, recipient.toAddress, leaseAmount, version = TxVersion.V1)
+        val lt          = TxHelpers.lease(sender, recipient.toAddress, leaseAmount)
         d.appendBlock(TestBlock.create(nextTs, genesisBlockId, Seq(lt)).block)
         d.blockchainUpdater.height shouldBe 2
         val blockWithLeaseId = d.lastBlockId
@@ -185,7 +185,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
         d.blockchainUpdater.leaseBalance(sender.toAddress).out shouldEqual leaseAmount
         d.blockchainUpdater.leaseBalance(recipient.toAddress).in shouldEqual leaseAmount
 
-        val leaseCancel = TxHelpers.leaseCancel(lt.id(), sender, version = TxVersion.V1)
+        val leaseCancel = TxHelpers.leaseCancel(lt.id(), sender)
         d.appendBlock(
           TestBlock
             .create(
@@ -247,7 +247,6 @@ class RollbackSpec extends FreeSpec with WithDomain {
                   feeAsset = Waves,
                   attachment = ByteStr.empty,
                   timestamp = nextTs,
-                  version = 1.toByte
                 )
               )
             )
@@ -268,7 +267,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
       val sender    = TxHelpers.signer(1)
       val recipient = TxHelpers.signer(2)
       val txCount   = (1 to 66).map(_ % 10 + 1).toList
-      withDomain(createSettings(MassTransfer -> 0), Seq(AddrWithBalance(sender.toAddress))) { d =>
+      withDomain(createSettings(), Seq(AddrWithBalance(sender.toAddress))) { d =>
         val ts = nextTs
 
         val transferAmount = 100

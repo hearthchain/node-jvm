@@ -74,7 +74,6 @@ package object http {
   ) { (version, sender, recipient, asset, amount, timestamp, feeAsset, fee, attachment, proofs, signature) =>
     TransferTransaction
       .create(
-        version.getOrElse(1.toByte),
         sender,
         recipient,
         asset,

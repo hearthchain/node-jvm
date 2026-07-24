@@ -67,7 +67,6 @@ case class MicroBlockResponse(microblock: MicroBlock, totalBlockId: BlockId) ext
 
 object MicroBlockResponse {
   def apply(mb: MicroBlock): MicroBlockResponse = {
-    require(mb.version < Block.ProtoBlockVersion)
     MicroBlockResponse(mb, mb.totalResBlockSig)
   }
 }

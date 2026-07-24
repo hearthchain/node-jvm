@@ -32,7 +32,6 @@ class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherV
     val block =
       Block
         .buildAndSign(
-          Block.ProtoBlockVersion,
           System.currentTimeMillis(),
           TestBlock.randomSignature(),
           2L,
@@ -40,7 +39,6 @@ class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherV
           Seq.empty,
           defaultSigner,
           features.sorted,
-          rewardVote = -1,
           Some(stateHash),
           challengedHeader = None,
           finalizationVoting = None
@@ -115,7 +113,6 @@ class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherV
       (1 to 10).foreach { _ =>
         shiftTime(miner, minerAcc, d.testTime)
         val block = miner.forgeBlock(minerAcc, TxHelpers.defaultVrfKey).toEither.explicitGet().newBlock
-        block.header.version shouldBe Block.ProtoBlockVersion
         append(block).explicitGet() shouldBe an[Applied]
       }
       d.blockchain.height shouldBe 11
@@ -130,7 +127,6 @@ class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherV
       generators = Seq(TxHelpers.defaultSigner)
     ) { d =>
       val keyBlock = d.appendKeyBlock()
-      keyBlock.header.version shouldBe Block.ProtoBlockVersion
 
       val transfer1 = TxHelpers.transfer()
       val transfer2 = TxHelpers.transfer()

@@ -34,7 +34,7 @@ class SmartGenerator(settings: SmartGenerator.Settings, val accounts: Seq[KeyPai
     val setScripts = Range(0, settings.scripts) flatMap (_ =>
       accounts.map { i =>
         SetScriptTransaction
-          .create(1.toByte, i.publicKey, Some(script), 1.waves, System.currentTimeMillis(), Proofs.empty)
+          .create(i.publicKey, Some(script), 1.waves, System.currentTimeMillis(), Proofs.empty)
           .map(_.signWith(i.privateKey))
           .explicitGet()
       }
@@ -43,7 +43,7 @@ class SmartGenerator(settings: SmartGenerator.Settings, val accounts: Seq[KeyPai
     val now = System.currentTimeMillis()
     val txs = Range(0, settings.transfers).map { i =>
       TransferTransaction
-        .create(2.toByte, bank.publicKey, bank.toAddress, Waves, 1.waves - 2 * fee, Waves, fee, ByteStr.empty, now + i, Proofs.empty)
+        .create(bank.publicKey, bank.toAddress, Waves, 1.waves - 2 * fee, Waves, fee, ByteStr.empty, now + i, Proofs.empty)
         .map(_.signWith(bank.privateKey))
         .explicitGet()
     }

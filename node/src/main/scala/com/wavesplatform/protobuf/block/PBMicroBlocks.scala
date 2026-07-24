@@ -25,7 +25,6 @@ object PBMicroBlocks {
 
     MicroBlockResponse(
       VanillaMicroBlock(
-        microBlock.version.toByte,
         PublicKey(microBlock.senderPublicKey.toByteArray),
         transactions,
         microBlock.reference.toByteStr,
@@ -39,7 +38,6 @@ object PBMicroBlocks {
   }
 
   def protobufUnsigned(microBlock: VanillaMicroBlock): PBMicroBlock = PBMicroBlock(
-    version = microBlock.version,
     reference = microBlock.reference.toByteString,
     updatedBlockSignature = microBlock.totalResBlockSig.toByteString,
     senderPublicKey = microBlock.sender.toByteString,

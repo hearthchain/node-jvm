@@ -180,7 +180,6 @@ class BlockChallengerImpl(
         blockTime
       )
       blockWithoutChallengeAndStateHash <- Block.buildAndSign(
-        challengedBlock.header.version,
         blockTime,
         challengedBlock.header.reference,
         consensusData.baseTarget,
@@ -188,7 +187,6 @@ class BlockChallengerImpl(
         txs,
         sk,
         blockFeatures(blockchainUpdater, settings),
-        blockRewardVote(settings),
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = challengedFinalizationVoting
@@ -203,7 +201,8 @@ class BlockChallengerImpl(
         blockchainUpdater.computeNextReward,
         None
       )
-      initialBlockSnapshot <- BlockDiffer.createInitialBlockSnapshot(blockchainUpdater, challengedBlock.header.reference, sk.toAddress)
+      // todo: prev block is required for proper initial snapshot
+      initialBlockSnapshot <- BlockDiffer.createInitialBlockSnapshot(blockchainUpdater, challengedBlock.header.reference, sk.toAddress, ???)
       stateHash <- TxStateSnapshotHashBuilder
         .computeStateHash(
           txs,
@@ -217,7 +216,6 @@ class BlockChallengerImpl(
         )
         .resultE
       challengingBlock <- Block.buildAndSign(
-        challengedBlock.header.version,
         blockTime,
         challengedBlock.header.reference,
         consensusData.baseTarget,
@@ -225,7 +223,6 @@ class BlockChallengerImpl(
         txs,
         sk,
         blockFeatures(blockchainUpdater, settings),
-        blockRewardVote(settings),
         Some(stateHash),
         Some(
           ChallengedHeader(
@@ -234,7 +231,6 @@ class BlockChallengerImpl(
             challengedBlock.header.generationSignature,
             challengedBlock.header.featureVotes,
             challengedBlock.header.generator,
-            challengedBlock.header.rewardVote,
             challengedStateHash,
             challengedSignature,
             challengedFinalizationVoting
@@ -259,9 +255,6 @@ class BlockChallengerImpl(
       .filter(BlockchainFeatures.implemented)
       .sorted
   }
-
-  private def blockRewardVote(settings: WavesSettings): Long =
-    settings.rewardsSettings.desired.getOrElse(-1L)
 
   private def waitForTimeAlign(blockTime: Long, timeDrift: Long): Task[Unit] =
     Task {

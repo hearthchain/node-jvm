@@ -255,7 +255,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
   "NODE-922. GetBlock should return correct data for challenging block" in {
     val sender = TxHelpers.signer(1)
     withDomain(
-      TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)),
+      TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(sender, defaultSigner)
     ) { d =>
       val grpcApi          = getGrpcApi(d)
@@ -308,7 +308,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
   "NODE-922. GetBlockRange should return correct data for challenging block" in {
     val sender = TxHelpers.signer(1)
     withDomain(
-      TransactionStateSnapshot.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)),
+      TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(sender, defaultSigner)
     ) { d =>
       val grpcApi          = getGrpcApi(d)
@@ -387,11 +387,6 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
             .copy(daoAddress = Some(daoAddress.toString), xtnBuybackAddress = Some(xtnBuybackAddress.toString), xtnBuybackRewardPeriod = 1),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
-      )
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 3,
-        BlockchainFeatures.CappedReward            -> 4,
-        BlockchainFeatures.CeaseXtnBuyback         -> 5
       )
 
     withDomain(settingsWithFeatures) { d =>

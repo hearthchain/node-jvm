@@ -61,7 +61,7 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
     }
   }
 
-  private val settingsWithGenesis: WavesSettings = DomainPresets.NG.setFeaturesHeight(BlockchainFeatures.BlockReward -> 2)
+  private val settingsWithGenesis: WavesSettings = DomainPresets.NG
   private val genesisBalance: Long               = 10 * 100.waves
 
   "wavesAmount includes the genesis snapshot" in withDomain(

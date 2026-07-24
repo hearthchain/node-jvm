@@ -31,7 +31,7 @@ class LightNodeTest extends PropSpec with WithDomain {
   property("NODE-1148. Light node shouldn't apply block when its state hash differs from snapshot state hash") {
     val sender    = TxHelpers.signer(1)
     val recipient = TxHelpers.address(2)
-    withDomain(settings.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)), AddrWithBalance.enoughBalances(sender)) { d =>
+    withDomain(settings, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)) { d =>
       val prevBlock    = d.lastBlock
       val txs          = Seq(TxHelpers.transfer(sender, recipient, amount = 10.waves), TxHelpers.transfer(sender, recipient, amount = 100.waves))
       val validBlock   = d.createBlock(txs)
@@ -58,7 +58,7 @@ class LightNodeTest extends PropSpec with WithDomain {
     val txs             = Seq(TxHelpers.transfer(sender, recipient, amount = 10.waves), TxHelpers.transfer(sender, recipient, amount = 100.waves))
     val invalidBlockTxs = Seq(TxHelpers.transfer(sender, recipient, amount = 20.waves), TxHelpers.transfer(sender, recipient, amount = 200.waves))
 
-    withDomain(settings, AddrWithBalance.enoughBalances(sender)) { d =>
+    withDomain(settings, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)) { d =>
       val validBlockWithOtherTxs = d.createBlock(txs)
 
       val invalidBlock = d.createBlock(invalidBlockTxs, stateHash = Some(validBlockWithOtherTxs.header.stateHash))
@@ -75,7 +75,7 @@ class LightNodeTest extends PropSpec with WithDomain {
     val recipient = TxHelpers.address(2)
 
     Seq(true -> None, false -> Some(List.empty[BlockSnapshot])).foreach { case (isLightMode, maybeExpectedSnapshots) =>
-      withDomain(DomainPresets.TransactionStateSnapshot.copy(enableLightMode = isLightMode), AddrWithBalance.enoughBalances(sender)) { d =>
+      withDomain(DomainPresets.TransactionStateSnapshot.copy(enableLightMode = isLightMode), AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)) { d =>
         val genesisSignature = d.lastBlockId
 
         def newBlocks(count: Int): List[BlockSnapshot] = {
@@ -171,8 +171,9 @@ class LightNodeTest extends PropSpec with WithDomain {
     val challengingMiner = TxHelpers.signer(3)
 
     withDomain(
-      settings.configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0)),
-      AddrWithBalance.enoughBalances(challengingMiner, TxHelpers.defaultSigner, sender)
+      settings,
+      AddrWithBalance.enoughBalances(challengingMiner, TxHelpers.defaultSigner, sender),
+      generators = Seq(TxHelpers.defaultSigner, challengingMiner)
     ) { d =>
       val txs              = Seq(TxHelpers.transfer(sender, recipient, amount = 1.waves), TxHelpers.transfer(sender, recipient, amount = 2.waves))
       val invalidBlock     = d.createBlock(txs, strictTime = true, stateHash = Some(Some(invalidStateHash)))

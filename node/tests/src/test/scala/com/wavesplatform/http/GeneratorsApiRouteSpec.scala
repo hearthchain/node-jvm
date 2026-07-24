@@ -35,7 +35,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
   private val activationHeight       = Height(2)
   private val generationPeriodLength = 3
   private val defaultSettings: WavesSettings = {
-    val orig = DomainPresets.DeterministicFinality.setFeaturesHeight(BlockchainFeatures.DeterministicFinality -> activationHeight.toInt)
+    val orig = DomainPresets.DeterministicFinality
     orig.copy(
       blockchainSettings = orig.blockchainSettings.copy(
         functionalitySettings = orig.blockchainSettings.functionalitySettings.copy(generationPeriodLength = generationPeriodLength)
@@ -58,24 +58,6 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
   private val period3 = period2.next
 
   "/generators/at/{height}" - {
-    "before activation" in test { d =>
-      d.blockchain.isFeatureActivated(BlockchainFeatures.DeterministicFinality) shouldBe false
-
-      d.checkAt() { status shouldBe NotFound }
-      d.checkAt(period1.start) { status shouldBe NotFound }
-      d.checkAt(period2.start) { status shouldBe NotFound }
-    }
-
-    "before commitments" in test { d =>
-      d.appendBlock()
-      d.blockchain.isFeatureActivated(BlockchainFeatures.DeterministicFinality) shouldBe true
-
-      d.checkAt(1) { status shouldBe NotFound } // Before activation
-      d.checkAt() { jsonBodyIsEmpty() }
-      d.checkAt(period1.start) { jsonBodyIsEmpty() }
-      d.checkAt(period2.start) { status shouldBe NotFound }
-    }
-
     "committed to the period 1" in test { d =>
       d.appendBlock()
       val txIds = d.commit(generators*)

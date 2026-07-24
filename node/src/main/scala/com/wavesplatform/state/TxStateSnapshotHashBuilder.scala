@@ -8,7 +8,7 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.TxMeta.Status
-import com.wavesplatform.state.diffs.BlockDiffer.{CurrentBlockFeePart, maybeApplySponsorship}
+import com.wavesplatform.state.diffs.BlockDiffer.CurrentBlockFeePart
 import com.wavesplatform.state.diffs.TransactionDiffer
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
@@ -110,8 +110,7 @@ object TxStateSnapshotHashBuilder {
           val txDifferResult = txDiffer(accBlockchain, tx)
           txDifferResult.resultE match {
             case Right(txSnapshot) =>
-              val (feeAsset, feeAmount) =
-                maybeApplySponsorship(accBlockchain, Height(accBlockchain.height) >= Sponsorship.sponsoredFeesSwitchHeight(blockchain), tx.assetFee)
+              val (feeAsset, feeAmount) = tx.assetFee
               val minerPortfolio = Map(signer.toAddress -> Portfolio.build(feeAsset, feeAmount).multiply(CurrentBlockFeePart))
 
               val txSnapshotWithBalances = txSnapshot.addBalances(minerPortfolio, accBlockchain).explicitGet()

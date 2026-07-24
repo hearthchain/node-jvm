@@ -36,9 +36,14 @@ object GenesisSnapshot {
         nextCommittedGenerators = generators
       )
       _ <- BalanceDiffValidation(snapshot)
-      _ <- generators.collectFirst { case c if snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L) < CommitToGenerationTransaction.DepositInWavelets =>
-        GenericError(s"Generator ${c.sender.toAddress} balance ${snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L)} is less than required for generation")
-      }.toLeft(())
+      _ <- generators
+        .collectFirst {
+          case c if snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L) < CommitToGenerationTransaction.DepositInWavelets =>
+            GenericError(
+              s"Generator ${c.sender.toAddress} balance ${snapshot.balances.getOrElse(c.sender.toAddress -> Asset.Waves, 0L)} is less than required for generation"
+            )
+        }
+        .toLeft(())
     } yield snapshot
   private def issuedAssets(settings: Seq[GenesisAssetSettings]): Either[ValidationError, Seq[(IssuedAsset, NewAssetInfo)]] =
     for {
@@ -111,14 +116,6 @@ object GenesisSnapshot {
     if (settings.isEmpty) Right(Seq.empty)
     else
       for {
-        _ <- Either.cond(
-          functionalitySettings.preActivatedFeatures.get(BlockchainFeatures.DeterministicFinality.id).exists(Height(_) <= GenesisBlockHeight),
-          (),
-          GenericError(
-            "Genesis generators require the DeterministicFinality feature to be pre-activated at a height not greater than " +
-              s"$GenesisBlockHeight, got ${functionalitySettings.preActivatedFeatures.get(BlockchainFeatures.DeterministicFinality.id)}"
-          )
-        )
         _ <- checkNoDuplicates(settings.map(_.publicKey), "genesis generator public key")
         _ <- checkNoDuplicates(settings.map(_.endorserPublicKey), "genesis generator endorser public key")
         _ <- checkNoDuplicates(settings.map(_.vrfPublicKey), "genesis generator VRF public key")

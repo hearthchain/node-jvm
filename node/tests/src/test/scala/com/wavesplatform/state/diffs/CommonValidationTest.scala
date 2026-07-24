@@ -23,7 +23,7 @@ class CommonValidationTest extends PropSpec with WithState {
       val recipients = Seq(master, TxHelpers.signer(2))
 
       recipients.map { recipient =>
-        TxHelpers.transfer(master, recipient.toAddress, version = TxVersion.V1)
+        TxHelpers.transfer(master, recipient.toAddress)
       }
     }
 
@@ -48,8 +48,8 @@ class CommonValidationTest extends PropSpec with WithState {
       val invChainId    = '#'.toByte
       val invChainAddr  = recipient.toAddress
       Seq(
-        TxHelpers.transfer(master, invChainAddr, amount, version = TxVersion.V1, chainId = invChainId),
-        TxHelpers.lease(master, invChainAddr, amount, version = TxVersion.V1, chainId = invChainId),
+        TxHelpers.transfer(master, invChainAddr, amount, chainId = invChainId),
+        TxHelpers.lease(master, invChainAddr, amount, chainId = invChainId),
         TxHelpers.exchangeFromOrders(
           TxHelpers.order(OrderType.BUY, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, sender = master),
           TxHelpers.order(OrderType.SELL, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, sender = recipient),
@@ -57,7 +57,7 @@ class CommonValidationTest extends PropSpec with WithState {
           chainId = invChainId
         ),
         TxHelpers.massTransfer(master, Seq(invChainAddr -> amount), chainId = invChainId),
-        TxHelpers.leaseCancel(asset.id, master, version = TxVersion.V3, chainId = invChainId),
+        TxHelpers.leaseCancel(asset.id, master, chainId = invChainId),
         TxHelpers.commitToGeneration(Height(3000), chainId = invChainId)
       )
     }

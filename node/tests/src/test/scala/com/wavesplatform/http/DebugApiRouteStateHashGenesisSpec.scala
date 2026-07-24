@@ -75,8 +75,6 @@ class DebugApiRouteStateHashGenesisSpec
         // Append first block to be able to request stateHash
         domain.appendBlock()
 
-        // Assert after DeterministicFinality feature activation
-        domain.blockchain.isFeatureActivated(BlockchainFeatures.DeterministicFinality, domain.blockchain.height) shouldBe true
         val genesisHeight      = 1
         val genesisBlockHeader = domain.blockchain.blockHeader(genesisHeight).value
         val expectedResponse = Json.obj(

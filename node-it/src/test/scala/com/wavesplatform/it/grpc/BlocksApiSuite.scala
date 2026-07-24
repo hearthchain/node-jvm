@@ -70,7 +70,6 @@ class BlocksApiSuite extends GrpcBaseTransactionSuite {
     validateHeaders(BlockV4Height + 1 until BlockV5Height) { header =>
       header.chainId shouldEqual AddressScheme.current.chainId
       header.version shouldEqual 4
-      header.rewardVote shouldEqual -1
     }
   }
 
@@ -79,7 +78,6 @@ class BlocksApiSuite extends GrpcBaseTransactionSuite {
     validateHeaders(BlockV5Height until BlockV5Height + 2) { header =>
       header.chainId shouldEqual AddressScheme.current.chainId
       header.version shouldEqual 5
-      header.rewardVote shouldEqual -1
     }
   }
 }

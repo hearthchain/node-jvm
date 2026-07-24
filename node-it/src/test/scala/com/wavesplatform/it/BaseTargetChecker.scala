@@ -35,8 +35,6 @@ object BaseTargetChecker {
           .genesis(
             settings.blockchainSettings.genesisSettings,
             settings.blockchainSettings.functionalitySettings,
-            blockchainUpdater.isFeatureActivated(BlockchainFeatures.RideV6),
-            blockchainUpdater.isFeatureActivated(BlockchainFeatures.LightNode)
           )
           .explicitGet()
       blockchainUpdater.processBlock(genesisBlock, genesisBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty)

@@ -46,25 +46,6 @@ lazy val `node-generator` = project.dependsOn(node, `node-testkit`)
 
 lazy val benchmark = project.dependsOn(node, `node-testkit`)
 
-lazy val repl = crossProject(JSPlatform, JVMPlatform)
-  .withoutSuffixFor(JVMPlatform)
-  .crossType(CrossType.Full)
-  .settings(
-    libraryDependencies ++= Dependencies.circe.value ++ Seq(
-      Dependencies.protoSchemasLib % "protobuf"
-    ),
-    inConfig(Compile)(
-      Seq(
-        PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value,
-        PB.protoSources += PB.externalIncludePath.value,
-        PB.generate / includeFilter := { (f: File) =>
-          (** / "hearth" / "*.proto").matches(f.toPath)
-        },
-        PB.deleteTargetDirectory := false
-      )
-    )
-  )
-
 lazy val `waves-node` = (project in file("."))
   .aggregate(
     node,

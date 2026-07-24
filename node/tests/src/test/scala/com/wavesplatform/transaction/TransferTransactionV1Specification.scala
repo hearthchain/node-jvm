@@ -2,12 +2,10 @@ package com.wavesplatform.transaction
 
 import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.Proofs
-import com.wavesplatform.transaction.serialization.impl.TransferTxSerializer
 import com.wavesplatform.transaction.transfer.*
 import play.api.libs.json.Json
 
@@ -35,7 +33,6 @@ class TransferTransactionV1Specification extends PropSpec {
 
     val recipient = Address.fromString("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8").explicitGet()
     val tx = TransferTransaction(
-      1.toByte,
       PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
       recipient,
       Waves,
@@ -54,7 +51,7 @@ class TransferTransactionV1Specification extends PropSpec {
   property("negative") {
     for {
       (_, sender, recipient, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
-    } yield TransferTransaction.create(1.toByte, PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty).map(_.signWith(sender)) should produce(
+    } yield TransferTransaction.create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty).map(_.signWith(sender)) should produce(
       "insufficient fee"
     )
   }

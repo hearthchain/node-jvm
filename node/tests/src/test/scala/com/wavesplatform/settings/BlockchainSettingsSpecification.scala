@@ -117,7 +117,6 @@ class BlockchainSettingsSpecification extends FlatSpec {
     val settings = BlockchainSettings.fromRootConfig(config)
 
     settings.addressSchemeCharacter should be('T')
-    settings.functionalitySettings.generationBalanceDepthFrom50To1000AfterHeight should be(0)
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(120.minutes)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(90.minutes)
     settings.rewardsSettings.initial should be(600000000)

@@ -13,7 +13,6 @@ import monix.eval.Coeval
 import tech.hearth.crypto.SigningKey
 
 case class MicroBlock(
-    version: Byte,
     sender: PublicKey,
     transactionData: Seq[Transaction],
     reference: BlockId,
@@ -35,7 +34,6 @@ case class MicroBlock(
 
 object MicroBlock {
   def buildAndSign(
-      version: Byte,
       generator: SigningKey,
       transactionData: Seq[Transaction],
       reference: BlockId,
@@ -44,7 +42,6 @@ object MicroBlock {
       finalizationVoting: Option[FinalizationVoting]
   ): Either[ValidationError, MicroBlock] =
     MicroBlock(
-      version,
       PublicKey(generator.publicKey),
       transactionData,
       reference,
@@ -55,6 +52,5 @@ object MicroBlock {
     ).validate
       .map(_.sign(generator))
 
-  def validateReferenceLength(version: Byte, length: Int): Boolean =
-    length == Block.referenceLength(version)
+  def validateReferenceLength(length: Int): Boolean = length == Block.ReferenceLength
 }

@@ -11,7 +11,6 @@ import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
 final case class LeaseCancelTransaction(
-    version: TxVersion,
     sender: PublicKey,
     leaseId: ByteStr,
     fee: TxPositiveAmount,
@@ -37,7 +36,6 @@ object LeaseCancelTransaction {
   implicit val validator: TxValidator[LeaseCancelTransaction] = LeaseCancelTxValidator
 
   def create(
-      version: TxVersion,
       sender: PublicKey,
       leaseId: ByteStr,
       fee: Long,
@@ -47,6 +45,6 @@ object LeaseCancelTransaction {
   ): Either[ValidationError, TransactionT] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- LeaseCancelTransaction(version, sender, leaseId, fee, timestamp, proofs, chainId).validatedEither
+      tx  <- LeaseCancelTransaction(sender, leaseId, fee, timestamp, proofs, chainId).validatedEither
     } yield tx
 }

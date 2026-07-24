@@ -66,7 +66,7 @@ class BlockchainUpdatesGetBlockUpdatesSpec extends BlockchainUpdatesTestBase {
         TxHelpers.issue(firstTxParticipant, name = "Nft_test_asset", description = "OVER_9000", amount = 1, reissuable = false, script = None)
       withGenerateGetBlockUpdate(
         height = 2,
-        settings = currentSettings.addFeatures(BlockchainFeatures.ReduceNFTFee),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       )(_.appendBlock(issueNftTx)) { getBlockUpdate =>
         val append = getBlockUpdate.getUpdate.getAppend
@@ -122,7 +122,7 @@ class BlockchainUpdatesGetBlockUpdatesSpec extends BlockchainUpdatesTestBase {
         val order1          = createOrder(OrderType.BUY, firstTxParticipant, Order.V4)
         val order2          = createOrder(OrderType.SELL, secondTxParticipant, Order.V4)
         val normalizedPrice = order1.price.value / 2 / 10000000
-        val exchangeTx      = TxHelpers.exchangeFromOrders(order1, order2, firstTxParticipant, version = TxVersion.V3)
+        val exchangeTx      = TxHelpers.exchangeFromOrders(order1, order2, firstTxParticipant)
         withAddedBlocksAndGetBlockUpdate(exchangeTx, height = 4) { getBlockUpdate =>
           val append = getBlockUpdate.getUpdate.getAppend
           checkExchangeTx(append, exchangeTx, normalizedPrice, order1.amount.value)
@@ -192,7 +192,7 @@ class BlockchainUpdatesGetBlockUpdatesSpec extends BlockchainUpdatesTestBase {
       val setScript = TxHelpers.setScript(firstTxParticipant, testScript, customFee)
       withGenerateGetBlockUpdate(
         height = 2,
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       )(_.appendBlock(setScript)) { getBlockUpdate =>
         val append = getBlockUpdate.getUpdate.getAppend
@@ -239,7 +239,7 @@ class BlockchainUpdatesGetBlockUpdatesSpec extends BlockchainUpdatesTestBase {
       val setAssetScript = TxHelpers.setAssetScript(firstTxParticipant, issue.asset, complexScriptAfter, 1.waves)
       withGenerateGetBlockUpdate(
         height = 3,
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       ) { d =>
         d.appendBlock(issue)
@@ -276,7 +276,7 @@ class BlockchainUpdatesGetBlockUpdatesSpec extends BlockchainUpdatesTestBase {
 
       withGenerateGetBlockUpdate(
         height = 4,
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(
           AddrWithBalance(ethAddress, firstTxParticipantBalanceBefore),
           AddrWithBalance(secondTxParticipantAddress, secondTxParticipantBalanceBefore)

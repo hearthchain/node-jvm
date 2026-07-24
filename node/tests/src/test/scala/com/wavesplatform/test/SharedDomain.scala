@@ -21,9 +21,17 @@ trait SharedDomain extends BeforeAndAfterAll with NTPTime with DBCacheSettings {
   def settings: WavesSettings               = DomainPresets.DeterministicFinality
   def genesisBalances: Seq[AddrWithBalance] = Seq.empty
 
-  // Genesis balances are part of the genesis snapshot, which is built from the settings the state is created with
-  protected lazy val domainSettings: WavesSettings =
-    settings.withGenesisBalances(genesisBalances*).withGenesisGenerators(TxHelpers.defaultSigner)
+  // Genesis balances are part of the genesis snapshot, which is built from the settings the state is created with.
+  // defaultSigner is always committed as the generator here, so it also has to be funded for its genesis deposit -
+  // unless the spec's own genesisBalances already fund it.
+  protected lazy val domainSettings: WavesSettings = {
+    val balancesWithMiner =
+      if (genesisBalances.exists(_.address == TxHelpers.defaultSigner.toAddress)) genesisBalances
+      else AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: genesisBalances
+    settings
+      .withGenesisBalances(balancesWithMiner*)
+      .withGenesisGenerators(TxHelpers.defaultSigner)
+  }
 
   private lazy val (bui, ldb) = TestStorageFactory(domainSettings, rdb, ntpTime, BlockchainUpdateTriggers.noop)
 

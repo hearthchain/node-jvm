@@ -28,12 +28,12 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
   def transfers(sender: SigningKey, rs: Address, amount: Long): Seq[TransferTransaction] =
     Seq(
       TxHelpers.transfer(sender, rs, amount),
-      TxHelpers.transfer(sender, rs, amount, version = TxVersion.V1)
+      TxHelpers.transfer(sender, rs, amount)
     )
 
   def mkBlock(sender: SigningKey, reference: ByteStr, transactions: Seq[Transaction]): Block =
     Block
-      .buildAndSign(3.toByte, ntpNow, reference, 1000, ByteStr(new Array[Byte](32)), transactions, sender, Seq.empty, -1L, None, None, None)
+      .buildAndSign(ntpNow, reference, 1000, ByteStr(new Array[Byte](Block.GenerationVRFSignatureLength)), transactions, sender, Seq.empty, None, None, None)
       .explicitGet()
 
   private val genesisTimestamp = ntpNow
@@ -123,7 +123,7 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
     }
     "distinct result avoiding inconsistent state" in {
       val startRead = new ReentrantLock()
-      withDomain(RideV5, AddrWithBalance.enoughBalances(secondSigner), InterferableDB(_, startRead)) { d =>
+      withDomain(RideV5, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, secondSigner), InterferableDB(_, startRead)) { d =>
         d.appendBlock()
         d.appendMicroBlock(TxHelpers.transfer())
         startRead.lock()

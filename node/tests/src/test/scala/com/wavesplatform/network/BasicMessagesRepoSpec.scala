@@ -20,9 +20,7 @@ class BasicMessagesRepoSpec extends FreeSpec {
       ByteString.copyFrom(byteArrayGen(VanillaBlock.GenerationVRFSignatureLength).sample.get),
       Seq.fill(VanillaBlock.MaxFeaturesInBlock)(Short.MaxValue),
       Long.MaxValue,
-      Byte.MaxValue,
       ByteString.copyFrom(bytes32gen.sample.get),
-      Long.MaxValue,
       ByteString.copyFrom(bytes32gen.sample.get)
     )
     val maxSignature = ByteString.copyFrom(bytes64gen.sample.get)
@@ -67,7 +65,6 @@ class BasicMessagesRepoSpec extends FreeSpec {
           ByteString.copyFrom(bytes32gen.sample.get),
           Some(PBAmounts.fromAssetAndAmount(IssuedAsset(ByteStr(bytes32gen.sample.get)), Long.MaxValue)),
           Long.MaxValue,
-          Byte.MaxValue
         )
       ),
       Seq.fill(Proofs.MaxProofs)(ByteString.copyFrom(byteArrayGen(Proofs.MaxProofSize).sample.get))

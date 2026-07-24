@@ -3,24 +3,17 @@ package com.wavesplatform.state
 import com.google.common.primitives.Longs
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.EitherExt2.explicitGet
 import com.wavesplatform.state.StateHash.Section
 import com.wavesplatform.test.FreeSpec
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.TxHelpers
 
-import scala.util.Random
-
 class StateHashSpec extends FreeSpec {
-  private def mkAddress() = {
-    val bs = new Array[Byte](32)
-    Random.nextBytes(bs)
-    Address.fromPublicKey(PublicKey(bs))
-  }
-
   "state hash" - {
     val stateHash    = new StateHashBuilder
-    val address      = mkAddress()
-    val address1     = mkAddress()
+    val address      = Address.fromBytes(Array.fill(20)(1.toByte)).explicitGet()
+    val address1     = Address.fromBytes(Array.fill(20)(2.toByte)).explicitGet()
     val assetId      = IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get)
     val wavesAccount = TxHelpers.defaultSigner
     val blsAccount   = TxHelpers.defaultBlsKey

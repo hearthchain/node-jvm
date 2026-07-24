@@ -27,10 +27,6 @@ class RewardsTestSuite extends BaseFreeSpec with ActivationStatusRequest with Op
       miner.balanceAtHeight(miner.address, activationHeight - 1) shouldBe initMinerBalance
       miner.waitForHeight(activationHeight)
 
-      val featureInfo = miner.featureActivationStatus(BlockchainFeatures.BlockReward.id)
-      featureInfo.description shouldBe BlockchainFeatures.BlockReward.description
-      featureInfo.blockchainStatus shouldBe BlockchainFeatureStatus.Activated
-
       val minerBalanceAtActivationHeight = miner.balanceAtHeight(miner.address, activationHeight)
       minerBalanceAtActivationHeight shouldBe initMinerBalance + miner.rewardStatus().currentReward
 
@@ -175,11 +171,6 @@ object RewardsTestSuite {
 
   val configWithIncreasedDesired: Config = ConfigFactory.parseString(
     s"""waves {
-       |  blockchain.custom.functionality {
-       |    pre-activated-features = {
-       |      ${BlockchainFeatures.BlockReward.id} = $activationHeight
-       |    }
-       |  }
        |  blockchain.custom.rewards {
        |    term = $term
        |    initial = $initial
@@ -193,11 +184,6 @@ object RewardsTestSuite {
 
   val configWithDecreasedDesired: Config = ConfigFactory.parseString(
     s"""waves {
-       |  blockchain.custom.functionality {
-       |    pre-activated-features = {
-       |      ${BlockchainFeatures.BlockReward.id} = $activationHeight
-       |    }
-       |  }
        |  blockchain.custom.rewards {
        |    term = $term
        |    initial = $initial

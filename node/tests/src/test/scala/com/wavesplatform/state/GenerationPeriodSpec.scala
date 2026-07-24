@@ -135,5 +135,5 @@ class GenerationPeriodSpec extends FreeSpec {
       activation: Int = defaultActivation,
       len: Int = defaultGenerationPeriodLength
   ): Option[(start: GenerationPeriod, end: GenerationPeriod)] =
-    GenerationPeriod.enclosedPeriods(Height(activation), len, Height(start), Height(end))
+    GenerationPeriod.enclosedPeriods(len, Height(start), Height(end))
 }

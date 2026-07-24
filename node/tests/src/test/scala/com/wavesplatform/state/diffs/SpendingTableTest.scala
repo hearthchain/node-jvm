@@ -22,11 +22,11 @@ class SpendingTableTest extends FreeSpec with WithState {
     def test(hasLeasing: Boolean, hasDeposit: Boolean, spending: Spending, expectedError: String): Unit =
       s"hasLeasing=$hasLeasing, hasDeposit=$hasDeposit, spending=$spending" in {
         val settings = DomainPresets.DeterministicFinality
-          .addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+
           .blockchainSettings
           .functionalitySettings
           .copy(
-            generationPeriodLength = 3
+            generationPeriodLength = 2
           )
 
         val spendingAmount = CommitToGenerationTransaction.DepositInWavelets + // To fit both leasing and deposit cases
@@ -45,10 +45,10 @@ class SpendingTableTest extends FreeSpec with WithState {
           Numbers.when(initLeasing > 0)(initLeasing + txFee) + Numbers.when(initDeposit > 0)(initDeposit + txFee)
 
         val initLeasingTx = Option.when(hasLeasing)(TxHelpers.lease(sender = spender, minerAddr, amount = initLeasing, fee = txFee))
-        val initDepositTx = Option.when(hasDeposit)(TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(4), fee = txFee))
+        val initDepositTx = Option.when(hasDeposit)(TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(3), fee = txFee))
         val spendingTx = spending match {
           case Spending.Leasing  => TxHelpers.lease(sender = spender, minerAddr, amount = spendingAmount, fee = txFee)
-          case Spending.Deposit  => TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(7), fee = txFee)
+          case Spending.Deposit  => TxHelpers.commitToGeneration(sender = spender, generationPeriodStart = Height(5), fee = txFee)
           case Spending.Transfer => TxHelpers.transfer(from = spender, to = minerAddr, amount = spendingAmount, fee = txFee)
         }
 

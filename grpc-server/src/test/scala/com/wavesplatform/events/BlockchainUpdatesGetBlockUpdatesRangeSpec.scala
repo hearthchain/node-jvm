@@ -75,7 +75,7 @@ class BlockchainUpdatesGetBlockUpdatesRangeSpec extends BlockchainUpdatesTestBas
         TxHelpers.issue(firstTxParticipant, name = "Nft_test_asset", description = "OVER_9000", amount = 1, reissuable = false, script = None)
       withGenerateGetBlockUpdateRange(
         GetBlockUpdatesRangeRequest.of(1, 2),
-        settings = currentSettings.addFeatures(BlockchainFeatures.ReduceNFTFee),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       ) { d =>
         d.appendBlock(issueNftTx)
@@ -136,7 +136,7 @@ class BlockchainUpdatesGetBlockUpdatesRangeSpec extends BlockchainUpdatesTestBas
         val order1          = createOrder(OrderType.BUY, firstTxParticipant, Order.V4)
         val order2          = createOrder(OrderType.SELL, secondTxParticipant, Order.V4)
         val normalizedPrice = order1.price.value / 2 / 10000000
-        val exchangeTx      = TxHelpers.exchangeFromOrders(order1, order2, firstTxParticipant, version = TxVersion.V3)
+        val exchangeTx      = TxHelpers.exchangeFromOrders(order1, order2, firstTxParticipant)
         withAddedBlocksAndGetBlockUpdateRange(exchangeTx, GetBlockUpdatesRangeRequest.of(1, 4)) { getBlockUpdateRange =>
           val append = getBlockUpdateRange.apply(3).getAppend
           checkExchangeTx(append, exchangeTx, normalizedPrice, order1.amount.value)
@@ -212,7 +212,7 @@ class BlockchainUpdatesGetBlockUpdatesRangeSpec extends BlockchainUpdatesTestBas
       val setScript = TxHelpers.setScript(firstTxParticipant, testScript, customFee)
       withGenerateGetBlockUpdateRange(
         GetBlockUpdatesRangeRequest.of(1, 2),
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       ) { d =>
         d.appendBlock(setScript)
@@ -264,7 +264,7 @@ class BlockchainUpdatesGetBlockUpdatesRangeSpec extends BlockchainUpdatesTestBas
       val setAssetScript = TxHelpers.setAssetScript(firstTxParticipant, issue.asset, complexScriptAfter, 1.waves)
       withGenerateGetBlockUpdateRange(
         GetBlockUpdatesRangeRequest.of(1, 3),
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       ) { d =>
         d.appendBlock(issue)
@@ -303,7 +303,7 @@ class BlockchainUpdatesGetBlockUpdatesRangeSpec extends BlockchainUpdatesTestBas
 
       withGenerateGetBlockUpdateRange(
         GetBlockUpdatesRangeRequest.of(1, 4),
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(
           AddrWithBalance(ethAddress, firstTxParticipantBalanceBefore),
           AddrWithBalance(secondTxParticipantAddress, secondTxParticipantBalanceBefore)

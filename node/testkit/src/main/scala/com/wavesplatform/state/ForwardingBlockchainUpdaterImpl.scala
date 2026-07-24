@@ -19,7 +19,6 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
     activatedFeatures,
     featureVotes,
     blockReward,
-    blockRewardVotes,
     wavesAmount,
     transactionInfo,
     transactionInfos,

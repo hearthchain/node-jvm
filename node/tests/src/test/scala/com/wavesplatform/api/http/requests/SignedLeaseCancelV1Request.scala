@@ -19,7 +19,7 @@ case class SignedLeaseCancelV1Request(
       _sender    <- PublicKey.fromBase58String(senderPublicKey)
       _signature <- parseBase58(signature, "invalid.signature", SignatureStringLength)
       _leaseTx   <- parseBase58(leaseId, "invalid.leaseTx", SignatureStringLength)
-      _t         <- LeaseCancelTransaction.create(1.toByte, _sender, _leaseTx, fee, timestamp, Proofs(_signature))
+      _t         <- LeaseCancelTransaction.create(_sender, _leaseTx, fee, timestamp, Proofs(_signature))
     } yield _t
 }
 

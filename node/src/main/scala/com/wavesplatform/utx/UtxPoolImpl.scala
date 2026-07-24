@@ -323,7 +323,7 @@ case class UtxPoolImpl(
       def isUnlimited: Boolean = strategy == PackStrategy.Unlimited
 
       def minerFeePortfolio(currBlockchain: Blockchain, tx: Transaction): Map[Address, Portfolio] = {
-        val (feeAsset, feeAmount) = BlockDiffer.maybeApplySponsorship(currBlockchain, blockchain.isSponsorshipActive, tx.assetFee)
+        val (feeAsset, feeAmount) = tx.assetFee
         val minerPortfolio        = Portfolio.build(feeAsset, feeAmount).multiply(CurrentBlockFeePart) // NG is active
 
         Map(currBlockchain.lastBlockHeader.get.header.generator.toAddress -> minerPortfolio)

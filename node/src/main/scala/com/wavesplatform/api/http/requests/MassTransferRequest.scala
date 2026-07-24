@@ -12,8 +12,7 @@ import play.api.libs.json.*
 object MassTransferRequest {
   given Format[MassTransferRequest] = Format(
     (
-      (JsPath \ "version").readNullable[Byte] and
-        (JsPath \ "senderPublicKey").read[String] and
+      (JsPath \ "senderPublicKey").read[String] and
         (JsPath \ "assetId").readNullable[Asset] and
         (JsPath \ "transfers").read[List[Transfer]] and
         (JsPath \ "fee").read[Long] and
@@ -26,7 +25,6 @@ object MassTransferRequest {
 }
 
 case class MassTransferRequest(
-    version: Option[Byte],
     senderPublicKey: String,
     assetId: Option[Asset],
     transfers: List[Transfer],
@@ -40,7 +38,6 @@ case class MassTransferRequest(
       _sender    <- PublicKey.fromBase58String(senderPublicKey)
       _transfers <- MassTransferTransaction.parseTransfersList(transfers)
       t <- MassTransferTransaction.create(
-        version.getOrElse(1.toByte),
         _sender,
         assetId.getOrElse(Asset.Waves),
         _transfers,

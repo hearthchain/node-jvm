@@ -25,7 +25,6 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
   override protected def nodeConfigs: Seq[Config] = Seq(
     Miners(5)
       .quorum(0)
-      .preactivatedFeatures((BlockchainFeatures.BlockV5, activationHeight))
       .overrides(s"waves.blockchain.custom.functionality.min-asset-info-update-interval = $updateInterval")
   )
 
@@ -49,14 +48,12 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
     val height                            = sender.height
     val blockBeforeActivationHeight       = sender.blockAt(height)
     val blockHeaderBeforeActivationHeight = sender.blockHeaderAt(height)
-    blockBeforeActivationHeight.version.get shouldBe Block.ProtoBlockVersion
-    blockHeaderBeforeActivationHeight.version.get shouldBe Block.ProtoBlockVersion
-    Base58.decode(blockBeforeActivationHeight.generationSignature.get).length shouldBe Block.GenerationSignatureLength
+    Base58.decode(blockBeforeActivationHeight.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
     blockBeforeActivationHeight.baseTarget shouldBe blockHeaderBeforeActivationHeight.baseTarget
   }
 
   test("not able to broadcast tx of new versions before activation") {
-    assertApiError(sender.transfer(senderAcc, recipientAcc.toAddress.toString, transferAmount, version = TxVersion.V3)) { error =>
+    assertApiError(sender.transfer(senderAcc, recipientAcc.toAddress.toString, transferAmount)) { error =>
       error.statusCode shouldBe 400
       error.message shouldBe "State check failed. Reason: ActivationError(Ride V4, VRF, Protobuf, Failed transactions feature has not been activated yet)"
       error.id shouldBe 112
@@ -112,8 +109,6 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
     val height                        = sender.height
     val blockAtActivationHeight       = sender.blockAt(height)
     val blockHeaderAtActivationHeight = sender.blockHeaderAt(height)
-    blockAtActivationHeight.version.get shouldBe Block.ProtoBlockVersion
-    blockHeaderAtActivationHeight.version.get shouldBe Block.ProtoBlockVersion
 
     val blockHeaderById = sender.blockHeaderForId(blockHeaderAtActivationHeight.id)
     blockHeaderById shouldBe blockHeaderAtActivationHeight
@@ -141,7 +136,7 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
   test("able to broadcast tx of new version after activation") {
     val senderWavesBalance    = sender.balanceDetails(senderAcc.toAddress.toString)
     val recipientWavesBalance = sender.balanceDetails(recipientAcc.toAddress.toString)
-    sender.transfer(senderAcc, recipientAcc.toAddress.toString, transferAmount, version = TxVersion.V3, waitForTx = true)
+    sender.transfer(senderAcc, recipientAcc.toAddress.toString, transferAmount, waitForTx = true)
 
     sender.balanceDetails(senderAcc.toAddress.toString).available shouldBe senderWavesBalance.available - transferAmount - minFee
     sender.balanceDetails(recipientAcc.toAddress.toString).available shouldBe recipientWavesBalance.available + transferAmount
@@ -186,12 +181,10 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
     nodes.rollback(activationHeight)
 
     val blockAtActivationHeight1 = sender.blockAt(activationHeight)
-    blockAtActivationHeight1.version.get shouldBe Block.ProtoBlockVersion
     val returnedTxIds = sender.utx().map(tx => tx.id).filter(_ != secondUpdateAssetTxId)
 
     sender.waitForHeight(activationHeight + 1, 2.minutes)
     val blockAfterActivationHeight1 = sender.blockAt(activationHeight + 1)
-    blockAfterActivationHeight1.version.get shouldBe Block.ProtoBlockVersion
     nodes.waitForHeightArise()
 
     returnedTxIds.foreach(sender.waitForTransaction(_, timeout = 8 minutes))
@@ -200,21 +193,17 @@ class VRFProtobufActivationSuite extends BaseTransactionSuite {
     nodes.rollback(activationHeight - 1, returnToUTX = false)
 
     val blockBeforeActivationHeight = sender.blockAt(activationHeight - 1)
-    blockBeforeActivationHeight.version.get shouldBe Block.ProtoBlockVersion
 
     sender.waitForHeight(activationHeight, 2.minutes)
     val blockAtActivationHeight2 = sender.blockAt(activationHeight)
-    blockAtActivationHeight2.version.get shouldBe Block.ProtoBlockVersion
 
     sender.waitForHeight(activationHeight + 1, 2.minutes)
     val blockAfterActivationHeight2 = sender.blockAt(activationHeight + 1)
-    blockAfterActivationHeight2.version.get shouldBe Block.ProtoBlockVersion
     nodes.waitForHeightArise()
 
     nodes.rollback(activationHeight + 1)
 
     val blockAtActivationHeight3 = sender.blockAt(activationHeight + 1)
-    blockAtActivationHeight3.version.get shouldBe Block.ProtoBlockVersion
   }
 
   private def mkOrders: (Order, Order) = {

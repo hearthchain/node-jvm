@@ -9,7 +9,7 @@ import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import com.wavesplatform.state.{Blockchain, Height, StateSnapshot}
 
 trait History {
-  def loadBlockBytes(id: ByteStr): Option[(Byte, Array[Byte])]
+  def loadBlockBytes(id: ByteStr): Option[Array[Byte]]
   def loadMicroBlock(id: ByteStr): Option[MicroBlock]
   def blockIdsAfter(candidates: Seq[ByteStr], count: Int): Seq[ByteStr]
   def loadBlockSnapshots(id: ByteStr): Option[Seq[TransactionStateSnapshot]]
@@ -17,8 +17,6 @@ trait History {
 }
 
 object History {
-  private def versionedBytes(block: Block): (Byte, Array[Byte]) = block.header.version -> block.bytes()
-
   def apply(
       blockchain: Blockchain,
       liquidBlock: ByteStr => Option[Block],
@@ -28,12 +26,12 @@ object History {
       rdb: RDB
   ): History =
     new History {
-      override def loadBlockBytes(id: ByteStr): Option[(Byte, Array[Byte])] =
+      override def loadBlockBytes(id: ByteStr): Option[Array[Byte]] =
         liquidBlock(id)
           .orElse(blockchain.heightOf(id).flatMap { h =>
             database.loadBlock(Height(h), rdb)
           })
-          .map(versionedBytes)
+          .map(_.bytes())
 
       override def loadMicroBlock(id: ByteStr): Option[MicroBlock] = microBlock(id)
 

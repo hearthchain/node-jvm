@@ -158,7 +158,6 @@ class DebugApiRouteSpec
         val lastButOneHeight               = domain.blockchain.height - 1
         val lastButOneHeader               = domain.blockchain.blockHeader(lastButOneHeight).value
         val lastButOneStateHash            = domain.rocksDBWriter.loadStateHash(Height(lastButOneHeight)).value
-        val deterministicFinalityActivated = domain.blockchain.isFeatureActivated(BlockchainFeatures.DeterministicFinality, lastButOneHeight)
         val lastButOneStateHashJson        = StateHash.toJson(lastButOneStateHash)
         def field(name: String)            = (lastButOneStateHashJson \ name).as[String]
 

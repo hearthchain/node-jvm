@@ -38,10 +38,15 @@ class AssetsRouteSpec
   private val MaxDistributionDepth = 1
 
   def routeTest[A](
-      settings: WavesSettings = DomainPresets.RideV4.addFeatures(BlockchainFeatures.ReduceNFTFee),
+      settings: WavesSettings = DomainPresets.RideV4,
       balances: Seq[AddrWithBalance] = Seq.empty
   )(f: (Domain, Route) => A): A =
-    withDomain(settings, balances) { d =>
+    // Blocks in these route tests are mined by defaultSigner, so it must be a committed and funded genesis generator.
+    withDomain(
+      settings,
+      if (balances.exists(_.address == defaultSigner.toAddress)) balances
+      else AddrWithBalance(defaultSigner.toAddress) +: balances
+    ) { d =>
       f(
         d,
         seal(

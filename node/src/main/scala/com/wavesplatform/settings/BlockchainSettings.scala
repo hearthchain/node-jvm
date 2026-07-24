@@ -62,32 +62,13 @@ case class FunctionalitySettings(
     preActivatedFeatures: Map[Short, Int] = Map.empty,
     maxTransactionTimeBackOffset: FiniteDuration = 120.minutes,
     maxTransactionTimeForwardOffset: FiniteDuration = 90.minutes,
-    leaseExpiration: Int = 1000000,
-    estimatorPreCheckHeight: Int = 0,
     minBlockTime: FiniteDuration = 15.seconds,
     delayDelta: Int = 8,
     daoAddress: Option[String] = None,
-    lightNodeBlockFieldsAbsenceInterval: Int = 1000,
     blockRewardBoostPeriod: Int = 1000,
     maxValidEndorsers: Int = 5,
     generationPeriodLength: Int = 1000
 ) {
-  val estimatorSumOverflowFixHeight: Int                      = 0
-  val enforceTransferValidationAfter: Int                     = 0
-  val ethInvokePaymentsCheckHeight: Int                       = 0
-  val lastTimeBasedForkParameter: Long                        = 0L
-  val minAssetInfoUpdateInterval: Int                         = 100000
-  val generationBalanceDepthFrom50To1000AfterHeight: Int      = 0
-  val blockVersion3AfterHeight: Int                           = 0
-  val doubleFeaturesPeriodsAfterHeight: Int                   = Int.MaxValue
-  val allowLeasedBalanceTransferUntilHeight: Int              = blockVersion3AfterHeight
-  val allowTemporaryNegativeUntil: Long                       = lastTimeBasedForkParameter
-  val minimalGeneratingBalanceAfter: Long                     = lastTimeBasedForkParameter
-  val allowTransactionsFromFutureUntil: Long                  = lastTimeBasedForkParameter
-  val allowUnissuedAssetsUntil: Long                          = lastTimeBasedForkParameter
-  val allowInvalidReissueInSameBlockUntilTimestamp: Long      = lastTimeBasedForkParameter
-  val allowMultipleLeaseCancelTransactionUntilTimestamp: Long = lastTimeBasedForkParameter
-
   lazy val daoAddressParsed: Either[String, Option[Address]] =
     daoAddress.traverse(Address.fromString(_)).leftMap(_ => "Incorrect dao-address")
 
@@ -96,11 +77,9 @@ case class FunctionalitySettings(
     (blocksForFeatureActivation > 0) && (blocksForFeatureActivation <= featureCheckBlocksPeriod),
     s"blocks-for-feature-activation must be in range 1 to $featureCheckBlocksPeriod"
   )
-  require(minAssetInfoUpdateInterval >= 0, "min-asset-info-update-interval must be greater than or equal to 0")
   require(generationPeriodLength > 0, "generation-period-length must be greater than 0")
 
-  def activationWindowSize(height: Int): Int =
-    featureCheckBlocksPeriod * (if (height <= doubleFeaturesPeriodsAfterHeight) 1 else 2)
+  def activationWindowSize(height: Int): Int = featureCheckBlocksPeriod
 
   def activationWindow(height: Int): Range =
     if (height < 1) Range(0, 0)
@@ -109,11 +88,9 @@ case class FunctionalitySettings(
       Range.inclusive((height - 1) / ws * ws + 1, ((height - 1) / ws + 1) * ws)
     }
 
-  def blocksForFeatureActivation(height: Int): Int =
-    blocksForFeatureActivation * (if (height <= doubleFeaturesPeriodsAfterHeight) 1 else 2)
+  def blocksForFeatureActivation(height: Int): Int = blocksForFeatureActivation
 
-  def generatingBalanceDepth(height: Int): Int =
-    if (height >= generationBalanceDepthFrom50To1000AfterHeight) 1000 else 50
+  def generatingBalanceDepth(height: Int): Int = 1000
 }
 
 object FunctionalitySettings {
@@ -125,9 +102,8 @@ object FunctionalitySettings {
   val MAINNET: FunctionalitySettings = apply(
     featureCheckBlocksPeriod = 5000,
     blocksForFeatureActivation = 4000,
-    estimatorPreCheckHeight = 1847610,
     // TODO temporary stub, replace with the real hearth DAO address before launch
-    daoAddress = Some("hrthm1qzwgwm70gtj5dfja3ygzz0vufswwef7jxu0qhx40"),
+    daoAddress = Some("hrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehuhszwk"),
     blockRewardBoostPeriod = 300_000,
     maxValidEndorsers = 128, // BLS has much worse performance from 129
     generationPeriodLength = 10_000
@@ -136,9 +112,8 @@ object FunctionalitySettings {
   val TESTNET: FunctionalitySettings = apply(
     featureCheckBlocksPeriod = 3000,
     blocksForFeatureActivation = 2700,
-    estimatorPreCheckHeight = 817380,
     // TODO temporary stub, replace with the real hearth DAO address before launch
-    daoAddress = Some("hrtht1qzwgwm70gtj5dfja3ygzz0vufswwef7jxunes64r"),
+    daoAddress = Some("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn"),
     blockRewardBoostPeriod = 2_000,
     maxValidEndorsers = 64,
     generationPeriodLength = 3000
@@ -149,7 +124,7 @@ object FunctionalitySettings {
     blocksForFeatureActivation = 40,
     preActivatedFeatures = (1 to 13).map(_.toShort -> 0).toMap,
     // TODO temporary stub, replace with the real hearth DAO address before launch
-    daoAddress = Some("hrtht1qzwgwm70gtj5dfja3ygzz0vufswwef7jxunes64r"),
+    daoAddress = Some("shrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehgwv5cg"),
     maxValidEndorsers = 32,
     generationPeriodLength = 1000
   )

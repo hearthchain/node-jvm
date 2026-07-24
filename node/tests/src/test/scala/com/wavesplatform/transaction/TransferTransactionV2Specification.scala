@@ -16,7 +16,6 @@ class TransferTransactionV2Specification extends PropSpec {
     forAll(accountGen, accountGen, proofsGen, proofsGen, attachmentGen) {
       case (_, acc2, proofs1, proofs2, attachment) =>
         val tx1 = TransferTransaction(
-          2.toByte,
           PublicKey(acc2.publicKey),
           acc2.toAddress,
           Waves,
@@ -29,7 +28,6 @@ class TransferTransactionV2Specification extends PropSpec {
           AddressScheme.current.chainId
         )
         val tx2 = TransferTransaction(
-          2.toByte,
           PublicKey(acc2.publicKey),
           acc2.toAddress,
           Waves,
@@ -51,7 +49,6 @@ class TransferTransactionV2Specification extends PropSpec {
     first.fee shouldEqual second.fee
     first.amount shouldEqual second.amount
     first.recipient shouldEqual second.recipient
-    first.version shouldEqual second.version
     first.assetId shouldEqual second.assetId
     first.feeAssetId shouldEqual second.feeAssetId
     first.proofs shouldEqual second.proofs
@@ -80,7 +77,6 @@ class TransferTransactionV2Specification extends PropSpec {
 
     val recipient = Address.fromString("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8").explicitGet()
     val tx = TransferTransaction(
-      2.toByte,
       PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
       recipient,
       Waves,

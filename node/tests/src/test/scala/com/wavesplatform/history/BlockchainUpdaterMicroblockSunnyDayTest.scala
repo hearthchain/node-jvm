@@ -33,7 +33,6 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
   private def fundMaster(s: Setup): Seq[AddrWithBalance] = Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
 
   property("all txs in different blocks: B0 <- B1 <- B2 <- B3!") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
     scenario(preconditionsAndPayments, DefaultWavesSettings, fundMaster) {
       case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
         val blocks = chainBlocksFrom(domain.lastBlockId, Seq(Seq(masterToAlice), Seq(aliceToBob), Seq(aliceToBob2)))

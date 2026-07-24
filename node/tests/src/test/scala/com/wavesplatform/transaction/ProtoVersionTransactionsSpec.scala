@@ -10,7 +10,6 @@ import com.wavesplatform.settings.Constants
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.FreeSpec
 import com.wavesplatform.transaction.Asset.IssuedAsset
-import com.wavesplatform.transaction.assets.*
 import com.wavesplatform.transaction.assets.exchange.{ExchangeTransaction, Order}
 import com.wavesplatform.transaction.lease.LeaseTransaction
 import com.wavesplatform.transaction.Proofs
@@ -56,11 +55,11 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
       val recipient = accountOrAliasGen.sample.get
 
       val leaseTx = LeaseTransaction
-        .create(1, AddressScheme.current.chainId, PublicKey(Account.publicKey), recipient, 100, MinFee, Now, Proofs.empty)
+        .create(AddressScheme.current.chainId, PublicKey(Account.publicKey), recipient, 100, MinFee, Now, Proofs.empty)
         .map(_.signWith(Account))
         .explicitGet()
       val leaseCancelTx =
-        TxHelpers.leaseCancel(leaseId = leaseTx.id(), sender = Account, fee = MinFee, version = TxVersion.V3)
+        TxHelpers.leaseCancel(leaseId = leaseTx.id(), sender = Account, fee = MinFee)
       val base64LeaseStr       = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(leaseTx)))
       val base64CancelLeaseStr = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(leaseCancelTx)))
 
@@ -75,7 +74,7 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
 
       val transferTx =
         TransferTransaction
-          .create(TxVersion.V3, PublicKey(Account.publicKey), recipient, asset, 100, Asset.Waves, MinFee, ByteStr(attachment), Now, Proofs.empty)
+          .create(PublicKey(Account.publicKey), recipient, asset, 100, Asset.Waves, MinFee, ByteStr(attachment), Now, Proofs.empty)
           .map(_.signWith(Account))
           .explicitGet()
 
@@ -91,7 +90,7 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
 
       val massTransferTx =
         MassTransferTransaction
-          .create(TxVersion.V2, PublicKey(Account.publicKey), Asset.Waves, transfers, MassTransferTxFee, Now, ByteStr(attachment), Proofs.empty)
+          .create(PublicKey(Account.publicKey), Asset.Waves, transfers, MassTransferTxFee, Now, ByteStr(attachment), Proofs.empty)
           .map(_.signWith(Account))
           .explicitGet()
       val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(massTransferTx)))

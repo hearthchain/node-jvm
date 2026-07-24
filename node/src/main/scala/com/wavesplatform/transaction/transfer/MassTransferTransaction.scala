@@ -17,7 +17,6 @@ import play.api.libs.json.{JsObject, Json, OFormat}
 import scala.util.Either
 
 case class MassTransferTransaction(
-    version: TxVersion,
     sender: PublicKey,
     assetId: Asset,
     transfers: Seq[ParsedTransfer],
@@ -63,7 +62,6 @@ object MassTransferTransaction {
   case class ParsedTransfer(address: Address, amount: TxNonNegativeAmount)
 
   def create(
-      version: TxVersion,
       sender: PublicKey,
       assetId: Asset,
       transfers: Seq[ParsedTransfer],
@@ -75,7 +73,7 @@ object MassTransferTransaction {
   ): Either[ValidationError, MassTransferTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- MassTransferTransaction(version, sender, assetId, transfers, fee, timestamp, attachment, proofs, chainId).validatedEither
+      tx  <- MassTransferTransaction(sender, assetId, transfers, fee, timestamp, attachment, proofs, chainId).validatedEither
     } yield tx
 
   def parseTransfersList(transfers: List[Transfer]): Validation[List[ParsedTransfer]] =

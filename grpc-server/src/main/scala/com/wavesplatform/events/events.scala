@@ -637,7 +637,7 @@ object BlockAppended {
       height + 1,
       block,
       updatedWavesAmount,
-      if (block.header.version >= Block.ProtoBlockVersion) Some(hitSource) else None,
+      Some(hitSource),
       activatedFeatures,
       rewardShares,
       blockStateUpdate,

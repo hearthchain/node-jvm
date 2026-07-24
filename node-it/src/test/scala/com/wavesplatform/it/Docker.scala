@@ -613,12 +613,12 @@ object Docker {
         .at("waves.blockchain.custom.functionality.pre-activated-features")
         .loadOrThrow[Map[Short, Int]]
 
-    val isRideV6Activated          = features.get(BlockchainFeatures.RideV6.id).contains(0)
-    val isTxStateSnapshotActivated = features.get(BlockchainFeatures.LightNode.id).contains(0)
+    val isRideV6Activated          = true
+    val isTxStateSnapshotActivated = true
 
     // Only the pre-activated features matter here: they gate the genesis generators
     val fs               = FunctionalitySettings(preActivatedFeatures = features)
-    val genesisSignature = Block.genesis(gs, fs, isRideV6Activated, isTxStateSnapshotActivated).explicitGet().id()
+    val genesisSignature = Block.genesis(gs, fs).explicitGet().id()
 
     parseString(s"waves.blockchain.custom.genesis.signature = $genesisSignature").withFallback(timestampOverrides)
   }

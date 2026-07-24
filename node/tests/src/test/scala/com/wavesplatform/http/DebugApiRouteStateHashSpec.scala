@@ -34,7 +34,7 @@ class DebugApiRouteStateHashSpec
   private lazy val deterministicFinalityActivationHeight = 5
 
   override def settings: WavesSettings = DomainPresets.TransactionStateSnapshot
-    .addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+
     .copy(
       dbSettings = DomainPresets.TransactionStateSnapshot.dbSettings.copy(storeStateHashes = true),
       restAPISettings = restAPISettings
@@ -85,8 +85,6 @@ class DebugApiRouteStateHashSpec
         // Append first block to be able to request stateHash
         domain.appendBlock()
 
-        // Assert after DeterministicFinality feature activation
-        domain.blockchain.isFeatureActivated(BlockchainFeatures.DeterministicFinality, domain.blockchain.height) shouldBe false
         val beforeFinalityHeight = domain.blockchain.height - 1
         val beforeFinalityHeader = domain.blockchain.blockHeader(beforeFinalityHeight).value
         val expectedResponseBefore = Json.obj(
@@ -128,7 +126,6 @@ class DebugApiRouteStateHashSpec
 
         // Assert after DeterministicFinality feature activation
         val afterFinalityHeight = domain.blockchain.height - 1
-        domain.blockchain.isFeatureActivated(BlockchainFeatures.DeterministicFinality, afterFinalityHeight) shouldBe true
 
         val commitTxDefault = TxHelpers.commitToGeneration(generationPeriodStart = Height(8), sender = TxHelpers.defaultSigner)
         val commitTxSecond  = TxHelpers.commitToGeneration(generationPeriodStart = Height(8), sender = secondGenerator)

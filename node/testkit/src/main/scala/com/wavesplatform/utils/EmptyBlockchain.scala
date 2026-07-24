@@ -40,8 +40,6 @@ trait EmptyBlockchain extends Blockchain {
   /** Block reward related */
   override def blockReward(height: Int): Option[Long] = None
 
-  override def blockRewardVotes(height: Int): Seq[Long] = Seq.empty
-
   override def wavesAmount(height: Int): BigInt = 0
 
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] = None

@@ -1,7 +1,7 @@
 package com.wavesplatform.block.validation
 
 import cats.syntax.either.*
-import com.wavesplatform.block.Block.{GenerationSignatureLength, GenerationVRFSignatureLength, MaxFeaturesInBlock, ProtoBlockVersion}
+import com.wavesplatform.block.Block.{GenerationVRFSignatureLength, MaxFeaturesInBlock}
 import com.wavesplatform.block.{Block, MicroBlock}
 import com.wavesplatform.crypto
 import com.wavesplatform.crypto.{DigestLength, KeyLength}
@@ -14,16 +14,10 @@ object Validators {
   def validateBlock(b: Block): Validation[Block] =
     (for {
       _ <- Either.cond(Block.validateReferenceLength(b.header.reference.arr.length), (), "Incorrect reference")
-      genSigLength = if (b.header.version < ProtoBlockVersion) GenerationSignatureLength else GenerationVRFSignatureLength
-      _ <- Either.cond(b.header.generationSignature.arr.length == genSigLength, (), "Incorrect generationSignature")
+      _ <- Either.cond(b.header.generationSignature.arr.length == GenerationVRFSignatureLength, (), "Incorrect generationSignature")
       _ <- Either.cond(b.header.generator.arr.length == KeyLength, (), "Incorrect signer")
-      _ <- Either.cond(
-        b.header.version > 2 || b.header.featureVotes.isEmpty,
-        (),
-        s"Block version ${b.header.version} could not contain feature votes"
-      )
       _ <- Either.cond(b.header.featureVotes.distinct.size == b.header.featureVotes.size, (), s"Duplicates in feature votes")
-      _ <- Either.cond(b.header.version < ProtoBlockVersion || b.header.featureVotes.sorted == b.header.featureVotes, (), s"Unsorted feature votes")
+      _ <- Either.cond(b.header.featureVotes.sorted == b.header.featureVotes, (), s"Unsorted feature votes")
       _ <- Either.cond(b.header.featureVotes.size <= MaxFeaturesInBlock, (), s"Block could not contain more than $MaxFeaturesInBlock feature votes")
       _ <- Either.cond(b.header.stateHash.forall(_.size == DigestLength), (), "Incorrect block state hash")
     } yield b).leftMap(GenericError(_))
@@ -45,9 +39,9 @@ object Validators {
   def validateMicroBlock(mb: MicroBlock): Validation[MicroBlock] =
     (for {
       _ <- Either.cond(
-        MicroBlock.validateReferenceLength(mb.version, mb.reference.arr.length),
+        MicroBlock.validateReferenceLength(mb.reference.arr.length),
         (),
-        s"Incorrect prevResBlockSig: ${mb.reference.arr.length}"
+        s"Incorrect reference: ${mb.reference.arr.length}"
       )
       _ <- Either.cond(
         mb.totalResBlockSig.arr.length == crypto.SignatureLength,

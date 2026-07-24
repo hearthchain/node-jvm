@@ -14,7 +14,6 @@ object CommitToGenerationRequest {
 }
 
 case class CommitToGenerationRequest(
-    version: Option[TxVersion] = None,
     senderPublicKey: String,
     endorserPublicKey: ByteStr,
     vrfPublicKey: ByteStr,
@@ -32,7 +31,6 @@ case class CommitToGenerationRequest(
       blsPk        <- BlsPublicKey(endorserPublicKey)
       senderPk     <- PublicKey.fromBase58String(senderPublicKey)
       tx <- CommitToGenerationTransaction.create(
-        version.getOrElse(1.toByte),
         senderPk,
         blsPk,
         vrfPublicKey,

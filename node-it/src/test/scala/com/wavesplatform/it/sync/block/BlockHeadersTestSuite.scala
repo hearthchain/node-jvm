@@ -32,11 +32,6 @@ class BlockHeadersTestSuite
       .overrideBase(
         _.raw(
           s"""waves {
-             |  blockchain.custom.functionality {
-             |    pre-activated-features = {
-             |      ${BlockchainFeatures.BlockReward.id} = $activationHeight
-             |    }
-             |  }
              |  blockchain.custom.rewards {
              |    term = $rewardTerm
              |    initial = $initialReward

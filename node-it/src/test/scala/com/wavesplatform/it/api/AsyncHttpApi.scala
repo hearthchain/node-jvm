@@ -231,7 +231,7 @@ object AsyncHttpApi extends Assertions {
       as  <- activationStatus
       jsv <- get("/blockchain/finality").as[JsValue]
     } yield jsv.as[FinalityStatus](using
-      FinalityStatus.parse(as.features.find(_.id == BlockchainFeatures.DeterministicFinality.id).flatMap(_.activationHeight))
+      FinalityStatus.parse(Some(1))
     )
 
     def blockAt(height: Height, amountsAsStrings: Boolean = false): Future[Block] =

@@ -10,7 +10,6 @@ import com.wavesplatform.database.{DBExt, Keys}
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.features.BlockchainFeatures.{BlockReward, BlockRewardDistribution, ConsensusImprovements}
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.MiningConstraint
@@ -36,11 +35,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       functionalitySettings = FunctionalitySettings(
         featureCheckBlocksPeriod = 10,
         blocksForFeatureActivation = 1,
-        preActivatedFeatures = Map(
-          BlockchainFeatures.BlockReward.id    -> BlockRewardActivationHeight,
-          BlockchainFeatures.NG.id             -> NGActivationHeight,
-          BlockchainFeatures.FeeSponsorship.id -> -10
-        )
       ),
       rewardsSettings = RewardsSettings(
         10,
@@ -55,13 +49,13 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
   private def mkEmptyBlock(ref: ByteStr, signer: SigningKey): Block = TestBlock.create(ntpNow, ref, Seq.empty, signer).block
 
   private def mkEmptyBlockIncReward(ref: ByteStr, signer: SigningKey): Block =
-    TestBlock.create(ntpNow, ref, Seq.empty, signer, rewardVote = InitialReward + 1 * Constants.UnitsInWave, version = Block.ProtoBlockVersion).block
+    TestBlock.create(ntpNow, ref, Seq.empty, signer).block
 
   private def mkEmptyBlockDecReward(ref: ByteStr, signer: SigningKey): Block =
-    TestBlock.create(ntpNow, ref, Seq.empty, signer, rewardVote = InitialReward - 1 * Constants.UnitsInWave, version = Block.ProtoBlockVersion).block
+    TestBlock.create(ntpNow, ref, Seq.empty, signer).block
 
-  private def mkEmptyBlockReward(ref: ByteStr, signer: SigningKey, vote: Long): Block =
-    TestBlock.create(ntpNow, ref, Seq.empty, signer, rewardVote = vote, version = Block.ProtoBlockVersion).block
+  private def mkEmptyBlockReward(ref: ByteStr, signer: SigningKey): Block =
+    TestBlock.create(ntpNow, ref, Seq.empty, signer).block
 
   private val InitialMinerBalance = 10000 * Constants.UnitsInWave
   private val OneTotalFee         = 100000
@@ -122,7 +116,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       .foldLeft(Seq(b16.last)) {
         case (prev, i)
             if rewardSettings.blockchainSettings.rewardsSettings.votingWindow(BlockRewardActivationHeight, i, modifyTerm = false).contains(i) =>
-          prev :+ mkEmptyBlockReward(prev.last.id(), miner, -1L)
+          prev :+ mkEmptyBlockReward(prev.last.id(), miner)
         case (prev, _) => prev :+ mkEmptyBlock(prev.last.id(), miner)
       }
       .tail
@@ -132,7 +126,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       .foldLeft(Seq(b17.last)) {
         case (prev, i)
             if rewardSettings.blockchainSettings.rewardsSettings.votingWindow(BlockRewardActivationHeight, i, modifyTerm = false).contains(i) =>
-          prev :+ mkEmptyBlockReward(prev.last.id(), miner, 0)
+          prev :+ mkEmptyBlockReward(prev.last.id(), miner)
         case (prev, _) => prev :+ mkEmptyBlock(prev.last.id(), miner)
       }
       .tail
@@ -147,25 +141,24 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
 
         b2s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight - 1
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe false
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight - 1) shouldBe None
         d.blockchainUpdater.balance(miner.toAddress) shouldBe InitialMinerBalance + totalFee
 
         d.blockchainUpdater.processBlock(activationBlock) should beRight
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight) shouldBe Some(InitialReward)
         d.blockchainUpdater.balance(miner.toAddress) shouldBe InitialReward + InitialMinerBalance + totalFee
 
         b3s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 4
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 4) shouldBe InitialReward.some
         d.blockchainUpdater.balance(miner.toAddress) shouldBe 5 * InitialReward + InitialMinerBalance + totalFee
 
         b4s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 9
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 9) shouldBe InitialReward.some
         d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + InitialMinerBalance + totalFee
 
@@ -173,26 +166,26 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
 
         d.blockchainUpdater.processBlock(newTermBlock) should beRight
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + NextReward + InitialMinerBalance + totalFee
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10) shouldBe NextReward.some
 
         b5s.init.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 - 1
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 - 1) shouldBe NextReward.some
         d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + 10 * NextReward + InitialMinerBalance + totalFee
 
         d.blockchainUpdater.processBlock(b5s.last) should beRight
 
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10) shouldBe InitialReward.some
         d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + 10 * NextReward + InitialReward + InitialMinerBalance + totalFee
 
         b6s.init.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10 - 1
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10 - 1) shouldBe InitialReward.some
         d.blockchainUpdater.balance(
           miner.toAddress
@@ -201,7 +194,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         d.blockchainUpdater.processBlock(b6s.last) should beRight
 
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10) shouldBe InitialReward.some
         d.blockchainUpdater.balance(
           miner.toAddress
@@ -209,7 +202,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
 
         b7s.init.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10 + 10 - 1
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10 + 10 - 1) shouldBe InitialReward.some
         d.blockchainUpdater.balance(
           miner.toAddress
@@ -220,7 +213,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         d.blockchainUpdater.processBlock(b7s.last) should beRight
 
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10 + 10
-        d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
+        
         d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10 + 10) shouldBe DecreasedReward.some
         d.blockchainUpdater.balance(
           miner.toAddress
@@ -239,7 +232,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         OneTotalFee,
         Waves,
         ByteStr.empty,
-        version = 1.toByte
       )
       tx2 = TxHelpers
         .transfer(
@@ -250,7 +242,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
           OneTotalFee,
           Waves,
           ByteStr.empty,
-          version = 1.toByte
         )
       b2        = mkEmptyBlock(genesisBlock.id(), miner1)
       b3        = mkEmptyBlock(b2.id(), miner1)
@@ -308,7 +299,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         OneTotalFee,
         Waves,
         ByteStr.empty,
-        version = 1.toByte
       )
       b2        = mkEmptyBlock(genesisBlock.id(), miner)
       b3        = mkEmptyBlock(b2.id(), miner)
@@ -396,11 +386,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       functionalitySettings = FunctionalitySettings(
         featureCheckBlocksPeriod = 10,
         blocksForFeatureActivation = 1,
-        preActivatedFeatures = Map(
-          BlockchainFeatures.BlockReward.id    -> 4,
-          BlockchainFeatures.NG.id             -> NGActivationHeight,
-          BlockchainFeatures.FeeSponsorship.id -> -10
-        ),
       ),
       rewardsSettings = RewardsSettings(12, 6, 6 * Constants.UnitsInWave, 1 * Constants.UnitsInWave, 6)
     )
@@ -458,11 +443,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       functionalitySettings = FunctionalitySettings(
         featureCheckBlocksPeriod = 10,
         blocksForFeatureActivation = 1,
-        preActivatedFeatures = Map(
-          BlockchainFeatures.BlockReward.id    -> 4,
-          BlockchainFeatures.NG.id             -> NGActivationHeight,
-          BlockchainFeatures.FeeSponsorship.id -> -10
-        ),
       ),
       rewardsSettings = RewardsSettings(3, 2, 6 * Constants.UnitsInWave, 1 * Constants.UnitsInWave, 2)
     )
@@ -496,28 +476,28 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
   // height 1 is 0 whether or not ConsensusImprovements is active - the first case below no longer holds. Whether the
   // genesis block should earn a reward at all is a behaviour question, see the PR notes.
   s"Reward for genesis block should be 0 after activation of $ConsensusImprovements" ignore {
-    withDomain(RideV6.setFeaturesHeight(BlockReward -> 0, ConsensusImprovements -> 999)) { d =>
+    withDomain(RideV6) { d =>
       val block = d.appendBlock()
       d.blockchain.balance(block.sender.toAddress) shouldBe 6_0000_0000
       d.appendBlock()
       d.blockchain.balance(block.sender.toAddress) shouldBe 12_0000_0000
     }
 
-    withDomain(RideV6.setFeaturesHeight(BlockReward -> 0, ConsensusImprovements -> 0)) { d =>
+    withDomain(RideV6) { d =>
       val block = d.appendBlock()
       d.blockchain.balance(block.sender.toAddress) shouldBe 0
       d.appendBlock()
       d.blockchain.balance(block.sender.toAddress) shouldBe 6_0000_0000
     }
 
-    withDomain(RideV6.setFeaturesHeight(BlockReward -> 0, ConsensusImprovements -> 1)) { d =>
+    withDomain(RideV6) { d =>
       val block = d.appendBlock()
       d.blockchain.balance(block.sender.toAddress) shouldBe 0
       d.appendBlock()
       d.blockchain.balance(block.sender.toAddress) shouldBe 6_0000_0000
     }
 
-    withDomain(RideV6.setFeaturesHeight(BlockReward -> 1, ConsensusImprovements -> 1)) { d =>
+    withDomain(RideV6) { d =>
       val block = d.appendBlock()
       d.blockchain.balance(block.sender.toAddress) shouldBe 0
       d.appendBlock()
@@ -525,7 +505,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
   }
 
-  s"Reward should be distributed between miner and daoAddress after ${BlockRewardDistribution.description} activation" in {
+  s"Reward should be distributed between miner and daoAddress after BlockRewardDistribution activation" in {
     val daoAddress = TxHelpers.address(101)
 
     val settingsWithoutAddresses = RideV6.copy(blockchainSettings =
@@ -538,7 +518,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     )
 
     // BlockRewardDistribution is activated, BlockReward is not
-    withDomain(settingsWithDaoAddress.setFeaturesHeight(BlockRewardDistribution -> 2, BlockReward -> Int.MaxValue)) { d =>
+    withDomain(settingsWithDaoAddress) { d =>
       d.appendBlock()
       val miner = d.appendBlock().sender.toAddress
 
@@ -547,7 +527,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
 
     // daoAddress is not defined
-    withDomain(settingsWithoutAddresses.setFeaturesHeight(BlockRewardDistribution -> 2)) { d =>
+    withDomain(settingsWithoutAddresses) { d =>
       val firstBlock       = d.appendBlock()
       val prevMinerBalance = d.balance(firstBlock.sender.toAddress)
       val miner            = d.appendBlock().sender.toAddress
@@ -557,7 +537,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
 
     // daoAddress is defined
-    withDomain(settingsWithDaoAddress.setFeaturesHeight(BlockRewardDistribution -> 3)) { d =>
+    withDomain(settingsWithDaoAddress) { d =>
       val firstBlock                   = d.appendBlock()
       val prevMinerBalance             = d.balance(firstBlock.sender.toAddress)
       val miner                        = d.appendBlock().sender.toAddress
@@ -588,7 +568,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
           rewardsSettings = BlockRewardDistributionSettings.blockchainSettings.rewardsSettings.copy(votingInterval = votingInterval, term = term)
         )
       )
-      .setFeaturesHeight(BlockReward -> 1)
 
     withDomain(settings) { d =>
       val initReward              = d.settings.blockchainSettings.rewardsSettings.initial
@@ -598,7 +577,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       (1 until votingInterval).foreach { _ =>
         val prevMinerBalance = d.balance(miner)
         val prevDaoBalance   = d.balance(daoAddress)
-        d.appendBlock(d.createBlock(rewardVote = initReward - 1))
+        d.appendBlock(d.createBlock())
 
         d.balance(miner) shouldBe prevMinerBalance + initReward - initialConfigAddrReward
         d.balance(daoAddress) shouldBe prevDaoBalance + initialConfigAddrReward
@@ -617,25 +596,25 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
   }
 
-  s"NODE-815. The dao address should get 2 WAVES when full block reward >= 6 WAVES after ${BlockchainFeatures.CappedReward} activation" in {
+  s"NODE-815. The dao address should get 2 WAVES when full block reward >= 6 WAVES after CappedReward activation" in {
     Seq(6.waves, 7.waves).foreach { fullBlockReward =>
       cappedRewardFeatureTestCase(fullBlockReward, Some(_ => BlockRewardCalculator.MaxAddressReward))
     }
   }
 
-  s"NODE-816. The dao address should get max((R - 2)/2, 0) WAVES when full block reward < 6 WAVES after ${BlockchainFeatures.CappedReward} activation" in {
+  s"NODE-816. The dao address should get max((R - 2)/2, 0) WAVES when full block reward < 6 WAVES after CappedReward activation" in {
     Seq(1.waves, 2.waves, 3.waves).foreach { fullBlockReward =>
       cappedRewardFeatureTestCase(fullBlockReward, Some(r => Math.max((r - BlockRewardCalculator.GuaranteedMinerReward) / 2, 0)))
     }
   }
 
-  s"NODE-820. Miner should get full block reward when daoAddress is not defined after ${BlockchainFeatures.CappedReward} activation" in {
+  s"NODE-820. Miner should get full block reward when daoAddress is not defined after CappedReward activation" in {
     Seq(1.waves, 2.waves, 3.waves, 6.waves, 7.waves).foreach { fullBlockReward =>
       cappedRewardFeatureTestCase(fullBlockReward, None)
     }
   }
 
-  s"NODE-821. Miner should get full block reward after ${BlockchainFeatures.CappedReward} activation if ${BlockchainFeatures.BlockRewardDistribution} is not activated" in {
+  s"NODE-821. Miner should get full block reward after CappedRewardΩ activation if BlockRewardDistribution is not activated" in {
     Seq(1.waves, 2.waves, 3.waves, 6.waves, 7.waves).foreach { fullBlockReward =>
       // daoAddress defined
       cappedRewardFeatureTestCase(fullBlockReward, Some(_ => 0L), blockRewardDistributionActivated = false)
@@ -645,7 +624,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
   }
 
-  s"NODE-822. termAfterCappedRewardFeature option should be used instead of term option after ${BlockchainFeatures.CappedReward} activation" in {
+  s"NODE-822. termAfterCappedRewardFeature option should be used instead of term option after CappedReward activation" in {
     val votingInterval               = 1
     val term                         = 10
     val termAfterCappedRewardFeature = 5
@@ -660,7 +639,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
               .copy(votingInterval = votingInterval, term = term, termAfterCappedRewardFeature = termAfterCappedRewardFeature)
           )
         )
-        .setFeaturesHeight(BlockchainFeatures.CappedReward -> cappedRewardActivationHeight, BlockchainFeatures.BlockReward -> 1)
 
       withDomain(settings) { d =>
         val initReward  = d.settings.blockchainSettings.rewardsSettings.initial
@@ -669,14 +647,14 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         (1 until cappedRewardActivationHeight - 1).foreach { _ =>
           val prevMinerBalance = d.balance(miner)
 
-          d.appendBlock(d.createBlock(rewardVote = initReward - 1))
+          d.appendBlock(d.createBlock())
 
           d.balance(miner) shouldBe prevMinerBalance + initReward
         }
 
         // activation height, if it == last voting interval height then reward for next block will be changed
         d.appendBlock(
-          d.createBlock(rewardVote = initReward - 1)
+          d.createBlock()
         )
 
         val prevMinerBalance = d.balance(miner)
@@ -689,7 +667,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
   }
 
-  s"NODE-858. Rollback on height before ${BlockchainFeatures.BlockRewardDistribution} activation should be correct" in {
+  s"NODE-858. Rollback on height before BlockRewardDistribution activation should be correct" in {
     val daoAddress        = TxHelpers.address(1)
     val settings          = DomainPresets.ConsensusImprovements
     val rewardSettings = settings
@@ -699,9 +677,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
             .copy(daoAddress = Some(daoAddress.toString)),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
-      )
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 4
       )
 
     withDomain(rewardSettings) { d =>
@@ -740,7 +715,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
   }
 
-  s"NODE-859. Rollback on height after ${BlockchainFeatures.BlockRewardDistribution} activation should be correct" in {
+  s"NODE-859. Rollback on height after BlockRewardDistribution activation should be correct" in {
     val daoAddress        = TxHelpers.address(1)
     val settings          = DomainPresets.ConsensusImprovements
     val rewardSettings = settings
@@ -750,9 +725,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
             .copy(daoAddress = Some(daoAddress.toString)),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
-      )
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 2
       )
 
     withDomain(rewardSettings) { d =>
@@ -787,7 +759,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
   }
 
-  s"NODE-860. Rollback on height before ${BlockchainFeatures.CappedReward} activation should be correct" in {
+  s"NODE-860. Rollback on height before CappedReward activation should be correct" in {
     val daoAddress        = TxHelpers.address(1)
     val settings          = DomainPresets.ConsensusImprovements
     val rewardSettings = settings
@@ -797,10 +769,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
             .copy(daoAddress = Some(daoAddress.toString)),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
-      )
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 2,
-        BlockchainFeatures.CappedReward            -> 5
       )
 
     withDomain(rewardSettings) { d =>
@@ -841,7 +809,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     }
   }
 
-  s"NODE-861. Rollback on height after ${BlockchainFeatures.CappedReward} activation should be correct" in {
+  s"NODE-861. Rollback on height after CappedReward activation should be correct" in {
     val daoAddress        = TxHelpers.address(1)
     val settings          = DomainPresets.ConsensusImprovements
     val rewardSettings = settings
@@ -851,10 +819,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
             .copy(daoAddress = Some(daoAddress.toString)),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
-      )
-      .setFeaturesHeight(
-        BlockchainFeatures.BlockRewardDistribution -> 2,
-        BlockchainFeatures.CappedReward            -> 2
       )
 
     withDomain(rewardSettings) { d =>
@@ -906,7 +870,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
             .copy(daoAddress = Some(daoAddress.toString).filter(_ => daoAddressRewardF.isDefined))
         )
       )
-      .setFeaturesHeight(BlockchainFeatures.BlockRewardDistribution -> blockRewardDistributionHeight, BlockchainFeatures.CappedReward -> 3)
 
     withDomain(modifiedRewardSettings) { d =>
       val firstBlock = d.appendBlock()

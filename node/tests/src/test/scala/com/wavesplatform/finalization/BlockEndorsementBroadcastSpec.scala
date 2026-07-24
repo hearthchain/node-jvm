@@ -27,11 +27,10 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
   private val sender = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
 
   private val defaultSettings = DomainPresets.DeterministicFinality
-    .addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+
     .configure(
       _.copy(
         generationPeriodLength = 3,
-        lightNodeBlockFieldsAbsenceInterval = 0
       )
     )
 

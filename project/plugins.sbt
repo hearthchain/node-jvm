@@ -13,9 +13,6 @@ Seq(
   "com.github.sbt"     % "sbt-git"                  % "2.1.0",
   "com.github.sbt"     % "sbt-native-packager"      % "1.11.7",
   "com.github.sbt"     % "sbt-pgp"                  % "2.3.1",
-  "com.lightbend.sbt"  % "sbt-javaagent"            % "0.1.6",
-  "org.portable-scala" % "sbt-scalajs-crossproject" % "1.3.2",
-  "org.scala-js"       % "sbt-scalajs"              % "1.21.0",
   "org.scalameta"      % "sbt-scalafmt"             % "2.6.1",
   "pl.project13.scala" % "sbt-jmh"                  % "0.4.8"
 ).map(addSbtPlugin)

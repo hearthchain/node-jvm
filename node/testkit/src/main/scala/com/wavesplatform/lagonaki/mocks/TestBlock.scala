@@ -5,15 +5,19 @@ import com.wavesplatform.block.*
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.*
-import com.wavesplatform.transaction.Transaction
-import tech.hearth.crypto.{Crypto, KeyTree, SigningKey}
+import com.wavesplatform.transaction.{Transaction, TxHelpers}
+import tech.hearth.crypto.SigningKey
 
 import scala.util.{Random, Try}
 
 object TestBlock {
   case class BlockWithSigner(block: Block, signer: SigningKey)
 
-  val defaultSigner: SigningKey = KeyTree.signingKey(Crypto.defaultBackend().sha256(new Array[Byte](32)), 100)
+  /** The same account `withDomain` auto-commits as the genesis generator. DeterministicFinality only accepts blocks
+    * from a committed generator, so blocks these helpers sign by default have to come from that very account -
+    * otherwise every test building blocks here would need to commit a separate TestBlock key.
+    */
+  val defaultSigner: SigningKey = TxHelpers.defaultSigner
 
   val random: Random = new Random()
 
@@ -24,7 +28,6 @@ object TestBlock {
   def sign(signer: SigningKey, b: Block): BlockWithSigner = {
     val x = Block
       .buildAndSign(
-        b.header.version,
         b.header.timestamp,
         b.header.reference,
         b.header.baseTarget,
@@ -32,7 +35,6 @@ object TestBlock {
         b.transactionData,
         signer,
         b.header.featureVotes,
-        b.header.rewardVote,
         b.header.stateHash,
         b.header.challengedHeader,
         b.header.finalizationVoting
@@ -43,14 +45,11 @@ object TestBlock {
 
   def create(txs: Seq[Transaction]): BlockWithSigner = create(defaultSigner, txs)
 
-  def create(txs: Seq[Transaction], version: Byte): BlockWithSigner =
-    create(time = Try(txs.map(_.timestamp).max).getOrElse(0L), ref = randomSignature(), txs = txs, version = version)
-
   def create(signer: SigningKey, txs: Seq[Transaction]): BlockWithSigner =
     create(time = Try(txs.map(_.timestamp).max).getOrElse(0L), txs = txs, signer = signer)
 
   def create(signer: SigningKey, txs: Seq[Transaction], features: Seq[Short]): BlockWithSigner =
-    create(time = Try(txs.map(_.timestamp).max).getOrElse(0), ref = randomSignature(), txs = txs, signer = signer, version = 3, features = features)
+    create(time = Try(txs.map(_.timestamp).max).getOrElse(0), ref = randomSignature(), txs = txs, signer = signer, features = features)
 
   def create(time: Long, txs: Seq[Transaction]): BlockWithSigner = create(time, randomSignature(), txs, defaultSigner)
 
@@ -61,9 +60,7 @@ object TestBlock {
       ref: ByteStr,
       txs: Seq[Transaction],
       signer: SigningKey = defaultSigner,
-      version: Byte = 2,
       features: Seq[Short] = Seq.empty[Short],
-      rewardVote: Long = -1L,
       stateHash: Option[ByteStr] = None,
       baseTarget: Long = 2L,
       challengedHeader: Option[ChallengedHeader] = None
@@ -72,15 +69,11 @@ object TestBlock {
       signer,
       Block.create(
         timestamp = time,
-        version = version,
         reference = ref,
         baseTarget = baseTarget,
-        generationSignature =
-          if (version < Block.ProtoBlockVersion) ByteStr(Array.fill(Block.GenerationSignatureLength)(0: Byte))
-          else ByteStr(Array.fill(Block.GenerationVRFSignatureLength)(0: Byte)),
+        generationSignature = ByteStr(Array.fill(Block.GenerationVRFSignatureLength)(0: Byte)),
         generator = PublicKey(signer.publicKey),
         featureVotes = features,
-        rewardVote = rewardVote,
         transactionData = txs,
         stateHash = stateHash,
         challengedHeader = challengedHeader,
@@ -93,14 +86,12 @@ object TestBlock {
       defaultSigner,
       Block(
         BlockHeader(
-          version = 1.toByte,
           timestamp = 0,
           ref,
           baseTarget = 2L,
-          randomOfLength(Block.GenerationSignatureLength),
+          randomOfLength(Block.GenerationVRFSignatureLength),
           PublicKey(defaultSigner.publicKey),
           featureVotes = Seq.empty,
-          rewardVote = -1L,
           transactionsRoot = ByteStr.empty,
           stateHash = None,
           challengedHeader = None,
@@ -115,14 +106,12 @@ object TestBlock {
     sign(
       defaultSigner,
       Block.create(
-        version = 3.toByte,
         timestamp = 0,
         ref,
         baseTarget = 2L,
-        randomOfLength(Block.GenerationSignatureLength),
+        randomOfLength(Block.GenerationVRFSignatureLength),
         PublicKey(defaultSigner.publicKey),
         features,
-        rewardVote = -1L,
         transactionData = Seq.empty,
         stateHash = None,
         challengedHeader = None,

@@ -14,11 +14,10 @@ import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 // Enough to check appending both blocks and microblocks, because they share the validation code
 class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
   private val defaultSettings = DomainPresets.DeterministicFinality
-    .addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance)
+
     .configure(
       _.copy(
         generationPeriodLength = 2,
-        lightNodeBlockFieldsAbsenceInterval = 0
       )
     )
 

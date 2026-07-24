@@ -8,8 +8,7 @@ object LeaseCancelTxSerializer {
   def toJson(tx: LeaseCancelTransaction): JsObject =
     BaseTxJson.toJson(tx) ++ Json.obj(
       "leaseId" -> tx.leaseId.toString,
-      "chainId" -> tx.chainId,
-      "version" -> tx.version
+      "chainId" -> tx.chainId
     )
 
   def bodyBytes(tx: LeaseCancelTransaction): Array[Byte] =

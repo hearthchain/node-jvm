@@ -16,7 +16,7 @@ import scala.util.Random
 class RollbackSuite extends BaseFunSuite with TransferSending with TableDrivenPropertyChecks {
   import NodeConfigs.*
   override def nodeConfigs: Seq[Config] = Seq(
-    BiggestMiner.quorum(0).preactivatedFeatures((BlockchainFeatures.BlockReward, Height(1000000))),
+    BiggestMiner.quorum(0),
     NotMiner
   )
 

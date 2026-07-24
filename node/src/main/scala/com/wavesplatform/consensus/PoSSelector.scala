@@ -127,6 +127,6 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
       hitSource <- getHitSource(height)
     } yield hit(Ecvrf.prove(vrfKey, hitSource.arr).beta())
 
-  private def fairPosActivated(height: Int): Boolean = blockchain.activatedFeaturesAt(height).contains(BlockchainFeatures.FairPoS.id)
-  private def vrfActivated(height: Int): Boolean     = blockchain.activatedFeaturesAt(height).contains(BlockchainFeatures.BlockV5.id)
+  private def fairPosActivated(height: Int): Boolean = true
+  private def vrfActivated(height: Int): Boolean     = true
 }

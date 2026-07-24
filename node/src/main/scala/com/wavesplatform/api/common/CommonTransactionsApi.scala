@@ -82,7 +82,7 @@ object CommonTransactionsApi {
       for {
         transactionId           <- transactionIds
         (txm, tx)               <- blockchain.transactionInfo(transactionId)
-        (meta, allTransactions) <- blockAt(txm.height) if meta.header.version >= Block.ProtoBlockVersion
+        (meta, allTransactions) <- blockAt(txm.height)
         transactionProof        <- block.transactionProof(tx, allTransactions.map(_._2))
       } yield transactionProof
   }

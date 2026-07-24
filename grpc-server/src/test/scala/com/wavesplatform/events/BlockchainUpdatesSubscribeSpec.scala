@@ -61,7 +61,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
       val issueNftTx =
         TxHelpers.issue(firstTxParticipant, name = "Nft_test_asset", description = "OVER_9000", amount = 1, reissuable = false, script = None)
       withGenerateSubscription(
-        settings = currentSettings.addFeatures(BlockchainFeatures.ReduceNFTFee),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       )(_.appendMicroBlock(issueNftTx)) { updates =>
         val append = updates(1).append
@@ -115,7 +115,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
         val order1          = createOrder(OrderType.BUY, firstTxParticipant, Order.V4)
         val order2          = createOrder(OrderType.SELL, secondTxParticipant, Order.V4)
         val normalizedPrice = order1.price.value / 2 / 10000000
-        val exchangeTx      = TxHelpers.exchangeFromOrders(order1, order2, firstTxParticipant, version = TxVersion.V3)
+        val exchangeTx      = TxHelpers.exchangeFromOrders(order1, order2, firstTxParticipant)
         withAddedBlocksAndSubscribeExchangeTx(exchangeTx) { updated =>
           val append = updated.apply(3).getAppend
           checkExchangeTx(append, exchangeTx, normalizedPrice, order1.amount.value)
@@ -168,7 +168,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
     "BU-5. Return correct data for dataTx" in {
       val data = TxHelpers.data(firstTxParticipant, entries, customFee, TxVersion.V2)
       withGenerateSubscription(
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       )(_.appendMicroBlock(data)) { updates =>
         val append = updates(1).append
@@ -180,7 +180,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
       val setScript = TxHelpers.setScript(firstTxParticipant, testScript, customFee)
 
       withGenerateSubscription(
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       )(_.appendMicroBlock(setScript)) { updates =>
         val append = updates(1).append
@@ -224,7 +224,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
       val issue          = TxHelpers.issue(firstTxParticipant, amount, script = complexScriptBefore)
       val setAssetScript = TxHelpers.setAssetScript(firstTxParticipant, issue.asset, complexScriptAfter, 1.waves)
       withGenerateSubscription(
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       ) { d =>
         d.appendBlock(issue)
@@ -241,7 +241,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
       val updateAssetInfo = TxHelpers.updateAssetInfo(firstTokenAsset.id, newName, newDescription, firstTxParticipant)
 
       withGenerateSubscription(
-        settings = currentSettings.configure(_.copy(minAssetInfoUpdateInterval = 1)),
+        settings = currentSettings,
         balances = Seq(AddrWithBalance(firstTxParticipantAddress, firstTxParticipantBalanceBefore))
       ) { d =>
         d.appendBlock(firstToken)
@@ -260,7 +260,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
       val transfer   = TxHelpers.transfer(secondTxParticipant, ethAddress, secondTokenQuantity, secondTokenAsset)
 
       withGenerateSubscription(
-        settings = currentSettings.addFeatures(BlockchainFeatures.SmartAccounts),
+        settings = currentSettings,
         balances = Seq(
           AddrWithBalance(ethAddress, firstTxParticipantBalanceBefore),
           AddrWithBalance(secondTxParticipantAddress, secondTxParticipantBalanceBefore)

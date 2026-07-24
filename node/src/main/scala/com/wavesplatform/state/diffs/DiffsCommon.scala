@@ -54,7 +54,7 @@ object DiffsCommon {
       .flatMap { _ =>
         val oldInfo = blockchain.assetDescription(asset).get
 
-        if (oldInfo.reissuable || (blockTime <= blockchain.settings.functionalitySettings.allowInvalidReissueInSameBlockUntilTimestamp)) {
+        if (oldInfo.reissuable) {
           if ((Long.MaxValue - reissue.quantity) < oldInfo.totalVolume) {
             Left(GenericError("Asset total value overflow"))
           } else {
@@ -135,22 +135,10 @@ object DiffsCommon {
       leaseId: ByteStr,
       cancelTxId: ByteStr
   ): Either[ValidationError, StateSnapshot] = {
-    val allowedTs = blockchain.settings.functionalitySettings.allowMultipleLeaseCancelTransactionUntilTimestamp
     for {
       lease <- blockchain.leaseDetails(leaseId).toRight(GenericError(s"Lease with id=$leaseId not found"))
-      _ <- Either.cond(
-        lease.isActive || time <= allowedTs,
-        (),
-        GenericError(s"Cannot cancel already cancelled lease")
-      )
-      _ <- Either.cond(
-        sender == lease.sender || time < allowedTs,
-        (),
-        GenericError(
-          s"LeaseTransaction was leased by other sender and " +
-            s"time=$time > allowMultipleLeaseCancelTransactionUntilTimestamp=$allowedTs"
-        )
-      )
+      _     <- Either.raiseUnless(lease.isActive)(GenericError(s"Cannot cancel already cancelled lease"))
+      _     <- Either.raiseUnless(sender == lease.sender)(GenericError("LeaseTransaction was leased by other sender"))
       senderPortfolio    = Map[Address, Portfolio](sender.toAddress -> Portfolio(-fee, LeaseBalance(0, -lease.amount.value)))
       recipientPortfolio = Map(lease.recipientAddress -> Portfolio(0, LeaseBalance(-lease.amount.value, 0)))
       portfolios <- Portfolio.combine(senderPortfolio, recipientPortfolio).leftMap(GenericError(_))

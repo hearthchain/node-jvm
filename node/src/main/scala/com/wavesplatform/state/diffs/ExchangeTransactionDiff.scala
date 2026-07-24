@@ -44,7 +44,7 @@ object ExchangeTransactionDiff {
         }.toEither.leftMap(x => GenericError(x.getMessage))
 
       def orderPrice(order: Order, amountDecimals: Int, priceDecimals: Int) =
-        if (tx.version >= TxVersion.V3 && (order.version < Order.V4 || order.priceMode == AssetDecimals))
+        if (order.version < Order.V4 || order.priceMode == AssetDecimals)
           convertPrice(order.price.value, amountDecimals, priceDecimals)
         else
           Right(order.price.value)
@@ -119,8 +119,8 @@ object ExchangeTransactionDiff {
         GenericError("Matcher fee can not be negative")
       )
       _ <- Either.cond(assets.values.forall(_.isDefined), (), GenericError("Assets should be issued before they can be traded"))
-      amountDecimals = if (tx.version < TxVersion.V3) 8 else tx.buyOrder.assetPair.amountAsset.fold(8)(ia => assets(ia).fold(8)(_.decimals))
-      priceDecimals  = if (tx.version < TxVersion.V3) 8 else tx.buyOrder.assetPair.priceAsset.fold(8)(ia => assets(ia).fold(8)(_.decimals))
+      amountDecimals = tx.buyOrder.assetPair.amountAsset.fold(8)(ia => assets(ia).fold(8)(_.decimals))
+      priceDecimals  = tx.buyOrder.assetPair.priceAsset.fold(8)(ia => assets(ia).fold(8)(_.decimals))
       _                     <- isPriceValid(amountDecimals, priceDecimals)
       buyPriceAssetChange   <- getSpendAmount(tx.buyOrder, amountDecimals, priceDecimals, tx.amount.value, tx.price.value).map(-_)
       buyAmountAssetChange  <- getReceiveAmount(tx.buyOrder, amountDecimals, priceDecimals, tx.amount.value, tx.price.value)

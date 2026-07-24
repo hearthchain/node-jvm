@@ -62,7 +62,7 @@ class TransactionsRootSpec extends FreeSpec with OptionValues with BlockGen {
     for {
       (signer, txs) <- commonGen
       tx            <- Gen.oneOf(txs)
-      block         <- versionedBlockGen(txs, signer, Block.ProtoBlockVersion)
+      block         <- versionedBlockGen(txs, signer)
     } yield (block, tx)
 
   "Merkle tree for block should validate correct transaction" in forAll(happyPathScenario) { case (block, transaction) =>
@@ -77,7 +77,7 @@ class TransactionsRootSpec extends FreeSpec with OptionValues with BlockGen {
     for {
       (signer, txs) <- commonGen
       tx            <- Gen.oneOf(txs)
-      block         <- versionedBlockGen(Seq.empty, signer, Block.ProtoBlockVersion)
+      block         <- versionedBlockGen(Seq.empty, signer)
     } yield (block, tx)
 
   "Merkle tree for empty block should ignore any transaction" in forAll(emptyTxsDataScenario) { case (block, transaction) =>
@@ -92,7 +92,7 @@ class TransactionsRootSpec extends FreeSpec with OptionValues with BlockGen {
       anotherSender    <- accountGen
       anotherRecipient <- accountGen
       tx               <- versionedTransferGeneratorP(anotherSender, anotherRecipient.toAddress, Waves, Waves)
-      block            <- versionedBlockGen(txs, signer, Block.ProtoBlockVersion)
+      block            <- versionedBlockGen(txs, signer)
     } yield (block, tx)
 
   "Merkle tree for block should ignore incorrect transaction" in forAll(incorrectTransactionScenario) { case (block, transaction) =>
@@ -104,7 +104,7 @@ class TransactionsRootSpec extends FreeSpec with OptionValues with BlockGen {
     for {
       (signer, txs) <- commonGen
       tx            <- Gen.oneOf(txs)
-      block         <- versionedBlockGen(Seq(tx), signer, Block.ProtoBlockVersion)
+      block         <- versionedBlockGen(Seq(tx), signer)
     } yield (block, tx)
 
   "Merkle tree for block with single transaction should validate it" in forAll(singleTransactionScenario) { case (block, transaction) =>

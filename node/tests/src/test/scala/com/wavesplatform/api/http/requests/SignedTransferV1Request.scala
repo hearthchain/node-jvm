@@ -43,7 +43,6 @@ case class SignedTransferV1Request(
       _attachment <- parseBase58(attachment.filter(_.length > 0), "invalid.attachment", TransferTransaction.MaxAttachmentStringSize)
       _account    <- Address.fromString(recipient)
       tx <- TransferTransaction.create(
-        1.toByte,
         _sender,
         _account,
         _assetId,

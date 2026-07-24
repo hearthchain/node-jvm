@@ -74,7 +74,7 @@ class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISetting
       domain.appendBlock(TxHelpers.transfer(richAccount, lessor.toAddress, 30.006.waves))
 
       forAll(transactionVersions) { v =>
-        val leaseTransaction = TxHelpers.lease(lessor, leaseRecipient, version = v)
+        val leaseTransaction = TxHelpers.lease(lessor, leaseRecipient)
         val expectedDetails  = Seq(leaseTransaction.id() -> toDetails(leaseTransaction, domain.blockchain))
 
         domain.appendBlock(leaseTransaction)

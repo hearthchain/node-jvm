@@ -24,7 +24,6 @@ import play.api.libs.json.*
   *   instead of leaving a dead generator slot for a whole period.
   */
 final case class CommitToGenerationTransaction(
-    version: TxVersion,
     sender: PublicKey,
     endorserPublicKey: BlsPublicKey,
     vrfPublicKey: ByteStr,
@@ -82,7 +81,6 @@ object CommitToGenerationTransaction {
     vrfPublicKey.arr ++ generationPeriodStart.toByteArray
 
   def create(
-      version: TxVersion,
       sender: PublicKey,
       endorserPublicKey: BlsPublicKey,
       vrfPublicKey: ByteStr,
@@ -97,7 +95,6 @@ object CommitToGenerationTransaction {
     for {
       feeInWaves <- TxPositiveAmount(feeInWaves)(TxValidationError.InsufficientFee)
       tx <- CommitToGenerationTransaction(
-        version,
         sender,
         endorserPublicKey,
         vrfPublicKey,

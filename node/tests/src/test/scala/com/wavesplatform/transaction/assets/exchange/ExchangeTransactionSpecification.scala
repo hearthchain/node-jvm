@@ -116,7 +116,6 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
             sellMatcherFee = sellMatcherFee,
             fee = fee,
             timestamp = timestamp,
-            version = version
           )
       }
 
@@ -172,7 +171,6 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       sellMatcherFee = (BigInt(matcherFee) * amount / sell.amount.value).toLong,
       fee = matcherFee,
       timestamp = ntpTime.correctedTime(),
-      version = version
     )
   }
 
@@ -313,7 +311,6 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
     val tx = ExchangeTransaction
       .create(
-        TxVersion.V1,
         buy,
         sell,
         2,
@@ -413,7 +410,6 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
     val tx = ExchangeTransaction
       .create(
-        TxVersion.V2,
         buy,
         sell,
         2,
@@ -515,7 +511,6 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
     val tx = ExchangeTransaction
       .create(
-        TxVersion.V2,
         buy,
         sell,
         2,

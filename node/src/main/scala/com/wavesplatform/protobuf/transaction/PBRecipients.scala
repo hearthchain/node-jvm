@@ -14,7 +14,7 @@ object PBRecipients {
   def create(recipient: Address): PBRecipient = PBRecipient().withPublicKeyHash(ByteString.copyFrom(recipient.toBytes()))
 
   def toAddress(bytes: Array[Byte], chainId: Byte): Either[ValidationError, Address] = bytes.length match {
-    case Address.PAYLOAD_LEN => // Compressed address
+    case Address.HASH_LEN => // Compressed address
       com.wavesplatform.account.Address.fromBytes(bytes)
 
     case crypto.KeyLength => // Public key

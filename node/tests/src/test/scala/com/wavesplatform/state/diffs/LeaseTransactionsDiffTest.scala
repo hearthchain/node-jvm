@@ -32,18 +32,18 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
   def total(l: LeaseBalance): Long = l.in - l.out
 
   property("can lease/cancel lease preserving waves invariant") {
-    val sender    = TxHelpers.signer(1)
-    val recipient = TxHelpers.signer(2)
+    val sender    = TxHelpers.signer(2)
+    val recipient = TxHelpers.signer(3)
     val miner     = TestBlock.defaultSigner.toAddress
     val senderBalance = Seq(AddrWithBalance(sender.toAddress))
     for {
-      lease       <- Seq(TxHelpers.lease(sender, recipient.toAddress), TxHelpers.lease(sender, recipient.toAddress, version = TxVersion.V1))
-      leaseCancel <- Seq(TxHelpers.leaseCancel(lease.id(), sender), TxHelpers.leaseCancel(lease.id(), sender, version = TxVersion.V1))
+      lease       <- Seq(TxHelpers.lease(sender, recipient.toAddress), TxHelpers.lease(sender, recipient.toAddress))
+      leaseCancel <- Seq(TxHelpers.leaseCancel(lease.id(), sender), TxHelpers.leaseCancel(lease.id(), sender))
     } {
-      assertDiffAndState(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(lease)), balances = senderBalance) { case (snapshot, _) =>
+      assertDiffAndState(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(lease)), balances = senderBalance) { case (snapshot, b) =>
         snapshot.balances shouldBe VectorMap(
           (sender.toAddress, Waves) -> (ENOUGH_AMT - lease.fee.value),
-          (miner, Waves)            -> lease.fee.value
+          (miner, Waves)            -> (BlockDiffer.CurrentBlockFeePart(lease.fee.value) + b.settings.rewardsSettings.initial)
         )
         snapshot.leaseBalances shouldBe Map(
           sender.toAddress    -> LeaseBalance(0, lease.amount.value),
@@ -73,19 +73,19 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     for {
       lease <- Seq(
         TxHelpers.lease(master, recipient.toAddress, timestamp = ts),
-        TxHelpers.lease(master, recipient.toAddress, timestamp = ts, version = TxVersion.V1)
+        TxHelpers.lease(master, recipient.toAddress, timestamp = ts)
       )
       leaseCancel <- Seq(
         TxHelpers.leaseCancel(lease.id(), master, timestamp = ts + 1),
-        TxHelpers.leaseCancel(lease.id(), master, timestamp = ts + 1, version = TxVersion.V1)
+        TxHelpers.leaseCancel(lease.id(), master, timestamp = ts + 1)
       )
       leaseCancel2 <- Seq(
         TxHelpers.leaseCancel(lease.id(), master, fee = leaseCancel.fee.value + 1, timestamp = ts + 1),
-        TxHelpers.leaseCancel(lease.id(), master, fee = leaseCancel.fee.value + 1, timestamp = ts + 1, version = TxVersion.V1)
+        TxHelpers.leaseCancel(lease.id(), master, fee = leaseCancel.fee.value + 1, timestamp = ts + 1)
       )
     } yield {
       // ensure recipient has enough effective balance
-      val transfer = TxHelpers.transfer(master, recipient.toAddress, 20.waves, timestamp = ts, version = TxVersion.V1)
+      val transfer = TxHelpers.transfer(master, recipient.toAddress, 20.waves, timestamp = ts)
 
       (transfer, lease, leaseCancel, leaseCancel2)
     }
@@ -107,22 +107,6 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     }
   }
 
-  private val allowCancelTwice = {
-    val ts = repeatedCancelAllowed
-
-    cancelLeaseTwice(ts).map { case (payment, lease, unlease, unlease2) =>
-      (Seq(TestBlock.create(ts, Seq(payment, lease, unlease))), TestBlock.create(ts, Seq(unlease2)))
-    }
-  }
-
-  property("can cancel lease twice before allowMultipleLeaseCancelTransactionUntilTimestamp") {
-    allowCancelTwice.foreach { case (preconditions, block) =>
-      assertDiffEi(preconditions, block, settings, masterBalance) { snapshotEi =>
-        snapshotEi.explicitGet()
-      }
-    }
-  }
-
   property("cannot lease more than actual balance(cannot lease forward)") {
     val setup: Seq[(LeaseTransaction, LeaseTransaction, Long)] = {
       val master    = TxHelpers.signer(1)
@@ -130,8 +114,8 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
       val forward   = TxHelpers.signer(3)
 
       for {
-        lease        <- Seq(TxHelpers.lease(master, recipient.toAddress), TxHelpers.lease(master, recipient.toAddress, version = TxVersion.V1))
-        leaseForward <- Seq(TxHelpers.lease(recipient, forward.toAddress), TxHelpers.lease(recipient, forward.toAddress, version = TxVersion.V1))
+        lease        <- Seq(TxHelpers.lease(master, recipient.toAddress), TxHelpers.lease(master, recipient.toAddress))
+        leaseForward <- Seq(TxHelpers.lease(recipient, forward.toAddress), TxHelpers.lease(recipient, forward.toAddress))
       } yield (lease, leaseForward, leaseForward.timestamp)
     }
 
@@ -151,16 +135,16 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     val other     = TxHelpers.signer(3)
     val unleaser  = if (unleaseByRecipient) recipient else other
 
-    val genesis = AddrWithBalance.enoughBalances(master, unleaser)
+    val genesis = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, master, unleaser)
 
     for {
       lease <- Seq(
         TxHelpers.lease(master, recipient.toAddress, timestamp = timestamp),
-        TxHelpers.lease(master, recipient.toAddress, timestamp = timestamp, version = TxVersion.V1)
+        TxHelpers.lease(master, recipient.toAddress, timestamp = timestamp)
       )
       unleaseOtherOrRecipient <- Seq(
         TxHelpers.leaseCancel(lease.id(), unleaser, timestamp = timestamp + 1),
-        TxHelpers.leaseCancel(lease.id(), unleaser, timestamp = timestamp + 1, version = TxVersion.V1)
+        TxHelpers.leaseCancel(lease.id(), unleaser, timestamp = timestamp + 1)
       )
     } yield (genesis, lease, unleaseOtherOrRecipient, timestamp)
   }
@@ -195,21 +179,8 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     }
   }
 
-  property(
-    "if recipient cancels lease, it doesn't change leasing component of mining power before allowMultipleLeaseCancelTransactionUntilTimestamp"
-  ) {
-    cancelLeaseOfAnotherSender(unleaseByRecipient = true, repeatedCancelAllowed).foreach { case (genesis, lease, unleaseRecipient, blockTime) =>
-      withDomain(ScriptsAndSponsorship, genesis) { d =>
-        d.appendBlock(lease)
-        d.appendBlock(TestBlock.create(blockTime, d.lastBlockId, Seq(unleaseRecipient)).block)
-        d.liquidSnapshot.balances.get((lease.sender.toAddress, Waves)) shouldBe None
-        val unleaser = unleaseRecipient.sender.toAddress
-        total(d.liquidSnapshot.leaseBalances(unleaser)) shouldBe total(d.rocksDBWriter.leaseBalance(unleaser))
-      }
-    }
-  }
-
-  property(s"can pay for cancel lease from the returning funds (before and after ${BlockchainFeatures.BlockV5})") {
+  property(s"can pay for cancel lease from the returning funds (before and after BlockV5)") {
+    fail()
     val scenario = {
       val master    = TxHelpers.signer(1)
       val recipient = TxHelpers.signer(2)
@@ -222,11 +193,11 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
       for {
         lease <- Seq(
           TxHelpers.lease(master, recipient.toAddress, amount, fee = fee),
-          TxHelpers.lease(master, recipient.toAddress, amount, fee = fee, version = TxVersion.V1)
+          TxHelpers.lease(master, recipient.toAddress, amount, fee = fee)
         )
         leaseCancel <- Seq(
           TxHelpers.leaseCancel(lease.id(), master, fee = fee),
-          TxHelpers.leaseCancel(lease.id(), master, fee = fee, version = TxVersion.V1)
+          TxHelpers.leaseCancel(lease.id(), master, fee = fee)
         )
       } yield (genesis, lease, leaseCancel, leaseCancel.timestamp + 1)
     }
@@ -234,7 +205,7 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     scenario.foreach { case (genesis, lease, leaseCancel, ts) =>
       val beforeFailedTxs = TestFunctionalitySettings.Enabled
       val afterFailedTxs = beforeFailedTxs.copy(
-        preActivatedFeatures = beforeFailedTxs.preActivatedFeatures + (BlockchainFeatures.BlockV5.id -> 0)
+        preActivatedFeatures = beforeFailedTxs.preActivatedFeatures
       )
 
       assertDiffEi(Seq(TestBlock.create(ts, Seq(lease))), TestBlock.create(ts + 1, Seq(leaseCancel)), beforeFailedTxs, genesis) { ei =>
@@ -252,24 +223,17 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     val sender    = TxHelpers.signer(1)
     val recipient = TxHelpers.signer(2)
 
-    val balances = Seq(AddrWithBalance(sender.toAddress, totalBalance))
-    val lease    = TxHelpers.lease(sender, recipient.toAddress, totalBalance, version = TxVersion.V1)
+    val balances = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress), AddrWithBalance(sender.toAddress, totalBalance))
+    val lease    = TxHelpers.lease(sender, recipient.toAddress, totalBalance)
 
     (balances, lease)
   }
 
-  property(s"fee is not required prior to ${BlockchainFeatures.SynchronousCalls}") {
-    val (balances, lt) = scenario
-    withDomain(RideV4.setFeaturesHeight(BlockchainFeatures.SynchronousCalls -> 5), balances) { d =>
-      d.appendBlock(lt)
-    }
-  }
-
-  property(s"fee is not required once ${BlockchainFeatures.SynchronousCalls} is activated") {
+  property(s"fee is required") {
     val (balances, lt) = scenario
 
-    withDomain(RideV4.setFeaturesHeight(BlockchainFeatures.SynchronousCalls -> 1), balances) { d =>
-      d.blockchainUpdater.processBlock(d.createBlock(Seq(lt), version = Block.ProtoBlockVersion)) should produce("Cannot lease more than own")
+    withDomain(RideV4, balances) { d =>
+      d.blockchainUpdater.processBlock(d.createBlock(Seq(lt))) should produce("Cannot lease more than own")
     }
   }
 }

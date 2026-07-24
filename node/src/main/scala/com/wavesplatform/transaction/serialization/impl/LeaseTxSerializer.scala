@@ -8,8 +8,7 @@ object LeaseTxSerializer {
     import tx.*
     BaseTxJson.toJson(tx) ++ Json.obj(
       "amount"    -> amount.value,
-      "recipient" -> recipient.toBech32,
-      "version"   -> version.value
+      "recipient" -> recipient.toString
     )
   }
 }

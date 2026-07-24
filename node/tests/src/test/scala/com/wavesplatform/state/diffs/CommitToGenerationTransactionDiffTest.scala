@@ -22,7 +22,7 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
   "Accepted on the feature activation height, first period starts at activation_height+generation_period+1" in {
     val activationHeight = Height(3)
     withDomain(
-      defaultSettings.setFeaturesHeight(BlockchainFeatures.DeterministicFinality -> activationHeight.toInt),
+      defaultSettings,
       AddrWithBalance.enoughBalances(sender)
     ) { d =>
       val tx = TxHelpers.commitToGeneration(activationHeight + generationPeriodLength + 1, sender)
@@ -131,7 +131,7 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
       val newGenerator = TxHelpers.signer(1005)
       val txFee        = 1.waves
       withDomain(
-        DeterministicFinality.addFeatures(BlockchainFeatures.SmallerMinimalGeneratingBalance),
+        DeterministicFinality,
         Seq(
           AddrWithBalance(sender.toAddress, 1000000.waves),
           AddrWithBalance(

@@ -388,14 +388,12 @@ object Importer extends ScorexLogging {
           val lastHeader = blockchainUpdater.lastBlockHeader.get.header
           val pseudoBlock = Block(
             BlockHeader(
-              blockchainUpdater.blockVersionAt(blockchainUpdater.height),
               System.currentTimeMillis(),
               blockchainUpdater.lastBlockId.get,
               lastHeader.baseTarget,
               lastHeader.generationSignature,
               lastHeader.generator,
               featureVotes = Nil,
-              rewardVote = 0,
               transactionsRoot = ByteStr.empty,
               stateHash = None,
               challengedHeader = None,

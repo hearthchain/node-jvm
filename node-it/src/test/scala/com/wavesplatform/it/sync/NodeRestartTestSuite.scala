@@ -34,7 +34,7 @@ class NodeRestartTestSuite extends BaseFreeSpec {
   }
 
   "after restarting all the nodes, the duplicate transaction cannot be put into the blockchain" in {
-    val txJson = TxHelpers.transfer(from = nodeB.keyPair, to = AddressOrAlias.fromString(nodeA.address).explicitGet(), amount = 1.waves, asset = Waves, fee = minFee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = System.currentTimeMillis(), version = 1.toByte)
+    val txJson = TxHelpers.transfer(from = nodeB.keyPair, to = AddressOrAlias.fromString(nodeA.address).explicitGet(), amount = 1.waves, asset = Waves, fee = minFee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = System.currentTimeMillis())
       .json()
 
     val tx = nodeB.signedBroadcast(txJson, waitForTx = true)

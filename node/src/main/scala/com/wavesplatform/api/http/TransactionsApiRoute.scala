@@ -212,7 +212,7 @@ case class TransactionsApiRoute(
     encodedIds.map(id => ByteStr.decodeBase58(id).toEither.leftMap(_ => id)).separate match {
       case (Nil, txIds) =>
         commonApi.transactionProofs(txIds) match {
-          case Nil    => CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
+          case Nil    => CustomValidationError(s"transactions do not exist")
           case proofs => proofs
         }
       case (errors, _) => InvalidIds(errors)

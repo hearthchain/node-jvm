@@ -8,7 +8,6 @@ import com.wavesplatform.transaction.{Asset, Proofs}
 import play.api.libs.json.*
 
 case class TransferRequest(
-    version: Byte = 1.toByte,
     senderPublicKey: String,
     recipient: String,
     assetId: Option[Asset],
@@ -26,7 +25,6 @@ case class TransferRequest(
       validProofs    <- toProofs(signature, proofs)
       validSender    <- PublicKey.fromBase58String(senderPublicKey)
       tx <- TransferTransaction.create(
-        version,
         validSender,
         validRecipient,
         assetId.getOrElse(Asset.Waves),

@@ -162,13 +162,13 @@ object BlocksApiRoute {
 
   private def toJson(v: (BlockMeta, Seq[(TxMeta, Transaction)])): JsObject = v match {
     case (meta, transactions) =>
-      meta.json() ++ transactionField(meta.header.version, transactions)
+      meta.json() ++ transactionField(transactions)
   }
 
-  private def transactionField(blockVersion: Byte, transactions: Seq[(TxMeta, Transaction)]): JsObject = Json.obj(
+  private def transactionField(transactions: Seq[(TxMeta, Transaction)]): JsObject = Json.obj(
     "fee" -> transactions.map(_._2.assetFee).collect { case (Waves, feeAmt) => feeAmt }.sum,
     "transactions" -> JsArray(transactions.map { case (tm, transaction) =>
-      transaction.json() ++ TransactionJsonSerializer.applicationStatus(blockVersion >= Block.ProtoBlockVersion, tm.status)
+      transaction.json() ++ TransactionJsonSerializer.applicationStatus(true, tm.status)
     })
   )
 }

@@ -23,14 +23,16 @@ object BlockRewardCalculator {
   val GuaranteedMinerReward: Long = 2 * Constants.UnitsInWave
   val RewardBoost                 = 10
 
-  def getBlockRewardShares(
+  def fullRewardAt(height: Height, blockchain: Blockchain): Long =
+    blockchain.settings.rewardsSettings.initial
+
+  def rewardSharesAt(
       height: Height,
       fullBlockReward: Long,
-      daoAddress: Option[Address],
-      blockchain: Blockchain
+      daoAddress: Option[Address]
   ): BlockRewardShares = {
-    val blockRewardDistributionHeight = blockchain.featureActivationHeight(BlockchainFeatures.BlockRewardDistribution).getOrElse(Height(Int.MaxValue))
-    val cappedRewardHeight            = blockchain.featureActivationHeight(BlockchainFeatures.CappedReward).getOrElse(Height(Int.MaxValue))
+    val blockRewardDistributionHeight = Height(1)
+    val cappedRewardHeight            = Height(1)
 
     if (height >= blockRewardDistributionHeight) {
       if (height >= cappedRewardHeight) {
@@ -45,12 +47,12 @@ object BlockRewardCalculator {
         calculateRewards(fullBlockReward, CurrentBlockRewardPart.apply(fullBlockReward), daoAddress)
       }
     } else BlockRewardShares(fullBlockReward, 0)
-  }.multiply(blockchain.blockRewardBoost(height))
+  }
 
   def getSortedBlockRewardShares(height: Int, fullBlockReward: Long, generator: Address, blockchain: Blockchain): Seq[(Address, Long)] = {
     val daoAddress = blockchain.settings.functionalitySettings.daoAddressParsed.toOption.flatten
 
-    val rewardShares = getBlockRewardShares(Height(height), fullBlockReward, daoAddress, blockchain)
+    val rewardShares = rewardSharesAt(Height(height), fullBlockReward, daoAddress)
 
     import com.wavesplatform.utils.byteStrOrdering
 

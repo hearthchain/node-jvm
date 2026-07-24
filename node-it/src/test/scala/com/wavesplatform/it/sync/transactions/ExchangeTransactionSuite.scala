@@ -407,5 +407,5 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
 
   import NodeConfigs.*
   override protected def nodeConfigs: Seq[Config] =
-    Seq(BiggestMiner.quorum(0), NotMiner).map(_.preactivatedFeatures((BlockchainFeatures.BlockV5)))
+    Seq(BiggestMiner.quorum(0), NotMiner)
 }

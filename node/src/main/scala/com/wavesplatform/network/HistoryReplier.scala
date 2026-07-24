@@ -33,8 +33,8 @@ class HistoryReplier(score: => BigInt, history: History, settings: Synchronizati
     case GetBlock(sig) =>
       respondWith(
         ctx,
-        history.loadBlockBytes(sig).fold(s"Error loading block $sig") { case (_, bytes) =>
-          RawBytes(PBBlockSpec.messageCode, bytes)
+        history.loadBlockBytes(sig).fold(s"Error loading block $sig") { bs =>
+          RawBytes(PBBlockSpec.messageCode, bs)
         }
       )
 

@@ -33,20 +33,20 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
   // Hearth's PoSSelector consensus is VRF-only: consensusData always produces an ECVRF proof, so a pre-VRF NG (v3)
   // block can't be forged. The old Blake2b256 / NgBlockVersion row is dropped for that reason.
   private val generationSignatureMethods = Table(
-    ("method", "block version", "vrf activated"),
-    ("VRF", Block.ProtoBlockVersion, true)
+    ("method", "vrf activated"),
+    ("VRF", true)
   )
 
   "block delay" - {
-    "same on the same height in different forks" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT / 2, ENOUGH_AMT / 3), 110, blockVersion), vrfActivated) { case Env(_, blockchain, miners, blocks) =>
+    "same on the same height in different forks" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT / 2, ENOUGH_AMT / 3), 110), vrfActivated) { case Env(_, blockchain, miners, blocks) =>
         val (miner1, vrf1) = miners.head
         val (miner2, vrf2) = miners.tail.head
 
         val miner1Balance = blockchain.effectiveBalance(miner1.toAddress, 0)
 
-        val fork1 = mkFork(100, miner1, vrf1, blockchain, blocks.last, blockVersion)
-        val fork2 = mkFork(100, miner2, vrf2, blockchain, blocks.last, blockVersion)
+        val fork1 = mkFork(100, miner1, vrf1, blockchain, blocks.last)
+        val fork2 = mkFork(100, miner2, vrf2, blockchain, blocks.last)
 
         val fork1Delay = {
           val blockForHit =
@@ -88,25 +88,25 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
   }
 
   "block delay validation" - {
-    "succeed when delay is correct" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT), 10, blockVersion), vrfActivated) { case Env(pos, blockchain, miners, _) =>
+    "succeed when delay is correct" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
         val height       = blockchain.height
         val minerBalance = blockchain.effectiveBalance(miner.toAddress, 0)
         val lastBlock    = blockchain.lastBlockHeader.get
-        val block        = forgeBlock(miner, vrf, blockchain, pos, blockVersion)()
+        val block        = forgeBlock(miner, vrf, blockchain, pos)()
 
         pos.validateBlockDelay(height, block.header, lastBlock.header, minerBalance) should beRight
       }
     }
 
-    "failed when delay less than expected" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT), 10, blockVersion), vrfActivated) { case Env(pos, blockchain, miners, _) =>
+    "failed when delay less than expected" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
         val height       = blockchain.height
         val minerBalance = blockchain.effectiveBalance(miner.toAddress, 0)
         val lastBlock    = blockchain.lastBlockHeader.get
-        val block        = forgeBlock(miner, vrf, blockchain, pos, blockVersion)(updateDelay = _ - 1)
+        val block        = forgeBlock(miner, vrf, blockchain, pos)(updateDelay = _ - 1)
 
         pos
           .validateBlockDelay(
@@ -120,12 +120,12 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
   }
 
   "base target validation" - {
-    "succeed when BT is correct 1" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT), 10, blockVersion), vrfActivated) { case Env(pos, blockchain, miners, _) =>
+    "succeed when BT is correct 1" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
         val height       = blockchain.height
         val lastBlock    = blockchain.lastBlockHeader.get
-        val block        = forgeBlock(miner, vrf, blockchain, pos, blockVersion)()
+        val block        = forgeBlock(miner, vrf, blockchain, pos)()
 
         pos
           .validateBaseTarget(
@@ -137,12 +137,12 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       }
     }
 
-    "failed when BT less than expected" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT), 10, blockVersion), vrfActivated) { case Env(pos, blockchain, miners, _) =>
+    "failed when BT less than expected" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
         val height       = blockchain.height
         val lastBlock    = blockchain.lastBlockHeader.get.header
-        val block        = forgeBlock(miner, vrf, blockchain, pos, blockVersion)(updateBT = _ - 1)
+        val block        = forgeBlock(miner, vrf, blockchain, pos)(updateBT = _ - 1)
 
         pos
           .validateBaseTarget(
@@ -154,12 +154,12 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       }
     }
 
-    "failed when BT greater than expected" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT), 10, blockVersion), vrfActivated) { case Env(pos, blockchain, miners, _) =>
+    "failed when BT greater than expected" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
         val height       = blockchain.height
         val lastBlock    = blockchain.lastBlockHeader.get
-        val block        = forgeBlock(miner, vrf, blockchain, pos, blockVersion)(updateBT = _ + 1)
+        val block        = forgeBlock(miner, vrf, blockchain, pos)(updateBT = _ + 1)
 
         pos
           .validateBaseTarget(
@@ -173,10 +173,10 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
   }
 
   "generation signature validation" - {
-    "succeed when GS is correct" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT), 10, blockVersion), vrfActivated) { case Env(pos, blockchain, miners, _) =>
+    "succeed when GS is correct" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
-        val block        = forgeBlock(miner, vrf, blockchain, pos, blockVersion)()
+        val block        = forgeBlock(miner, vrf, blockchain, pos)()
 
         pos
           .validateGenerationSignature(block)
@@ -184,10 +184,10 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       }
     }
 
-    "failed when GS is incorrect" in forAll(generationSignatureMethods) { case (_, blockVersion: Byte, vrfActivated: Boolean) =>
-      withEnv(chainGen(List(ENOUGH_AMT), 100, blockVersion), vrfActivated) { case Env(pos, blockchain, miners, _) =>
+    "failed when GS is incorrect" in forAll(generationSignatureMethods) { case (_, vrfActivated: Boolean) =>
+      withEnv(chainGen(List(ENOUGH_AMT), 100), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
-        val block        = forgeBlock(miner, vrf, blockchain, pos, blockVersion)(updateGS = gs => ByteStr(gs.arr.tap(Random.nextBytes)))
+        val block        = forgeBlock(miner, vrf, blockchain, pos)(updateGS = gs => ByteStr(gs.arr.tap(Random.nextBytes)))
 
         pos
           .validateGenerationSignature(
@@ -229,13 +229,13 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
 
   "PoSSelector should verify generation signature for new blocks which reference non-last block correctly" in {
     Seq(1, 100).foreach { blockCount =>
-      withEnv(chainGen(List(ENOUGH_AMT, ENOUGH_AMT), blockCount, Block.ProtoBlockVersion), VRFActivated = true) {
+      withEnv(chainGen(List(ENOUGH_AMT, ENOUGH_AMT), blockCount), VRFActivated = true) {
         case Env(pos, blockchain, miners, _) =>
           val (currentMiner, cvrf) = miners.head
           val (anotherMiner, avrf) = miners(1)
 
-          val blockToApply = forgeBlock(currentMiner, cvrf, blockchain, pos, Block.ProtoBlockVersion)()
-          val anotherBlock = forgeBlock(anotherMiner, avrf, blockchain, pos, Block.ProtoBlockVersion)()
+          val blockToApply = forgeBlock(currentMiner, cvrf, blockchain, pos)()
+          val anotherBlock = forgeBlock(anotherMiner, avrf, blockchain, pos)()
 
           blockToApply.header.reference shouldBe anotherBlock.header.reference
 
@@ -256,12 +256,12 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
     }
 
     // Consensus is VRF-only, so this second case forges v5 blocks like the first, just at height 2
-    withEnv(chainGen(List(ENOUGH_AMT, ENOUGH_AMT), 1, Block.ProtoBlockVersion), VRFActivated = true) { case Env(pos, blockchain, miners, _) =>
+    withEnv(chainGen(List(ENOUGH_AMT, ENOUGH_AMT), 1), VRFActivated = true) { case Env(pos, blockchain, miners, _) =>
       val (currentMiner, cvrf) = miners.head
       val (anotherMiner, avrf) = miners(1)
 
-      val blockToApply = forgeBlock(currentMiner, cvrf, blockchain, pos, Block.ProtoBlockVersion)()
-      val anotherBlock = forgeBlock(anotherMiner, avrf, blockchain, pos, Block.ProtoBlockVersion)()
+      val blockToApply = forgeBlock(currentMiner, cvrf, blockchain, pos)()
+      val anotherBlock = forgeBlock(anotherMiner, avrf, blockchain, pos)()
 
       blockToApply.header.reference shouldBe anotherBlock.header.reference
 
@@ -294,11 +294,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
     // built directly instead of going through WavesSettings.withGenesisGenerators
     val writerSettings = {
       val base = TestSettings.Default.withFunctionalitySettings(
-        TestFunctionalitySettings.Stub.copy(preActivatedFeatures =
-          Map(BlockchainFeatures.FairPoS.id -> 0) ++
-            // Genesis generators require DeterministicFinality, and their VRF keys are only looked up on the VRF path
-            (if (VRFActivated) Map(BlockchainFeatures.BlockV5.id -> 0, BlockchainFeatures.DeterministicFinality.id -> 0) else Map())
-        )
+        TestFunctionalitySettings.Stub
       )
       base.copy(blockchainSettings =
         base.blockchainSettings.copy(genesisSettings =
@@ -356,7 +352,6 @@ object FPoSSelectorTest {
       vrfKey: VrfKey,
       blockchain: Blockchain & BlockchainUpdater,
       lastBlock: Block,
-      blockVersion: Byte = Block.ProtoBlockVersion
   ): List[(Block, ByteStr)] = {
     val height = blockchain.height
 
@@ -389,7 +384,6 @@ object FPoSSelectorTest {
         .blockWithComputedStateHash(
           Block
             .buildAndSign(
-              blockVersion,
               forkChain.head._1.header.timestamp + delay,
               forkChain.head._1.id(),
               bt,
@@ -397,7 +391,6 @@ object FPoSSelectorTest {
               txs = Nil,
               miner,
               featureVotes = Seq.empty,
-              rewardVote = -1L,
               stateHash = None,
               challengedHeader = None,
               finalizationVoting = None
@@ -418,7 +411,6 @@ object FPoSSelectorTest {
       vrfKey: VrfKey,
       blockchain: Blockchain & BlockchainUpdater,
       pos: PoSSelector,
-      blockVersion: Byte = Block.ProtoBlockVersion
   )(
       updateDelay: Long => Long = identity,
       updateBT: Long => Long = identity,
@@ -455,7 +447,6 @@ object FPoSSelectorTest {
       .blockWithComputedStateHash(
         Block
           .buildAndSign(
-            blockVersion,
             lastBlockHeader.header.timestamp + delay,
             lastBlockHeader.id(),
             updateBT(cData.baseTarget),
@@ -463,7 +454,6 @@ object FPoSSelectorTest {
             txs = Nil,
             miner,
             featureVotes = Seq.empty,
-            rewardVote = 0.toByte,
             stateHash = None,
             challengedHeader = None,
             finalizationVoting = None
@@ -488,7 +478,7 @@ object FPoSSelectorTest {
     * where it used to hold the genesis transactions. Each miner is also registered as a genesis generator, so that its
     * VRF public key can be looked up when its blocks' generation signatures are verified.
     */
-  def chainGen(balances: List[Long], blockCount: Int, blockVersion: Byte = Block.ProtoBlockVersion)(
+  def chainGen(balances: List[Long], blockCount: Int)(
       t: Time
   ): Gen[(Seq[(SigningKey, VrfKey)], Map[Address, Long], Seq[GenesisGeneratorSettings], Seq[Block])] = {
     val ts = t.correctedTime()
@@ -515,7 +505,6 @@ object FPoSSelectorTest {
               lastTxTimestamp + 1 + d,
               blocks.head.id(),
               Seq.empty,
-              version = blockVersion
             )
             .block
           newBlock :: blocks

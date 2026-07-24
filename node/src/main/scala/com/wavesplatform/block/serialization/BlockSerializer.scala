@@ -1,7 +1,6 @@
 package com.wavesplatform.block.serialization
 
 import com.wavesplatform.account.PublicKey
-import com.wavesplatform.block.Block.ProtoBlockVersion
 import com.wavesplatform.block.{Block, BlockHeader, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.protobuf.block.PBBlocks
@@ -13,7 +12,7 @@ import play.api.libs.json.{JsArray, JsNumber, JsObject, Json}
 
 object BlockHeaderSerializer {
   def toBytes(header: BlockHeader): Array[Byte] =
-      PBUtils.encodeDeterministic(PBBlocks.protobuf(header))
+    PBUtils.encodeDeterministic(PBBlocks.protobuf(header))
 
   def toJson(blockHeader: BlockHeader): JsObject = {
     def createFeaturesJson(featureVotes: Seq[Short]): JsObject =
@@ -21,9 +20,6 @@ object BlockHeaderSerializer {
 
     def createGeneratorJson(generator: PublicKey): JsObject =
       Json.obj("generator" -> generator.toAddress.toString, "generatorPublicKey" -> generator)
-
-    def createRewardVoteJson(rewardVote: Long): JsObject =
-      Json.obj("desiredReward" -> JsNumber(rewardVote))
 
     def createStateHashJson(stateHash: Option[ByteStr]): JsObject =
       stateHash match {
@@ -52,16 +48,13 @@ object BlockHeaderSerializer {
 
     val consensusJson =
       Json.obj(
-        "nxt-consensus" -> Json.obj(
-          "base-target"          -> blockHeader.baseTarget,
-          "generation-signature" -> blockHeader.generationSignature.toString
-        )
-      ) ++ (if (blockHeader.version >= ProtoBlockVersion)
-              Json.obj("transactionsRoot" -> blockHeader.transactionsRoot.toString, "id" -> Block.protoHeaderHash(blockHeader).toString)
-            else Json.obj())
+        "transactionsRoot"    -> blockHeader.transactionsRoot.toString,
+        "id"                  -> Block.protoHeaderHash(blockHeader).toString,
+        "baseTarget"          -> blockHeader.baseTarget,
+        "generationSignature" -> blockHeader.generationSignature.toString
+      )
 
     val featuresJson  = createFeaturesJson(blockHeader.featureVotes)
-    val rewardJson    = createRewardVoteJson(blockHeader.rewardVote)
     val generatorJson = createGeneratorJson(blockHeader.generator)
     val stateHashJson = createStateHashJson(blockHeader.stateHash)
 
@@ -72,9 +65,10 @@ object BlockHeaderSerializer {
             "challengedHeader" -> {
               Json.obj(
                 "headerSignature" -> ch.headerSignature.toString
-              ) ++ createFeaturesJson(ch.featureVotes) ++ createGeneratorJson(ch.generator) ++ createRewardVoteJson(
-                ch.rewardVote
-              ) ++ createStateHashJson(ch.stateHash) ++ createFinalizationJson(ch.finalizationVoting)
+              ) ++ createFeaturesJson(ch.featureVotes) ++
+                createGeneratorJson(ch.generator) ++
+                createStateHashJson(ch.stateHash) ++
+                createFinalizationJson(ch.finalizationVoting)
             }
           )
         case None => JsObject.empty
@@ -83,10 +77,9 @@ object BlockHeaderSerializer {
     val finalizationHeaderJson = createFinalizationJson(blockHeader.finalizationVoting)
 
     Json.obj(
-      "version"   -> blockHeader.version,
       "timestamp" -> blockHeader.timestamp,
       "reference" -> blockHeader.reference.toString
-    ) ++ consensusJson ++ featuresJson ++ rewardJson ++ generatorJson ++ stateHashJson ++ challengedHeaderJson ++ finalizationHeaderJson
+    ) ++ consensusJson ++ featuresJson ++ generatorJson ++ stateHashJson ++ challengedHeaderJson ++ finalizationHeaderJson
   }
 
   def toJson(header: BlockHeader, blockSize: Int, transactionCount: Int, signature: ByteStr): JsObject =
@@ -94,7 +87,7 @@ object BlockHeaderSerializer {
       "signature"        -> signature.toString,
       "blocksize"        -> blockSize,
       "transactionCount" -> transactionCount
-    ) ++ (if (header.version < ProtoBlockVersion) Json.obj("id" -> signature.toString) else Json.obj())
+    )
 }
 
 object BlockSerializer {

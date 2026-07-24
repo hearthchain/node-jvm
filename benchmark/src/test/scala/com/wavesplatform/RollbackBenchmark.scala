@@ -62,7 +62,6 @@ object RollbackBenchmark extends ScorexLogging {
         GenesisTransaction.create(issuer.publicKey.toAddress, 100000e8.toLong, time.correctedTime()).explicitGet() +: assets,
         issuer,
         featureVotes = Seq.empty,
-        rewardVote = -1,
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = None
@@ -90,7 +89,6 @@ object RollbackBenchmark extends ScorexLogging {
     val nextBlock =
       Block
         .buildAndSign(
-          2.toByte,
           time.correctedTime(),
           genesisBlock.id(),
           1000,
@@ -98,7 +96,6 @@ object RollbackBenchmark extends ScorexLogging {
           txs = Seq.empty,
           issuer,
           featureVotes = Seq.empty,
-          rewardVote = -1,
           stateHash = None,
           challengedHeader = None,
           finalizationVoting = None

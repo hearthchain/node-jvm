@@ -13,7 +13,7 @@ class TransferDiffTest extends PropSpec with WithDomain {
   private val preconditionsAndTransfer = {
     val recipient = TxHelpers.signer(2)
 
-    val transferV1 = TxHelpers.transfer(master, recipient.toAddress, version = TxVersion.V1)
+    val transferV1 = TxHelpers.transfer(master, recipient.toAddress)
     val transferV2 = TxHelpers.transfer(master, recipient.toAddress)
 
     Seq(transferV1, transferV2)
@@ -21,7 +21,7 @@ class TransferDiffTest extends PropSpec with WithDomain {
 
   property("transfers to recipient preserving waves invariant") {
     preconditionsAndTransfer.foreach { transfer =>
-      withDomain(ScriptsAndSponsorship, Seq(AddrWithBalance(master.toAddress))) { d =>
+      withDomain(ScriptsAndSponsorship, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, master)) { d =>
         d.appendBlock(transfer)
 
         val carryFee = -transfer.fee.value * 3 / 5

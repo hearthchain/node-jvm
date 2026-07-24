@@ -2,7 +2,6 @@ package com.wavesplatform.it.asset
 
 import com.typesafe.config.Config
 import com.wavesplatform.account.KeyPair
-import com.wavesplatform.features.BlockchainFeatures.{RideV6, SynchronousCalls}
 import com.wavesplatform.it.{BaseFreeSpec, NodeConfigs}
 import com.wavesplatform.lang.directives.values.StdLibVersion
 import com.wavesplatform.test.*
@@ -13,7 +12,7 @@ trait ScriptAssetActionLimitsSuite extends BaseFreeSpec {
 
   import NodeConfigs.*
   override protected def nodeConfigs: Seq[Config] =
-    Seq(BiggestMiner.quorum(0).preactivatedFeatures(SynchronousCalls, RideV6))
+    Seq(BiggestMiner.quorum(0)
 
   protected val initialWavesBalance: Long  = 1000.waves
   protected val minSponsoredAssetFee: Long = 1001

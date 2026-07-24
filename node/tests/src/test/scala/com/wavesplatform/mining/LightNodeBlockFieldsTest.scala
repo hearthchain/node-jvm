@@ -4,7 +4,6 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures.LightNode
 import com.wavesplatform.mining.MultiDimensionalMiningConstraint.Unlimited
 import com.wavesplatform.mining.microblocks.MicroBlockMinerImpl
 import com.wavesplatform.state.Height
@@ -28,8 +27,6 @@ class LightNodeBlockFieldsTest extends PropSpec with WithMiner {
   property("new block fields appear `lightNodeBlockFieldsAbsenceInterval` blocks after LightNode activation") {
     val settings =
       TransactionStateSnapshot
-        .setFeaturesHeight(LightNode -> 2)
-        .configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 10))
         .copy(minerSettings = TransactionStateSnapshot.minerSettings.copy(quorum = 0, minMicroBlockAge = 0.seconds))
     withDomainAndMiner(
       settings,
@@ -75,7 +72,6 @@ class LightNodeBlockFieldsTest extends PropSpec with WithMiner {
       log.debug("LightNode activation")
       appendBlock()
       d.blockchain.height shouldBe 2
-      d.blockchain.isFeatureActivated(LightNode) shouldBe true
       block(2).stateHash shouldBe None
 
       appendMicro()
@@ -119,7 +115,6 @@ class LightNodeBlockFieldsTest extends PropSpec with WithMiner {
 
   property("micro forks should not produce invalid state hash") {
     val settings = TransactionStateSnapshot
-      .configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 0))
       .copy(minerSettings = TransactionStateSnapshot.minerSettings.copy(quorum = 0, minMicroBlockAge = 0.seconds))
 
     val signer = TxHelpers.signer(2) // Sends transfers, forges blocks
@@ -172,7 +167,7 @@ class LightNodeBlockFieldsTest extends PropSpec with WithMiner {
     "blocks with challenged header or state hash should be allowed only `lightNodeBlockFieldsAbsenceInterval` blocks after LightNode activation"
   ) {
     withDomainAndMiner(
-      TransactionStateSnapshot.setFeaturesHeight(LightNode -> 2).configure(_.copy(lightNodeBlockFieldsAbsenceInterval = 10)),
+      TransactionStateSnapshot,
       AddrWithBalance.enoughBalances(defaultSigner, secondSigner)
     ) { case (d, _, append) =>
       (1 to 9).foreach(_ => d.appendBlock())

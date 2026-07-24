@@ -28,11 +28,11 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
     val aliceLeaseToBobAmount    = 500.waves
     val masterLeaseToAliceAmount = 750.waves
 
-    val masterTransfersToAlice = TxHelpers.transfer(master, alice.toAddress, masterTransferAmount, fee = fee, version = TxVersion.V1)
+    val masterTransfersToAlice = TxHelpers.transfer(master, alice.toAddress, masterTransferAmount, fee = fee)
     val aliceLeasesToBob       = TxHelpers.lease(alice, bob.toAddress, aliceLeaseToBobAmount)
     val masterLeasesToAlice    = TxHelpers.lease(master, alice.toAddress, masterLeaseToAliceAmount)
     val aliceTransfersMoreThanOwnsMinusLeaseOut =
-      TxHelpers.transfer(alice, cooper.toAddress, masterTransferAmount - fee - aliceLeaseToBobAmount, fee = fee, version = TxVersion.V1)
+      TxHelpers.transfer(alice, cooper.toAddress, masterTransferAmount - fee - aliceLeaseToBobAmount, fee = fee)
 
     (masterTransfersToAlice, aliceLeasesToBob, masterLeasesToAlice, aliceTransfersMoreThanOwnsMinusLeaseOut)
   }
@@ -81,14 +81,17 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
       notBlockedAmount + CommitToGenerationTransaction.DepositInWavelets + TestValues.commitToGenerationFee + TestValues.fee // for transfer
 
     val transferAmount = notBlockedAmount + 1
+    // The depositor must not be the account these blocks are mined by (TestBlock signs with defaultSigner): a miner
+    // collects the fees of the very blocks under test, and that extra balance would cover the transfer without ever
+    // touching the deposit, which is exactly what this test is checking.
     assertDiffEiTraced(
       Seq(
         TestBlock.create(Seq()), // Height 1: carries the genesis snapshot
-        TestBlock.create(Seq(TxHelpers.commitToGeneration(Height(4))))
+        TestBlock.create(Seq(TxHelpers.commitToGeneration(Height(4), sender = master)))
       ),
-      TestBlock.create(Seq(TxHelpers.transfer(amount = transferAmount))),
+      TestBlock.create(Seq(TxHelpers.transfer(from = master, to = TxHelpers.address(2), amount = transferAmount))),
       settings,
-      Seq(AddrWithBalance(TxHelpers.defaultAddress, initBalance))
+      Seq(AddrWithBalance(master.toAddress, initBalance))
     ) { snapshotEi =>
       snapshotEi.resultE should produce("trying to spend a deposit")
     }

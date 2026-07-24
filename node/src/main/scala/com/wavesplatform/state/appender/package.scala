@@ -242,7 +242,6 @@ package object appender {
           grandParent = blockchain.parentHeader(parent, 2)
 
           minerBalance <- minerBalance(blockchain, miner, parentHeight, block).leftMap(GenericError(_))
-          _            <- validateBlockVersion(parentHeight.toInt, block, blockchain)
           _            <- Either.cond(blockTime - currentTs < MaxTimeDrift, (), BlockFromFuture(blockTime, currentTs))
           _            <- pos.validateBaseTarget(parentHeight.toInt, block, parent, grandParent)
           hitSource    <- pos.validateGenerationSignature(block)
@@ -271,14 +270,6 @@ package object appender {
 
   private def checkExceptions(height: Height, block: Block, origError: ValidationError): Either[ValidationError, Unit] =
     Either.raiseUnless(exceptions.contains((height, block.id())))(origError)
-
-  private def validateBlockVersion(parentHeight: Int, block: Block, blockchain: Blockchain): Either[ValidationError, Unit] = {
-    Either.cond(
-      blockchain.blockVersionAt(parentHeight + 1) == block.header.version,
-      (),
-      GenericError(s"Block version should be equal to ${blockchain.blockVersionAt(parentHeight + 1)}")
-    )
-  }
 
   private def validateChallengedHeader(block: Block, blockchain: Blockchain): Either[ValidationError, Unit] =
     for {

@@ -216,7 +216,6 @@ class TransactionsRouteSpec
 
         (result \ "height").as[Int] shouldBe domain.blockchain.height
         (result \ "spentComplexity").as[Int] shouldBe 0
-        (result \ "version").as[Int] shouldBe transferTxn.version
         (result \ "type").as[Int] shouldBe transferTxn.tpe.id
         (result \ "timestamp").as[Long] shouldBe transferTxn.timestamp
       }
@@ -464,7 +463,7 @@ class TransactionsRouteSpec
 
     def validateFailure(response: HttpResponse): Unit = {
       response.status shouldEqual StatusCodes.BadRequest
-      (responseAs[JsObject] \ "message").as[String] shouldEqual s"transactions do not exist or block version < ${Block.ProtoBlockVersion}"
+      (responseAs[JsObject] \ "message").as[String] shouldEqual s"transactions do not exist"
     }
 
     "returns merkle proofs" in {
@@ -586,7 +585,6 @@ class TransactionsRouteSpec
       TxHelpers.exchangeFromOrders(
         TxHelpers.order(OrderType.BUY, Waves, issuedAsset, version = Order.V4, attachment = Some(attachment)),
         TxHelpers.order(OrderType.SELL, Waves, issuedAsset, version = Order.V4, sender = issuer),
-        version = TxVersion.V3
       )
 
     domain.appendBlock(

@@ -29,7 +29,6 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
   private def fundSender(s: Setup): Seq[AddrWithBalance] = Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
 
   property("generator should get fees before applying block before applyMinerFeeWithTransactionAfter in two blocks") {
-    assume(BlockchainFeatures.implemented.contains(BlockchainFeatures.SmartAccounts.id))
     scenario(preconditionsAndPayments, DefaultWavesSettings, fundSender) {
       case (domain: Domain, (_, somePayment, generatorPaymentOnFee, someOtherPayment)) =>
         val blocks = chainBlocksFrom(domain.lastBlockId, Seq(Seq(somePayment), Seq(generatorPaymentOnFee, someOtherPayment)))

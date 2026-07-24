@@ -19,7 +19,7 @@ class AssetsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
   private given scheduler: Scheduler = Schedulers.singleThread("grpc", executionModel = SynchronousExecution)
   val sender: KeyPair                = TxHelpers.signer(1)
 
-  "GetNFTList should work" in withDomain(RideV6.addFeatures(BlockchainFeatures.ReduceNFTFee), AddrWithBalance.enoughBalances(sender)) { d =>
+  "GetNFTList should work" in withDomain(RideV6, AddrWithBalance.enoughBalances(sender)) { d =>
     val grpcApi = getGrpcApi(d)
 
     val nftIssues = (1 to 10).map(idx => TxHelpers.issue(sender, 1, name = s"nft$idx", reissuable = false))
@@ -57,7 +57,7 @@ class AssetsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
   }
 
   "NODE-999. GetNftList limit should work properly" in withDomain(
-    RideV6.addFeatures(BlockchainFeatures.ReduceNFTFee),
+    RideV6,
     AddrWithBalance.enoughBalances(sender)
   ) { d =>
     val nftIssues = (1 to 5).map(idx => TxHelpers.issue(sender, 1, name = s"nft$idx", reissuable = false))

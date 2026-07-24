@@ -12,7 +12,6 @@ import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
 case class TransferTransaction(
-    version: TxVersion,
     sender: PublicKey,
     recipient: Address,
     assetId: Asset,
@@ -45,7 +44,6 @@ object TransferTransaction {
   implicit val validator: TxValidator[TransferTransaction] = TransferTxValidator
 
   def create(
-      version: TxVersion,
       sender: PublicKey,
       recipient: Address,
       asset: Asset,
@@ -60,6 +58,6 @@ object TransferTransaction {
     for {
       amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, asset.maybeBase58Repr.getOrElse("waves")))
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx     <- TransferTransaction(version, sender, recipient, asset, amount, feeAsset, fee, attachment, timestamp, proofs, chainId).validatedEither
+      tx     <- TransferTransaction(sender, recipient, asset, amount, feeAsset, fee, attachment, timestamp, proofs, chainId).validatedEither
     } yield tx
 }

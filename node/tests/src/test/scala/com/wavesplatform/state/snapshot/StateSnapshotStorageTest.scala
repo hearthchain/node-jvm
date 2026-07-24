@@ -22,7 +22,7 @@ import scala.math.pow
 class StateSnapshotStorageTest extends PropSpec with WithDomain {
   property("transaction snapshot storage") {
     // The sender used to be credited by a genesis transaction, which the genesis snapshot replaces
-    withDomain(RideV6, Seq(AddrWithBalance(secondAddress, ENOUGH_AMT))) { d =>
+    withDomain(RideV6, Seq(AddrWithBalance(defaultAddress, ENOUGH_AMT), AddrWithBalance(secondAddress, ENOUGH_AMT))) { d =>
       val sender           = secondSigner
       val senderAddress    = secondAddress
       val recipientSigner  = TxHelpers.signer(2)

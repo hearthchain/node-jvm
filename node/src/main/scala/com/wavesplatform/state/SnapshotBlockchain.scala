@@ -173,8 +173,6 @@ case class SnapshotBlockchain(
   /** Block reward related */
   override def blockReward(height: Int): Option[Long] = reward.filter(_ => this.height == height) orElse inner.blockReward(height)
 
-  override def blockRewardVotes(height: Int): Seq[Long] = inner.blockRewardVotes(height)
-
   override def wavesAmount(height: Int): BigInt = {
     val parentBlockHeader = blockMeta match {
       case None => inner.blockHeader(height - 1)

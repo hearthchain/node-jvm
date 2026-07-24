@@ -1,6 +1,7 @@
 package com.wavesplatform.state.diffs
 
 import cats.implicits.toBifunctorOps
+import cats.syntax.either.*
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
@@ -57,14 +58,7 @@ object TransferDiff {
       portfolios <- Portfolio.combine(transferPf, feePf).leftMap(GenericError(_))
       assetIssued    = assetId.fold(true)(blockchain.assetDescription(_).isDefined)
       feeAssetIssued = feeAssetId.fold(true)(blockchain.assetDescription(_).isDefined)
-      _ <- Either.cond(
-        blockchain.lastBlockTimestamp
-          .forall(_ <= blockchain.settings.functionalitySettings.allowUnissuedAssetsUntil || (assetIssued && feeAssetIssued)),
-        (),
-        GenericError(
-          s"Unissued assets are not allowed after allowUnissuedAssetsUntil=${blockchain.settings.functionalitySettings.allowUnissuedAssetsUntil}"
-        )
-      )
+      _        <- Either.raiseUnless(assetIssued && feeAssetIssued)(GenericError(s"Unissued assets are not allowed"))
       snapshot <- StateSnapshot.build(blockchain, portfolios = portfolios)
     } yield snapshot
   }

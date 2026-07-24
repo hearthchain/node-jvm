@@ -14,65 +14,64 @@ import com.wavesplatform.transaction.{Asset, *}
 import scala.util.{Left, Right}
 
 object CommonValidation {
-  def disallowSendingGreaterThanBalance[T <: Transaction](blockchain: Blockchain, blockTime: Long, tx: T): Either[ValidationError, T] =
-    if (blockTime >= blockchain.settings.functionalitySettings.allowTemporaryNegativeUntil) {
-      def checkTransfer(
-          sender: Address,
-          assetId: Asset,
-          amount: Long,
-          feeAssetId: Asset,
-          feeAmount: Long,
-          allowFeeOverdraft: Boolean = false
-      ): Either[ValidationError, T] = {
-        val amountPortfolio = assetId match {
-          case aid @ IssuedAsset(_) => Portfolio.build(aid -> -amount)
-          case Waves                => Portfolio(-amount)
-        }
-        val feePortfolio = feeAssetId match {
-          case aid @ IssuedAsset(_) => Portfolio.build(aid -> -feeAmount)
-          case Waves                => Portfolio(-feeAmount)
-        }
+  def disallowSendingGreaterThanBalance[T <: Transaction](blockchain: Blockchain, blockTime: Long, tx: T): Either[ValidationError, T] = {
+    def checkTransfer(
+        sender: Address,
+        assetId: Asset,
+        amount: Long,
+        feeAssetId: Asset,
+        feeAmount: Long,
+        allowFeeOverdraft: Boolean = false
+    ): Either[ValidationError, T] = {
+      val amountPortfolio = assetId match {
+        case aid @ IssuedAsset(_) => Portfolio.build(aid -> -amount)
+        case Waves                => Portfolio(-amount)
+      }
+      val feePortfolio = feeAssetId match {
+        case aid @ IssuedAsset(_) => Portfolio.build(aid -> -feeAmount)
+        case Waves                => Portfolio(-feeAmount)
+      }
 
-        val checkedTx = for {
-          _ <- assetId match {
-            case IssuedAsset(id) => InvokeDiffsCommon.checkAsset(blockchain, id)
-            case Waves           => Right(())
+      val checkedTx = for {
+        _ <- assetId match {
+          case IssuedAsset(id) => InvokeDiffsCommon.checkAsset(blockchain, id)
+          case Waves           => Right(())
+        }
+        spendings <- amountPortfolio.combine(feePortfolio)
+        oldWavesBalance = blockchain.balance(sender, Waves)
+
+        newWavesBalance     <- safeSum(oldWavesBalance, spendings.balance, "Spendings")
+        feeUncheckedBalance <- safeSum(oldWavesBalance, amountPortfolio.balance, "Transfer amount")
+
+        overdraftFilter = allowFeeOverdraft && feeUncheckedBalance >= 0
+        _ <- Either.cond(
+          overdraftFilter || newWavesBalance >= 0,
+          (),
+          "Attempt to transfer unavailable funds: Transaction application leads to " +
+            s"negative waves balance to (at least) temporary negative state, current balance equals $oldWavesBalance, " +
+            s"spends equals ${spendings.balance}, result is $newWavesBalance"
+        )
+        _ <- spendings.assets
+          .collectFirst {
+            case (aid, delta) if delta < 0 && blockchain.balance(sender, aid) + delta < 0 =>
+              val availableBalance = blockchain.balance(sender, aid)
+              "Attempt to transfer unavailable funds: Transaction application leads to negative asset " +
+                s"'$aid' balance to (at least) temporary negative state, current balance is $availableBalance, " +
+                s"spends equals $delta, result is ${availableBalance + delta}"
           }
-          spendings <- amountPortfolio.combine(feePortfolio)
-          oldWavesBalance = blockchain.balance(sender, Waves)
+          .toLeft(())
+      } yield tx
 
-          newWavesBalance     <- safeSum(oldWavesBalance, spendings.balance, "Spendings")
-          feeUncheckedBalance <- safeSum(oldWavesBalance, amountPortfolio.balance, "Transfer amount")
+      checkedTx.leftMap(GenericError(_))
+    }
 
-          overdraftFilter = allowFeeOverdraft && feeUncheckedBalance >= 0
-          _ <- Either.cond(
-            overdraftFilter || newWavesBalance >= 0,
-            (),
-            "Attempt to transfer unavailable funds: Transaction application leads to " +
-              s"negative waves balance to (at least) temporary negative state, current balance equals $oldWavesBalance, " +
-              s"spends equals ${spendings.balance}, result is $newWavesBalance"
-          )
-          _ <- spendings.assets
-            .collectFirst {
-              case (aid, delta) if delta < 0 && blockchain.balance(sender, aid) + delta < 0 =>
-                val availableBalance = blockchain.balance(sender, aid)
-                "Attempt to transfer unavailable funds: Transaction application leads to negative asset " +
-                  s"'$aid' balance to (at least) temporary negative state, current balance is $availableBalance, " +
-                  s"spends equals $delta, result is ${availableBalance + delta}"
-            }
-            .toLeft(())
-        } yield tx
-
-        checkedTx.leftMap(GenericError(_))
-      }
-
-      tx match {
-        case ttx: TransferTransaction => checkTransfer(ttx.sender.toAddress, ttx.assetId, ttx.amount.value, ttx.feeAssetId, ttx.fee.value)
-        case mtx: MassTransferTransaction =>
-          checkTransfer(mtx.sender.toAddress, mtx.assetId, mtx.transfers.map(_.amount.value).sum, Waves, mtx.fee.value)
-        case _ => Right(tx)
-      }
-    } else Right(tx)
+    tx match {
+      case ttx: TransferTransaction => checkTransfer(ttx.sender.toAddress, ttx.assetId, ttx.amount.value, ttx.feeAssetId, ttx.fee.value)
+      case mtx: MassTransferTransaction =>
+        checkTransfer(mtx.sender.toAddress, mtx.assetId, mtx.transfers.map(_.amount.value).sum, Waves, mtx.fee.value)
+      case _ => Right(tx)
+    }
+  }
 
   def disallowDuplicateIds[T <: Transaction](blockchain: Blockchain, tx: T): Either[ValidationError, T] = tx match {
     case _ =>
@@ -90,8 +89,7 @@ object CommonValidation {
     )
 
   def disallowTxFromFuture[T <: Transaction](settings: FunctionalitySettings, time: Long, tx: T): Either[ValidationError, T] = {
-    val allowTransactionsFromFutureByTimestamp = tx.timestamp < settings.allowTransactionsFromFutureUntil
-    if (!allowTransactionsFromFutureByTimestamp && tx.timestamp - time > settings.maxTransactionTimeForwardOffset.toMillis)
+    if (tx.timestamp - time > settings.maxTransactionTimeForwardOffset.toMillis)
       Left(
         Mistiming(
           s"""Transaction timestamp ${tx.timestamp}

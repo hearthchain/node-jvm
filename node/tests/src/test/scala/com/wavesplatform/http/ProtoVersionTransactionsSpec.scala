@@ -85,7 +85,7 @@ class ProtoVersionTransactionsSpec
     "LeaseTransaction/LeaseCancelTransaction" in {
       val recipient = TxHelpers.secondAddress
       val leaseTxUnsigned = LeaseTransaction
-        .create(1, AddressScheme.current.chainId, PublicKey(account.publicKey), recipient, 100L, MinFee, now, Proofs.empty)
+        .create(AddressScheme.current.chainId, PublicKey(account.publicKey), recipient, 100L, MinFee, now, Proofs.empty)
         .explicitGet()
 
       val (leaseProofs, leaseTxJson) = Post(routePath("/sign"), leaseTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {
@@ -99,7 +99,7 @@ class ProtoVersionTransactionsSpec
       }
 
       val leaseCancelTxUnsigned =
-        LeaseCancelTransaction.create(TxVersion.V1, PublicKey(account.publicKey), leaseTx.id(), MinFee, now, Proofs.empty).explicitGet()
+        LeaseCancelTransaction.create(PublicKey(account.publicKey), leaseTx.id(), MinFee, now, Proofs.empty).explicitGet()
 
       val (leaseCancelProofs, leaseCancelTxJson) = Post(routePath("/sign"), leaseCancelTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {
         checkProofs(response)
@@ -125,7 +125,7 @@ class ProtoVersionTransactionsSpec
       val recipient = TxHelpers.secondAddress
       val transferTxUnsigned =
         TransferTransaction
-          .create(TxVersion.V1, PublicKey(account.publicKey), recipient, asset, 100L, Waves, MinFee, ByteStr(attachment), now, Proofs.empty)
+          .create(PublicKey(account.publicKey), recipient, asset, 100L, Waves, MinFee, ByteStr(attachment), now, Proofs.empty)
           .explicitGet()
 
       val (proofs, transferTxJson) = Post(routePath("/sign"), transferTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {
@@ -153,7 +153,7 @@ class ProtoVersionTransactionsSpec
 
       val massTransferTxUnsigned =
         MassTransferTransaction
-          .create(TxVersion.V1, PublicKey(account.publicKey), Waves, transfers, MassTransferTxFee, now, ByteStr(attachment), Proofs.empty)
+          .create(PublicKey(account.publicKey), Waves, transfers, MassTransferTxFee, now, ByteStr(attachment), Proofs.empty)
           .explicitGet()
 
       val (proofs, massTransferTxJson) = Post(routePath("/sign"), massTransferTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {

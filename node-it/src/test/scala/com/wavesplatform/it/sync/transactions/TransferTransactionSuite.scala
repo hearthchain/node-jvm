@@ -21,7 +21,7 @@ import scala.concurrent.duration.*
 
 class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFailure {
   test("transfer with empty string assetId") {
-    val tx = TxHelpers.transfer(from = sender.keyPair, to = sender.keyPair.toAddress, amount = 100L, asset = Waves, fee = minFee, feeAsset = Waves, attachment = ByteStr.empty, version = 2.toByte)
+    val tx = TxHelpers.transfer(from = sender.keyPair, to = sender.keyPair.toAddress, amount = 100L, asset = Waves, fee = minFee, feeAsset = Waves, attachment = ByteStr.empty)
     val json = tx.json() ++ Json.obj("assetId" -> "", "feeAssetId" -> "")
     sender.signedBroadcast(json, waitForTx = true)
   }
@@ -74,7 +74,6 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
         attachment: Array[Byte] = Array.emptyByteArray
     ): TransferTransaction = {
       val tx = TransferTransaction(
-        version = version,
         sender = sender.keyPair.publicKey,
         recipient = AddressOrAlias.fromString(sender.address).explicitGet(),
         assetId = Waves,

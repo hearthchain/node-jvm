@@ -22,7 +22,6 @@ class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, Embed
     .configure(
       _.copy(
         generationPeriodLength = 2,
-        lightNodeBlockFieldsAbsenceInterval = 0
       )
     )
 

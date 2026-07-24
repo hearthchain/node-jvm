@@ -70,13 +70,12 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
         base: Seq[Transaction],
         micros: Seq[Seq[Transaction]],
         signer: SigningKey,
-        version: Byte,
         timestamp: Long
     ): (Block, Seq[MicroBlock]) = {
-      val block = unsafeBlock(totalRefTo, base, signer, version, timestamp)
+      val block = unsafeBlock(totalRefTo, base, signer, timestamp)
       val microBlocks = micros
         .foldLeft((block, Seq.empty[MicroBlock])) { case ((lastTotal, allMicros), txs) =>
-          val (newTotal, micro) = unsafeMicro(totalRefTo, lastTotal, txs, signer, version, timestamp)
+          val (newTotal, micro) = unsafeMicro(totalRefTo, lastTotal, txs, signer, timestamp)
           (newTotal, allMicros :+ micro)
         }
         ._2
@@ -88,38 +87,32 @@ trait BlocksTransactionsHelpers { self: TransactionGen =>
         prevTotal: Block,
         txs: Seq[Transaction],
         signer: SigningKey,
-        version: TxVersion,
         ts: Long
     ): (Block, MicroBlock) = {
-      val newTotalBlock = unsafeBlock(totalRefTo, prevTotal.transactionData ++ txs, signer, version, ts)
-      (newTotalBlock, MicroBlock.buildAndSign(version, signer, txs, prevTotal.id(), newTotalBlock.signature, None, None).explicitGet())
+      val newTotalBlock = unsafeBlock(totalRefTo, prevTotal.transactionData ++ txs, signer, ts)
+      (newTotalBlock, MicroBlock.buildAndSign(signer, txs, prevTotal.id(), newTotalBlock.signature, None, None).explicitGet())
     }
 
     def unsafeBlock(
         reference: ByteStr,
         txs: Seq[Transaction],
         signer: SigningKey,
-        version: Byte,
         timestamp: Long,
         bTarget: Long = DefaultBaseTarget
     ): Block = {
       val unsigned: Block = Block.create(
-        version = version,
         timestamp = timestamp,
         reference = reference,
         baseTarget = bTarget,
         generationSignature = com.wavesplatform.history.generationSignature,
         generator = PublicKey(signer.publicKey),
         featureVotes = Seq.empty,
-        rewardVote = -1L,
         transactionData = txs,
         stateHash = None,
         challengedHeader = None,
         finalizationVoting = None
       )
-      val toSign =
-        if (version < Block.ProtoBlockVersion) unsigned.bytes()
-        else PBBlocks.protobuf(unsigned).header.get.toByteArray
+      val toSign = PBBlocks.protobuf(unsigned).header.get.toByteArray
       unsigned.copy(signature = ByteStr(signer.sign(toSign)))
     }
   }

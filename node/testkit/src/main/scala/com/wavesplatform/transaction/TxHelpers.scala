@@ -79,11 +79,10 @@ object TxHelpers {
       feeAsset: Asset = Waves,
       attachment: ByteStr = ByteStr.empty,
       timestamp: TxTimestamp = timestamp,
-      version: Byte = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
   ): TransferTransaction =
     TransferTransaction
-      .create(version, PublicKey(from.publicKey), to, asset, amount, feeAsset, fee, attachment, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(from.publicKey), to, asset, amount, feeAsset, fee, attachment, timestamp, Proofs.empty, chainId)
       .map(_.signWith(from))
       .explicitGet()
 
@@ -94,11 +93,9 @@ object TxHelpers {
       asset: Asset = Waves,
       fee: Long = TestValues.fee,
       feeAsset: Asset = Waves,
-      version: Byte = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
   ): TransferTransaction =
     TransferTransaction(
-      version,
       PublicKey(from.publicKey),
       to,
       asset,
@@ -117,12 +114,10 @@ object TxHelpers {
       asset: Asset = Waves,
       fee: Long = FeeConstants(TransactionType.MassTransfer) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      version: Byte = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
   ): MassTransferTransaction =
     MassTransferTransaction
       .create(
-        version,
         PublicKey(from.publicKey),
         asset,
         to.map { case (r, a) => MassTransferTransaction.ParsedTransfer(r, TxNonNegativeAmount.unsafeFrom(a)) },
@@ -277,9 +272,8 @@ object TxHelpers {
       order2: Order,
       matcher: SigningKey = defaultSigner,
       fee: Long = TestValues.fee,
-      version: TxVersion = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
-  ): ExchangeTransaction = exchangeFromOrders(order1, order2, order1.price.value, matcher, fee, version, chainId)
+  ): ExchangeTransaction = exchangeFromOrders(order1, order2, order1.price.value, matcher, fee, chainId)
 
   def exchangeFromOrders(
       order1: Order,
@@ -287,12 +281,10 @@ object TxHelpers {
       price: Long,
       matcher: SigningKey,
       fee: Long,
-      version: TxVersion,
       chainId: Byte
   ): ExchangeTransaction =
     ExchangeTransaction
       .create(
-        version,
         order1,
         order2,
         order1.amount.value,
@@ -316,12 +308,10 @@ object TxHelpers {
       sellMatcherFee: Long = 1L,
       fee: Long = TestValues.fee,
       timestamp: Long = timestamp,
-      version: TxVersion = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
   ): ExchangeTransaction =
     ExchangeTransaction
       .create(
-        version,
         order1 = order1,
         order2 = order2,
         amount = amount,
@@ -341,12 +331,10 @@ object TxHelpers {
       amount: Long = 10.waves,
       fee: Long = FeeConstants(TransactionType.Lease) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      // LeaseTransaction.Version is refined to 1: the migration collapsed leases to a single version
-      version: TxVersion = TxVersion.V1,
       chainId: Byte = AddressScheme.current.chainId
   ): LeaseTransaction = {
     LeaseTransaction
-      .create(version, chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
+      .create(chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
   }
@@ -356,11 +344,10 @@ object TxHelpers {
       sender: SigningKey = defaultSigner,
       fee: Long = FeeConstants(TransactionType.LeaseCancel) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      version: TxVersion = TxVersion.V2,
       chainId: Byte = AddressScheme.current.chainId
   ): LeaseCancelTransaction = {
     LeaseCancelTransaction
-      .create(version, PublicKey(sender.publicKey), leaseId, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), leaseId, fee, timestamp, Proofs.empty, chainId)
       .map(_.signWith(sender))
       .explicitGet()
   }
@@ -372,11 +359,10 @@ object TxHelpers {
       timestamp: TxTimestamp = timestamp,
       fee: Long = TestValues.commitToGenerationFee,
       chainId: Byte = AddressScheme.current.chainId,
-      version: TxVersion = TxVersion.V1,
       // Defaults to the sender's own derived key, see vrfKeyOf
       vrfKey: Option[VrfKey] = None
   ): CommitToGenerationTransaction =
-    commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, chainId, version, vrfKey)
+    commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, chainId, vrfKey)
 
   def blsKeyOf(sender: SigningKey): BlsKeyPair = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(sender.publicKey()))
 
@@ -387,14 +373,12 @@ object TxHelpers {
       timestamp: TxTimestamp = timestamp,
       fee: Long = TestValues.commitToGenerationFee,
       chainId: Byte = AddressScheme.current.chainId,
-      version: TxVersion = TxVersion.V1,
       // Defaults to the sender's own derived key, see vrfKeyOf
       vrfKeyOpt: Option[VrfKey] = None
   ): CommitToGenerationTransaction = {
     val vrfKey = vrfKeyOpt.getOrElse(vrfKeyOf(sender))
     CommitToGenerationTransaction
       .create(
-        version,
         PublicKey(sender.publicKey()),
         endorserKp.publicKey,
         ByteStr(vrfKey.publicKey()),

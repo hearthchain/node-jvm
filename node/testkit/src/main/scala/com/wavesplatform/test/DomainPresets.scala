@@ -21,7 +21,11 @@ object DomainPresets {
         ws.copy(blockchainSettings =
           ws.blockchainSettings.copy(
             genesisSettings = ws.blockchainSettings.genesisSettings.copy(
-              balances = balances.map(b => GenesisBalanceSettings(b.address.toBech32, b.balance, b.assets.map { case (k, v) => k.toString -> v }))
+              // Dedupe by recipient (genesis forbids duplicate recipients): lets a caller prepend a shared funding list
+              // - e.g. a committed generator pool - in front of its own per-test entries without colliding.
+              balances = balances
+                .distinctBy(_.address)
+                .map(b => GenesisBalanceSettings(b.address.toBech32, b.balance, b.assets.map { case (k, v) => k.toString -> v }))
             )
           )
         )
@@ -32,7 +36,9 @@ object DomainPresets {
         ws.copy(blockchainSettings =
           ws.blockchainSettings.copy(
             genesisSettings = ws.blockchainSettings.genesisSettings.copy(
-              generators = generators.map(WithState.genesisGeneratorFor)
+              // Callers may commit an overlapping pool (e.g. a fixed generator pool plus a challenger drawn from it),
+              // so dedupe by public key: a generator is committed once, matching the genesis snapshot's own rule.
+              generators = generators.distinctBy(g => com.wavesplatform.common.state.ByteStr(g.publicKey())).map(WithState.genesisGeneratorFor)
             )
           )
         )
@@ -113,54 +119,33 @@ object DomainPresets {
       .noFeatures()
       .blockchainSettings
       .functionalitySettings
-      .copy(lightNodeBlockFieldsAbsenceInterval = 0)
 
     domainSettingsWithFS(defaultFS.copy(preActivatedFeatures = fs.map { case (f, h) =>
       f.id -> h
     }.toMap))
   }
 
-  val NG: WavesSettings = domainSettingsWithPreactivatedFeatures(
-    BlockchainFeatures.MassTransfer, // Removes limit of 100 transactions per block
-    BlockchainFeatures.NG,
-    BlockchainFeatures.DeterministicFinality
-  )
+  val NG: WavesSettings = domainSettingsWithPreactivatedFeatures()
 
   val ScriptsAndSponsorship: WavesSettings = NG
-    .addFeatures(
-      BlockchainFeatures.SmartAccounts,
-      BlockchainFeatures.SmartAccountTrading,
-      BlockchainFeatures.OrderV3,
-      BlockchainFeatures.FeeSponsorship,
-      BlockchainFeatures.DataTransaction,
-      BlockchainFeatures.SmartAssets
-    )
-    .setFeaturesHeight(
-      BlockchainFeatures.FeeSponsorship -> -NG.blockchainSettings.functionalitySettings.activationWindowSize(1)
-    )
 
-  val RideV3: WavesSettings = ScriptsAndSponsorship.addFeatures(
-    BlockchainFeatures.Ride4DApps
-  )
+  val RideV3: WavesSettings = ScriptsAndSponsorship
 
-  val RideV4: WavesSettings = RideV3.addFeatures(
-    BlockchainFeatures.BlockReward,
-    BlockchainFeatures.BlockV5
-  )
+  val RideV4: WavesSettings = RideV3
 
-  val RideV4WithRewards: WavesSettings = RideV4.addFeatures(BlockchainFeatures.BlockReward)
+  val RideV4WithRewards: WavesSettings = RideV4
 
-  val RideV5: WavesSettings = RideV4.addFeatures(BlockchainFeatures.SynchronousCalls)
+  val RideV5: WavesSettings = RideV4
 
-  val RideV6: WavesSettings = RideV5.addFeatures(BlockchainFeatures.RideV6)
+  val RideV6: WavesSettings = RideV5
 
-  val ConsensusImprovements: WavesSettings = RideV6.addFeatures(BlockchainFeatures.ConsensusImprovements)
+  val ConsensusImprovements: WavesSettings = RideV6
 
-  val BlockRewardDistribution: WavesSettings = ConsensusImprovements.addFeatures(BlockchainFeatures.BlockRewardDistribution)
+  val BlockRewardDistribution: WavesSettings = ConsensusImprovements
 
-  val TransactionStateSnapshot: WavesSettings = BlockRewardDistribution.addFeatures(BlockchainFeatures.LightNode)
+  val TransactionStateSnapshot: WavesSettings = BlockRewardDistribution
 
-  val DeterministicFinality: WavesSettings = TransactionStateSnapshot.addFeatures(BlockchainFeatures.DeterministicFinality)
+  val DeterministicFinality: WavesSettings = TransactionStateSnapshot
 
   def mostRecent: WavesSettings = RideV6
 }

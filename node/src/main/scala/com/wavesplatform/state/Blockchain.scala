@@ -9,7 +9,7 @@ import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatureStatus, B
 import com.wavesplatform.settings.BlockchainSettings
 import com.wavesplatform.state.TxMeta.Status
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, Transaction}
+import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, Transaction, TxNonNegativeAmount}
 import com.wavesplatform.utils.Numbers
 import tech.hearth.crypto.Address
 
@@ -37,7 +37,6 @@ trait Blockchain {
 
   /** Block reward related */
   def blockReward(height: Int): Option[Long]
-  def blockRewardVotes(height: Int): Seq[Long]
 
   def wavesAmount(height: Int): BigInt
 
@@ -185,7 +184,7 @@ object Blockchain {
     def vrf(atHeight: Int): Option[ByteStr] =
       blockchain
         .blockHeader(atHeight)
-        .flatMap(header => if (header.header.version >= Block.ProtoBlockVersion) blockchain.hitSource(atHeight) else None)
+        .flatMap(header => blockchain.hitSource(atHeight))
 
     def isFeatureActivated(feature: BlockchainFeature, height: Int = blockchain.height): Boolean =
       blockchain.activatedFeatures.get(feature.id).exists(_ <= Height(height))
@@ -210,14 +209,9 @@ object Blockchain {
       maybeConflict.getOrElse(false)
     }
 
-    def currentBlockVersion: Byte = blockVersionAt(blockchain.height)
-    def nextBlockVersion: Byte    = blockVersionAt(blockchain.height + 1)
-
     def featureActivationHeight(feature: BlockchainFeature): Option[Height] = featureActivationHeight(feature.id)
     def featureActivationHeight(feature: Short): Option[Height]             = blockchain.activatedFeatures.get(feature)
     def featureApprovalHeight(feature: Short): Option[Height]               = blockchain.approvedFeatures.get(feature)
-
-    def blockVersionAt(height: Int): Byte = ProtoBlockVersion
 
     def transactionSucceeded(id: ByteStr): Boolean = blockchain.transactionMeta(id).exists(_.status == TxMeta.Status.Succeeded)
 
@@ -236,8 +230,7 @@ object Blockchain {
 
     def currentGenerationPeriod: Option[GenerationPeriod] = this.generationPeriodOf(Height(blockchain.height))
 
-    def supportsFinalizationVoting(height: Int = blockchain.height): Boolean =
-      blockchain.featureActivationHeight(BlockchainFeatures.DeterministicFinality).exists(Height(height) >= _)
+    def supportsFinalizationVoting(height: Int = blockchain.height): Boolean = true
   }
 
   def finalizedHeightOrFallback(at: Height, latestFinalized: Option[Height], maxRollbackLength: Int): Height = {

@@ -24,7 +24,7 @@ class BlockAppenderSpec extends FlatSpec with WithDomain with BeforeAndAfterAll 
 
   "BlockAppender" should "not broadcast block that wasn't applied to state" in {
     val sender = TxHelpers.signer(1)
-    withDomain(DomainPresets.ConsensusImprovements, AddrWithBalance.enoughBalances(sender)) { d =>
+    withDomain(DomainPresets.ConsensusImprovements, AddrWithBalance.enoughBalances(sender), generators = Seq(sender)) { d =>
       val channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
       val channel1 = new EmbeddedChannel(new MessageCodec(PeerDatabase.NoOp))
       val channel2 = new EmbeddedChannel(new MessageCodec(PeerDatabase.NoOp))

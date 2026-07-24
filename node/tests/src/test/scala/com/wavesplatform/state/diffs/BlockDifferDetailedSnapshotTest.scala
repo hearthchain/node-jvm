@@ -25,7 +25,7 @@ class BlockDifferDetailedSnapshotTest extends FreeSpec with WithState with WithD
   private def assertDetailedSnapshot(block: Block, ws: WavesSettings, balances: Seq[AddrWithBalance] = Seq.empty)(
       assertion: (StateSnapshot, StateSnapshot) => Unit
   ): Unit =
-    withDomain(ws, balances) { d =>
+    withDomain(ws, AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: balances) { d =>
       val BlockDiffer.Result(snapshot, _, _, _, detailedSnapshot, _) =
         BlockDiffer
           .fromBlock(d.blockchain, Some(d.lastBlock), block, None, MiningConstraint.Unlimited, block.header.generationSignature)
@@ -48,8 +48,8 @@ class BlockDifferDetailedSnapshotTest extends FreeSpec with WithState with WithD
       val a1 = TxHelpers.signer(1)
       val a2 = TxHelpers.signer(2)
 
-      val transfer1 = TxHelpers.transfer(a1, a2.toAddress, amount1, fee = fee1, version = TxVersion.V1)
-      val transfer2 = TxHelpers.transfer(a2, a1.toAddress, amount2, fee = fee2, version = TxVersion.V1)
+      val transfer1 = TxHelpers.transfer(a1, a2.toAddress, amount1, fee = fee1)
+      val transfer2 = TxHelpers.transfer(a2, a1.toAddress, amount2, fee = fee2)
       val block     = TestBlock.create(a1, Seq(transfer1, transfer2))
       val address1  = a1.toAddress
       val address2  = a2.toAddress
@@ -89,10 +89,10 @@ class BlockDifferDetailedSnapshotTest extends FreeSpec with WithState with WithD
             val amount1 = 2.waves
             val amount2 = 1.waves
 
-            val transfer1 = TxHelpers.transfer(a1, a2.toAddress, amount1, fee = fee1, version = TxVersion.V1)
-            val transfer2 = TxHelpers.transfer(a2, a1.toAddress, amount2, fee = fee2, version = TxVersion.V1)
+            val transfer1 = TxHelpers.transfer(a1, a2.toAddress, amount1, fee = fee1)
+            val transfer2 = TxHelpers.transfer(a2, a1.toAddress, amount2, fee = fee2)
 
-            withDomain(NG, Seq(AddrWithBalance(a1.toAddress))) { d =>
+            withDomain(NG, Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress), AddrWithBalance(a1.toAddress))) { d =>
               d.appendBlock(transfer1)
               val block = TestBlock.create(defaultSigner, Seq(transfer2)).block
               val BlockDiffer.Result(_, _, _, _, detailedSnapshot, _) =

@@ -24,11 +24,11 @@ class MerkleRootTestSuite extends BaseFreeSpec with ActivationStatusRequest with
     val txId = miner.broadcastTransfer(miner.keyPair, miner.address, transferAmount, minFee, None, None).id
     assertApiError(
       miner.getMerkleProof(txId),
-      CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
+      CustomValidationError(s"transactions do not exist")
     )
     assertApiError(
       miner.getMerkleProofPost(txId),
-      CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
+      CustomValidationError(s"transactions do not exist")
     )
   }
 
@@ -50,11 +50,11 @@ class MerkleRootTestSuite extends BaseFreeSpec with ActivationStatusRequest with
   "error raised if transaction id is not valid" in {
     assertApiError(
       miner.getMerkleProof("FCymvrY43ddiKKTkznawWasoMbWd1LWyX8DUrwAAbcUA"),
-      CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
+      CustomValidationError(s"transactions do not exist")
     )
     assertApiError(
       miner.getMerkleProofPost("FCymvrY43ddiKKTkznawWasoMbWd1LWyX8DUrwAAbcUA"),
-      CustomValidationError(s"transactions do not exist or block version < ${Block.ProtoBlockVersion}")
+      CustomValidationError(s"transactions do not exist")
     )
 
     val invalidId = "FCym43ddiKKT000kznawWasoMbWd1LWyX8DUrwAAbcUA" // id is invalid because base58 cannot contain "0"
@@ -119,16 +119,6 @@ object MerkleRootTestSuite {
   val Config: Config = ConfigFactory.parseString(
     s"""
        |waves {
-       |   blockchain.custom {
-       |      functionality {
-       |        pre-activated-features {
-       |          ${BlockchainFeatures.NG.id} = $MicroblockActivationHeight,
-       |          ${BlockchainFeatures.FairPoS.id} = $FairPosActivationHeight,
-       |          ${BlockchainFeatures.BlockV5.id} = $ActivationHeight
-       |        }
-       |        generation-balance-depth-from-50-to-1000-after-height = 1000
-       |      }
-       |   }
        |   miner {
        |      quorum = 0
        |      min-micro-block-age = 10s

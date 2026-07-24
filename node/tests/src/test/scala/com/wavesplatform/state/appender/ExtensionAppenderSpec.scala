@@ -27,7 +27,7 @@ class ExtensionAppenderSpec extends FlatSpec with WithDomain {
       // generating balance, so spending from the miner between building this block and validating it would push the
       // required delay up and get the block rejected as too early
       val tx = TxHelpers.transfer(sender)
-      val block1 = d.createBlock(Seq(tx), strictTime = true, version = Block.ProtoBlockVersion)
+      val block1 = d.createBlock(Seq(tx), strictTime = true)
       utx.putIfNew(tx).resultE.explicitGet()
       d.appendBlock(tx)
       utx.all shouldBe Seq(tx)
