@@ -7,7 +7,7 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.state.GeneratorIndex
-import com.wavesplatform.transaction.{BlockchainUpdater, TxNonNegativeAmount}
+import com.wavesplatform.transaction.{Asset, BlockchainUpdater, TxNonNegativeAmount}
 import play.api.libs.json.*
 
 import scala.annotation.targetName
@@ -100,19 +100,33 @@ package object state {
   type CompleteBlockchainUpdater = Blockchain & BlockchainUpdater & NG
 
   opaque type TransactionId = ByteStr
-  
+
   opaque type BlockFee = Portfolio
   object BlockFee {
+    val empty: BlockFee = Portfolio.empty
+
     def apply(pf: Portfolio): Either[String, BlockFee] = for {
       _ <- Either.raiseWhen(pf.lease != LeaseBalance.empty)("lease balance not allowed in carry fee")
       _ <- Either.raiseWhen(pf.generationDeposit != 0)("generation deposit not allowed in carry fee")
       _ <- Either.raiseWhen(pf.balance < 0)("carry fee can not be negative")
       _ <- Either.raiseWhen(pf.assets.values.exists(_ < 0))("asset carry fee can not be negative")
     } yield pf
-      
+
+    def combineAll(amounts: IterableOnce[(Asset, Long)]): Either[String, BlockFee] =
+      amounts.iterator
+        .foldLeft(Portfolio.empty.asRight[String])((acc, amount) => acc.flatMap(_.combine(Portfolio.build(amount))))
+        .flatMap(apply)
+
     extension (cf: BlockFee) {
       def pf: Portfolio = cf
+
+      /** The amount of fee collected in WAVES; asset fees are not converted. */
+      def wavesAmount: Long = cf.balance
+
+      def combine(that: Portfolio): Either[String, BlockFee] = {
+        val self: Portfolio = cf
+        self.combine(that).flatMap(apply)
+      }
     }
   }
-  
 }

@@ -14,7 +14,7 @@ case class SnapshotBlockchain(
     inner: Blockchain,
     maybeSnapshot: Option[StateSnapshot] = None,
     blockMeta: Option[(SignedBlockHeader, ByteStr)] = None,
-    carry: Long = 0,
+    carry: BlockFee = BlockFee.empty,
     reward: Option[Long] = None,
     stateHash: Option[ByteStr] = None,
     latestGeneratorSet: Option[GeneratorSet] = None
@@ -151,7 +151,8 @@ case class SnapshotBlockchain(
     }
   }
 
-  override def carryFee(refId: Option[ByteStr]): Long = carry
+  override def carryFee(refId: ByteStr): Either[String, BlockFee] =
+    if (blockMeta.exists(_._1.id() == refId)) Right(carry) else inner.carryFee(refId)
 
   override def score: BigInt = blockMeta.fold(BigInt(0))(_._1.header.score()) + inner.score
 
@@ -237,8 +238,9 @@ object SnapshotBlockchain {
       Some(ngState.finalizationState.generatorSet)
     )
 
+  // no new block on top of `inner`, so there's no carry of its own: carryFee always falls through to `inner`
   def apply(inner: Blockchain, reward: Option[Long]): SnapshotBlockchain =
-    new SnapshotBlockchain(inner, carry = inner.carryFee(None), reward = reward)
+    new SnapshotBlockchain(inner, reward = reward)
 
   def apply(inner: Blockchain, snapshot: StateSnapshot): SnapshotBlockchain =
     new SnapshotBlockchain(inner, Some(snapshot))
@@ -248,7 +250,7 @@ object SnapshotBlockchain {
       snapshot: StateSnapshot,
       newBlock: Block,
       hitSource: ByteStr,
-      carry: Long,
+      carry: BlockFee,
       reward: Option[Long],
       stateHash: Option[ByteStr]
   ): SnapshotBlockchain =

@@ -52,6 +52,8 @@ case class Block(
 
   val id: Coeval[ByteStr] = Coeval.evalOnce(Block.idFromHeader(header, signature))
 
+  def signedHeader: SignedBlockHeader = SignedBlockHeader(header, signature)
+
   val sender: PublicKey = header.generator
 
   val bytes: Coeval[Array[Byte]] = Coeval.evalOnce(BlockSerializer.toBytes(this))

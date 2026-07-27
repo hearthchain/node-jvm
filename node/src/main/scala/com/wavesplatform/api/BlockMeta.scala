@@ -65,7 +65,7 @@ object BlockMeta {
         pbMeta.height,
         pbMeta.size,
         pbMeta.transactionCount,
-        pbMeta.totalFeeInWaves,
+        pbMeta.totalFee.collectFirst { case a if a.assetId.isEmpty => a.amount }.getOrElse(0L),
         Some(pbMeta.reward),
         Seq(),
         if (pbMeta.vrf.isEmpty) None

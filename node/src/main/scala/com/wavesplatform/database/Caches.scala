@@ -11,6 +11,7 @@ import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database.protobuf.{BlockMetaExt, BlockMeta as PBBlockMeta}
 import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.protobuf.toByteStr
+import com.wavesplatform.protobuf.transaction.PBAmounts
 import com.wavesplatform.settings.DBSettings
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
@@ -59,6 +60,13 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
   override def hitSource(height: Int): Option[ByteStr] =
     if (current.height == Height(height)) current.hitSource else loadBlockMeta(Height(height)).map(toHitSource)
+
+  override def carryFee(refId: ByteStr): Either[String, BlockFee] =
+    for {
+      b <- (if (current.id.contains(refId)) current.meta else blockHeightCache.get(refId).flatMap(h => loadBlockMeta(Height(h))))
+        .toRight(s"Meta for block $refId is not available")
+      bf <- BlockFee.combineAll(b.carryFee.map(PBAmounts.toAssetAndAmount))
+    } yield bf
 
   def loadHeightOf(blockId: ByteStr): Option[Int]
 
@@ -202,7 +210,6 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
   protected def doAppend(
       blockMeta: PBBlockMeta,
       snapshot: StateSnapshot,
-      carry: Long,
       computedBlockStateHash: ByteStr,
       newAddresses: Map[Address, AddressId],
       balances: Map[(AddressId, Asset), (CurrentBalance, BalanceNode)],
@@ -220,8 +227,8 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
   override def append(
       snapshot: StateSnapshot,
-      carryFee: Long,
-      totalFee: Long,
+      carryFee: BlockFee,
+      totalFee: BlockFee,
       reward: Option[Long],
       hitSource: ByteStr,
       computedBlockStateHash: ByteStr,
@@ -248,7 +255,8 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       newHeight.toInt,
       block.bytes().length,
       block.transactionData.size,
-      totalFee,
+      PBAmounts.fromBlockFee(totalFee),
+      PBAmounts.fromBlockFee(carryFee),
       reward.getOrElse(0),
       ByteString.copyFrom(hitSource.arr),
       ByteString.copyFrom(newScore.toByteArray),
@@ -373,7 +381,6 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     doAppend(
       newMeta,
       snapshot,
-      carryFee,
       computedBlockStateHash,
       newAddressIds,
       VectorMap() ++ updatedBalanceNodes.map { case ((address, asset), v) => (addressIdWithFallback(address, newAddressIds), asset) -> v },

@@ -26,7 +26,7 @@ trait Blockchain {
   def blockHeader(height: Int): Option[SignedBlockHeader]
   def hitSource(height: Int): Option[ByteStr]
 
-  def carryFee(refId: Option[ByteStr]): Long
+  def carryFee(refId: ByteStr): Either[String, BlockFee]
 
   def heightOf(blockId: ByteStr): Option[Int]
 

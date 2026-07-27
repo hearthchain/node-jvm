@@ -26,7 +26,7 @@ trait EmptyBlockchain extends Blockchain {
 
   override def hitSource(height: Int): Option[ByteStr] = None
 
-  override def carryFee(refId: Option[ByteStr]): Long = 0
+  override def carryFee(refId: ByteStr): Either[String, BlockFee] = Right(BlockFee.empty)
 
   override def heightOf(blockId: ByteStr): Option[Int] = None
 

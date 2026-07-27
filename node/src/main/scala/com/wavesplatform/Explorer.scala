@@ -109,7 +109,9 @@ object Explorer extends ScorexLogging {
 
           log.info(s"Found $wavesBalanceRecords waves balance records and $blocksRecords block records")
 
-          val actualTotalBalance   = accountsBaseTotalBalance + reader.carryFee(None)
+          // the carry of the last block hasn't been credited to anyone yet, so it's not part of any account balance
+          val lastBlockCarry       = reader.lastBlockId.flatMap(reader.carryFee(_).toOption).fold(0L)(_.wavesAmount)
+          val actualTotalBalance   = accountsBaseTotalBalance + lastBlockCarry
           val expectedTotalBalance = Constants.UnitsInWave * Constants.TotalWaves + actualTotalReward
           val byKeyTotalBalance    = reader.wavesAmount(blockchainHeight)
 

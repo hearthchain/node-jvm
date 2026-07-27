@@ -2,7 +2,7 @@ package com.wavesplatform.db
 
 import com.google.common.primitives.Shorts
 import com.wavesplatform.account.Address
-import com.wavesplatform.block.Block
+import com.wavesplatform.block.{Block, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.database.{KeyTag, RDB, RocksDBWriter, TestStorageFactory, loadActiveLeases}
@@ -182,7 +182,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       SnapshotBlockchain(blockchain, reward)
     }
 
-    def differ(blockchain: Blockchain, prevBlock: Option[Block], b: Block) =
+    def differ(blockchain: Blockchain, prevBlock: Option[SignedBlockHeader], b: Block) =
       BlockDiffer.fromBlockTraced(
         getCompBlockchain(blockchain),
         prevBlock,
@@ -198,7 +198,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     preconditions.foreach { precondition =>
       (for {
         preconditionBlock <- blockWithComputedStateHash(precondition.block, precondition.signer, bcu).resultE
-        diffResult        <- differ(state, state.lastBlock, preconditionBlock).resultE
+        diffResult        <- differ(state, state.lastBlockHeader, preconditionBlock).resultE
       } yield state.append(
         diffResult.snapshot,
         diffResult.carry,
@@ -216,7 +216,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       (blockWithComputedStateHash(block.block, block.signer, bcu) match {
         case right @ TracedResult(Right(_), _, _) => right.copy(trace = Nil)
         case err                                  => err
-      }).flatMap(differ(state, state.lastBlock, _))
+      }).flatMap(differ(state, state.lastBlockHeader, _))
 
     assertion(snapshot1.map(_.snapshot))
   }
@@ -235,7 +235,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       SnapshotBlockchain(blockchain, reward)
     }
 
-    def differ(blockchain: Blockchain, prevBlock: Option[Block], b: Block): Either[ValidationError, BlockDiffer.Result] =
+    def differ(blockchain: Blockchain, prevBlock: Option[SignedBlockHeader], b: Block): Either[ValidationError, BlockDiffer.Result] =
       BlockDiffer.fromBlock(
         getCompBlockchain(blockchain),
         prevBlock,
@@ -245,7 +245,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
         b.header.generationSignature
       )
 
-    preconditions.foldLeft[Option[Block]](None) { (prevBlock, curBlock) =>
+    preconditions.foldLeft[Option[SignedBlockHeader]](None) { (prevBlock, curBlock) =>
       (for {
         preconditionBlock <- blockWithComputedStateHash(curBlock.block, curBlock.signer, bcu).resultE
         diffResult        <- differ(state, prevBlock, preconditionBlock)
@@ -261,13 +261,13 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
           newFinalizedHeight = GenesisBlockHeight,
           generatorSet = Seq.empty
         )
-        Some(preconditionBlock)
+        Some(preconditionBlock.signedHeader)
       }).explicitGet()
     }
 
     (for {
       checkedBlock <- blockWithComputedStateHash(block.block, block.signer, bcu).resultE
-      diffResult   <- differ(state, state.lastBlock, checkedBlock)
+      diffResult   <- differ(state, state.lastBlockHeader, checkedBlock)
     } yield {
       val ngState = NgState(
         checkedBlock,
@@ -327,7 +327,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       def differ(blockchain: Blockchain, b: Block) =
         BlockDiffer.fromBlock(
           blockchain,
-          state.lastBlock,
+          state.lastBlockHeader,
           b,
           None,
           MiningConstraint.Unlimited,
@@ -474,7 +474,7 @@ object WithState {
       blockchain: BlockchainUpdater & Blockchain
   ): TracedResult[ValidationError, Block] = {
     val compBlockchain =
-      SnapshotBlockchain(blockchain, StateSnapshot.empty, blockWithoutStateHash, ByteStr.empty, 0, blockchain.computeNextReward, None)
+      SnapshotBlockchain(blockchain, StateSnapshot.empty, blockWithoutStateHash, ByteStr.empty, BlockFee.empty, blockchain.computeNextReward, None)
     val prevStateHash = blockchain.lastStateHash(Some(blockWithoutStateHash.header.reference))
     // The block at height 1 earns no reward: its initial snapshot is the predefined genesis snapshot, exactly as
     // BlockDiffer builds it. Using the reward snapshot here instead would compute a state hash the differ rejects.
@@ -486,7 +486,8 @@ object WithState {
           .createInitialBlockSnapshot(
             blockchain,
             blockWithoutStateHash.header.reference,
-            blockWithoutStateHash.header.generator.toAddress
+            blockWithoutStateHash.header.generator.toAddress,
+            blockchain.lastBlockHeader
           )
     )
       .flatMap { initSnapshot =>

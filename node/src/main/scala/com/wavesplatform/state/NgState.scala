@@ -7,6 +7,7 @@ import com.wavesplatform.block
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{Block, FinalizationVoting, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.EitherExt2.explicitGet
 import com.wavesplatform.state.NgState.{BlockData, LiquidBlock, NgStateCaches}
 import com.wavesplatform.state.StateSnapshot.monoid
 import com.wavesplatform.transaction.{DiscardedMicroBlocks, Transaction}
@@ -20,16 +21,16 @@ object NgState {
 
   case class BlockData(
       snapshot: StateSnapshot,
-      carryFee: Long,
-      totalFee: Long,
+      carryFee: BlockFee,
+      totalFee: BlockFee,
       liquidStateHash: ByteStr,
       finalizedHeight: Height,
       finalizationVoting: Option[FinalizationVoting]
   ) {
     def mergeToLiquid(latest: BlockData): BlockData = BlockData(
       snapshot |+| latest.snapshot,
-      carryFee + latest.carryFee,
-      totalFee + latest.totalFee,
+      carryFee.combine(latest.carryFee.pf).explicitGet(),
+      totalFee.combine(latest.totalFee.pf).explicitGet(),
       latest.liquidStateHash,
       latest.finalizedHeight,
       latest.finalizationVoting.orElse(finalizationVoting)
@@ -64,8 +65,8 @@ object NgState {
 case class NgState(
     base: Block,
     baseBlockSnapshot: StateSnapshot,
-    baseBlockCarry: Long,
-    baseBlockTotalFee: Long,
+    baseBlockCarry: BlockFee,
+    baseBlockTotalFee: BlockFee,
     baseBlockComputedStateHash: ByteStr,
     approvedFeatures: Set[Short],
     reward: Option[Long],
@@ -129,7 +130,7 @@ case class NgState(
       LiquidBlock(r.forged, r.discarded, this.snapshotFor(id))
     }
 
-  def bestLiquidSnapshotAndFees: (StateSnapshot, Long, Long) = {
+  def bestLiquidSnapshotAndFees: (StateSnapshot, BlockFee, BlockFee) = {
     val s = snapshotFor(bestLiquidBlockId)
     (s.snapshot, s.carryFee, s.totalFee)
   }
@@ -156,8 +157,8 @@ case class NgState(
   def append(
       microBlock: MicroBlock,
       snapshot: StateSnapshot,
-      microblockCarry: Long,
-      microblockTotalFee: Long,
+      microblockCarry: BlockFee,
+      microblockTotalFee: BlockFee,
       timestamp: Long,
       liquidStateHash: ByteStr,
       totalBlockId: Option[BlockId] = None,
@@ -182,7 +183,8 @@ case class NgState(
     )
   }
 
-  def carryFee: Long = baseBlockCarry + microSnapshots.valuesIterator.map(_.data.carryFee).sum
+  def carryFee: BlockFee =
+    microSnapshots.valuesIterator.foldLeft(baseBlockCarry)((acc, mb) => acc.combine(mb.data.carryFee.pf).explicitGet())
 
   def createTotalBlockId(lastMicroBlock: MicroBlock): BlockId = {
     val newTransactions = this.transactions ++ lastMicroBlock.transactionData

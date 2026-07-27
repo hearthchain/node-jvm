@@ -6,7 +6,7 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.api.common.*
 import com.wavesplatform.block.Block.BlockId
-import com.wavesplatform.block.{Block, BlockSnapshot, ChallengedHeader, FinalizationVoting, MicroBlock}
+import com.wavesplatform.block.{Block, BlockSnapshot, ChallengedHeader, FinalizationVoting, MicroBlock, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.nxt.NxtLikeConsensusBlockData
@@ -209,7 +209,7 @@ case class Domain(
 
   def lastBlockId: ByteStr = blockchainUpdater.lastBlockId.getOrElse(randomSig)
 
-  def carryFee(refId: Option[ByteStr]): Long = blockchainUpdater.carryFee(refId)
+  def carryFee(refId: ByteStr): Either[String, BlockFee] = blockchainUpdater.carryFee(refId)
 
   def balance(address: Address): Long               = blockchainUpdater.balance(address)
   def balance(address: Address, asset: Asset): Long = blockchainUpdater.balance(address, asset)
@@ -464,12 +464,17 @@ case class Domain(
         if (blockchain.supportsLightNodeBlockFields(blockchain.height + 1)) {
           val hitSource = posSelector.validateGenerationSignature(blockWithoutStateHash).getOrElse(blockWithoutStateHash.header.generationSignature)
           val blockchainWithNewBlock =
-            SnapshotBlockchain(blockchain, StateSnapshot.empty, blockWithoutStateHash, hitSource, 0, blockchain.computeNextReward, None)
+            SnapshotBlockchain(blockchain, StateSnapshot.empty, blockWithoutStateHash, hitSource, BlockFee.empty, blockchain.computeNextReward, None)
           // todo: this does not seem to work when ref is not to a liquid block
           val prevStateHash = blockchain.lastStateHash(Some(blockWithoutStateHash.header.reference))
 
           BlockDiffer
-            .createInitialBlockSnapshot(blockchain, blockWithoutStateHash.header.reference, generator.toAddress, ref.flatMap(blockchain.liquidBlock))
+            .createInitialBlockSnapshot(
+              blockchain,
+              blockWithoutStateHash.header.reference,
+              generator.toAddress,
+              ref.flatMap(blockchain.liquidBlock).map(_.signedHeader)
+            )
             .flatMap { initSnapshot =>
               val initStateHash = BlockDiffer.computeInitialStateHash(initSnapshot, prevStateHash)
 

@@ -23,11 +23,12 @@ message BlockMeta {
   int32 height = 4;
   int32 size = 5;
   int32 transaction_count = 6;
-  int64 total_fee_in_waves = 7;
-  int64 reward = 8;
-  bytes vrf = 9;
-  bytes total_score = 10;
-  int64 total_waves_amount = 11;
+  repeated Amount total_fee = 7;
+  repeated Amount carry_fee = 8;
+  int64 reward = 9;
+  bytes vrf = 10;
+  bytes total_score = 11;
+  int64 total_waves_amount = 12;
 }
 
 message TransactionMeta {
@@ -40,25 +41,25 @@ message TransactionMeta {
 }
 
 message EthereumTransactionMeta {
-    message Invocation {
-        bytes function_call = 1;
-        repeated Amount payments = 2;
-    }
-    message Transfer {
-        bytes public_key_hash = 1;
-        Amount amount = 2;
-    }
-    oneof payload {
-        Invocation invocation = 1;
-        Transfer transfer = 2;
-    }
+  message Invocation {
+    bytes function_call = 1;
+    repeated Amount payments = 2;
+  }
+  message Transfer {
+    bytes public_key_hash = 1;
+    Amount amount = 2;
+  }
+  oneof payload {
+    Invocation invocation = 1;
+    Transfer transfer = 2;
+  }
 }
 
 message TransactionData {
   oneof transaction {
     bytes legacy_bytes = 1;
     SignedTransaction waves_transaction = 2;
-        bytes ethereum_transaction = 5;
+    bytes ethereum_transaction = 5;
   }
   TransactionStatus status = 3;
   int64 spent_complexity = 4;
@@ -119,8 +120,4 @@ message LeaseDetails {
 
 message LeaseIds {
   repeated bytes ids = 1;
-}
-
-message CarryFee {
-  repeated Amount carry_fee = 1;
 }

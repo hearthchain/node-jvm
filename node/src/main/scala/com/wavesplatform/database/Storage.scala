@@ -2,14 +2,14 @@ package com.wavesplatform.database
 
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.state.{GeneratorSet, Height, StateSnapshot}
+import com.wavesplatform.state.{BlockFee, GeneratorSet, Height, StateSnapshot}
 import com.wavesplatform.transaction.DiscardedBlocks
 
 trait Storage {
   def append(
       snapshot: StateSnapshot,
-      carryFee: Long,
-      totalFee: Long,
+      carryFee: BlockFee,
+      totalFee: BlockFee,
       reward: Option[Long],
       hitSource: ByteStr,
       computedBlockStateHash: ByteStr,

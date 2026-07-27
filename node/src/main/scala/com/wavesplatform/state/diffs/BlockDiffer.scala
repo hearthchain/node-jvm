@@ -1,16 +1,15 @@
 package com.wavesplatform.state.diffs
 
-import cats.implicits.{catsSyntaxSemigroup, toFoldableOps}
+import cats.implicits.catsSyntaxSemigroup
 import cats.syntax.either.*
 import com.wavesplatform.account.Address
-import com.wavesplatform.block.{Block, BlockSnapshot, FinalizationVoting, MicroBlock, MicroBlockSnapshot}
+import com.wavesplatform.block.{Block, BlockSnapshot, FinalizationVoting, MicroBlock, MicroBlockSnapshot, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.mining.MiningConstraint
 import com.wavesplatform.state.*
 import com.wavesplatform.state.StateSnapshot.monoid
 import com.wavesplatform.state.TxStateSnapshotHashBuilder.TxStatusInfo
-import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxValidationError.*
 import com.wavesplatform.transaction.assets.exchange.ExchangeTransaction
 import com.wavesplatform.transaction.lease.LeaseTransaction
@@ -24,8 +23,8 @@ import scala.collection.immutable.VectorMap
 object BlockDiffer {
   final case class Result(
       snapshot: StateSnapshot,
-      carry: Long,
-      totalFee: Long,
+      carry: BlockFee,
+      totalFee: BlockFee,
       constraint: MiningConstraint,
       keyBlockSnapshot: StateSnapshot,
       computedStateHash: ByteStr
@@ -35,13 +34,13 @@ object BlockDiffer {
     def apply(l: Long): Long = l / divider * dividend
   }
 
-  case class TxFeeInfo(feeAsset: Asset, feeAmount: Long, carry: Long, wavesFee: Long)
+  case class TxFeeInfo(feeAsset: Asset, feeAmount: Long, carry: Portfolio, fee: Portfolio)
 
   val CurrentBlockFeePart: Fraction = Fraction(2, 5)
 
   def fromBlock(
       blockchain: Blockchain,
-      maybePrevBlock: Option[Block],
+      maybePrevBlock: Option[SignedBlockHeader],
       block: Block,
       snapshot: Option[BlockSnapshot],
       constraint: MiningConstraint,
@@ -96,7 +95,7 @@ object BlockDiffer {
 
   def fromBlockTraced(
       blockchain: Blockchain,
-      maybePrevBlock: Option[Block],
+      maybePrevBlock: Option[SignedBlockHeader],
       block: Block,
       snapshot: Option[BlockSnapshot],
       constraint: MiningConstraint,
@@ -110,13 +109,11 @@ object BlockDiffer {
       StateSnapshot.empty,
       block,
       hitSource,
-      0,
+      BlockFee.empty,
       Some(BlockRewardCalculator.fullRewardAt(Height(blockchain.height + 1), blockchain)),
       None
     )
-    val initSnapshotE = mkInitialSnapshot(blockchain, maybePrevBlock, block.sender.toAddress)
-
-    println(s"\n\tHEIGHT:${blockchainWithNewBlock.height}\n\tBDIF: $initSnapshotE")
+    val initSnapshotE = mkInitialSnapshot(blockchain, block.header.reference, maybePrevBlock, block.sender.toAddress)
 
     for {
       _            <- TracedResult(Either.cond(!verify || block.signatureValid(), (), GenericError(s"Block $block has invalid signature")))
@@ -125,9 +122,7 @@ object BlockDiffer {
       hasChallenge  = block.header.challengedHeader.isDefined
       r <- snapshot match {
         case Some(BlockSnapshot(_, txSnapshots)) =>
-          TracedResult.wrapValue(
-            apply(blockchainWithNewBlock, prevStateHash, initSnapshot, block.transactionData, txSnapshots)
-          )
+          TracedResult(apply(blockchainWithNewBlock, prevStateHash, initSnapshot, block.transactionData, txSnapshots))
         case None =>
           apply(
             blockchainWithNewBlock,
@@ -146,7 +141,7 @@ object BlockDiffer {
     } yield r
   }
 
-  private def mkInitialSnapshot(blockchain: Blockchain, maybePrevBlock: Option[Block], minerAddress: Address) = {
+  private def mkInitialSnapshot(blockchain: Blockchain, reference: ByteStr, maybePrevBlock: Option[SignedBlockHeader], minerAddress: Address) = {
     val heightWithNewBlock = Height(blockchain.height)
 
     val addressRewardsE: Either[String, (Portfolio, Map[Address, Portfolio])] = for {
@@ -169,9 +164,16 @@ object BlockDiffer {
     else
       (for {
         (minerReward, daoPortfolio) <- addressRewardsE
-        feeFromPreviousBlock        <- prevBlockFeePart(maybePrevBlock)
-        _ = println(s"FEE FROM PREV: $feeFromPreviousBlock")
-        totalMinerReward            <- minerReward.combine(feeFromPreviousBlock)
+        // the block is applied on top of `blockchain`, so it has to reference its last block. this used to be an
+        // unwritten assumption; the carry fee below is only the right one if it actually holds
+        _ <- Either.cond(
+          blockchain.lastBlockId.contains(reference),
+          (),
+          s"Block references $reference, but the blockchain it is applied to is at ${blockchain.lastBlockId.getOrElse("empty")}"
+        )
+        // the referenced block collected these fees per transaction; the miner of this block gets to keep them
+        feeFromPreviousBlock <- blockchain.carryFee(reference)
+        totalMinerReward     <- minerReward.combine(feeFromPreviousBlock.pf)
         totalMinerPortfolio = Map(minerAddress -> totalMinerReward)
         totalRewardPortfolios <- Portfolio.combine(totalMinerPortfolio, daoPortfolio)
         penalties <- maybePrevBlock match {
@@ -218,7 +220,7 @@ object BlockDiffer {
       _ <- TracedResult(micro.signaturesValid())
       r <- snapshot match {
         case Some(MicroBlockSnapshot(_, txSnapshots)) =>
-          TracedResult.wrapValue(apply(blockchain, prevStateHash, StateSnapshot.empty, micro.transactionData, txSnapshots))
+          TracedResult(apply(blockchain, prevStateHash, StateSnapshot.empty, micro.transactionData, txSnapshots))
         case None =>
           apply(
             blockchain,
@@ -237,7 +239,7 @@ object BlockDiffer {
     } yield r
   }
 
-  private def calculatePenalties(blockchain: Blockchain, prevBlock: Block): Either[String, Map[Address, Portfolio]] = {
+  private def calculatePenalties(blockchain: Blockchain, prevBlock: SignedBlockHeader): Either[String, Map[Address, Portfolio]] = {
     val empty = Map.empty[Address, Portfolio].asRight[String]
     val parentBlockInfo = for {
       voting     <- prevBlock.header.finalizationVoting
@@ -270,26 +272,13 @@ object BlockDiffer {
     }
   }
 
-  private def prevBlockFeePart(maybePrevBlock: Option[Block]): Either[String, Portfolio] =
-    // it's important to combine tx fee fractions (instead of getting a fraction of the combined tx fee)
-    // so that we end up with the same value as when computing per-transaction fee part
-    // during microblock processing below
-    maybePrevBlock.fold(Right(Portfolio.empty)) { b =>
-      b.transactionData
-        .map { t =>
-          val pf = Portfolio.build(t.assetFee)
-          pf.minus(pf.multiply(CurrentBlockFeePart))
-        }
-        .foldM(Portfolio.empty)(_.combine(_))
-    }
-
   def createInitialBlockSnapshot(
       blockchainUpdater: BlockchainUpdater & Blockchain,
       reference: ByteStr,
       miner: Address,
-      maybePrevBlock: Option[Block]
+      maybePrevBlock: Option[SignedBlockHeader]
   ): Either[ValidationError, StateSnapshot] =
-    mkInitialSnapshot(blockchainUpdater.referencedBlockchain(reference), maybePrevBlock, miner)
+    mkInitialSnapshot(blockchainUpdater.referencedBlockchain(reference), reference, maybePrevBlock, miner)
 
   def computeInitialStateHash(initSnapshot: StateSnapshot, prevStateHash: ByteStr): ByteStr =
     if (initSnapshot == StateSnapshot.empty)
@@ -322,7 +311,9 @@ object BlockDiffer {
 
     val initStateHash = computeInitialStateHash(initSnapshot, prevStateHash)
     txs
-      .foldLeft(TracedResult(Result(initSnapshot, 0L, 0L, initConstraint, initSnapshot, initStateHash).asRight[ValidationError])) {
+      .foldLeft(
+        TracedResult(Result(initSnapshot, BlockFee.empty, BlockFee.empty, initConstraint, initSnapshot, initStateHash).asRight[ValidationError])
+      ) {
         case (acc @ TracedResult(Left(_), _, _), _) => acc
         case (
               TracedResult(
@@ -342,15 +333,15 @@ object BlockDiffer {
             else {
               val txFeeInfo = computeTxFeeInfo(tx)
 
-              // unless NG is activated, miner has already received all the fee from this block by the time the first
-              // transaction is processed (see abode), so there's no need to include tx fee into portfolio.
-              // if NG is activated, just give them their 40%
+              // the miner of this block only gets their 40% of the fee; the rest is carried over to the next block
               val minerPortfolio    = Portfolio.build(txFeeInfo.feeAsset, txFeeInfo.feeAmount).multiply(CurrentBlockFeePart)
               val minerPortfolioMap = Map(blockGenerator -> minerPortfolio)
 
-              println(s"\n\tMINER: $minerPortfolioMap")
-
-              txSnapshot.addBalances(minerPortfolioMap, currBlockchain).leftMap(GenericError(_)).map { resultTxSnapshot =>
+              for {
+                resultTxSnapshot <- txSnapshot.addBalances(minerPortfolioMap, currBlockchain).leftMap(GenericError(_))
+                newCarryFee      <- carryFee.combine(txFeeInfo.carry).leftMap(GenericError(_))
+                newTotalFee      <- currTotalFee.combine(txFeeInfo.fee).leftMap(GenericError(_))
+              } yield {
                 val (_, txInfo)         = txSnapshot.transactions.head
                 val txInfoWithFee       = txInfo.copy(snapshot = resultTxSnapshot.copy(transactions = VectorMap.empty))
                 val newKeyBlockSnapshot = keyBlockSnapshot.withTransaction(txInfoWithFee)
@@ -359,8 +350,8 @@ object BlockDiffer {
 
                 Result(
                   newSnapshot,
-                  carryFee + txFeeInfo.carry,
-                  currTotalFee + txFeeInfo.wavesFee,
+                  newCarryFee,
+                  newTotalFee,
                   updatedConstraint,
                   newKeyBlockSnapshot,
                   TxStateSnapshotHashBuilder
@@ -389,19 +380,27 @@ object BlockDiffer {
       initSnapshot: StateSnapshot,
       txs: Seq[Transaction],
       txSnapshots: Seq[(StateSnapshot, TxMeta.Status)]
-  ): Result = {
+  ): Either[ValidationError, Result] = {
     val initStateHash = computeInitialStateHash(initSnapshot, prevStateHash)
-    txs.zip(txSnapshots).foldLeft(Result(initSnapshot, 0L, 0L, MiningConstraint.Unlimited, initSnapshot, initStateHash)) {
-      case (Result(currSnapshot, carryFee, currTotalFee, currConstraint, keyBlockSnapshot, prevStateHash), (tx, (txSnapshot, txStatus))) =>
+    val init          = Result(initSnapshot, BlockFee.empty, BlockFee.empty, MiningConstraint.Unlimited, initSnapshot, initStateHash)
+    txs.zip(txSnapshots).foldLeft(init.asRight[ValidationError]) {
+      case (error @ Left(_), _) => error
+      case (
+            Right(Result(currSnapshot, carryFee, currTotalFee, currConstraint, keyBlockSnapshot, prevStateHash)),
+            (tx, (txSnapshot, txStatus))
+          ) =>
         val currBlockchain = SnapshotBlockchain(blockchain, currSnapshot)
 
         val txFeeInfo = if (txStatus == TxMeta.Status.Elided) None else Some(computeTxFeeInfo(tx))
         val nti       = NewTransactionInfo.create(tx, txStatus, txSnapshot, currBlockchain)
 
-        Result(
+        for {
+          newCarryFee <- carryFee.combine(txFeeInfo.fold(Portfolio.empty)(_.carry)).leftMap(GenericError(_))
+          newTotalFee <- currTotalFee.combine(txFeeInfo.fold(Portfolio.empty)(_.fee)).leftMap(GenericError(_))
+        } yield Result(
           currSnapshot |+| txSnapshot.withTransaction(nti),
-          carryFee + txFeeInfo.map(_.carry).getOrElse(0L),
-          currTotalFee + txFeeInfo.map(_.wavesFee).getOrElse(0L),
+          newCarryFee,
+          newTotalFee,
           currConstraint,
           keyBlockSnapshot.withTransaction(nti),
           TxStateSnapshotHashBuilder.createHashFromSnapshot(txSnapshot, Some(TxStatusInfo(tx.id(), txStatus))).createHash(prevStateHash)
@@ -410,17 +409,15 @@ object BlockDiffer {
   }
 
   private def computeTxFeeInfo(tx: Transaction): TxFeeInfo = {
-    val hasNg                 = true
-    val hasSponsorship        = false
     val (feeAsset, feeAmount) = tx.assetFee
-    val currentBlockFee       = CurrentBlockFeePart(feeAmount)
+    val fee                   = Portfolio.build(feeAsset, feeAmount)
 
-    // carry is 60% of waves fees the next miner will get. obviously carry fee only makes sense when both
-    // NG and sponsorship is active. also if sponsorship is active, feeAsset can only be Waves
-    val carry    = if (hasNg && hasSponsorship) feeAmount - currentBlockFee else 0
-    val wavesFee = if (feeAsset == Waves) feeAmount else 0L
+    // carry is what's left of the fee after the miner of this block has taken their part: the miner of the next
+    // block will get it. it's important to take the fraction per transaction (instead of taking a fraction of the
+    // summed up fees), so that the carry matches the sum of the per-transaction shares credited below
+    val carry = fee.minus(fee.multiply(CurrentBlockFeePart))
 
-    TxFeeInfo(feeAsset, feeAmount, carry, wavesFee)
+    TxFeeInfo(feeAsset, feeAmount, carry, fee)
   }
 
   private def prepareCaches(blockGenerator: Address, txs: Seq[Transaction], loadCacheData: (Set[Address], Set[ByteStr]) => Unit): Unit = {

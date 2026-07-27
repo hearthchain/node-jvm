@@ -24,7 +24,7 @@ trait NG {
 
   def bestLiquidSnapshot: Option[StateSnapshot]
 
-  def bestLiquidSnapshotAndFees: Option[(StateSnapshot, Long, Long)]
+  def bestLiquidSnapshotAndFees: Option[(StateSnapshot, BlockFee, BlockFee)]
 
   def snapshotBlockchain: SnapshotBlockchain
 

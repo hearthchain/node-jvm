@@ -10,7 +10,8 @@ import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.lagonaki.mocks.TestBlock.BlockWithSigner
 import com.wavesplatform.mining.MiningConstraint
-import com.wavesplatform.settings.FunctionalitySettings
+import com.wavesplatform.history.{DefaultBlockchainSettings, settings}
+import com.wavesplatform.settings.RewardsSettings
 import com.wavesplatform.state.diffs.BlockDiffer.Result
 import com.wavesplatform.state.{Blockchain, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
 import com.wavesplatform.test.*
@@ -28,82 +29,54 @@ class BlockDifferTest extends FreeSpec with WithDomain {
 
   private val master, recipient = randomKeyPair()
 
-  // The master is credited by the genesis snapshot, which is applied to the block at height 1
-  private val masterBalance: Seq[AddrWithBalance] = Seq(AddrWithBalance(master.toAddress, Long.MaxValue - 1))
+  private val InitialMinerBalance = 10000.waves
 
-  private val testChain: Seq[BlockWithSigner] = getTwoMinersBlockChain(master, recipient, 9)
+  // Zero block reward, so that the only thing moving the miners' balances is the fee distribution under test
+  private val noRewardSettings = settings.copy(
+    blockchainSettings = DefaultBlockchainSettings.copy(rewardsSettings = RewardsSettings(100000, 50000, 0, 50000000, 10000))
+  )
+
+  private val minerBalances = Seq(
+    AddrWithBalance(master.toAddress, 1000000.waves),
+    AddrWithBalance(signerA.toAddress, InitialMinerBalance),
+    AddrWithBalance(signerB.toAddress, InitialMinerBalance)
+  )
 
   "BlockDiffer" - {
-    "enableMicroblocksAfterHeight" - {
+    "NG fee distribution" - {
       /*
-      | N | fee | signer | A receive | A balance | B receive | B balance |
-      |--:|:---:|:------:|----------:|----------:|----------:|-----------|
-      |1  |0    |A       |0          |0          |0          |0          | <- genesis
-      |2  |10   |B       |0          |0          |10         |+10        |
-      |3  |10   |A       |10         |+10        |0          |0          |
-      |4  |10   |B       |0          |10         |+10        |10+10=20   |
-      |5  |10   |A       |10         |10+10=20   |0          |20         |
-      |6  |10   |B       |0          |20         |+10        |20+10=30   |
-      |7  |10   |A       |10         |20+10=30   |0          |30         |
-      |8  |10   |B       |0          |30         |+10        |30+10=40   |
-      |9  |10   |A       |10         |30+10=40   |0          |40         | <- 1st check
-      |10 |10   |B       |0          |40         |+10        |40+10=50   | <- 2nd check
+      | N | fee | miner | A receives | A balance | B receives | B balance |
+      |--:|:---:|:-----:|-----------:|----------:|-----------:|-----------|
+      |1  |0    |-      |0           |0          |0           |0          | <- genesis, no transactions
+      |2  |10   |B      |0           |0          |4           |4          |
+      |3  |10   |A      |6+4=10      |10         |0           |4          |
+      |4  |10   |B      |0           |10         |6+4=10      |14         |
+      |5  |10   |A      |6+4=10      |20         |0           |14         |
+      |6  |10   |B      |0           |20         |6+4=10      |24         |
+      |7  |10   |A      |6+4=10      |30         |0           |24         |
+      |8  |10   |B      |0           |30         |6+4=10      |34         |
+      |9  |10   |A      |6+4=10      |40         |0           |34         | <- 1st check
+      |10 |10   |B      |0           |40         |6+4=10      |44         | <- 2nd check
        */
-      "height < enableMicroblocksAfterHeight - a miner should receive 100% of the current block's fee" in {
-        assertDiff(testChain.init, 1000) { case (_, s) =>
-          s.balance(signerA.toAddress) shouldBe 40
-        }
+      "a miner receives 40% of the current block's fees and 60% of the previous block's" in
+        withDomain(noRewardSettings, minerBalances, generators = Seq(signerA, signerB)) { d =>
+          // Odd heights are mined by A, even ones by B. Every block past the genesis carries a single payment,
+          // so at each height the miner collects 40% of its own block and 60% of the one it references.
+          def appendPayment(height: Int): Unit = {
+            val signer = if (height % 2 == 0) signerB else signerA
+            d.appendBlock(d.createBlock(Seq(TxHelpers.transfer(master, recipient.toAddress, 10000, fee = TransactionFee)), generator = signer))
+          }
 
-        assertDiff(testChain, 1000) { case (_, s) =>
-          s.balance(signerB.toAddress) shouldBe 50
-        }
-      }
+          (2 to 9).foreach(appendPayment)
+          d.blockchain.height shouldBe 9
+          d.blockchain.balance(signerA.toAddress) shouldBe InitialMinerBalance + 40
+          d.blockchain.balance(signerB.toAddress) shouldBe InitialMinerBalance + 34
 
-      /*
-      | N | fee | signer | A receive | A balance | B receive | B balance |
-      |--:|:---:|:------:|----------:|----------:|----------:|-----------|
-      |1  |0    |A       |0          |0          |0          |0          | <- genesis
-      |2  |10   |B       |0          |0          |10         |+10        |
-      |3  |10   |A       |10         |+10        |0          |0          |
-      |4  |10   |B       |0          |10         |+10        |10+10=20   |
-      |5  |10   |A       |10         |10+10=20   |0          |20         |
-      |6  |10   |B       |0          |20         |+10        |20+10=30   |
-      |7  |10   |A       |10         |20+10=30   |0          |30         |
-      |8  |10   |B       |0          |30         |+10        |30+10=40   |
-      |9  |10   |A       |10         |30+10=40   |0          |40         |
-      |-------------------------- Enable NG -----------------------------|
-      |10 |10   |B       |0          |40         |+4         |40+4=44    | <- check
-       */
-      "height = enableMicroblocksAfterHeight - a miner should receive 40% of the current block's fee only" in {
-        assertDiff(testChain, 9) { case (_, s) =>
-          s.balance(signerB.toAddress) shouldBe 44
+          appendPayment(10)
+          d.blockchain.height shouldBe 10
+          d.blockchain.balance(signerA.toAddress) shouldBe InitialMinerBalance + 40
+          d.blockchain.balance(signerB.toAddress) shouldBe InitialMinerBalance + 44
         }
-      }
-
-      /*
-      | N | fee | signer | A receive | A balance | B receive | B balance |
-      |--:|:---:|:------:|----------:|----------:|----------:|-----------|
-      |1  |0    |A       |0          |0          |0          |0          | <- genesis
-      |2  |10   |B       |0          |0          |10         |+10        |
-      |3  |10   |A       |10         |+10        |0          |0          |
-      |4  |10   |B       |0          |10         |+10        |10+10=20   |
-      |-------------------------- Enable NG -----------------------------|
-      |5  |10   |A       |4          |10+4=14    |0          |20         |
-      |6  |10   |B       |0          |14         |+4+6=10    |20+10=30   |
-      |7  |10   |A       |4+6=10     |14+10=24   |0          |30         |
-      |8  |10   |B       |0          |24         |+4+6=10    |30+10=40   |
-      |9  |10   |A       |4+6=10     |24+10=34   |0          |40         | <- 1st check
-      |10 |10   |B       |0          |34         |+4+6=10    |40+10=50   | <- 2nd check
-       */
-      "height > enableMicroblocksAfterHeight - a miner should receive 60% of previous block's fee and 40% of the current one" in {
-        assertDiff(testChain.init, 4) { case (_, s) =>
-          s.balance(signerA.toAddress) shouldBe 34
-        }
-
-        assertDiff(testChain, 4) { case (_, s) =>
-          s.balance(signerB.toAddress) shouldBe 50
-        }
-      }
     }
 
     "correctly computes state hash" - {
@@ -142,7 +115,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
           val signer     = TxHelpers.signer(2)
           val blockchain = SnapshotBlockchain(d.blockchain, Some(d.settings.blockchainSettings.rewardsSettings.initial))
           val initSnapshot = BlockDiffer
-            .createInitialBlockSnapshot(d.blockchain, d.lastBlock.id(), signer.toAddress)
+            .createInitialBlockSnapshot(d.blockchain, d.lastBlock.id(), signer.toAddress, Some(d.lastBlock.signedHeader))
             .explicitGet()
           val initStateHash = TxStateSnapshotHashBuilder.createHashFromSnapshot(initSnapshot, None).createHash(genesis.header.stateHash.get)
           val blockStateHash = TxStateSnapshotHashBuilder
@@ -163,7 +136,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
           BlockDiffer
             .fromBlock(
               blockchain,
-              Some(genesis),
+              Some(genesis.signedHeader),
               correctBlock.block,
               None,
               MiningConstraint.Unlimited,
@@ -175,7 +148,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
             .block
           BlockDiffer.fromBlock(
             blockchain,
-            Some(genesis),
+            Some(genesis.signedHeader),
             incorrectBlock,
             None,
             MiningConstraint.Unlimited,
@@ -241,13 +214,13 @@ class BlockDifferTest extends FreeSpec with WithDomain {
 
           val block              = d.createBlock(Seq(TxHelpers.transfer(sender, amount = idx.waves, fee = TestValues.fee * idx)))
           val hs                 = d.posSelector.validateGenerationSignature(block).explicitGet()
-          val txValidationResult = BlockDiffer.fromBlock(refBlockchain, Some(liquid.block), block, None, MiningConstraint.Unlimited, hs)
+          val txValidationResult = BlockDiffer.fromBlock(refBlockchain, Some(liquid.block.signedHeader), block, None, MiningConstraint.Unlimited, hs)
 
           val txInfo        = txValidationResult.explicitGet().snapshot.transactions.head._2
           val blockSnapshot = BlockSnapshot(block.id(), Seq(txInfo.snapshot -> txInfo.status))
 
           val snapshotApplyResult =
-            BlockDiffer.fromBlock(refBlockchain, Some(liquid.block), block, Some(blockSnapshot), MiningConstraint.Unlimited, hs)
+            BlockDiffer.fromBlock(refBlockchain, Some(liquid.block.signedHeader), block, Some(blockSnapshot), MiningConstraint.Unlimited, hs)
 
           // TODO: remove after NODE-2610 fix
           def clearAffected(r: Result): Result = {
@@ -293,26 +266,4 @@ class BlockDifferTest extends FreeSpec with WithDomain {
     }
   }
 
-  private def assertDiff(blocks: Seq[BlockWithSigner], ngAtHeight: Int)(assertion: (StateSnapshot, Blockchain) => Unit): Unit = {
-    val fs = FunctionalitySettings(
-      featureCheckBlocksPeriod = ngAtHeight / 2,
-      blocksForFeatureActivation = 1,
-      preActivatedFeatures = Map[Short, Int]((2, ngAtHeight)),
-    )
-    assertNgDiffState(blocks.init, blocks.last, fs, masterBalance)(assertion)
-  }
-
-  private def getTwoMinersBlockChain(from: SigningKey, to: SigningKey, numPayments: Int): Seq[BlockWithSigner] = {
-    val features: Seq[Short] = Seq[Short](2)
-
-    val paymentTxs = (1 to numPayments).map { _ =>
-      TxHelpers.transfer(from, to.toAddress, 10000, fee = TransactionFee)
-    }
-
-    // The block at height 1 is empty: it used to hold the genesis transaction, which the genesis snapshot replaces
-    (Seq.empty[Transaction] +: paymentTxs.map(Seq(_))).zipWithIndex.map { case (txs, i) =>
-      val signer = if (i % 2 == 0) signerA else signerB
-      TestBlock.create(signer, txs, features)
-    }
-  }
 }

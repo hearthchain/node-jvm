@@ -17,7 +17,7 @@ import com.wavesplatform.common.utils.Base64
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database
-import com.wavesplatform.database.protobuf.{BlockMetaExt, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta, CarryFee as PBCarryFee}
+import com.wavesplatform.database.protobuf.{BlockMetaExt, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.protobuf.transaction.PBAmounts
@@ -192,18 +192,6 @@ class RocksDBWriter(
 
   override protected def loadTxs(height: Height): Seq[Transaction] =
     loadTransactions(height, rdb).map(_._2)
-
-  override def carryFee(refId: Option[ByteStr]): Long = 0
-//    writableDB
-//      .get(Keys.carryFee(Height(height)))
-//      .carryFee
-//      .map(PBAmounts.toAssetAndAmount)
-//      .foldLeft(Portfolio.empty.asRight[String]) {
-//        case (Right(p), amt) => p.combine(Portfolio.build(amt))
-//        case (left, _)       => left
-//      }
-//      .flatMap(BlockFee(_))
-//      .explicitGet()
 
   protected override def loadBalance(req: (Address, Asset)): CurrentBalance =
     addressId(req._1).fold(CurrentBalance.Unavailable) { addressId =>
@@ -420,7 +408,6 @@ class RocksDBWriter(
   override protected def doAppend(
       blockMeta: PBBlockMeta,
       snapshot: StateSnapshot,
-      carry: Long,
       computedBlockStateHash: ByteStr,
       newAddresses: Map[Address, AddressId],
       balances: Map[(AddressId, Asset), (CurrentBalance, BalanceNode)],
@@ -647,10 +634,6 @@ class RocksDBWriter(
       // TODO: height
       rw.put(Keys.issuedAssets(Height(height)), snapshot.assetStatics.keySet.toSeq)
       rw.put(Keys.updatedAssets(Height(height)), updatedAssetSet.toSeq)
-
-      // todo: store actual carry fee
-//      rw.put(Keys.carryFee(Height(height)), carry)
-      expiredKeys += Keys.carryFee(threshold - 1).keyBytes
 
       rw.put(Keys.blockStateHash(Height(height)), computedBlockStateHash)
 
@@ -1011,7 +994,6 @@ class RocksDBWriter(
           rw.delete(Keys.changedWavesBalances(currentHeight))
           rw.delete(Keys.heightOf(discardedMeta.id))
           blockHeightsToInvalidate.addOne(discardedMeta.id)
-          rw.delete(Keys.carryFee(currentHeight))
           rw.delete(Keys.blockStateHash(currentHeight))
           rw.delete(Keys.stateHash(currentHeight))
 

@@ -109,7 +109,7 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
 
       override def bestLiquidSnapshot: Option[StateSnapshot] = None
 
-      override def bestLiquidSnapshotAndFees: Option[(StateSnapshot, Long, Long)] = None
+      override def bestLiquidSnapshotAndFees: Option[(StateSnapshot, BlockFee, BlockFee)] = None
 
       override def snapshotBlockchain: SnapshotBlockchain = ???
 

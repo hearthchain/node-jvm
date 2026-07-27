@@ -75,7 +75,10 @@ class LightNodeTest extends PropSpec with WithDomain {
     val recipient = TxHelpers.address(2)
 
     Seq(true -> None, false -> Some(List.empty[BlockSnapshot])).foreach { case (isLightMode, maybeExpectedSnapshots) =>
-      withDomain(DomainPresets.TransactionStateSnapshot.copy(enableLightMode = isLightMode), AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)) { d =>
+      withDomain(
+        DomainPresets.TransactionStateSnapshot.copy(enableLightMode = isLightMode),
+        AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)
+      ) { d =>
         val genesisSignature = d.lastBlockId
 
         def newBlocks(count: Int): List[BlockSnapshot] = {
@@ -159,7 +162,11 @@ class LightNodeTest extends PropSpec with WithDomain {
         appender(extensionBlocks).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")) should beRight
         d.lastBlock.header.stateHash shouldBe expectedStateHash
         d.blockchain.height shouldBe chainSize + 1
-        d.blocksApi.blocksRange(Height(2), Height(d.blockchain.height)).toListL.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")).map(_._1.header) shouldBe
+        d.blocksApi
+          .blocksRange(Height(2), Height(d.blockchain.height))
+          .toListL
+          .runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
+          .map(_._1.header) shouldBe
           betterBlocks.map(_._1.header)
       }
     }
@@ -213,7 +220,7 @@ class LightNodeTest extends PropSpec with WithDomain {
 
     val snapshot =
       BlockDiffer
-        .fromBlock(referencedBlockchain, Some(liquid.block), block, None, MiningConstraint.Unlimited, hs, None)
+        .fromBlock(referencedBlockchain, Some(liquid.block.signedHeader), block, None, MiningConstraint.Unlimited, hs, None)
         .explicitGet()
         .snapshot
 
