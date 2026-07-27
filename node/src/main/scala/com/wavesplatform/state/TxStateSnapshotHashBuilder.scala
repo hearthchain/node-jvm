@@ -111,7 +111,7 @@ object TxStateSnapshotHashBuilder {
           txDifferResult.resultE match {
             case Right(txSnapshot) =>
               val (feeAsset, feeAmount) = tx.assetFee
-              val minerPortfolio = Map(signer.toAddress -> Portfolio.build(feeAsset, feeAmount).multiply(CurrentBlockFeePart))
+              val minerPortfolio        = Map(signer.toAddress -> Portfolio.build(feeAsset, feeAmount).multiply(CurrentBlockFeePart))
 
               val txSnapshotWithBalances = txSnapshot.addBalances(minerPortfolio, accBlockchain).explicitGet()
               val txInfo                 = txSnapshot.transactions.head._2

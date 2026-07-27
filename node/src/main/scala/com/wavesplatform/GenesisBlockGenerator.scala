@@ -9,7 +9,7 @@ import com.wavesplatform.consensus.PoSCalculator.hit
 import com.wavesplatform.consensus.{FairPoSCalculator, NxtPoSCalculator}
 import com.wavesplatform.crypto.*
 import com.wavesplatform.crypto.bls.BlsKeyPair
-import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatures}
+import com.wavesplatform.features.BlockchainFeature
 import com.wavesplatform.settings.*
 import com.wavesplatform.utils.*
 import pureconfig.*

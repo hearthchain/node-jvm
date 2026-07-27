@@ -75,7 +75,7 @@ object SyncGrpcApi extends Assertions {
 
     def resolveAlias(alias: String): Addr = {
       val addr = accounts.resolveAlias(alias)
-      PBRecipients.toAddress(addr.toByteArray, AddressScheme.current.chainId).explicitGet()
+      PBRecipients.toAddress(addr.toByteArray).explicitGet()
     }
 
     def stateChanges(txId: String): (VanillaTransaction, StateChangesDetails) = {

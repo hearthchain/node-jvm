@@ -3,27 +3,19 @@ package com.wavesplatform.http
 import com.wavesplatform.api.http.{RouteTimeout, TransactionsApiRoute}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithDomain
-import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.network.TransactionPublisher
-import com.wavesplatform.settings.WavesSettings
-import com.wavesplatform.test.DomainPresets.TransactionStateSnapshot
-import com.wavesplatform.test.{NumericExt, SharedDomain, TestTime}
+import com.wavesplatform.test.TestTime
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.assets.exchange.*
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
 import com.wavesplatform.transaction.{
   AssetIdLength,
   Transaction,
-  TxExchangeAmount,
   TxHelpers,
-  TxMatcherFee,
-  TxOrderPrice,
-  TxVersion
 }
-import com.wavesplatform.utils.{EmptyBlockchain, EthEncoding, SharedSchedulerMixin}
+import com.wavesplatform.utils.{EmptyBlockchain, SharedSchedulerMixin}
 import io.netty.channel.Channel
-import org.web3j.crypto.Bip32ECKeyPair
-import play.api.libs.json.{JsObject, JsValue}
+import play.api.libs.json.JsObject
 
 import scala.concurrent.Future
 import scala.concurrent.duration.*

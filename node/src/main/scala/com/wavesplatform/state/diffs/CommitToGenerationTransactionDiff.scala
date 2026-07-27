@@ -48,7 +48,7 @@ object CommitToGenerationTransactionDiff {
         nextCommittedGenerators = Seq(GenerationCommitment(tx.sender, tx.endorserPublicKey, tx.vrfPublicKey))
       )
       generatingBalanceAfterDeposit = SnapshotBlockchain(blockchain, snapshot).generatingBalance(sender)
-      minBalance                    = GeneratingBalanceProvider.minMiningBalance(blockchain, Height(blockchain.height))
+      minBalance                    = GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2
       _ <- Either.raiseWhen(generatingBalanceAfterDeposit < minBalance) {
         GenericError(s"Generating balance $generatingBalanceAfterDeposit is less than $minBalance required for block generation")
       }

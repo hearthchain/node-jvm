@@ -1,15 +1,13 @@
 package com.wavesplatform.http
 
 import com.google.common.primitives.Longs
-import com.wavesplatform.api.http.ApiError.{ApiKeyNotValid, DataKeysNotSpecified, MissingSenderPrivateKey, TooBigArrayAllocation}
+import com.wavesplatform.api.http.ApiError.{ApiKeyNotValid, MissingSenderPrivateKey}
 import com.wavesplatform.api.http.{AddressApiRoute, RouteTimeout}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.settings.{WalletSettings, WavesSettings}
-import com.wavesplatform.state.IntegerDataEntry
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.{Schedulers, SharedSchedulerMixin}
@@ -17,11 +15,7 @@ import com.wavesplatform.wallet.Wallet
 import io.netty.util.HashedWheelTimer
 import monix.execution.schedulers.SchedulerService
 import org.apache.pekko.http.scaladsl.model.*
-import org.apache.pekko.http.scaladsl.model.HttpEntity.{Chunk, LastChunk}
-import org.apache.pekko.http.scaladsl.model.headers.{Accept, RawHeader, `Transfer-Encoding`}
-import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.*
-import play.api.libs.json.Json.JsValueWrapper
 
 import scala.concurrent.duration.*
 

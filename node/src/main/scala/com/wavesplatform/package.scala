@@ -6,8 +6,7 @@ import com.wavesplatform.block.Block
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.mining.Miner
 import com.wavesplatform.settings.WavesSettings
-import com.wavesplatform.state.{Blockchain, GeneratorIndex, GeneratorInfo, GenesisSnapshot, StateSnapshot}
-import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.state.Blockchain
 import com.wavesplatform.transaction.BlockchainUpdater
 import com.wavesplatform.transaction.TxValidationError.GenericError
 import org.slf4j.LoggerFactory
@@ -37,7 +36,7 @@ package object wavesplatform {
 
   def checkGenesis(settings: WavesSettings, blockchainUpdater: Blockchain & BlockchainUpdater, miner: Miner): Unit = {
     (for {
-      block <- Block.genesis(settings.blockchainSettings.genesisSettings, settings.blockchainSettings.functionalitySettings)
+      block <- Block.genesis(settings.blockchainSettings.genesisSettings)
       _     <- checkOrAppend(block, blockchainUpdater, miner)
     } yield ()).left
       .foreach { e =>

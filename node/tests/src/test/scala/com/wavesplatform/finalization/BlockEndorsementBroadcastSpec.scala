@@ -3,7 +3,6 @@ package com.wavesplatform.finalization
 import com.wavesplatform.block.{Block, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.mining.BlockChallengerImpl
 import com.wavesplatform.network.{EndorseBlock, MessageCodec, PeerDatabase}

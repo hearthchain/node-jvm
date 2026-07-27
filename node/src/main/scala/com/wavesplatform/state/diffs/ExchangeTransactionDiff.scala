@@ -9,7 +9,7 @@ import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{GenericError, OrderValidationError}
 import com.wavesplatform.transaction.assets.exchange.*
 import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.AssetDecimals
-import com.wavesplatform.transaction.{Asset, TxVersion}
+import com.wavesplatform.transaction.Asset
 
 import java.text.{DecimalFormat, DecimalFormatSymbols}
 import scala.util.{Right, Try}
@@ -29,8 +29,8 @@ object ExchangeTransactionDiff {
       _          <- enoughVolume(tx, blockchain)
       portfolios <- getPortfolios(blockchain, tx)
       orderFills = Map(
-        tx.buyOrder.id()  -> VolumeAndFee(tx.amount.value, tx.buyMatcherFee),
-        tx.sellOrder.id() -> VolumeAndFee(tx.amount.value, tx.sellMatcherFee)
+        tx.buyOrder.id()  -> VolumeAndFee(tx.amount.value, tx.buyMatcherFee.value),
+        tx.sellOrder.id() -> VolumeAndFee(tx.amount.value, tx.sellMatcherFee.value)
       )
       snapshot <- StateSnapshot.build(blockchain, portfolios, orderFills)
     } yield snapshot
@@ -98,8 +98,8 @@ object ExchangeTransactionDiff {
 
     lazy val matcherPortfolioE =
       Seq(
-        getOrderFeePortfolio(tx.buyOrder, tx.buyMatcherFee),
-        getOrderFeePortfolio(tx.sellOrder, tx.sellMatcherFee),
+        getOrderFeePortfolio(tx.buyOrder, tx.buyMatcherFee.value),
+        getOrderFeePortfolio(tx.sellOrder, tx.sellMatcherFee.value),
         Portfolio.waves(-tx.fee.value)
       ).foldM(Portfolio())(_.combine(_))
 
@@ -107,17 +107,14 @@ object ExchangeTransactionDiff {
       matcherPortfolioE.flatMap(matcherPortfolio =>
         Seq(
           Map[Address, Portfolio](matcher -> matcherPortfolio),
-          Map[Address, Portfolio](buyer   -> getOrderFeePortfolio(tx.buyOrder, -tx.buyMatcherFee)),
-          Map[Address, Portfolio](seller  -> getOrderFeePortfolio(tx.sellOrder, -tx.sellMatcherFee))
+          Map[Address, Portfolio](buyer   -> getOrderFeePortfolio(tx.buyOrder, -tx.buyMatcherFee.value)),
+          Map[Address, Portfolio](seller  -> getOrderFeePortfolio(tx.sellOrder, -tx.sellMatcherFee.value))
         ).foldM(Map.empty[Address, Portfolio])(Portfolio.combine)
       )
 
     for {
-      _ <- Either.cond(
-        tx.buyMatcherFee >= 0 && tx.sellMatcherFee >= 0,
-        (),
-        GenericError("Matcher fee can not be negative")
-      )
+      // No sign check on the matcher fees: TxMatcherFee refines them to (0; Order.MaxAmount), so a negative one cannot
+      // reach here - ExchangeTransaction.create rejects it with TxMatcherFee.errMsg.
       _ <- Either.cond(assets.values.forall(_.isDefined), (), GenericError("Assets should be issued before they can be traded"))
       amountDecimals = tx.buyOrder.assetPair.amountAsset.fold(8)(ia => assets(ia).fold(8)(_.decimals))
       priceDecimals  = tx.buyOrder.assetPair.priceAsset.fold(8)(ia => assets(ia).fold(8)(_.decimals))
@@ -153,7 +150,7 @@ object ExchangeTransactionDiff {
 
     lazy val buyFeeValid =
       isFeeValid(
-        feeTotal = filledBuy.fee + exTrans.buyMatcherFee,
+        feeTotal = filledBuy.fee + exTrans.buyMatcherFee.value,
         amountTotal = buyTotal,
         maxfee = exTrans.buyOrder.matcherFee.value,
         maxAmount = exTrans.buyOrder.amount.value,
@@ -162,7 +159,7 @@ object ExchangeTransactionDiff {
 
     lazy val sellFeeValid =
       isFeeValid(
-        feeTotal = filledSell.fee + exTrans.sellMatcherFee,
+        feeTotal = filledSell.fee + exTrans.sellMatcherFee.value,
         amountTotal = sellTotal,
         maxfee = exTrans.sellOrder.matcherFee.value,
         maxAmount = exTrans.sellOrder.amount.value,

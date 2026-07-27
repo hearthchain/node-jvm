@@ -4,7 +4,6 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.*
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.state.diffs.*
 import com.wavesplatform.test.*
@@ -126,7 +125,7 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         val (block1, microBlocks1) = chainBaseAndMicro(genesisId, masterToAlice, Seq(Seq(aliceToBob)))
         val otherSigner            = SigningKey.fromSeed(Array.fill(KeyLength)(1: Byte))
         val block2 =
-          customBuildBlockOfTxs(genesisId, Seq(masterToAlice, aliceToBob2), otherSigner, 1, block1.header.timestamp - 1)
+          customBuildBlockOfTxs(genesisId, Seq(masterToAlice, aliceToBob2), otherSigner, block1.header.timestamp - 1)
         domain.blockchainUpdater.processBlock(block1) should beRight
         domain.blockchainUpdater.processMicroBlock(microBlocks1(0), None) should beRight
         domain.blockchainUpdater.processBlock(block2) should beRight
@@ -142,9 +141,9 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
       val ts = masterToAlice.timestamp
 
       val minerABalance = withDomain(MicroblocksActivatedAt0WavesSettings, fundMaster(setup)) { da =>
-        val (block1a, microBlocks1a) = chainBaseAndMicro(da.lastBlockId, Seq(masterToAlice), Seq(Seq(aliceToBob)), miner, 3: Byte, ts)
-        val block2a                  = customBuildBlockOfTxs(block1a.id(), Seq(aliceToBob2), miner, 3: Byte, ts)
-        val block3a                  = customBuildBlockOfTxs(block2a.id(), Seq.empty, miner, 3: Byte, ts)
+        val (block1a, microBlocks1a) = chainBaseAndMicro(da.lastBlockId, Seq(masterToAlice), Seq(Seq(aliceToBob)), miner, ts)
+        val block2a                  = customBuildBlockOfTxs(block1a.id(), Seq(aliceToBob2), miner, ts)
+        val block3a                  = customBuildBlockOfTxs(block2a.id(), Seq.empty, miner, ts)
         da.blockchainUpdater.processBlock(block1a) should beRight
         da.blockchainUpdater.processMicroBlock(microBlocks1a(0), None) should beRight
         da.blockchainUpdater.processBlock(block2a) should beRight
@@ -168,8 +167,5 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
     }
   }
 
-  private def effBalance(aa: Address, domain: Domain): Long = aa match {
-    case address: Address => domain.effBalance(address)
-    case _                => fail("Unexpected address object")
-  }
+  private def effBalance(aa: Address, domain: Domain): Long = domain.effBalance(aa)
 }

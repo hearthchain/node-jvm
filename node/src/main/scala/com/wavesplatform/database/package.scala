@@ -5,7 +5,7 @@ import com.google.common.io.ByteStreams.{newDataInput, newDataOutput}
 import com.google.common.io.{ByteArrayDataInput, ByteArrayDataOutput}
 import com.google.common.primitives.{Ints, Longs}
 import com.google.protobuf.ByteString
-import com.wavesplatform.account.{AddressScheme, PublicKey}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.validation.Validators
 import com.wavesplatform.block.{Block, BlockHeader}
 import com.wavesplatform.common.state.ByteStr
@@ -151,7 +151,7 @@ package object database {
     LeaseDetails(
       LeaseStaticInfo(
         d.senderPublicKey.toPublicKey,
-        PBRecipients.toAddress(d.recipient.get, AddressScheme.current.chainId).explicitGet(),
+        PBRecipients.toAddress(d.recipient.get).explicitGet(),
         TxPositiveAmount.unsafeFrom(d.amount),
         TransactionId(d.sourceId.toByteStr),
         Height(d.height)

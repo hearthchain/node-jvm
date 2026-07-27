@@ -9,7 +9,7 @@ object LeaseTransactionsDiff {
     DiffsCommon
       .processLease(blockchain, tx.amount, tx.sender, tx.recipient, tx.fee.value, tx.id(), TransactionId(tx.id()))
 
-  def leaseCancel(blockchain: Blockchain, time: Long)(tx: LeaseCancelTransaction): Either[ValidationError, StateSnapshot] =
+  def leaseCancel(blockchain: Blockchain)(tx: LeaseCancelTransaction): Either[ValidationError, StateSnapshot] =
     DiffsCommon
-      .processLeaseCancel(blockchain, tx.sender, tx.fee.value, time, tx.leaseId, tx.id())
+      .processLeaseCancel(blockchain, tx.sender, tx.fee.value, tx.leaseId, tx.id())
 }

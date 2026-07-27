@@ -6,7 +6,7 @@ import com.wavesplatform.crypto.bls.{BlsPublicKey, BlsSignature}
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.Height
 import com.wavesplatform.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
-import com.wavesplatform.transaction.{CommitToGenerationTransaction, Proofs, TransactionType, TxVersion}
+import com.wavesplatform.transaction.{CommitToGenerationTransaction, Proofs, TransactionType}
 import play.api.libs.json.*
 
 object CommitToGenerationRequest {

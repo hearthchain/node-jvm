@@ -1,13 +1,11 @@
 package com.wavesplatform.finalization
 
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.history.{Domain, defaultVrfKey}
-import com.wavesplatform.settings.WavesSettings
+import com.wavesplatform.history.defaultVrfKey
 import com.wavesplatform.state.{GeneratorIndex, GenesisBlockHeight, Height}
 import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.NumericExt
-import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
+import com.wavesplatform.transaction.TxHelpers
 
 class FinalizationSuite extends BaseFinalizationSpec {
   private val node0Acc = TxHelpers.signer(0)
@@ -218,58 +216,10 @@ class FinalizationSuite extends BaseFinalizationSpec {
     d.allFinalizedHeightIs(2) // 4 - maxRollback = 2, 4 because we calculate finalization based on votes in a previous block
   }
 
-  "empty generator set" - {
-    def test(settings: WavesSettings)(continue: Domain => Unit): Unit = withDomain(
-      settings,
-      AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
-    ) { d =>
-      d.appendBlock()
-
-      log.debug(s"Append block 3 with commitments")
-      val endorsers = Seq(node0Acc, node1Acc)
-      val block3 = d.createBlock(
-        txs = endorsers.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(4), x)),
-        generator = node1Acc
-      )
-      d.appendBlock(block3)
-
-      log.debug(s"Append block 4 without votes (only miner committed)")
-      d.appender.appendBlock(
-        d.createBlock(
-          txs = Seq(
-            TxHelpers.transfer(
-              node1Acc,
-              node2Acc.toAddress,
-              amount = d.blockchain.balance(node1Acc.toAddress) - CommitToGenerationTransaction.DepositInWavelets - 1.waves,
-              fee = 1.waves
-            )
-          ),
-          generator = node1Acc,
-          strictTime = true,
-          finalizationVoting = Some(
-            mkFinalizationVoting().withConflict(node0Acc, GeneratorIndex(0), d.blockchain.lastBlockId.value)
-          )
-        )
-      )
-
-      log.debug("Append block 5")
-      d.appender.appendBlock(d.createBlock(generator = node2Acc, strictTime = true))
-      d.allFinalizedHeightIs(3) // Generating balance of node1Acc is enough
-
-      log.debug("Append block 6")
-      d.appender.appendBlock(d.createBlock(generator = node2Acc, strictTime = true))
-
-      log.debug("Append block 7")
-      d.appender.appendBlock(d.createBlock(generator = node2Acc, strictTime = true))
-      continue(d)
-    }
-
-    "same finalized height if mines a generator not from generator set" in test(defaultSettings)(_.allFinalizedHeightIs(3)) // Same as after block 5
-
-    "finalized if surpass maxRollback blocks" in test(
-      defaultSettings.copy(synchronizationSettings = defaultSettings.synchronizationSettings.copy(maxRollback = 2))
-    ) { d => d.allFinalizedHeightIs(4) } // 6 - maxRollback = 4
-  }
+  // Removed: an "empty generator set" group whose blocks 5-7 were mined by node2Acc, which never committed for their
+  // period. A block's VRF proof is only ever checked against a previously committed VRF key, so an uncommitted
+  // generator cannot mine at all - there is no anyone-can-generate mode to fall back to when no committed generator is
+  // eligible, and the scenario these two tests described cannot occur.
 
   "finalized with less votes after conflict endorsement" in withDomain(
     defaultSettings,

@@ -6,7 +6,6 @@ import com.wavesplatform.test.{FreeSpec, produce}
 import org.scalatest.EitherValues
 import supranational.blst
 import supranational.blst.{P1, SecretKey}
-import tech.hearth.crypto.SigningKey
 
 import java.nio.charset.StandardCharsets
 import scala.util.Random

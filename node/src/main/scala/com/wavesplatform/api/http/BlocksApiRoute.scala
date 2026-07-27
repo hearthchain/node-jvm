@@ -4,7 +4,6 @@ import cats.syntax.either.*
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.api.common.CommonBlocksApi
 import com.wavesplatform.api.http.ApiError.{BlockDoesNotExist, NotFinalized, TooBigArrayAllocation}
-import com.wavesplatform.block.Block
 import com.wavesplatform.settings.RestAPISettings
 import com.wavesplatform.state.{Height, TxMeta}
 import com.wavesplatform.transaction.Asset.Waves

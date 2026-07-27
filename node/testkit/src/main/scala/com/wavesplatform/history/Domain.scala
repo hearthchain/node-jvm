@@ -6,14 +6,13 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.api.BlockMeta
 import com.wavesplatform.api.common.*
 import com.wavesplatform.block.Block.BlockId
-import com.wavesplatform.block.{Block, BlockSnapshot, ChallengedHeader, FinalizationVoting, MicroBlock, SignedBlockHeader}
+import com.wavesplatform.block.{Block, BlockSnapshot, ChallengedHeader, FinalizationVoting, MicroBlock}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.nxt.NxtLikeConsensusBlockData
-import com.wavesplatform.consensus.{PoSCalculator, PoSSelector}
-import com.wavesplatform.database.{DBExt, Keys, RDB, RocksDBWriter, loadBlock}
+import com.wavesplatform.consensus.PoSSelector
+import com.wavesplatform.database.{DBExt, Keys, RDB, RocksDBWriter}
 import com.wavesplatform.events.BlockchainUpdateTriggers
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.mining.{BlockChallenger, BlockChallengerImpl, MiningAccount}

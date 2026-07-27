@@ -3,7 +3,6 @@ package com.wavesplatform.finalization
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{Block, FinalizationVoting}
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.*
@@ -266,7 +265,12 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
 
     def continue(d: Domain): Unit
 
-    def run(): Unit = withDomain(settings, AddrWithBalance.enoughBalances(allGenerators*)) { d =>
+    // Genesis has to commit the generators of blocks 2 and 3 for period [1, 2]: the appender checks the new block's
+    // period, but PoSSelector resolves the generator's VRF key at the *parent's* height, so committedGenerator1 —
+    // which mines block 3, the first block of period [3, 4] — needs a commitment on both sides of the boundary.
+    // notCommittedGenerator stays "not committed" for the period under test, which is the one from height 3 on.
+    def run(): Unit =
+      withDomain(settings, AddrWithBalance.enoughBalances(allGenerators*), generators = Seq(notCommittedGenerator, committedGenerator1)) { d =>
       log.debug(s"Append block 2 with commitments")
       val txs                   = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
       val block2WithCommitments = d.createBlock(txs, generator = notCommittedGenerator, strictTime = true)

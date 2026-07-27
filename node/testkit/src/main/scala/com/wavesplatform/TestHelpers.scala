@@ -5,8 +5,7 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{FileVisitResult, Files, Path, SimpleFileVisitor}
 
 import com.wavesplatform.account.Address
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.settings.{FunctionalitySettings, GenesisBalanceSettings, GenesisSettings, WavesSettings}
+import com.wavesplatform.settings.{GenesisBalanceSettings, GenesisSettings}
 
 import scala.concurrent.duration.*
 

@@ -6,10 +6,9 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.history.DefaultBaseTarget
 import com.wavesplatform.protobuf.block.PBBlocks
-import com.wavesplatform.state.StringDataEntry
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import com.wavesplatform.transaction.{Transaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Transaction, TxHelpers}
 import org.scalacheck.Gen
 import tech.hearth.crypto.SigningKey
 

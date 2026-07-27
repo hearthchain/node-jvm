@@ -7,7 +7,7 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.transaction.Transaction
 import org.scalacheck.Gen
 import org.scalatest.Suite
-import tech.hearth.crypto.{Crypto, KeyTree, SigningKey}
+import tech.hearth.crypto.{Crypto, SigningKey}
 
 trait BlockGen extends TransactionGen { suite: Suite =>
 

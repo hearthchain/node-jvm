@@ -24,9 +24,9 @@ object FinalityStatus {
     }
 
   private def readGenerationPeriod(activationHeight: Option[Height], json: JsValue, fieldName: String) =
-    activationHeight.fold(JsError())(h => (json \ fieldName).validateOpt[GenerationPeriod](using generationPeriodReads(h)))
+    activationHeight.fold(JsError())(_ => (json \ fieldName).validateOpt[GenerationPeriod](using generationPeriodReads))
 
-  private def generationPeriodReads(activationHeight: Height): Reads[GenerationPeriod] =
+  private val generationPeriodReads: Reads[GenerationPeriod] =
     (
       (__ \ "start").read[Height] and (__ \ "end").read[Height]
     )((start, end) => GenerationPeriod(start, end - start))

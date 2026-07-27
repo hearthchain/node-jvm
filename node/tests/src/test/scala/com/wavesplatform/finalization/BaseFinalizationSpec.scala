@@ -2,7 +2,7 @@ package com.wavesplatform.finalization
 
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.block.{BlockEndorsement, FinalizationVoting}
-import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsSignature}
+import com.wavesplatform.crypto.bls.BlsSignature
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.history.Domain
 import com.wavesplatform.state.{BalanceSnapshot, ConflictGenerators, GeneratorIndex, GenesisBlockHeight, Height}

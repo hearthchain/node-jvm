@@ -1,6 +1,5 @@
 package com.wavesplatform.state.diffs
 
-import cats.implicits.toBifunctorOps
 import cats.syntax.either.*
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.*

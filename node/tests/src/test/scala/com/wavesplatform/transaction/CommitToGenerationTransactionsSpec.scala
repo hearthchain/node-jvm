@@ -16,7 +16,6 @@ import play.api.libs.json.Json
 import scala.util.{Failure, Success}
 
 class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
-  private val wavesSigner = TxHelpers.signer(0)
   private val blsKp       = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(0)))
   private val sig         = CommitToGenerationTransaction.mkPopSignature(blsKp, Height(3000))
   private val vrfKey      = VrfKey.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(0)))

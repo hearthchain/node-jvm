@@ -8,14 +8,13 @@ import com.wavesplatform.api.http.{DebugApiRoute, RouteTimeout}
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.TestMiner
 import com.wavesplatform.network.PeerDatabase
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.StateHash.Section
 import com.wavesplatform.state.diffs.ENOUGH_AMT
-import com.wavesplatform.state.{Blockchain, Height, StateHash}
+import com.wavesplatform.state.{Height, StateHash}
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.{Transaction, TxHelpers}
 import com.wavesplatform.utils.SharedSchedulerMixin
@@ -51,7 +50,6 @@ class DebugApiRouteSpec
 
   val block: Block = TestBlock.create(Nil).block
   val testStateHash: StateHash = {
-    import com.wavesplatform.utils.byteStrOrdering
     def randomHash: ByteStr = ByteStr(Array.fill(32)(Random.nextInt(256).toByte))
 
     val hashes = Section.values.map((_, randomHash)).toMap

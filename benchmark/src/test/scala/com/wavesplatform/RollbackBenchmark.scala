@@ -29,7 +29,7 @@ object RollbackBenchmark extends ScorexLogging {
     log.info("Generating addresses")
 
     val addresses = 1 to 18000 map { i =>
-      PBRecipients.toAddress(Ints.toByteArray(i) ++ new Array[Byte](Address.HashLength - 4), AddressScheme.current.chainId).explicitGet()
+      PBRecipients.toAddress(Ints.toByteArray(i) ++ new Array[Byte](Address.HashLength - 4)).explicitGet()
     }
 
     log.info("Generating issued assets")

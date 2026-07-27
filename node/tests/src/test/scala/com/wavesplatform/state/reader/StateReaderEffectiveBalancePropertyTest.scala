@@ -3,7 +3,6 @@ package com.wavesplatform.state.reader
 import com.wavesplatform.TestValues
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures.*
 import com.wavesplatform.lagonaki.mocks.TestBlock.create as block
 import com.wavesplatform.settings.TestFunctionalitySettings.Enabled
 import com.wavesplatform.settings.WavesSettings

@@ -1,13 +1,10 @@
 package com.wavesplatform.state.diffs
 
-import com.wavesplatform.account.Address
-import com.wavesplatform.block.Block
 import tech.hearth.crypto.SigningKey
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{WithDomain, WithState}
 import com.wavesplatform.history.defaultSigner
-import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.MiningConstraint
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.{SnapshotBlockchain, StateSnapshot}
@@ -15,7 +12,7 @@ import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.{NG, RideV6, SettingsFromDefaultConfig}
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxHelpers.defaultAddress
-import com.wavesplatform.transaction.{CommitToGenerationTransaction, Transaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{CommitToGenerationTransaction, Transaction, TxHelpers}
 
 class BlockDifferDetailedSnapshotTest extends FreeSpec with WithState with WithDomain {
 

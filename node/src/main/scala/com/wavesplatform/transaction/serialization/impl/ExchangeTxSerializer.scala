@@ -11,8 +11,8 @@ object ExchangeTxSerializer {
       "order2"         -> order2.json(),
       "amount"         -> amount.value,
       "price"          -> price.value,
-      "buyMatcherFee"  -> buyMatcherFee,
-      "sellMatcherFee" -> sellMatcherFee
+      "buyMatcherFee"  -> buyMatcherFee.value,
+      "sellMatcherFee" -> sellMatcherFee.value
     )
   }
 

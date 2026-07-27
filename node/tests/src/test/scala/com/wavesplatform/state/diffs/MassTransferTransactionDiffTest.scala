@@ -2,9 +2,7 @@ package com.wavesplatform.state.diffs
 
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock.create as block
 import com.wavesplatform.settings.{FunctionalitySettings, GenesisAssetSettings, TestFunctionalitySettings}
 import com.wavesplatform.test.*
@@ -12,7 +10,7 @@ import com.wavesplatform.test.DomainPresets.ScriptsAndSponsorship
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.ParsedTransfer
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.transaction.{Asset, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Asset, TxHelpers}
 import tech.hearth.crypto.SigningKey
 
 class MassTransferTransactionDiffTest extends PropSpec with WithDomain {

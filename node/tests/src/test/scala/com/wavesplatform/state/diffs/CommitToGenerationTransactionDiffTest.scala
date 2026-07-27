@@ -2,11 +2,9 @@ package com.wavesplatform.state.diffs
 
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.GeneratingBalanceProvider
-import com.wavesplatform.crypto
 import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsPublicKey}
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*

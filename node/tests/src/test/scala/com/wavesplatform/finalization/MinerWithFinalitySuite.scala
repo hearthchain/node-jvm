@@ -5,7 +5,6 @@ import com.wavesplatform.block.BlockEndorsement
 import com.wavesplatform.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.{Domain, defaultVrfKey}
 import com.wavesplatform.mining.{Miner, MinerImpl}
 import com.wavesplatform.network.EndorseBlock

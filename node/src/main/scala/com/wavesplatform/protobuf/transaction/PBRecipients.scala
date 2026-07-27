@@ -13,7 +13,7 @@ object PBRecipients {
   // Writing the bare 20-byte hash here would make a recipient unreadable once it is stored or serialized.
   def create(recipient: Address): PBRecipient = PBRecipient().withPublicKeyHash(ByteString.copyFrom(recipient.toBytes()))
 
-  def toAddress(bytes: Array[Byte], chainId: Byte): Either[ValidationError, Address] = bytes.length match {
+  def toAddress(bytes: Array[Byte]): Either[ValidationError, Address] = bytes.length match {
     case Address.HASH_LEN => // Compressed address
       com.wavesplatform.account.Address.fromBytes(bytes)
 
@@ -25,7 +25,7 @@ object PBRecipients {
   }
 
   // A Recipient is only ever a public key hash now, rather than a oneof of that and an alias
-  def toAddress(r: PBRecipient, chainId: Byte): Either[ValidationError, Address] =
+  def toAddress(r: PBRecipient): Either[ValidationError, Address] =
     if (r.publicKeyHash.isEmpty) Left(GenericError(s"Not an address: $r"))
-    else toAddress(r.publicKeyHash.toByteArray, chainId)
+    else toAddress(r.publicKeyHash.toByteArray)
 }

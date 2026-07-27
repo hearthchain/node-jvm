@@ -3,7 +3,6 @@ package com.wavesplatform.api.common
 import com.wavesplatform.account.Address
 import com.wavesplatform.api.{BlockMeta, common}
 import com.wavesplatform.block
-import com.wavesplatform.block.Block
 import com.wavesplatform.block.Block.TransactionProof
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database.RDB
@@ -71,7 +70,7 @@ object CommonTransactionsApi {
 
     override def calculateFee(tx: Transaction): Either[ValidationError, (Asset, Long, Long)] =
       FeeValidation
-        .getMinFee(blockchain, tx)
+        .getMinFee(tx)
         .map { case FeeDetails(asset, _, feeInAsset, feeInWaves) =>
           (asset, feeInAsset, feeInWaves)
         }
@@ -80,10 +79,10 @@ object CommonTransactionsApi {
 
     override def transactionProofs(transactionIds: List[ByteStr]): List[TransactionProof] =
       for {
-        transactionId           <- transactionIds
-        (txm, tx)               <- blockchain.transactionInfo(transactionId)
-        (meta, allTransactions) <- blockAt(txm.height)
-        transactionProof        <- block.transactionProof(tx, allTransactions.map(_._2))
+        transactionId        <- transactionIds
+        (txm, tx)            <- blockchain.transactionInfo(transactionId)
+        (_, allTransactions) <- blockAt(txm.height)
+        transactionProof     <- block.transactionProof(tx, allTransactions.map(_._2))
       } yield transactionProof
   }
 }

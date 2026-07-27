@@ -5,7 +5,7 @@ import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.ScriptsAndSponsorship
-import com.wavesplatform.transaction.{TxHelpers, TxVersion}
+import com.wavesplatform.transaction.TxHelpers
 
 class TransferDiffTest extends PropSpec with WithDomain {
   private val master = TxHelpers.signer(1)

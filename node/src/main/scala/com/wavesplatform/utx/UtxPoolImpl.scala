@@ -13,7 +13,7 @@ import com.wavesplatform.settings.UtxSettings
 import com.wavesplatform.state.TxStateSnapshotHashBuilder.TxStatusInfo
 import com.wavesplatform.state.diffs.BlockDiffer.CurrentBlockFeePart
 import com.wavesplatform.state.diffs.TransactionDiffer.TransactionValidationError
-import com.wavesplatform.state.diffs.{BlockDiffer, TransactionDiffer}
+import com.wavesplatform.state.diffs.TransactionDiffer
 import com.wavesplatform.state.SnapshotBlockchain
 import com.wavesplatform.state.{Blockchain, Portfolio, StateSnapshot, TxStateSnapshotHashBuilder}
 import com.wavesplatform.transaction.*

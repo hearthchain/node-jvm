@@ -1,15 +1,12 @@
 package com.wavesplatform.state.diffs
 
 import com.wavesplatform.account.{Address, AddressScheme, PrivateKey, PublicKey}
-import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.history.defaultSigner
 import com.wavesplatform.lagonaki.mocks.TestBlock
-import com.wavesplatform.settings.{Constants, FunctionalitySettings, TestFunctionalitySettings, WavesSettings}
+import com.wavesplatform.settings.{Constants, FunctionalitySettings, GenesisAssetSettings, TestFunctionalitySettings, WavesSettings}
 import com.wavesplatform.state.*
 import com.wavesplatform.state.diffs.ExchangeTransactionDiff.getOrderFeePortfolio
 import com.wavesplatform.state.diffs.TransactionDiffer.TransactionValidationError
@@ -18,7 +15,7 @@ import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxHelpers.defaultAddress
-import com.wavesplatform.transaction.TxValidationError.{AccountBalanceError, GenericError}
+import com.wavesplatform.transaction.TxValidationError.AccountBalanceError
 import com.wavesplatform.transaction.assets.exchange.*
 import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals, Default as DefaultPriceMode}
 import com.wavesplatform.transaction.transfer.MassTransferTransaction
@@ -26,7 +23,6 @@ import com.wavesplatform.{TestValues, TestWallet, crypto}
 import org.scalatest.{EitherValues, Inside}
 import tech.hearth.crypto.SigningKey
 
-import scala.concurrent.duration.*
 import scala.util.Random
 
 class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain with EitherValues with TestWallet {
@@ -35,6 +31,16 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
 
   // Predefined assets will be implemented later; for now asset-pair IDs are hardcoded.
   private def iasset(n: Int): IssuedAsset = IssuedAsset(ByteStr(Array.fill(32)(n.toByte)))
+
+  // A hardcoded id names an asset that no transaction ever issues, so the genesis snapshot has to issue it - otherwise
+  // the real append path rejects the trade with "Assets should be issued before they can be traded". The issuer is only
+  // recorded in the asset's static info, so any 32-byte public key does.
+  private val assetIssuer = ByteStr.fill(32)(3).toString
+
+  private val AssetQuantity = 100_000_000_00L
+
+  private def genesisAsset(asset: IssuedAsset, quantity: Long): GenesisAssetSettings =
+    GenesisAssetSettings(asset.id, assetIssuer, s"asset-${asset.id.arr.head}", 8, quantity)
 
   val fs: FunctionalitySettings = TestFunctionalitySettings.Enabled
 
@@ -53,16 +59,17 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
 
   property("Preserves waves invariant, stores match info, rewards matcher") {
 
-    val preconditionsAndExchange: Seq[(Seq[AddrWithBalance], ExchangeTransaction)] = {
+    val preconditionsAndExchange: Seq[(Seq[AddrWithBalance], ExchangeTransaction, Seq[IssuedAsset])] = {
       val buyer   = TxHelpers.signer(1)
       val seller  = TxHelpers.signer(2)
       val matcher = TxHelpers.signer(3)
+      val assetId = ByteStr(new Array[Byte](32))
 
       val genesis = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, buyer, seller, matcher)
 
       for {
-        maybeAsset1 <- Seq(Some(ByteStr(new Array[Byte](32))), None)
-        maybeAsset2 <- Seq(Some(ByteStr(new Array[Byte](32))), None) if maybeAsset1 != maybeAsset2
+        maybeAsset1 <- Seq(Some(assetId), None)
+        maybeAsset2 <- Seq(Some(assetId), None) if maybeAsset1 != maybeAsset2
         exchange <- Seq(
           TxHelpers.exchangeFromOrders(
             TxHelpers.order(
@@ -145,10 +152,10 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
             
           )
         )
-      } yield (genesis, exchange)
+      } yield (genesis, exchange, Seq(maybeAsset1, maybeAsset2) collect { case Some(id) => IssuedAsset(id) })
     }
 
-    preconditionsAndExchange.foreach { case (genesis, exchange) =>
+    preconditionsAndExchange.foreach { case (genesis, exchange, assets) =>
       withDomain(ScriptsAndSponsorship, genesis) { d =>
         d.appendBlock(exchange)
         d.liquidSnapshot.balances.toSeq
@@ -162,7 +169,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
           .groupMap(_._1)(_._2)
           .foreach { case (_, balances) => balances.sum shouldBe 0 }
         d.liquidSnapshot.balances((exchange.sender.toAddress, Waves)) shouldBe
-          d.rocksDBWriter.balance(exchange.sender.toAddress) + exchange.buyMatcherFee + exchange.sellMatcherFee - exchange.fee.value
+          d.rocksDBWriter.balance(exchange.sender.toAddress) + exchange.buyMatcherFee.value + exchange.sellMatcherFee.value - exchange.fee.value
       }
     }
   }
@@ -240,8 +247,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         val sender = exchange.sender.toAddress
         val expectedMatcherPortfolio =
           Seq(
-            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.buyOrder, exchange.buyMatcherFee),
-            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.sellOrder, exchange.sellMatcherFee),
+            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.buyOrder, exchange.buyMatcherFee.value),
+            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.sellOrder, exchange.sellMatcherFee.value),
             wavesPortfolio(-exchange.fee.value)
           ).fold(Portfolio())(_.combine(_).explicitGet())
 
@@ -261,9 +268,13 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       val seller  = TxHelpers.signer(2)
       val matcher = TxHelpers.signer(3)
 
-      val genesis           = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, buyer, seller, matcher)
       val buyerIssuedAsset  = iasset(1)
       val sellerIssuedAsset = iasset(2)
+      // Neither trader holds any of the pair - that is what drives the balance negative - so the whole issued quantity
+      // sits with defaultSigner, since a genesis asset has to be fully distributed.
+      val genesis =
+        AddrWithBalance(defaultAddress, ENOUGH_AMT, Map(buyerIssuedAsset -> AssetQuantity, sellerIssuedAsset -> AssetQuantity)) +:
+          AddrWithBalance.enoughBalances(buyer, seller, matcher)
 
       val exchange = TxHelpers.exchangeFromOrders(
         TxHelpers.order(
@@ -293,8 +304,12 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     }
 
     val (genesis, exchange) = preconditionsAndExchange
-    assertDiffEi(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(exchange)), fsWithOrderFeature, genesis) { blockDiffEi =>
-      blockDiffEi should produce("negative asset balance")
+    withDomain(
+      domainSettingsWithFS(fsWithOrderFeature),
+      genesis,
+      assets = Seq(genesisAsset(iasset(1), AssetQuantity), genesisAsset(iasset(2), AssetQuantity))
+    ) { d =>
+      d.appendBlockE(exchange) should produce("negative asset balance")
     }
   }
 
@@ -350,8 +365,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         val sender = exchange.sender.toAddress
         val expectedMatcherPortfolio =
           Seq(
-            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.buyOrder, exchange.buyMatcherFee),
-            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.sellOrder, exchange.sellMatcherFee),
+            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.buyOrder, exchange.buyMatcherFee.value),
+            ExchangeTransactionDiff.getOrderFeePortfolio(exchange.sellOrder, exchange.sellMatcherFee.value),
             wavesPortfolio(-exchange.fee.value)
           ).fold(Portfolio())(_.combine(_).explicitGet())
 
@@ -394,8 +409,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     }
 
     preconditionsAndExchange.foreach { case (genesis, exchange) =>
-      assertDiffEi(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(exchange)), fsWithOrderFeature, genesis) { blockDiffEi =>
-        blockDiffEi should produce("AccountBalanceError")
+      withDomain(domainSettingsWithFS(fsWithOrderFeature), genesis) { d =>
+        d.appendBlockE(exchange) should produce("AccountBalanceError")
       }
     }
   }
@@ -443,13 +458,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     }
 
     val (genesis, exchange) = preconditionsAndExchange
-    assertDiffEi(
-      Seq(TestBlock.create(Seq())),
-      TestBlock.create(Seq(exchange)),
-      fsWithOrderFeature,
-      genesis
-    ) { blockDiffEi =>
-      blockDiffEi should produce("negative asset balance")
+    withDomain(domainSettingsWithFS(fsWithOrderFeature), genesis) { d =>
+      d.appendBlockE(exchange) should produce("negative asset balance")
     }
   }
 
@@ -474,7 +484,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         .foreach { case (_, balanceDiff) => balanceDiff.sum shouldBe 0 }
 
       val combinedPortfolio =
-        exchanges.map(ex => getOrderFeePortfolio(bigBuyOrder, ex.buyMatcherFee)).fold(Portfolio())(_.combine(_).explicitGet())
+        exchanges.map(ex => getOrderFeePortfolio(bigBuyOrder, ex.buyMatcherFee.value)).fold(Portfolio())(_.combine(_).explicitGet())
 
       val feeSumPaidByBuyer =
         bigBuyOrder.matcherFeeAssetId
@@ -494,13 +504,9 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       )
 
     val (genesises, massTransfer, exchanges, _) = preconditions
-    assertDiffEi(
-      Seq(TestBlock.create(Seq()), TestBlock.create(Seq(massTransfer))),
-      TestBlock.create(exchanges),
-      fsOrderMassTransfer,
-      genesises
-    ) { blockDiffEi =>
-      blockDiffEi should produce("Insufficient buy fee")
+    withDomain(domainSettingsWithFS(fsOrderMassTransfer), genesises) { d =>
+      d.appendBlock(massTransfer)
+      d.appendBlockE(exchanges*) should produce("Insufficient buy fee")
     }
   }
 
@@ -513,13 +519,9 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       )
 
     val (genesises, massTransfer, exchanges, _) = preconditions
-    assertDiffEi(
-      Seq(TestBlock.create(Seq()), TestBlock.create(Seq(massTransfer))),
-      TestBlock.create(exchanges),
-      fsOrderMassTransfer,
-      genesises
-    ) { blockDiffEi =>
-      blockDiffEi should produce("Too much buy")
+    withDomain(domainSettingsWithFS(fsOrderMassTransfer), genesises) { d =>
+      d.appendBlock(massTransfer)
+      d.appendBlockE(exchanges*) should produce("Too much buy")
     }
   }
 
@@ -592,16 +594,11 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
           .foreach { case (_, balanceDiff) => balanceDiff.sum shouldBe 0 }
 
         d.liquidSnapshot.balances((exchange.sender.toAddress, Waves)) shouldBe
-          d.rocksDBWriter.balance(exchange.sender.toAddress, Waves) + exchange.buyMatcherFee + exchange.sellMatcherFee - exchange.fee.value
+          d.rocksDBWriter.balance(exchange.sender.toAddress, Waves) + exchange.buyMatcherFee.value + exchange.sellMatcherFee.value - exchange.fee.value
       }
 
-      assertDiffEi(
-        Seq(TestBlock.create(Seq())),
-        TestBlock.create(Seq(exchange)),
-        fsWithBlockV5,
-        genesis
-      ) { ei =>
-        ei should produce("AccountBalanceError")
+      withDomain(domainSettingsWithFS(fsWithBlockV5), genesis) { d =>
+        d.appendBlockE(exchange) should produce("AccountBalanceError")
       }
     }
   }
@@ -641,7 +638,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val sell = TxHelpers.order(OrderType.SELL, issue, Waves, fee = MatcherFee, sender = seller, matcher = matcher, version = Order.V1)
     val tx   = createExTx(buy, sell, buy.price.value, matcher)
     assertDiffAndState(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(tx)), fs, genesis) { case (snapshot, state) =>
-      snapshot.balances((tx.sender.toAddress, Waves)) shouldBe tx.buyMatcherFee + tx.sellMatcherFee - tx.fee.value
+      snapshot.balances((tx.sender.toAddress, Waves)) shouldBe tx.buyMatcherFee.value + tx.sellMatcherFee.value - tx.fee.value
       state.balance(tx.sender.toAddress) shouldBe 1L
     }
   }
@@ -682,8 +679,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       version = Order.V1
     )
     val tx = createExTx(buy, sell, buy.price.value, matcher)
-    assertDiffEi(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(tx)), fsWithOrderFeature, genesis) { snapshotEi =>
-      inside(snapshotEi) { case Left(TransactionValidationError(AccountBalanceError(errs), _)) =>
+    withDomain(domainSettingsWithFS(fsWithOrderFeature), genesis) { d =>
+      inside(d.appendBlockE(tx)) { case Left(TransactionValidationError(AccountBalanceError(errs), _)) =>
         errs should contain key seller.toAddress
       }
     }
@@ -773,7 +770,6 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val matcher = TxHelpers.signer(3)
 
     val genesis            = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, buyer, seller, matcher)
-    val baseBlocks         = Seq(TestBlock.create(Seq())) // Height 1: carries the genesis snapshot
 
     val amountAsset = iasset(2)
     val priceAsset  = iasset(1)
@@ -890,8 +886,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         chainId = AddressScheme.current.chainId
       )
 
-      assertDiffEi(baseBlocks, TestBlock.create(Seq(exchange)), fsWithRideV6) { blockDiffEi =>
-        blockDiffEi should produce(expectedError)
+      withDomain(domainSettingsWithFS(fsWithRideV6), genesis) { d =>
+        d.appendBlockE(exchange) should produce(expectedError)
       }
     }
   }
@@ -1171,8 +1167,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         val fee = 100000000L
         val fixed = tx
           .copy(
-            buyMatcherFee = fee,
-            sellMatcherFee = fee,
+            buyMatcherFee = TxMatcherFee.unsafeFrom(fee),
+            sellMatcherFee = TxMatcherFee.unsafeFrom(fee),
             fee = TxPositiveAmount.unsafeFrom(fee),
             order1 = { val o = tx.order1.copy(version = Order.V4, matcherFee = TxMatcherFee.unsafeFrom(fee)); o.withProofs(Proofs(ByteStr(buyer.sign(o.bodyBytes())))) },
             order2 = { val o = tx.order2.copy(version = Order.V4, matcherFee = TxMatcherFee.unsafeFrom(fee)); o.withProofs(Proofs(ByteStr(seller.sign(o.bodyBytes())))) },
@@ -1250,27 +1246,6 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     }
   }
 
-  property(s"NODE-970. Non-empty attachment field is allowed only after LightNode activation") {
-    val matcher = TxHelpers.defaultSigner
-    val issuer  = TxHelpers.secondSigner
-
-    withDomain(
-      ConsensusImprovements,
-      AddrWithBalance.enoughBalances(matcher, issuer)
-    ) { d =>
-      val asset = iasset(1)
-      val exchange = () =>
-        TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, Waves, asset, version = Order.V4, attachment = Some(ByteStr.fill(1)(1))),
-          TxHelpers.order(OrderType.SELL, Waves, asset, version = Order.V4, sender = TxHelpers.secondSigner),
-        )
-
-      d.appendBlockE(exchange()) should produce("Attachment field for orders is not supported yet")
-      d.appendBlock()
-      d.appendBlockE(exchange()) should beRight
-    }
-  }
-
   def script(caseType: String, v: Boolean, complex: Boolean = false): Seq[String] = Seq(true, false).map { full =>
     val expr =
       s"""
@@ -1335,12 +1310,12 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       case (_: Order, _: Order) =>
         val isBuyerReceiveAmountGreaterThanFee =
           if (ex.buyOrder.assetPair.amountAsset == ex.buyOrder.matcherFeeAssetId) {
-            ExchangeTransactionDiff.getReceiveAmount(ex.buyOrder, 8, 8, ex.amount.value, ex.price.value).explicitGet() > ex.buyMatcherFee
+            ExchangeTransactionDiff.getReceiveAmount(ex.buyOrder, 8, 8, ex.amount.value, ex.price.value).explicitGet() > ex.buyMatcherFee.value
           } else true
 
         val isSellerReceiveAmountGreaterThanFee =
           if (ex.sellOrder.assetPair.amountAsset == ex.sellOrder.matcherFeeAssetId) {
-            ExchangeTransactionDiff.getReceiveAmount(ex.sellOrder, 8, 8, ex.amount.value, ex.price.value).explicitGet() > ex.sellMatcherFee
+            ExchangeTransactionDiff.getReceiveAmount(ex.sellOrder, 8, 8, ex.amount.value, ex.price.value).explicitGet() > ex.sellMatcherFee.value
           } else true
 
         isBuyerReceiveAmountGreaterThanFee && isSellerReceiveAmountGreaterThanFee

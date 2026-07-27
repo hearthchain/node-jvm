@@ -3,7 +3,6 @@ package com.wavesplatform.finalization
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.{Domain, defaultVrfKey}
 import com.wavesplatform.state.*
 import com.wavesplatform.test.DomainPresets.*

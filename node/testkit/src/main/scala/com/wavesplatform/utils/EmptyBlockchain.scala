@@ -4,7 +4,6 @@ import com.typesafe.config.ConfigFactory
 import com.wavesplatform.account.Address
 import com.wavesplatform.block.SignedBlockHeader
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.settings.BlockchainSettings
 import com.wavesplatform.state.*
 import com.wavesplatform.state.TxMeta.Status

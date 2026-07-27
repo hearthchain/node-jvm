@@ -1,6 +1,5 @@
 package com.wavesplatform.api.http
 
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.state.{Blockchain, Height}
 import com.wavesplatform.transaction.TxValidationError.GenericError

@@ -2,9 +2,10 @@ package com.wavesplatform.state
 
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.settings.Constants
 import com.wavesplatform.state.diffs.BlockDiffer.Fraction
+
+import scala.annotation.unused
 
 object BlockRewardCalculator {
 
@@ -23,7 +24,7 @@ object BlockRewardCalculator {
   val GuaranteedMinerReward: Long = 2 * Constants.UnitsInWave
   val RewardBoost                 = 10
 
-  def fullRewardAt(height: Height, blockchain: Blockchain): Long =
+  def fullRewardAt(@unused height: Height, blockchain: Blockchain): Long =
     blockchain.settings.rewardsSettings.initial
 
   def rewardSharesAt(

@@ -8,11 +8,9 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{WithDomain, WithState}
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.{GenerationPeriod, GeneratorIndex, Height, diffs}
-import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import monix.execution.Scheduler.global
 import org.apache.pekko.http.scaladsl.model.StatusCodes.{NotFound, OK}

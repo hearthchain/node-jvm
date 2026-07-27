@@ -10,7 +10,7 @@ import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.lease.LeaseTransaction
 import com.wavesplatform.transaction.transfer.*
-import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 
 class BalanceDiffValidationTest extends PropSpec with WithState {
   private val master = TxHelpers.signer(1)

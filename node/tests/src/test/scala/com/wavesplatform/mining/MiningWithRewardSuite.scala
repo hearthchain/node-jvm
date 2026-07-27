@@ -8,13 +8,12 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.database.{RDB, TestStorageFactory}
 import com.wavesplatform.db.DBCacheSettings
-import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatures}
+import com.wavesplatform.features.BlockchainFeature
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.settings.*
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.state.{BlockEndorser, Blockchain, BlockchainUpdaterImpl, EndorsementStorage, NG}
 import com.wavesplatform.transaction.Asset.Waves
-import com.wavesplatform.state.utils.TestRocksDB
 import com.wavesplatform.transaction.{BlockchainUpdater, Transaction, TxHelpers}
 import com.wavesplatform.utx.UtxPoolImpl
 import com.wavesplatform.wallet.Wallet

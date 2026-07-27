@@ -88,8 +88,6 @@ case class FunctionalitySettings(
       Range.inclusive((height - 1) / ws * ws + 1, ((height - 1) / ws + 1) * ws)
     }
 
-  def blocksForFeatureActivation(height: Int): Int = blocksForFeatureActivation
-
   def generatingBalanceDepth(height: Int): Int = 1000
 }
 

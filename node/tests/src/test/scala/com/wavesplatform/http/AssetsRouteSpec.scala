@@ -7,18 +7,15 @@ import com.wavesplatform.api.http.ApiError.{AssetIdNotSpecified, AssetsDoesNotEx
 import com.wavesplatform.api.http.RouteTimeout
 import com.wavesplatform.api.http.assets.AssetsApiRoute
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.{Domain, defaultSigner}
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.{AssetDescription, Height, TransactionId}
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.Asset.IssuedAsset
-import com.wavesplatform.transaction.TxHelpers.*
-import com.wavesplatform.transaction.{AssetIdLength, Transaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{AssetIdLength, Transaction, TxHelpers}
 import com.wavesplatform.utils.SharedSchedulerMixin
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, FormData, HttpEntity, StatusCodes}
 import org.apache.pekko.http.scaladsl.server.Route

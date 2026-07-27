@@ -1,7 +1,6 @@
 package com.wavesplatform.network
 import java.util.concurrent.CountDownLatch
 
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.test.FreeSpec
 import com.wavesplatform.transaction.smart.script.trace.TracedResult

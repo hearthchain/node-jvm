@@ -9,7 +9,7 @@ import com.wavesplatform.crypto.*
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.protobuf.transaction.PBTransactions
-import com.wavesplatform.settings.{FunctionalitySettings, GenesisSettings}
+import com.wavesplatform.settings.GenesisSettings
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.TxValidationError.GenericError
@@ -50,7 +50,7 @@ case class Block(
 ) {
   import Block.*
 
-  val id: Coeval[ByteStr] = Coeval.evalOnce(Block.idFromHeader(header, signature))
+  val id: Coeval[ByteStr] = Coeval.evalOnce(Block.idFromHeader(header))
 
   def signedHeader: SignedBlockHeader = SignedBlockHeader(header, signature)
 
@@ -112,7 +112,7 @@ case class Block(
 }
 
 object Block {
-  def idFromHeader(h: BlockHeader, signature: ByteStr): ByteStr = protoHeaderHash(h)
+  def idFromHeader(h: BlockHeader): ByteStr = protoHeaderHash(h)
 
   def protoHeaderHash(h: BlockHeader): ByteStr = {
     ByteStr(crypto.fastHash(PBBlocks.protobuf(h).toByteArray))
@@ -195,11 +195,10 @@ object Block {
 
   /** The genesis block has no transactions: its effect on the state is the predefined snapshot built from [[GenesisSettings]]. */
   def genesis(
-      genesisSettings: GenesisSettings,
-      functionalitySettings: FunctionalitySettings
+      genesisSettings: GenesisSettings
   ): Either[ValidationError, Block] =
     for {
-      snapshot <- GenesisSnapshot.build(genesisSettings, functionalitySettings)
+      snapshot <- GenesisSnapshot.build(genesisSettings)
       baseTarget = genesisSettings.initialBaseTarget
       timestamp  = genesisSettings.blockTimestamp
       // The state hash goes into the header before signing: the block is protobuf-serialized, so its body bytes cover it
@@ -268,5 +267,5 @@ object Block {
 }
 
 case class SignedBlockHeader(header: BlockHeader, signature: ByteStr) {
-  val id: Coeval[ByteStr] = Coeval.evalOnce(Block.idFromHeader(header, signature))
+  val id: Coeval[ByteStr] = Coeval.evalOnce(Block.idFromHeader(header))
 }

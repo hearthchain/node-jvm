@@ -13,7 +13,7 @@ object PBImplicitConversions {
   // The canonical on-chain form is the 21-byte payload (version || hash); see PBRecipients.toAddress, which parses it back
   extension (a: Address) def toPB: Recipient = Recipient.of(PBByteString.copyFrom(a.toBytes()))
 
-  extension (r: Recipient) def toAddress(chainId: Byte): Either[ValidationError, Address] = PBRecipients.toAddress(r, chainId)
+  extension (r: Recipient) def toAddress: Either[ValidationError, Address] = PBRecipients.toAddress(r)
 
   implicit def fromAssetIdAndAmount(v: (VanillaAssetId, Long)): Amount = v match {
     case (IssuedAsset(assetId), amount) =>

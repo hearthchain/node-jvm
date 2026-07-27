@@ -9,7 +9,6 @@ import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.database.{RDB, TestStorageFactory}
 import com.wavesplatform.db.{DBCacheSettings, WithState}
 import com.wavesplatform.events.BlockchainUpdateTriggers
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.settings.{WavesSettings, *}
 import com.wavesplatform.state.*
@@ -309,7 +308,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
     val settings0     = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
     val settings      = settings0.copy(featuresSettings = settings0.featuresSettings.copy(autoShutdownOnUnsupportedFeature = false))
     val bcu =
-      new BlockchainUpdaterImpl(defaultWriter, settings, ntpTime, ignoreBlockchainUpdateTriggers, (_, _) => Map.empty)
+      new BlockchainUpdaterImpl(defaultWriter, settings, ntpTime, ignoreBlockchainUpdateTriggers)
     val pos = PoSSelector(bcu, settings.synchronizationSettings.maxBaseTarget)
     try {
       blocks.foreach { block =>

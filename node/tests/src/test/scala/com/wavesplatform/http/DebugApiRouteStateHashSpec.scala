@@ -4,7 +4,6 @@ import com.wavesplatform.*
 import com.wavesplatform.api.http.{DebugApiRoute, RouteTimeout}
 import com.wavesplatform.block.Block
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.TestMiner
 import com.wavesplatform.network.PeerDatabase

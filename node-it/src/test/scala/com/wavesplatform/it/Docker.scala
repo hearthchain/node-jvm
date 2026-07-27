@@ -618,7 +618,7 @@ object Docker {
 
     // Only the pre-activated features matter here: they gate the genesis generators
     val fs               = FunctionalitySettings(preActivatedFeatures = features)
-    val genesisSignature = Block.genesis(gs, fs).explicitGet().id()
+    val genesisSignature = Block.genesis(gs).explicitGet().id()
 
     parseString(s"waves.blockchain.custom.genesis.signature = $genesisSignature").withFallback(timestampOverrides)
   }

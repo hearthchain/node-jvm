@@ -7,9 +7,6 @@ import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.serialization.impl.LeaseTxSerializer
 import com.wavesplatform.transaction.validation.TxValidator
 import com.wavesplatform.transaction.validation.impl.LeaseTxValidator
-import eu.timepit.refined.*
-import eu.timepit.refined.api.{RefType, Refined}
-import eu.timepit.refined.generic.Equal
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 

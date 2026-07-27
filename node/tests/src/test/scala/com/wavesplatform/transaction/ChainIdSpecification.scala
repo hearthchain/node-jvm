@@ -17,14 +17,13 @@ import tech.hearth.crypto.SigningKey
 class ChainIdSpecification extends PropSpec {
   private val otherChainId = 'W'.toByte
 
-  private def txParams: Gen[(TxVersion, SigningKey, TxPositiveAmount, TxPositiveAmount, TxTimestamp)] =
+  private def txParams: Gen[(SigningKey, TxPositiveAmount, TxPositiveAmount, TxTimestamp)] =
     for {
-      version <- Gen.oneOf(1, 2, 3)
       sender  <- accountGen
       amount  <- Gen.choose(1L, 10000000L)
       fee     <- Gen.choose(1000000L, 10000000L)
       ts      <- Gen.choose(1L, 1000000L)
-    } yield (version.toByte, sender, TxPositiveAmount.unsafeFrom(amount), TxPositiveAmount.unsafeFrom(fee), ts)
+    } yield (sender, TxPositiveAmount.unsafeFrom(amount), TxPositiveAmount.unsafeFrom(fee), ts)
 
   private def validateFromOtherNetwork(tx: Transaction): Unit = {
     tx.chainId should not be AddressScheme.current.chainId
@@ -37,11 +36,11 @@ class ChainIdSpecification extends PropSpec {
     val recoveredTx = recoveredTxEi.explicitGet().asInstanceOf[ProvenTransaction]
 
     recoveredTx shouldBe tx
-    recoveredTx.firstProofIsValidSignatureBeforeV6.explicitGet()
+    recoveredTx.firstProofIsValidSignatureAfterV6.explicitGet()
   }
 
   property("TransferTransaction validation") {
-    forAll(txParams) { case (_, sender, amount, fee, ts) =>
+    forAll(txParams) { case (sender, amount, fee, ts) =>
       validateFromOtherNetwork(
         TransferTransaction(
           PublicKey(sender.publicKey),
@@ -60,7 +59,7 @@ class ChainIdSpecification extends PropSpec {
   }
 
   property("LeaseTransaction validation") {
-    forAll(txParams) { case (_, sender, amount, fee, ts) =>
+    forAll(txParams) { case (sender, amount, fee, ts) =>
       validateFromOtherNetwork(
         LeaseTransaction
           .create(otherChainId, PublicKey(sender.publicKey), sender.toAddress, amount.value, fee.value, ts, Proofs.empty)
@@ -71,7 +70,7 @@ class ChainIdSpecification extends PropSpec {
   }
 
   property("ExchangeTransaction validation") {
-    forAll(txParams) { case (_, sender, amount, fee, ts) =>
+    forAll(txParams) { case (sender, amount, fee, ts) =>
       val pair = AssetPair(Waves, IssuedAsset(ByteStr(bytes32gen.sample.get)))
       validateFromOtherNetwork(
         ExchangeTransaction(
@@ -79,8 +78,8 @@ class ChainIdSpecification extends PropSpec {
           TxHelpers.buy(Order.V3, sender, PublicKey(sender.publicKey), pair, amount.value, amount.value, ts, ts + ts, fee.value).explicitGet(),
           TxExchangeAmount.unsafeFrom(amount.value),
           TxExchangePrice.unsafeFrom(amount.value),
-          fee.value,
-          fee.value,
+          TxMatcherFee.unsafeFrom(fee.value),
+          TxMatcherFee.unsafeFrom(fee.value),
           fee,
           ts,
           Proofs.empty,
@@ -91,7 +90,7 @@ class ChainIdSpecification extends PropSpec {
   }
 
   property("LeaseCancelTransaction validation") {
-    forAll(txParams) { case (_, sender, _, fee, ts) =>
+    forAll(txParams) { case (sender, _, fee, ts) =>
       validateFromOtherNetwork(
         LeaseCancelTransaction(
           PublicKey(sender.publicKey),
@@ -106,7 +105,7 @@ class ChainIdSpecification extends PropSpec {
   }
 
   property("MassTransferTransaction validation") {
-    forAll(txParams) { case (_, sender, amount, fee, ts) =>
+    forAll(txParams) { case (sender, amount, fee, ts) =>
       validateFromOtherNetwork(
         MassTransferTransaction(
           
@@ -124,7 +123,7 @@ class ChainIdSpecification extends PropSpec {
   }
 
   property("CommitToGenerationTransaction validation") {
-    forAll(txParams) { case (version, sender, _, fee, ts) =>
+    forAll(txParams) { case (sender, _, fee, ts) =>
       validateFromOtherNetwork(
         TxHelpers.commitToGeneration(
           generationPeriodStart = Height(3001),

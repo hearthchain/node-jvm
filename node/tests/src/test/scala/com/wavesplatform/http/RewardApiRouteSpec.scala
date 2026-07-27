@@ -4,7 +4,6 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.api.http.RewardApiRoute
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.Height

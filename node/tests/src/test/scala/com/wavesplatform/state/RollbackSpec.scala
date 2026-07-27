@@ -4,11 +4,9 @@ import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.api.common.LeaseInfo
 import com.wavesplatform.api.common.LeaseInfo.Status.Active
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.features.*
-import com.wavesplatform.features.BlockchainFeatures.*
 import com.wavesplatform.history
 import com.wavesplatform.history.defaultSigner
 import com.wavesplatform.lagonaki.mocks.TestBlock
@@ -17,7 +15,7 @@ import com.wavesplatform.state.{Height, TransactionId}
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxHelpers.*
-import com.wavesplatform.transaction.{Transaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Transaction, TxHelpers}
 import monix.execution.Scheduler.Implicits.global
 import org.scalatest.{Assertion, Assertions}
 import tech.hearth.crypto.SigningKey

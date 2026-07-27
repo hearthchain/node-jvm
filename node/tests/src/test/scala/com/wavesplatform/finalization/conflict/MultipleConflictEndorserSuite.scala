@@ -1,7 +1,6 @@
 package com.wavesplatform.finalization.conflict
 
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.finalization.BaseFinalizationSpec
 import com.wavesplatform.state.{GeneratorIndex, Height}
 import com.wavesplatform.test.DomainPresets.*

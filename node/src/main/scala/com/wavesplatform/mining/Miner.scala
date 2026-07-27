@@ -138,7 +138,7 @@ class MinerImpl(
       reference: ByteStr,
       prevStateHash: Option[ByteStr]
   ): (Seq[Transaction], MiningConstraint, Option[ByteStr]) = {
-    val estimators = MiningConstraints(blockchainUpdater, blockchainUpdater.height, Some(minerSettings))
+    val estimators = MiningConstraints(Some(minerSettings))
     val keyBlockStateHash = prevStateHash.flatMap { prevHash =>
       BlockDiffer
         .createInitialBlockSnapshot(blockchainUpdater, reference, miner, None)
@@ -179,7 +179,7 @@ class MinerImpl(
       val stopReasons = for {
         _ <- Right(())
         balance = blockchain.generatingBalance(address)
-        _ <- Either.raiseUnless(GeneratingBalanceProvider.isMiningAllowed(blockchain, newBlockHeight, balance)) {
+        _ <- Either.raiseUnless(GeneratingBalanceProvider.isMiningAllowed(balance)) {
           s"$address is not committed on $newBlockHeight. Try to commit to generation on next period"
         }
         _ <- Either.raiseWhen(blockchain.isConflict(newBlockHeight, address)) {
@@ -245,7 +245,7 @@ class MinerImpl(
   def nextBlockGenerationTime(blockchain: Blockchain, signingKey: SigningKey, vrfKey: VrfKey): Either[String, Long] = {
     val balance = blockchain.generatingBalance(signingKey.toAddress)
 
-    if (GeneratingBalanceProvider.isMiningAllowed(blockchain, Height(blockchain.height), balance)) {
+    if (GeneratingBalanceProvider.isMiningAllowed(balance)) {
       val lastBlockHeader = blockchain.lastBlockHeader.get.header
       val blockDelayE     = pos.copy(blockchain = blockchain).getValidBlockDelay(blockchain.height, vrfKey, lastBlockHeader.baseTarget, balance)
       for {
@@ -255,7 +255,7 @@ class MinerImpl(
       } yield expectedTS
     } else
       Left(
-        s"Balance $balance of ${signingKey.toAddress} is lower than required for generation: ${GeneratingBalanceProvider.minMiningBalance(blockchain, Height(blockchain.height))}"
+        s"Balance $balance of ${signingKey.toAddress} is lower than required for generation: ${GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2}"
       )
   }
 

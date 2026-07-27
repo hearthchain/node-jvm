@@ -25,7 +25,7 @@ case class ActivationApiRoute(settings: RestAPISettings, featuresSettings: Featu
         ActivationStatus(
           height,
           blockchain.settings.functionalitySettings.activationWindowSize(height.toInt),
-          blockchain.settings.functionalitySettings.blocksForFeatureActivation(height.toInt),
+          blockchain.settings.functionalitySettings.blocksForFeatureActivation,
           Height(blockchain.settings.functionalitySettings.activationWindow(height.toInt).last),
           featureIds.map { id =>
             val status = blockchain.featureStatus(id, height.toInt)

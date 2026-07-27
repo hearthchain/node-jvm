@@ -58,11 +58,11 @@ object PBSnapshots {
 
   def fromProtobuf(pbSnapshot: TransactionStateSnapshot, txId: ByteStr, height: Height): (StateSnapshot, TxMeta.Status) = {
     val balances: VectorMap[(Address, Asset), Long] =
-      VectorMap() ++ pbSnapshot.balances.map(b => (b.address.toAddress(), b.getAmount.assetId.toAssetId) -> b.getAmount.amount)
+      VectorMap() ++ pbSnapshot.balances.map(b => (b.address.toAddress, b.getAmount.assetId.toAssetId) -> b.getAmount.amount)
 
     val leaseBalances: Map[Address, LeaseBalance] =
       pbSnapshot.leaseBalances
-        .map(b => b.address.toAddress() -> LeaseBalance(b.in, b.out))
+        .map(b => b.address.toAddress -> LeaseBalance(b.in, b.out))
         .toMap
 
     val assetStatics: Map[IssuedAsset, (AssetStaticInfo, Int)] =
@@ -93,7 +93,7 @@ object PBSnapshots {
       l.leaseId.toByteStr ->
         LeaseStaticInfo(
           l.senderPublicKey.toPublicKey,
-          l.recipientAddress.toAddress(),
+          l.recipientAddress.toAddress,
           TxPositiveAmount.unsafeFrom(l.amount),
           TransactionId(txId),
           height

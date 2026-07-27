@@ -6,7 +6,6 @@ import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.db.DBCacheSettings
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.BlockWithMaxBaseTargetTest.Env
 import com.wavesplatform.settings.*
@@ -14,12 +13,10 @@ import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.state.*
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.diffs.ENOUGH_AMT
-import com.wavesplatform.state.utils.TestRocksDB
 import com.wavesplatform.test.{FreeSpec, HasSecurityManager}
 import com.wavesplatform.transaction.BlockchainUpdater
 import com.wavesplatform.utils.BaseTargetReachedMaximum
 import com.wavesplatform.utx.UtxPoolImpl
-import com.wavesplatform.wallet.Wallet
 import io.netty.channel.group.DefaultChannelGroup
 import io.netty.util.concurrent.GlobalEventExecutor
 import monix.eval.Task
@@ -43,7 +40,6 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
     "node should stop if base target greater than maximum in block creation " in {
       withEnv { case Env(settings, pos, bcu, utxPoolStub, scheduler, account, lastBlock) =>
         val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
-        val wallet      = Wallet(WalletSettings(None, Some("123"), None))
         val miner = new MinerImpl(
           allChannels,
           bcu,
@@ -116,7 +112,7 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
     )
 
     val bcu =
-      new BlockchainUpdaterImpl(defaultWriter, settings, ntpTime, ignoreBlockchainUpdateTriggers, (_, _) => Map.empty)
+      new BlockchainUpdaterImpl(defaultWriter, settings, ntpTime, ignoreBlockchainUpdateTriggers)
     val pos = PoSSelector(bcu, settings.synchronizationSettings.maxBaseTarget)
 
     val utxPoolStub = new UtxPoolImpl(ntpTime, bcu, settings0.utxSettings, settings.maxTxErrorLogSize, settings0.minerSettings.enable)

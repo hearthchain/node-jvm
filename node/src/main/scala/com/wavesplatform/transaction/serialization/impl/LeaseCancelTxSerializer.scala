@@ -1,6 +1,5 @@
 package com.wavesplatform.transaction.serialization.impl
 
-import com.wavesplatform.transaction.TxVersion
 import com.wavesplatform.transaction.lease.LeaseCancelTransaction
 import play.api.libs.json.{JsObject, Json}
 

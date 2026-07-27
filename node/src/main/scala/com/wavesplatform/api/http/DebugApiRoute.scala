@@ -236,8 +236,7 @@ case class DebugApiRoute(
       sh <- db.loadStateHash(Height(height))
       h  <- blockchain.blockHeader(height)
     } yield {
-      val deterministicFinalityActivated = true
-      val stateHashJson                  = StateHash.toJson(sh)
+      val stateHashJson = StateHash.toJson(sh)
       stateHashJson ++ Json.obj(
         "snapshotHash" -> db.snapshotStateHash(height),
         "blockId"      -> h.id().toString,

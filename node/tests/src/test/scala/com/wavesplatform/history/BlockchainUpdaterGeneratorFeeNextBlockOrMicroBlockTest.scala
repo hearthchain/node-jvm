@@ -2,7 +2,6 @@ package com.wavesplatform.history
 
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.state.diffs.*
 import com.wavesplatform.test.*
@@ -45,7 +44,6 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
           Seq.empty[Transaction],
           Seq(Seq(somePayment), Seq(generatorPaymentOnFee, someOtherPayment)),
           defaultSigner,
-          3,
           somePayment.timestamp
         )
         domain.blockchainUpdater.processBlock(block) should beRight
@@ -71,7 +69,6 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
           Seq.empty[Transaction],
           Seq(Seq(somePayment), Seq(generatorPaymentOnFee, someOtherPayment)),
           defaultSigner,
-          3,
           somePayment.timestamp
         )
         domain.blockchainUpdater.processBlock(block) should beRight

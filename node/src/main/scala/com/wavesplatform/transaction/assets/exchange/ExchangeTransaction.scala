@@ -19,8 +19,8 @@ case class ExchangeTransaction(
     order2: Order,
     amount: TxExchangeAmount,
     price: TxExchangePrice,
-    buyMatcherFee: Long,
-    sellMatcherFee: Long,
+    buyMatcherFee: TxMatcherFee,
+    sellMatcherFee: TxMatcherFee,
     fee: TxPositiveAmount,
     timestamp: Long,
     proofs: Proofs,
@@ -36,15 +36,10 @@ case class ExchangeTransaction(
 
   val (buyOrder, sellOrder) = if (order1.orderType == OrderType.BUY) (order1, order2) else (order2, order1)
 
-  override protected def verifyFirstProof(isRideV6Activated: Boolean): Either[GenericError, Unit] =
-    super.verifyFirstProof(isRideV6Activated).tap { _ =>
-      if (isRideV6Activated) {
-        order1.firstProofIsValidSignatureAfterV6
-        order2.firstProofIsValidSignatureAfterV6
-      } else {
-        order1.firstProofIsValidSignatureBeforeV6
-        order2.firstProofIsValidSignatureBeforeV6
-      }
+  override protected def verifyFirstProof(): Either[GenericError, Unit] =
+    super.verifyFirstProof().tap { _ =>
+      order1.firstProofIsValidSignatureAfterV6
+      order2.firstProofIsValidSignatureAfterV6
     }
 
   override val sender: PublicKey = buyOrder.matcherPublicKey
@@ -78,13 +73,15 @@ object ExchangeTransaction {
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
       amount <- TxExchangeAmount(amount)(GenericError(TxExchangeAmount.errMsg))
       price  <- TxExchangePrice(price)(GenericError(TxExchangePrice.errMsg))
+      bmf    <- TxMatcherFee(buyMatcherFee)(GenericError(TxMatcherFee.errMsg))
+      smf    <- TxMatcherFee(sellMatcherFee)(GenericError(TxMatcherFee.errMsg))
       tx <- ExchangeTransaction(
         order1,
         order2,
         amount,
         price,
-        buyMatcherFee,
-        sellMatcherFee,
+        bmf,
+        smf,
         fee,
         timestamp,
         proofs,

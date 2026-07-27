@@ -1,6 +1,5 @@
 package com.wavesplatform.history
 
-import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -20,11 +19,10 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
   property("resulting miner balance should not depend on tx distribution among blocks and microblocks") {
     // The accounts are credited by the genesis snapshot, so the sequences are chained onto the domain's genesis block
     forAll(g(100, 5)) { case (balances, miner, payments, intSeqs, ts) =>
-      val version = 3: Byte
       val finalMinerBalances = intSeqs.map { intSeq =>
         withDomain(MicroblocksActivatedAt0WavesSettings, balances) { d =>
-          val bmb  = r(payments, intSeq, d.lastBlockId, miner, version, ts)
-          val last = customBuildBlockOfTxs(bestRef(bmb.last), Seq.empty, miner, version, ts)
+          val bmb  = r(payments, intSeq, d.lastBlockId, miner, ts)
+          val last = customBuildBlockOfTxs(bestRef(bmb.last), Seq.empty, miner, ts)
           bmb.foreach { case (b, mbs) =>
             d.blockchainUpdater.processBlock(b) should beRight
             mbs.foreach(mb => d.blockchainUpdater.processMicroBlock(mb, None) should beRight)
@@ -51,8 +49,8 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       MicroblocksActivatedAt0WavesSettings,
       s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
     ) { case (domain, (master, miner, payment, ts)) =>
-      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, Seq(Seq(payment)), miner, 3, ts)
-      val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, 3, ts)
+      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, Seq(Seq(payment)), miner, ts)
+      val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, ts)
       domain.blockchainUpdater.processBlock(base) should beRight
       domain.blockchainUpdater.processMicroBlock(micros.head, None) should beRight
       domain.blockchainUpdater.processBlock(emptyBlock) should beRight
@@ -82,8 +80,8 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       MicroblocksActivatedAt0WavesSettings,
       s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
     ) { case (domain, (_, miner, microBlockTxs, ts)) =>
-      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, microBlockTxs, miner, 3, ts)
-      val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, 3, ts)
+      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, microBlockTxs, miner, ts)
+      val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, ts)
       domain.blockchainUpdater.processBlock(base) should beRight
       micros.foreach(domain.blockchainUpdater.processMicroBlock(_, None) should beRight)
       domain.blockchainUpdater.processBlock(emptyBlock) should beRight
@@ -178,11 +176,10 @@ object BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest {
       sizes: BlockAndMicroblockSize,
       prev: ByteStr,
       signer: SigningKey,
-      version: TxVersion,
       timestamp: Long
   ): (BlockAndMicroblocks, Seq[Transaction]) = {
     val ((blockTxs, microblockTxs), rest) = take(txs, sizes)
-    (chainBaseAndMicro(prev, blockTxs, microblockTxs, signer, version, timestamp), rest)
+    (chainBaseAndMicro(prev, blockTxs, microblockTxs, signer, timestamp), rest)
   }
 
   def bestRef(r: BlockAndMicroblocks): ByteStr = r._2.lastOption match {
@@ -195,13 +192,12 @@ object BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest {
       sizes: BlockAndMicroblockSizes,
       initial: ByteStr,
       signer: SigningKey,
-      version: TxVersion,
       timestamp: Long
   ): BlockAndMicroblockSequence = {
     sizes
       .foldLeft((Seq.empty[BlockAndMicroblocks], txs)) { case ((acc, rest), s) =>
         val prev         = acc.headOption.map(bestRef).getOrElse(initial)
-        val (step, next) = stepR(rest, s, prev, signer, version, timestamp)
+        val (step, next) = stepR(rest, s, prev, signer, timestamp)
         (step +: acc, next)
       }
       ._1

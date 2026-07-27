@@ -1,7 +1,6 @@
 package com.wavesplatform.history
 
 import cats.syntax.option.*
-import com.wavesplatform.account.Address
 import com.wavesplatform.api.http.RewardApiRoute
 import com.wavesplatform.block.{Block, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
@@ -9,7 +8,6 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.database.{DBExt, Keys}
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.MiningConstraint
@@ -31,7 +29,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     m.totalFee.collectFirst { case a if a.assetId.isEmpty => a.amount }.getOrElse(0L)
 
   private val BlockRewardActivationHeight = 5
-  private val NGActivationHeight          = 0
   private val InitialReward               = 6 * Constants.UnitsInWave
   private val rewardSettings = settings.copy(
     blockchainSettings = DefaultBlockchainSettings.copy(
@@ -249,7 +246,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       b2        = mkEmptyBlock(genesisBlock.id(), miner1)
       b3        = mkEmptyBlock(b2.id(), miner1)
       b4        = TestBlock.create(ntpNow, b3.id(), Seq(tx1), miner1).block
-      (b5, m5s) = chainBaseAndMicro(b4.id(), Seq.empty, Seq(Seq(tx2)), miner2, 3.toByte, ntpNow)
+      (b5, m5s) = chainBaseAndMicro(b4.id(), Seq.empty, Seq(Seq(tx2)), miner2, ntpNow)
     } yield (miner1, miner2, Seq(genesisBlock, b2, b3, b4), b5, m5s)
 
     def differ(blockchain: Blockchain, prevBlock: Option[SignedBlockHeader], b: Block): BlockDiffer.Result =
@@ -306,7 +303,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       b2        = mkEmptyBlock(genesisBlock.id(), miner)
       b3        = mkEmptyBlock(b2.id(), miner)
       b4        = mkEmptyBlock(b3.id(), miner)
-      (b5, m5s) = chainBaseAndMicro(b4.id(), Seq.empty, Seq(Seq(tx)), miner, 3.toByte, ntpNow)
+      (b5, m5s) = chainBaseAndMicro(b4.id(), Seq.empty, Seq(Seq(tx)), miner, ntpNow)
       b6a       = TestBlock.create(ntpNow, m5s.last.totalResBlockSig, Seq.empty, miner).block
       b6b = TestBlock
         .sign(
@@ -864,7 +861,6 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     val daoAddress = TxHelpers.address(1)
 
     val settings                      = DomainPresets.ConsensusImprovements
-    val blockRewardDistributionHeight = if (blockRewardDistributionActivated) 0 else Int.MaxValue
     val modifiedRewardSettings = settings
       .copy(blockchainSettings =
         settings.blockchainSettings.copy(

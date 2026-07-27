@@ -14,8 +14,8 @@ import org.scalatest.*
 import scala.util.Random
 
 class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
-  private def verifyOrderSignature(order: Order, isRideV6Activated: Boolean): Either[?, ?] =
-    if (isRideV6Activated) order.firstProofIsValidSignatureAfterV6 else order.firstProofIsValidSignatureBeforeV6
+  private def verifyOrderSignature(order: Order): Either[?, ?] =
+    order.firstProofIsValidSignatureAfterV6
 
   property("Order serialization roundtrip") {
     forAll(orderV1Gen) { order =>
@@ -159,45 +159,45 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
 
       Random.nextBytes(rndAsset)
 
-      verifyOrderSignature(order, isRideV6Activated = true) should beRight
+      verifyOrderSignature(order) should beRight
 
-      verifyOrderSignature(order.copy(matcherPublicKey = PublicKey(pka.publicKey)), isRideV6Activated = true) should produce(err)
+      verifyOrderSignature(order.copy(matcherPublicKey = PublicKey(pka.publicKey))) should produce(err)
       val assetPair = order.assetPair
       verifyOrderSignature(
         order.copy(assetPair = assetPair.copy(amountAsset = IssuedAsset(ByteStr(rndAsset)))),
-        isRideV6Activated = true
+        
       ) should produce(err)
       verifyOrderSignature(
         order.copy(assetPair = assetPair.copy(priceAsset = IssuedAsset(ByteStr(rndAsset)))),
-        isRideV6Activated = true
+        
       ) should produce(err)
-      verifyOrderSignature(order.copy(orderType = OrderType.reverse(order.orderType)), isRideV6Activated = true) should produce(
+      verifyOrderSignature(order.copy(orderType = OrderType.reverse(order.orderType))) should produce(
         err
       )
       verifyOrderSignature(
         order.copy(price = TxOrderPrice.unsafeFrom(order.price.value + 1)),
-        isRideV6Activated = true
+        
       ) should produce(
         err
       )
       verifyOrderSignature(
         order.copy(amount = TxExchangeAmount.unsafeFrom(order.amount.value + 1)),
-        isRideV6Activated = true
+        
       ) should produce(err)
-      verifyOrderSignature(order.copy(expiration = order.expiration + 1), isRideV6Activated = true) should produce(err)
+      verifyOrderSignature(order.copy(expiration = order.expiration + 1)) should produce(err)
       verifyOrderSignature(
         order.copy(matcherFee = TxMatcherFee.unsafeFrom(order.matcherFee.value + 1)),
-        isRideV6Activated = true
+        
       ) should produce(err)
 
       val orderAuth = order.orderAuthentication.asInstanceOf[OrderProofs]
       verifyOrderSignature(
         order.copy(orderAuthentication = orderAuth.copy(key = PublicKey(pka.publicKey))),
-        isRideV6Activated = true
+        
       ) should produce(err)
       verifyOrderSignature(
         order.copy(orderAuthentication = orderAuth.copy(proofs = Proofs(Seq(ByteStr(pka.publicKey ++ pka.publicKey))))),
-        isRideV6Activated = true
+        
       ) should produce(err)
     }
   }

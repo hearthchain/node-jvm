@@ -160,7 +160,7 @@ object BlockDiffer {
 
     if (heightWithNewBlock == Height(0))
       // The genesis block has no transactions and earns no reward: its whole effect is the predefined snapshot
-      GenesisSnapshot.build(blockchain.settings.genesisSettings, blockchain.settings.functionalitySettings)
+      GenesisSnapshot.build(blockchain.settings.genesisSettings)
     else
       (for {
         (minerReward, daoPortfolio) <- addressRewardsE
@@ -300,12 +300,11 @@ object BlockDiffer {
   ): TracedResult[ValidationError, Result] = {
     val timestamp       = blockchain.lastBlockTimestamp.get
     val blockGenerator  = blockchain.lastBlockHeader.get.header.generator.toAddress
-    val rideV6Activated = true // RideV6 is active
 
     val txDiffer = TransactionDiffer(prevBlockTimestamp, timestamp, verify)
 
     if (verify && txSignParCheck)
-      ParSignatureChecker.checkTxSignatures(txs, rideV6Activated)
+      ParSignatureChecker.checkTxSignatures(txs)
 
     prepareCaches(blockGenerator, txs, loadCacheData)
 

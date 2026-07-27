@@ -9,7 +9,6 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.common.utils.{Base58, Base64}
 import com.wavesplatform.database.*
 import com.wavesplatform.database.protobuf.StaticAssetInfo
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.settings.Constants
 import com.wavesplatform.state.{Blockchain, Height, LeaseDetails, Portfolio, StateHash, StateSnapshot, TransactionId}
 import com.wavesplatform.transaction.Asset.IssuedAsset

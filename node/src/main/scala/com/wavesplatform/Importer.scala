@@ -246,7 +246,6 @@ object Importer extends ScorexLogging {
             if (blocksToSkip > 0) {
               blocksToSkip -= 1
             } else {
-              val rideV6                = true // RideV6 is active
               lazy val parsedProtoBlock = PBBlocks.vanilla(PBBlocks.addChainId(protobuf.block.PBBlock.parseFrom(blockBytes)))
               val block                 = parsedProtoBlock.get
               val blockSnapshot = snapshotsBytes.map { bytes =>
@@ -263,7 +262,7 @@ object Importer extends ScorexLogging {
                 )
               }
 
-              ParSignatureChecker.checkBlockAndTxSignatures(block, blockSnapshot.isEmpty, rideV6)
+              ParSignatureChecker.checkBlockAndTxSignatures(block, blockSnapshot.isEmpty)
 
               queue.enqueue(block -> blockSnapshot)
             }

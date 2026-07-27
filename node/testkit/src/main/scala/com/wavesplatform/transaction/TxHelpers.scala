@@ -10,7 +10,6 @@ import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.crypto.{DigestLength, SignatureLength}
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.mining.MiningAccount
-import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
 import com.wavesplatform.state.{Height, TransactionId}
 import com.wavesplatform.test.*
@@ -21,7 +20,7 @@ import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransac
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.ParsedTransfer
 import com.wavesplatform.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import monix.execution.atomic.AtomicLong
-import tech.hearth.crypto.{Crypto, KeyTree, SigningKey, VrfKey}
+import tech.hearth.crypto.{Crypto, SigningKey, VrfKey}
 
 import java.util.concurrent.ThreadLocalRandom
 

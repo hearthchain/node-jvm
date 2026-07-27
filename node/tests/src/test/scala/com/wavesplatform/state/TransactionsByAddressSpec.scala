@@ -10,12 +10,11 @@ import com.wavesplatform.db.{InterferableDB, WithDomain}
 import com.wavesplatform.history.Domain
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.settings.{Constants, GenesisBalanceSettings, GenesisSettings, WavesSettings}
-import com.wavesplatform.test.DomainPresets
 import com.wavesplatform.test.DomainPresets.RideV5
 import com.wavesplatform.test.FreeSpec
 import com.wavesplatform.transaction.TxHelpers.{defaultAddress, secondSigner}
 import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{Transaction, TransactionType, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Transaction, TransactionType, TxHelpers}
 import org.scalactic.source.Position
 import tech.hearth.crypto.SigningKey
 
@@ -60,7 +59,6 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
     val genesisBlock = Block
       .genesis(
         genesisSettings,
-        domainSettings.blockchainSettings.functionalitySettings,
       )
       .explicitGet()
 

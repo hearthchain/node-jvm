@@ -34,7 +34,6 @@ class BlockchainUpdaterImpl(
     wavesSettings: WavesSettings,
     time: Time,
     blockchainUpdateTriggers: BlockchainUpdateTriggers,
-    collectActiveLeases: (Height, Height) => Map[ByteStr, LeaseDetails],
     miner: Miner = Miner.StrictDisabledMiner
 ) extends Blockchain
     with BlockchainUpdater
@@ -61,11 +60,9 @@ class BlockchainUpdaterImpl(
   private var ngState: Option[NgState] = Option.empty
 
   @volatile
-  private var restTotalConstraint: MiningConstraint = MiningConstraints(rocksdb, rocksdb.height).total
+  private var restTotalConstraint: MiningConstraint = MiningConstraints().total
 
   private val internalLastBlockInfo = ReplaySubject.createLimited[LastBlockInfo](1)
-
-  private def lastBlockReward: Option[Long] = this.blockReward(this.height)
 
   private def publishLastBlockInfo(): Unit =
     for (id <- this.lastBlockId; ts <- ngState.map(_.base.header.timestamp).orElse(rocksdb.lastBlockTimestamp)) {
@@ -115,7 +112,7 @@ class BlockchainUpdaterImpl(
     val height = rocksdb.height + 1
 
     val featuresCheckPeriod        = functionalitySettings.activationWindowSize(height)
-    val blocksForFeatureActivation = functionalitySettings.blocksForFeatureActivation(height)
+    val blocksForFeatureActivation = functionalitySettings.blocksForFeatureActivation
 
     if (height % featuresCheckPeriod == 0) {
       val approvedFeatures = rocksdb
@@ -206,9 +203,8 @@ class BlockchainUpdaterImpl(
                   val logDetails = s"The referenced block(${block.header.reference})" +
                     s" ${if (rocksdb.contains(block.header.reference)) "exists, it's not last persisted" else "doesn't exist"}"
                   Left(BlockAppendError(s"References incorrect or non-existing block: " + logDetails, block))
-                case lastBlockId =>
-                  val height            = lastBlockId.fold(0)(rocksdb.unsafeHeightOf)
-                  val miningConstraints = MiningConstraints(rocksdb, height)
+                case _ =>
+                  val miningConstraints = MiningConstraints()
                   val reward            = computeNextReward
 
                   val referencedBlockchain = SnapshotBlockchain(rocksdb, reward)
@@ -236,8 +232,7 @@ class BlockchainUpdaterImpl(
             case Some(ng) =>
               if (ng.base.header.reference == block.header.reference) {
                 if (block.header.timestamp < ng.base.header.timestamp) {
-                  val height            = rocksdb.unsafeHeightOf(ng.base.header.reference)
-                  val miningConstraints = MiningConstraints(rocksdb, height)
+                  val miningConstraints = MiningConstraints()
 
                   val referencedBlockchain = SnapshotBlockchain(rocksdb, ng.reward)
                   BlockDiffer
@@ -286,9 +281,7 @@ class BlockchainUpdaterImpl(
                   case Some(liquid) =>
                     // Block on a new height
                     if (!verify || liquid.block.signatureValid()) {
-                      val referencedForgedBlockParentHeight = Height(rocksdb.heightOf(liquid.block.header.reference).getOrElse(0))
-
-                      val constraint = MiningConstraints(rocksdb, referencedForgedBlockParentHeight.toInt).total
+                      val constraint = MiningConstraints().total
 
                       val prevReward = ng.reward
                       val reward     = computeNextReward

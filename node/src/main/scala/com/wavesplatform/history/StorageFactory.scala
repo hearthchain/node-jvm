@@ -1,6 +1,6 @@
 package com.wavesplatform.history
 
-import com.wavesplatform.database.{DBExt, Keys, RDB, RocksDBWriter, loadActiveLeases}
+import com.wavesplatform.database.{DBExt, Keys, RDB, RocksDBWriter}
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.mining.Miner
 import com.wavesplatform.settings.WavesSettings
@@ -25,7 +25,6 @@ object StorageFactory extends ScorexLogging {
       settings,
       time,
       blockchainUpdateTriggers,
-      (minHeight, maxHeight) => loadActiveLeases(rdb, minHeight, maxHeight),
       miner
     )
     (bui, rocksDBWriter)

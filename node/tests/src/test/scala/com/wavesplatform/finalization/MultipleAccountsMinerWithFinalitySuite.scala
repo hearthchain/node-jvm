@@ -1,7 +1,6 @@
 package com.wavesplatform.finalization
 
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.mining.{Miner, MinerImpl}
 import com.wavesplatform.state.*

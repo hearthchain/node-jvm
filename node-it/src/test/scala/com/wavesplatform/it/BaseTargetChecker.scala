@@ -34,7 +34,6 @@ object BaseTargetChecker {
         Block
           .genesis(
             settings.blockchainSettings.genesisSettings,
-            settings.blockchainSettings.functionalitySettings,
           )
           .explicitGet()
       blockchainUpdater.processBlock(genesisBlock, genesisBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty)

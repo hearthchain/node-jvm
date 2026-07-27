@@ -3,7 +3,6 @@ package com.wavesplatform.http
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.api.http.ApiError.*
 import com.wavesplatform.api.http.{CustomJson, RouteTimeout, TransactionsApiRoute}
-import com.wavesplatform.block.Block
 import com.wavesplatform.common.merkle.Merkle
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
@@ -18,7 +17,7 @@ import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxHelpers.defaultAddress
 import com.wavesplatform.transaction.assets.exchange.{Order, OrderType}
 import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{AssetIdLength, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{AssetIdLength, TxHelpers}
 import com.wavesplatform.utils.SharedSchedulerMixin
 import com.wavesplatform.{BlockGen, TestValues, crypto}
 import org.apache.pekko.http.scaladsl.model.*

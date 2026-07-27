@@ -65,7 +65,7 @@ object PBTransactions {
     val result: Either[ValidationError, VanillaTransaction] = data match {
       case Data.Transfer(TransferTransactionData(Some(recipient), Some(amount), attachment, `empty`)) =>
         for {
-          address <- recipient.toAddress(chainId)
+          address <- recipient.toAddress
           tx <- vt.transfer.TransferTransaction.create(
             sender.toPublicKey,
             address,
@@ -81,7 +81,7 @@ object PBTransactions {
 
       case Data.Lease(LeaseTransactionData(Some(recipient), amount, `empty`)) =>
         for {
-          address <- recipient.toAddress(chainId)
+          address <- recipient.toAddress
           tx      <- vt.lease.LeaseTransaction.create(chainId, sender.toPublicKey, address, amount, feeAmount, timestamp, proofs)
         } yield tx
 
@@ -109,7 +109,7 @@ object PBTransactions {
       case Data.MassTransfer(mt) =>
         for {
           parsedTransfers <- mt.transfers.traverse { t =>
-            t.getRecipient.toAddress(chainId).flatMap { addressOrAlias =>
+            t.getRecipient.toAddress.flatMap { addressOrAlias =>
               TxNonNegativeAmount(t.amount)(NegativeAmount(t.amount, "asset"))
                 .map(ParsedTransfer(addressOrAlias, _))
             }
@@ -172,8 +172,8 @@ object PBTransactions {
         val data = ExchangeTransactionData(
           amount.value,
           price.value,
-          buyMatcherFee,
-          sellMatcherFee,
+          buyMatcherFee.value,
+          sellMatcherFee.value,
           Seq(PBOrders.protobuf(order1), PBOrders.protobuf(order2))
         )
         PBTransactions.create(tx.sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.Exchange(data))

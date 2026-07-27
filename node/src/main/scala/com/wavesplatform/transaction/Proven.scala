@@ -8,7 +8,7 @@ trait Proven extends Authorized {
   def proofs: Proofs
   val bodyBytes: Coeval[Array[Byte]]
 
-  protected def verifyFirstProof(isRideV6Activated: Boolean): Either[GenericError, Unit] =
+  protected def verifyFirstProof(): Either[GenericError, Unit] =
     if (proofs.size != 1) Left(GenericError("Transactions from non-scripted accounts must have exactly 1 proof"))
     else
       Either.cond(
@@ -17,8 +17,7 @@ trait Proven extends Authorized {
         GenericError(s"Proof doesn't validate as signature for $this")
       )
 
-  lazy val firstProofIsValidSignatureBeforeV6: Either[GenericError, Unit] = verifyFirstProof(false)
-  lazy val firstProofIsValidSignatureAfterV6: Either[GenericError, Unit]  = verifyFirstProof(true)
+  lazy val firstProofIsValidSignatureAfterV6: Either[GenericError, Unit] = verifyFirstProof()
 }
 
 object Proven {

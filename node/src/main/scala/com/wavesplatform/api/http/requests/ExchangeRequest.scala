@@ -3,7 +3,7 @@ package com.wavesplatform.api.http.requests
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.assets.exchange.{ExchangeTransaction, Order}
-import com.wavesplatform.transaction.{Proofs, TxTimestamp, TxVersion}
+import com.wavesplatform.transaction.{Proofs, TxTimestamp}
 import play.api.libs.json.{Format, Json}
 
 case class ExchangeRequest(

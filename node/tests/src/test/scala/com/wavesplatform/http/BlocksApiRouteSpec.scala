@@ -14,14 +14,13 @@ import com.wavesplatform.common.utils.EitherExt2.explicitGet
 import com.wavesplatform.crypto.bls.BlsSignature
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.state.{BlockRewardCalculator, Blockchain, GeneratorIndex, Height}
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.assets.exchange.{Order, OrderType}
-import com.wavesplatform.transaction.{TxHelpers, TxVersion}
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.{SharedSchedulerMixin, SystemTime}
 import monix.reactive.Observable
 import org.apache.pekko.http.scaladsl.model.StatusCodes

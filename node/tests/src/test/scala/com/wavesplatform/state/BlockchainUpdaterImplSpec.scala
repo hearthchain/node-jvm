@@ -7,7 +7,7 @@ import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{DBCacheSettings, WithDomain}
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
-import com.wavesplatform.history.{chainBaseAndMicro, randomSig}
+import com.wavesplatform.history.chainBaseAndMicro
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.diffs.ENOUGH_AMT
@@ -15,7 +15,7 @@ import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxValidationError.BlockAppendError
 import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{Transaction, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Transaction, TxHelpers}
 import com.wavesplatform.utils.{Schedulers, SystemTime, Time}
 import com.wavesplatform.{EitherMatchers, NTPTime}
 import monix.execution.Scheduler.Implicits.global

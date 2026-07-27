@@ -7,7 +7,6 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.PropSpec
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.assets.exchange.OrderJson.*
-import com.wavesplatform.transaction.Proofs
 import com.wavesplatform.utils.JsonMatchers
 import play.api.libs.json.*
 import tech.hearth.crypto.SigningKey
@@ -187,7 +186,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
 
         case JsSuccess(o: Order, _) =>
           o.json() should matchJson(json)
-          o.firstProofIsValidSignatureBeforeV6.explicitGet()
+          o.firstProofIsValidSignatureAfterV6.explicitGet()
       }
     }
   }

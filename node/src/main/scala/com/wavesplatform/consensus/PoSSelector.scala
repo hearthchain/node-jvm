@@ -3,10 +3,8 @@ package com.wavesplatform.consensus
 import cats.syntax.either.*
 import com.wavesplatform.block.{Block, BlockHeader}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.consensus.nxt.NxtLikeConsensusBlockData
 import com.wavesplatform.crypto
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.state.{Blockchain, Height}
@@ -20,7 +18,7 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
   import PoSCalculator.*
   import blockchain.settings as blockchainSettings
 
-  protected def posCalculator(height: Int): PoSCalculator = FairPoSCalculator.fromSettings(blockchain.settings.functionalitySettings)
+  protected def posCalculator(): PoSCalculator = FairPoSCalculator.fromSettings(blockchain.settings.functionalitySettings)
 
   def consensusData(
       vrfKey: VrfKey,
@@ -31,7 +29,7 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
       greatGrandParentTS: Option[Long],
       currentTime: Long
   ): Either[ValidationError, NxtLikeConsensusBlockData] = {
-    val bt = posCalculator(height).calculateBaseTarget(targetBlockDelay.toSeconds, height, refBlockBT, refBlockTS, greatGrandParentTS, currentTime)
+    val bt = posCalculator().calculateBaseTarget(targetBlockDelay.toSeconds, height, refBlockBT, refBlockTS, greatGrandParentTS, currentTime)
 
     checkBaseTargetLimit(bt, height).flatMap(_ =>
       getHitSource(height)
@@ -40,7 +38,7 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
   }
 
   def getValidBlockDelay(height: Int, vrfKey: VrfKey, refBlockBT: Long, balance: Long): Either[ValidationError, Long] = {
-    val pc = posCalculator(height)
+    val pc = posCalculator()
 
     getHit(height, vrfKey)
       .map(pc.calculateDelay(_, refBlockBT, balance))
@@ -52,7 +50,7 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
       gs <- vrfPublicKeyOf(header.generator, Height(parentHeight))
         .flatMap(crypto.verifyVRF(header.generationSignature, parentHitSource.arr, _))
         .map(_.arr)
-      ts = posCalculator(parentHeight).calculateDelay(hit(gs), parent.baseTarget, effectiveBalance) + parent.timestamp
+      ts = posCalculator().calculateDelay(hit(gs), parent.baseTarget, effectiveBalance) + parent.timestamp
       _ <- Either.cond(
         ts <= header.timestamp,
         (),
@@ -92,7 +90,7 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
   }
 
   private def calculateBaseTarget(height: Int, timestamp: Long, parent: BlockHeader, grandParent: Option[BlockHeader]): Long = {
-    posCalculator(height).calculateBaseTarget(
+    posCalculator().calculateBaseTarget(
       blockchainSettings.genesisSettings.averageBlockDelay.toSeconds,
       height,
       parent.baseTarget,
@@ -128,5 +126,4 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
     } yield hit(Ecvrf.prove(vrfKey, hitSource.arr).beta())
 
   private def fairPosActivated(height: Int): Boolean = true
-  private def vrfActivated(height: Int): Boolean     = true
 }

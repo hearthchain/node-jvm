@@ -7,7 +7,7 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.state.GeneratorIndex
-import com.wavesplatform.transaction.{Asset, BlockchainUpdater, TxNonNegativeAmount}
+import com.wavesplatform.transaction.{Asset, BlockchainUpdater}
 import play.api.libs.json.*
 
 import scala.annotation.targetName

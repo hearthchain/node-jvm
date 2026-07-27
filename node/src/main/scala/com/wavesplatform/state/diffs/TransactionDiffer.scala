@@ -66,7 +66,7 @@ object TransactionDiffer {
       _                   <- validateCommon(blockchain, tx, prevBlockTimestamp, currentBlockTimestamp, verify).traced
       _                   <- validateFunds(blockchain, tx).traced
       verifierSnapshot    <- TracedResult.wrapValue(StateSnapshot.empty)
-      transactionSnapshot <- transactionSnapshot(blockchain, tx, verifierSnapshot, currentBlockTimestamp)
+      transactionSnapshot <- transactionSnapshot(blockchain, tx, verifierSnapshot)
       _                   <- validateBalance(blockchain, tx.tpe, transactionSnapshot).traced
     } yield transactionSnapshot
 
@@ -89,8 +89,8 @@ object TransactionDiffer {
             _ <- CommonValidation.disallowTxFromFuture(blockchain.settings.functionalitySettings, currentBlockTs, tx)
             _ <- CommonValidation.disallowTxFromPast(blockchain.settings.functionalitySettings, prevBlockTs, tx)
             _ <- CommonValidation.disallowDuplicateIds(blockchain, tx)
-            _ <- CommonValidation.disallowSendingGreaterThanBalance(blockchain, currentBlockTs, tx)
-            _ <- FeeValidation(blockchain, tx)
+            _ <- CommonValidation.disallowSendingGreaterThanBalance(blockchain, tx)
+            _ <- FeeValidation(tx)
           } yield ()
         }
     else Right(())
@@ -103,8 +103,8 @@ object TransactionDiffer {
         _ <- tx match {
           case etx: ExchangeTransaction =>
             for {
-              _ <- validateOrder(blockchain, etx.buyOrder, etx.buyMatcherFee)
-              _ <- validateOrder(blockchain, etx.sellOrder, etx.sellMatcherFee)
+              _ <- validateOrder(blockchain, etx.buyOrder, etx.buyMatcherFee.value)
+              _ <- validateOrder(blockchain, etx.sellOrder, etx.sellMatcherFee.value)
 
               // Balance overflow check
               _ <- for {
@@ -123,8 +123,7 @@ object TransactionDiffer {
   private def transactionSnapshot(
       blockchain: Blockchain,
       tx: Transaction,
-      initSnapshot: StateSnapshot,
-      currentBlockTs: TxTimestamp
+      initSnapshot: StateSnapshot
   ): TracedResult[ValidationError, StateSnapshot] =
     stats.transactionDiffValidation
       .measureForType(tx.tpe) {
@@ -133,7 +132,7 @@ object TransactionDiffer {
           case ttx: TransferTransaction            => TransferTransactionDiff(blockchain)(ttx).traced
           case mtx: MassTransferTransaction        => MassTransferTransactionDiff(blockchain)(mtx).traced
           case ltx: LeaseTransaction               => LeaseTransactionsDiff.lease(blockchain)(ltx).traced
-          case ltx: LeaseCancelTransaction         => LeaseTransactionsDiff.leaseCancel(blockchain, currentBlockTs)(ltx).traced
+          case ltx: LeaseCancelTransaction         => LeaseTransactionsDiff.leaseCancel(blockchain)(ltx).traced
           case cgtx: CommitToGenerationTransaction => CommitToGenerationTransactionDiff(blockchain)(cgtx).traced
           case _                                   => UnsupportedTransactionType.asLeft.traced
         }

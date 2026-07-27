@@ -8,19 +8,16 @@ import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.lagonaki.mocks.TestBlock
-import com.wavesplatform.lagonaki.mocks.TestBlock.BlockWithSigner
 import com.wavesplatform.mining.MiningConstraint
 import com.wavesplatform.history.{DefaultBlockchainSettings, settings}
 import com.wavesplatform.settings.RewardsSettings
 import com.wavesplatform.state.diffs.BlockDiffer.Result
 import com.wavesplatform.state.{Blockchain, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.DomainPresets.{TransactionStateSnapshot}
 import com.wavesplatform.test.node.*
 import com.wavesplatform.transaction.TxValidationError.InvalidStateHash
-import com.wavesplatform.transaction.{Transaction, TxHelpers, TxVersion}
-import tech.hearth.crypto.SigningKey
+import com.wavesplatform.transaction.TxHelpers
 
 class BlockDifferTest extends FreeSpec with WithDomain {
   private val TransactionFee = 10

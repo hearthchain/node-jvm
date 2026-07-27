@@ -3,7 +3,6 @@ package com.wavesplatform.transaction.validation.impl
 import cats.data.ValidatedNel
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.TxValidationError.{GenericError, OrderValidationError}
-import com.wavesplatform.transaction.TxVersion
 import com.wavesplatform.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}
 import com.wavesplatform.transaction.validation.TxValidator
 
@@ -11,9 +10,9 @@ object ExchangeTxValidator extends TxValidator[ExchangeTransaction] {
   override def validate(tx: ExchangeTransaction): ValidatedNel[ValidationError, ExchangeTransaction] = {
     import tx.*
 
+    // No bounds check on the matcher fees: TxMatcherFee refines them to (0; Order.MaxAmount), so an out-of-range fee
+    // cannot be constructed in the first place - ExchangeTransaction.create rejects it with TxMatcherFee.errMsg.
     V.seq(tx)(
-      V.cond(sellMatcherFee <= Order.MaxAmount, GenericError("sellMatcherFee too large")),
-      V.cond(buyMatcherFee <= Order.MaxAmount, GenericError("buyMatcherFee too large")),
       V.cond(fee.value <= Order.MaxAmount, GenericError("fee too large")),
       V.cond(buyOrder.orderType == OrderType.BUY, GenericError("buyOrder should has OrderType.BUY")),
       V.cond(sellOrder.orderType == OrderType.SELL, GenericError("sellOrder should has OrderType.SELL")),

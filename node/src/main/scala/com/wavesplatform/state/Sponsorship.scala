@@ -1,7 +1,6 @@
 package com.wavesplatform.state
 
 import cats.kernel.Monoid
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.state.diffs.FeeValidation
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.{Asset, Transaction}
@@ -31,8 +30,6 @@ object Sponsorship {
     case (Asset.Waves, amountInWaves) =>
       amountInWaves
   }
-
-  def sponsoredFeesSwitchHeight(blockchain: Blockchain): Height = Height(Int.MaxValue)
 
   def toWaves(assetFee: Long, sponsorship: Long): Long =
     if (sponsorship == 0) Long.MaxValue

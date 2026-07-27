@@ -10,33 +10,25 @@ import monix.execution.schedulers.SchedulerService
 object ParSignatureChecker {
   implicit val sigverify: SchedulerService = Schedulers.fixedPool(4, "sigverify")
 
-  def checkTxSignatures(txs: Seq[Transaction], rideV6Activated: Boolean): Unit =
+  def checkTxSignatures(txs: Seq[Transaction]): Unit =
     txs
       .parUnorderedTraverse {
         case tx: ProvenTransaction =>
           Task {
-            if (rideV6Activated) {
-              tx.firstProofIsValidSignatureAfterV6
-            } else {
-              tx.firstProofIsValidSignatureBeforeV6
-            }
+            tx.firstProofIsValidSignatureAfterV6
           }.void
         case _ => Task.unit
       }
       .executeOn(sigverify)
       .runAsyncAndForget
 
-  def checkBlockAndTxSignatures(block: Block, checkTxSignatures: Boolean, rideV6Activated: Boolean): Unit = {
+  def checkBlockAndTxSignatures(block: Block, checkTxSignatures: Boolean): Unit = {
     val verifiedObjects: Seq[Any] = (block +: block.transactionData)
     verifiedObjects
       .parTraverse {
         case tx: ProvenTransaction if checkTxSignatures =>
           Task {
-            if (rideV6Activated) {
-              tx.firstProofIsValidSignatureAfterV6
-            } else {
-              tx.firstProofIsValidSignatureBeforeV6
-            }
+            tx.firstProofIsValidSignatureAfterV6
           }.void
         case b: Block => Task(b.signatureValid()).void
         case _        => Task.unit

@@ -15,7 +15,7 @@ object BaseTxJson {
     ) ++ (tx match {
       case p: ProvenTransaction =>
         Json.obj(
-          "sender"          -> p.sender.toAddress(p.chainId).toBech32,
+          "sender"          -> p.sender.toAddress.toString,
           "senderPublicKey" -> p.sender,
           "proofs"          -> JsArray(p.proofs.proofs.map(p => JsString(p.toString)))
         )

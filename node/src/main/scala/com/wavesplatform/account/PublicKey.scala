@@ -37,11 +37,7 @@ object PublicKey {
   extension (pk: PublicKey) {
     def arr: Array[Byte]   = pk.arr
     def byteStr: ByteStr   = pk
-    def toAddress: Address = toAddress(AddressScheme.current.chainId)
-    def toAddress(chainId: Byte): Address = pk.size match {
-      case KeyLength => Address.fromPublicKey(pk)
-      case other     => throw new IllegalArgumentException(s"Unexpected public key length: $other")
-    }
+    def toAddress: Address = Address.fromPublicKey(pk)
   }
 
   given Format[PublicKey] = Format[PublicKey](

@@ -2,7 +2,7 @@ package com.wavesplatform.test
 
 import com.wavesplatform.db.WithState
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatures}
+import com.wavesplatform.features.BlockchainFeature
 import com.wavesplatform.settings.{FunctionalitySettings, GenesisAssetSettings, GenesisBalanceSettings, WavesSettings, loadConfig}
 import tech.hearth.crypto.SigningKey
 

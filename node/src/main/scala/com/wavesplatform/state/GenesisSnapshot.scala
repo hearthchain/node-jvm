@@ -6,9 +6,8 @@ import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.crypto
 import com.wavesplatform.crypto.bls.BlsPublicKey
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.settings.{FunctionalitySettings, GenesisAssetSettings, GenesisGeneratorSettings, GenesisSettings}
+import com.wavesplatform.settings.{GenesisAssetSettings, GenesisGeneratorSettings, GenesisSettings}
 import com.wavesplatform.state.diffs.BalanceDiffValidation
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.GenericError
@@ -22,12 +21,12 @@ import scala.collection.immutable.VectorMap
   * account balances - comes from [[GenesisSettings]]. Balances are absolute, because there is nothing in the state to add them to.
   */
 object GenesisSnapshot {
-  def build(genesisSettings: GenesisSettings, functionalitySettings: FunctionalitySettings): Either[ValidationError, StateSnapshot] =
+  def build(genesisSettings: GenesisSettings): Either[ValidationError, StateSnapshot] =
     for {
       assets     <- issuedAssets(genesisSettings.assets)
       balances   <- this.balances(genesisSettings, assets)
       _          <- checkAssetsAreFullyDistributed(assets, balances)
-      generators <- committedGenerators(genesisSettings.generators, functionalitySettings)
+      generators <- committedGenerators(genesisSettings.generators)
       snapshot = StateSnapshot(
         balances = balances,
         assetStatics = StateSnapshot.assetStatics(assets),
@@ -110,8 +109,7 @@ object GenesisSnapshot {
   }
 
   private def committedGenerators(
-      settings: Seq[GenesisGeneratorSettings],
-      functionalitySettings: FunctionalitySettings
+      settings: Seq[GenesisGeneratorSettings]
   ): Either[ValidationError, Seq[GenerationCommitment]] =
     if (settings.isEmpty) Right(Seq.empty)
     else

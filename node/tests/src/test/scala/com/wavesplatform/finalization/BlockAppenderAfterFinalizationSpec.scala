@@ -1,13 +1,10 @@
 package com.wavesplatform.finalization
 
-import com.wavesplatform.TestValues
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.state.*
 import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{NumericExt, produce}
-import com.wavesplatform.transaction.CommitToGenerationTransaction.DepositInWavelets
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 
 class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
@@ -31,16 +28,6 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
     )
 
   "should append a block" - {
-    "if no one committed" in {
-      val generator = TxHelpers.signer(0)
-      withDomain(defaultSettings, AddrWithBalance.enoughBalances(generator)) { d =>
-        d.wallet.generateNewAccounts(1)
-
-        val block = d.createBlock(generator = generator, strictTime = true)
-        d.appender.appendBlock(block)
-      }
-    }
-
     "if committed" in new BaseTest {
       override def continue(d: Domain): Unit = {
         log.debug(s"Append block 3 of committed generator")
@@ -48,49 +35,6 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
         d.appender.appendBlock(block)
       }
     }.run()
-
-    "if no one eligible committed" - {
-      "all committed are poor" in new BaseTest {
-        override def continue(d: Domain): Unit = {
-          log.debug(s"Append block 3 with spending")
-          val block3WithSpending = d.createBlock(
-            txs = Seq(committedGenerator1, committedGenerator2).map { kp =>
-              TxHelpers.transfer(kp, notCommittedGeneratorAddr, amount = d.balance(kp.toAddress) - TestValues.fee - DepositInWavelets)
-            },
-            generator = committedGenerator1,
-            strictTime = true
-          )
-          d.appender.appendBlock(block3WithSpending)
-
-          log.debug(s"Append block 4 of not committed generator")
-          val block = d.createBlock(generator = notCommittedGenerator, strictTime = true)
-          d.appender.appendBlock(block)
-        }
-      }.run()
-
-      "poor conflict, rest conflict" in new BaseTest {
-        override def continue(d: Domain): Unit = {
-          log.debug(s"Append block 3 with vote and spending")
-          val block3 = d.createBlock(
-            txs = Seq(
-              TxHelpers.transfer(
-                committedGenerator1,
-                notCommittedGeneratorAddr,
-                amount = d.balance(committedGenerator1Addr) - TestValues.fee - DepositInWavelets
-              )
-            ),
-            generator = committedGenerator1,
-            strictTime = true,
-            finalizationVoting = Some(mkFinalizationVoting().withConflict(committedGenerator2, committedGenerator2Idx, d.lastBlock.id()))
-          )
-          d.appender.appendBlock(block3)
-
-          log.debug(s"Append block 4 of not committed generator")
-          val block = d.createBlock(generator = notCommittedGenerator, strictTime = true)
-          d.appender.appendBlock(block)
-        }
-      }.run()
-    }
 
     "on new period if was conflict on previous" in new BaseTest {
       override def continue(d: Domain): Unit = {
@@ -102,13 +46,21 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
         )
         d.appender.appendBlock(block3WithVotes)
 
-        log.debug(s"Append empty blocks")
-        (4 to 5).foreach { _ =>
-          val block = d.createBlock(generator = committedGenerator2, strictTime = true)
-          d.appender.appendBlock(block)
-        }
+        // Blocks 5 and 6 fall in the next period, and a generator can only mine a period it has committed to, so the
+        // commitments have to land while the chain is still in this one.
+        log.debug(s"Append block 4 with commitments for the next period")
+        d.appender.appendBlock(
+          d.createBlock(
+            committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(5), x)),
+            generator = committedGenerator2,
+            strictTime = true
+          )
+        )
 
-        log.debug(s"Append new period block")
+        log.debug(s"Append block 5")
+        d.appender.appendBlock(d.createBlock(generator = committedGenerator2, strictTime = true))
+
+        log.debug(s"Append new period block of the generator that was in conflict on the previous period")
         val block = d.createBlock(generator = committedGenerator1, strictTime = true)
         d.appender.appendBlock(block)
       }
@@ -291,7 +243,8 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
 
       withDomain(
         defaultSettings.configure(_.copy(generationPeriodLength = 2)),
-        AddrWithBalance.enoughBalances(allGenerators*)
+        AddrWithBalance.enoughBalances(allGenerators*),
+        generators = allGenerators
       ) { d =>
         log.debug(s"Append block 2 with commitments")
         val txs    = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
@@ -401,7 +354,9 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
 
     def continue(d: Domain): Unit
 
-    def run(): Unit = withDomain(defaultSettings, AddrWithBalance.enoughBalances(allGenerators*)) { d =>
+    // Genesis commits every generator for period [1, 2]: notCommittedGenerator mines block 2, and the committed ones
+    // mine block 3 — the first block of period [3, 4] — whose VRF key PoSSelector resolves at the parent's height.
+    def run(): Unit = withDomain(defaultSettings, AddrWithBalance.enoughBalances(allGenerators*), generators = allGenerators) { d =>
       log.debug(s"Append block 2 with commitments")
       val txs                   = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
       val block2WithCommitments = d.createBlock(txs, generator = notCommittedGenerator, strictTime = true)

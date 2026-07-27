@@ -2,20 +2,17 @@ package com.wavesplatform.transaction
 
 import com.wavesplatform.account.{AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.Base64
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.crypto
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.transaction.serialization.impl.{MassTransferTxSerializer, PBTransactionSerializer}
 import com.wavesplatform.transaction.transfer.*
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.{MaxTransferCount, ParsedTransfer, Transfer}
-import play.api.libs.json.{JsObject, Json}
+import play.api.libs.json.Json
 import tech.hearth.crypto.{Crypto, SigningKey}
 
 import java.nio.charset.StandardCharsets
-import scala.util.{Random, Success}
+import scala.util.Random
 
 class MassTransferTransactionSpecification extends PropSpec {
 
@@ -90,14 +87,14 @@ class MassTransferTransactionSpecification extends PropSpec {
 
     val differentChainIds = Seq(
       ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(100)),
-      ParsedTransfer(PublicKey(sender.publicKey).toAddress('?'.toByte), TxNonNegativeAmount.unsafeFrom(100))
+      ParsedTransfer(PublicKey(sender.publicKey).toAddress, TxNonNegativeAmount.unsafeFrom(100))
     )
     val invalidChainIdEi = create(PublicKey(sender.publicKey), assetId, differentChainIds, 100, timestamp, attachment, proofs)
     invalidChainIdEi should produce("One of chain ids not match")
 
     val otherChainIds = Seq(
-      ParsedTransfer(PublicKey(sender.publicKey).toAddress('?'.toByte), TxNonNegativeAmount.unsafeFrom(100)),
-      ParsedTransfer(PublicKey(sender.publicKey).toAddress('?'.toByte), TxNonNegativeAmount.unsafeFrom(100))
+      ParsedTransfer(PublicKey(sender.publicKey).toAddress, TxNonNegativeAmount.unsafeFrom(100)),
+      ParsedTransfer(PublicKey(sender.publicKey).toAddress, TxNonNegativeAmount.unsafeFrom(100))
     )
     val invalidOtherChainIdEi = create(PublicKey(sender.publicKey), assetId, otherChainIds, 100, timestamp, attachment, proofs)
     invalidOtherChainIdEi should produce("One of chain ids not match")

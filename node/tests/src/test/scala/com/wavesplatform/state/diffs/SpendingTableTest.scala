@@ -3,11 +3,9 @@ package com.wavesplatform.state.diffs
 import com.wavesplatform.consensus.GeneratingBalanceProvider
 import com.wavesplatform.db.WithState
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import com.wavesplatform.utils.Numbers
 

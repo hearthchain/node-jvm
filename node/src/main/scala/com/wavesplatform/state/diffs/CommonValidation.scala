@@ -14,7 +14,7 @@ import com.wavesplatform.transaction.{Asset, *}
 import scala.util.{Left, Right}
 
 object CommonValidation {
-  def disallowSendingGreaterThanBalance[T <: Transaction](blockchain: Blockchain, blockTime: Long, tx: T): Either[ValidationError, T] = {
+  def disallowSendingGreaterThanBalance[T <: Transaction](blockchain: Blockchain, tx: T): Either[ValidationError, T] = {
     def checkTransfer(
         sender: Address,
         assetId: Asset,

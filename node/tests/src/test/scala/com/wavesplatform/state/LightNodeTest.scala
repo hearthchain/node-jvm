@@ -14,7 +14,6 @@ import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
 import com.wavesplatform.state.appender.{BlockAppender, ExtensionAppender}
 import com.wavesplatform.state.diffs.BlockDiffer
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.TxValidationError.InvalidStateHash
 import io.netty.channel.embedded.EmbeddedChannel

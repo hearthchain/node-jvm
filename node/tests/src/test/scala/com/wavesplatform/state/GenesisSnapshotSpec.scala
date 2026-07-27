@@ -90,6 +90,36 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       }
     }
 
+    "keeps the predefined assets usable once it is no longer the liquid block" in {
+      val asset = IssuedAsset(assetId)
+      withDomain(
+        settingsWith(assets = Seq(assetSettings(quantity = 1000))),
+        balances = Seq(
+          AddrWithBalance(address(1), 100.waves, Map(asset -> 600L)),
+          AddrWithBalance(address(2), 5.waves, Map(asset -> 400L))
+        )
+      ) { d =>
+        // Reads at height 1 go through SnapshotBlockchain, which answers from the liquid genesis snapshot. Append past
+        // it so the assertions below hit the persisted state instead.
+        d.appendBlock()
+        d.appendBlock()
+
+        val persisted = d.rocksDBWriter.assetDescription(asset).value
+        persisted.totalVolume shouldBe BigInt(1000)
+        persisted.decimals shouldBe 2
+        persisted.issuer shouldBe PublicKey(issuer.publicKey())
+        persisted.issueHeight shouldBe Height(1)
+
+        d.rocksDBWriter.balance(address(1), asset) shouldBe 600L
+        d.rocksDBWriter.balance(address(2), asset) shouldBe 400L
+
+        // The point of issuing it: a genesis asset has to be spendable like any other
+        d.appendBlockE(TxHelpers.transfer(signer(1), address(2), 100L, asset)) should beRight
+        d.blockchain.balance(address(1), asset) shouldBe 500L
+        d.blockchain.balance(address(2), asset) shouldBe 500L
+      }
+    }
+
     "commits the predefined generators from the very first period" in {
       val generator = TxHelpers.signer(3)
       val blsKey    = blsKeyPair(42)
@@ -123,7 +153,6 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       val block = Block
         .genesis(
           ws.blockchainSettings.genesisSettings,
-          ws.blockchainSettings.functionalitySettings
         )
         .explicitGet()
       val blockchain = preGenesisBlockchain(ws)
@@ -186,7 +215,7 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
   "the genesis snapshot is rejected when" - {
     def buildFails(settings: WavesSettings): String =
       GenesisSnapshot
-        .build(settings.blockchainSettings.genesisSettings, settings.blockchainSettings.functionalitySettings)
+        .build(settings.blockchainSettings.genesisSettings)
         .left
         .value
         .toString

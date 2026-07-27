@@ -1,12 +1,9 @@
 package com.wavesplatform.state.appender
 
-import com.wavesplatform.block.Block
-import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.network.{ExtensionBlocks, InvalidBlockStorage, PeerDatabase}
-import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.SystemTime

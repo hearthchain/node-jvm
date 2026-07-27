@@ -5,7 +5,7 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.block.{Block, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.database.{KeyTag, RDB, RocksDBWriter, TestStorageFactory, loadActiveLeases}
+import com.wavesplatform.database.{KeyTag, RDB, RocksDBWriter, TestStorageFactory}
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.history.Domain
@@ -396,7 +396,8 @@ trait WithDomain extends WithState {
       wrapBU: CompleteBlockchainUpdater => CompleteBlockchainUpdater = identity,
       miner: Miner = Miner.StrictDisabledMiner,
       time: TestTime = TestTime(),
-      generators: Seq[SigningKey] = Nil
+      generators: Seq[SigningKey] = Nil,
+      assets: Seq[GenesisAssetSettings] = Seq.empty
   )(test: Domain => A): A = {
     val noExplicitGenerators = generators.isEmpty && settings.blockchainSettings.genesisSettings.generators.isEmpty
     val effectiveGenerators  = if (noExplicitGenerators) Seq(TxHelpers.defaultSigner) else generators
@@ -406,7 +407,8 @@ trait WithDomain extends WithState {
       if (noExplicitGenerators && !balances.exists(_.address == TxHelpers.defaultSigner.toAddress))
         AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: balances
       else balances
-    val settingsWithGenesis = settings.withGenesisBalances(effectiveBalances*).withGenesisGenerators(effectiveGenerators*)
+    val settingsWithGenesis =
+      settings.withGenesisBalances(effectiveBalances*).withGenesisGenerators(effectiveGenerators*).withGenesisAssets(assets*)
 
     withRocksDBWriter(settingsWithGenesis) { blockchain =>
       var domain: Domain = null
@@ -416,7 +418,6 @@ trait WithDomain extends WithState {
           settingsWithGenesis,
           time,
           BlockchainUpdateTriggers.combined(domain.triggers),
-          loadActiveLeases(rdb, _, _),
           miner
         )
       )
@@ -480,7 +481,7 @@ object WithState {
     // BlockDiffer builds it. Using the reward snapshot here instead would compute a state hash the differ rejects.
     TracedResult(
       if (Height(blockchain.height + 1) == GenesisBlockHeight)
-        GenesisSnapshot.build(blockchain.settings.genesisSettings, blockchain.settings.functionalitySettings)
+        GenesisSnapshot.build(blockchain.settings.genesisSettings)
       else
         BlockDiffer
           .createInitialBlockSnapshot(
@@ -524,10 +525,5 @@ object WithState {
   }
 
   def createGenesisBlock(settings: WavesSettings): Block =
-    Block
-      .genesis(
-        settings.blockchainSettings.genesisSettings,
-        settings.blockchainSettings.functionalitySettings
-      )
-      .explicitGet()
+    Block.genesis(settings.blockchainSettings.genesisSettings).explicitGet()
 }

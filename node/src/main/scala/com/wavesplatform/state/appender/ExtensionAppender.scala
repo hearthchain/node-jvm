@@ -56,7 +56,7 @@ object ExtensionAppender extends ScorexLogging {
                 droppedBlocksEi.flatMap { case (commonBlockHeight, droppedBlocks) =>
                   newBlocks.foreach { block =>
                     // RideV6 is active
-                    ParSignatureChecker.checkTxSignatures(block.transactionData, rideV6Activated = true)
+                    ParSignatureChecker.checkTxSignatures(block.transactionData)
                   }
 
                   val forkApplicationResultEi = {

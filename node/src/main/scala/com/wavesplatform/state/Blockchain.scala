@@ -5,11 +5,11 @@ import com.wavesplatform.block.Block.*
 import com.wavesplatform.block.{Block, BlockHeader, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.GeneratingBalanceProvider
-import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatureStatus, BlockchainFeatures}
+import com.wavesplatform.features.{BlockchainFeature, BlockchainFeatureStatus}
 import com.wavesplatform.settings.BlockchainSettings
 import com.wavesplatform.state.TxMeta.Status
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, Transaction, TxNonNegativeAmount}
+import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, Transaction}
 import com.wavesplatform.utils.Numbers
 import tech.hearth.crypto.Address
 
@@ -85,7 +85,7 @@ object Blockchain {
   implicit class BlockchainExt(private val blockchain: Blockchain) extends AnyVal {
     def isEmpty: Boolean = blockchain.height == 0
 
-    def isSponsorshipActive: Boolean = Height(blockchain.height) >= Sponsorship.sponsoredFeesSwitchHeight(blockchain)
+    def isSponsorshipActive: Boolean = false
     def isNGActive: Boolean          = true // NG is active
 
     def parentHeader(block: BlockHeader, back: Int = 1): Option[BlockHeader] =
@@ -177,14 +177,11 @@ object Blockchain {
     }
 
     def isGeneratingBalanceValid(height: Height, blockHeader: BlockHeader, balance: Long): Boolean =
-      GeneratingBalanceProvider.isGeneratingBalanceValid(blockchain, height, blockHeader.timestamp, balance)
+      GeneratingBalanceProvider.isGeneratingBalanceValid(balance)
 
     def lastBlockReward: Option[Long] = blockchain.blockReward(blockchain.height)
 
-    def vrf(atHeight: Int): Option[ByteStr] =
-      blockchain
-        .blockHeader(atHeight)
-        .flatMap(header => blockchain.hitSource(atHeight))
+    def vrf(atHeight: Int): Option[ByteStr] = blockchain.hitSource(atHeight)
 
     def isFeatureActivated(feature: BlockchainFeature, height: Int = blockchain.height): Boolean =
       blockchain.activatedFeatures.get(feature.id).exists(_ <= Height(height))

@@ -1,22 +1,18 @@
 package com.wavesplatform.database
 
 import com.google.common.primitives.{Ints, Longs, Shorts}
-import com.wavesplatform.TestValues
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database.RocksDBWriter.{merge3, slice}
 import com.wavesplatform.db.WithDomain
-import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.settings.{GenesisBalanceSettings, WavesSettings}
 import com.wavesplatform.state.Height as H
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.*
-import com.wavesplatform.transaction.{TxHelpers, TxPositiveAmount}
+import com.wavesplatform.transaction.TxHelpers
 import org.rocksdb.{ReadOptions, RocksIterator}
 
-import scala.util.{Random, Using}
+import scala.util.Using
 
 class RocksDBWriterSpec extends FreeSpec with WithDomain {
   "Slice" - {

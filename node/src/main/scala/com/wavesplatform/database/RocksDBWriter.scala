@@ -1,7 +1,6 @@
 package com.wavesplatform.database
 
 import cats.implicits.catsSyntaxNestedBitraverse
-import cats.syntax.either.*
 import com.google.common.cache.CacheBuilder
 import com.google.common.collect.MultimapBuilder
 import com.google.common.hash.{BloomFilter, Funnels}
@@ -18,9 +17,7 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database
 import com.wavesplatform.database.protobuf.{BlockMetaExt, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.protobuf.block.PBBlocks
-import com.wavesplatform.protobuf.transaction.PBAmounts
 import com.wavesplatform.protobuf.{PBSnapshots, toByteString, toPublicKey}
 import com.wavesplatform.settings.{BlockchainSettings, DBSettings}
 import com.wavesplatform.state.*
@@ -595,7 +592,7 @@ class RocksDBWriter(
 
       val activationWindowSize = settings.functionalitySettings.activationWindowSize(height)
       if (height % activationWindowSize == 0) {
-        val minVotes = settings.functionalitySettings.blocksForFeatureActivation(height)
+        val minVotes = settings.functionalitySettings.blocksForFeatureActivation
         val newlyApprovedFeatures = featureVotes(h)
           .filterNot { case (featureId, _) => settings.functionalitySettings.preActivatedFeatures.contains(featureId) }
           .collect {

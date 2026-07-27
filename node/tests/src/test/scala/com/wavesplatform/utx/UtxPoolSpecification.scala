@@ -12,9 +12,7 @@ import com.wavesplatform.database.{RDB, RocksDBWriter, TestStorageFactory}
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.events.UtxEvent
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
-import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.*
 import com.wavesplatform.settings.*
 import com.wavesplatform.state.*
@@ -78,7 +76,6 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
           Block
             .genesis(
               genesisSettings,
-              settings.blockchainSettings.functionalitySettings
             )
             .explicitGet()
         ) should beRight

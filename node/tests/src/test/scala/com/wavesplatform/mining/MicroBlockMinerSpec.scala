@@ -7,14 +7,13 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.events.UtxEvent
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.mining.microblocks.MicroBlockMinerImpl
 import com.wavesplatform.settings.TestFunctionalitySettings
 import com.wavesplatform.state.{Blockchain, EndorsementStorage, StateSnapshot}
 import com.wavesplatform.test.DomainPresets.RideV6
 import com.wavesplatform.test.FlatSpec
 import com.wavesplatform.transaction.TxHelpers.{defaultAddress, defaultSigner, secondAddress, transfer}
-import com.wavesplatform.transaction.{Transaction, TxVersion}
+import com.wavesplatform.transaction.Transaction
 import com.wavesplatform.utils.Schedulers
 import com.wavesplatform.utx.{UtxPool, UtxPoolImpl, UtxPriorityPool}
 import monix.execution.Scheduler
@@ -23,7 +22,6 @@ import monix.reactive.subjects.ConcurrentSubject
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.duration.*
-import scala.util.Random
 
 class MicroBlockMinerSpec extends FlatSpec with WithDomain {
   "Micro block miner" should "generate microblocks in flat interval" in {

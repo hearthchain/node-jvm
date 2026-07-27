@@ -1,22 +1,10 @@
 package com.wavesplatform.state.diffs
 
 import cats.syntax.either.*
-import cats.syntax.ior.*
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.lang.v1.traits.domain.*
-import com.wavesplatform.state.{
-  AssetVolumeInfo,
-  Blockchain,
-  Height,
-  LeaseBalance,
-  LeaseDetails,
-  LeaseStaticInfo,
-  Portfolio,
-  StateSnapshot,
-  TransactionId
-}
+import com.wavesplatform.state.{Blockchain, Height, LeaseBalance, LeaseDetails, LeaseStaticInfo, Portfolio, StateSnapshot, TransactionId}
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxPositiveAmount
 import com.wavesplatform.transaction.TxValidationError.GenericError
@@ -39,50 +27,6 @@ object DiffsCommon {
         Left(GenericError("Referenced assetId not found"))
       case Some(_) =>
         Right({})
-    }
-  }
-
-  def processReissue(
-      blockchain: Blockchain,
-      sender: Address,
-      blockTime: Long,
-      fee: Long,
-      reissue: Reissue
-  ): Either[ValidationError, StateSnapshot] = {
-    val asset = IssuedAsset(reissue.assetId)
-    validateAsset(blockchain, asset, sender, issuerOnly = true)
-      .flatMap { _ =>
-        val oldInfo = blockchain.assetDescription(asset).get
-
-        if (oldInfo.reissuable) {
-          if ((Long.MaxValue - reissue.quantity) < oldInfo.totalVolume) {
-            Left(GenericError("Asset total value overflow"))
-          } else {
-            val volumeInfo = AssetVolumeInfo(reissue.isReissuable, BigInt(reissue.quantity))
-            val portfolio  = Portfolio.build(-fee, asset, reissue.quantity)
-            StateSnapshot.build(
-              blockchain,
-              portfolios = Map(sender -> portfolio),
-              updatedAssets = Map(IssuedAsset(reissue.assetId) -> volumeInfo.rightIor)
-            )
-          }
-        } else {
-          Left(GenericError("Asset is not reissuable"))
-        }
-      }
-  }
-
-  def processBurn(blockchain: Blockchain, sender: Address, fee: Long, burn: Burn): Either[ValidationError, StateSnapshot] = {
-    val asset = IssuedAsset(burn.assetId)
-
-    validateAsset(blockchain, asset, sender, issuerOnly = false).flatMap { _ =>
-      val volumeInfo = AssetVolumeInfo(isReissuable = true, volume = -burn.quantity)
-      val portfolio  = Portfolio.build(-fee, asset, -burn.quantity)
-      StateSnapshot.build(
-        blockchain,
-        portfolios = Map(sender -> portfolio),
-        updatedAssets = Map(asset -> volumeInfo.rightIor)
-      )
     }
   }
 
@@ -131,7 +75,6 @@ object DiffsCommon {
       blockchain: Blockchain,
       sender: PublicKey,
       fee: Long,
-      time: Long,
       leaseId: ByteStr,
       cancelTxId: ByteStr
   ): Either[ValidationError, StateSnapshot] = {

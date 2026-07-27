@@ -21,7 +21,7 @@ object TestStorageFactory {
       Some(MoreExecutors.newDirectExecutorService())
     )
     (
-      new BlockchainUpdaterImpl(rocksDBWriter, settings, time, blockchainUpdateTriggers, loadActiveLeases(rdb, _, _)),
+      new BlockchainUpdaterImpl(rocksDBWriter, settings, time, blockchainUpdateTriggers),
       rocksDBWriter
     )
   }

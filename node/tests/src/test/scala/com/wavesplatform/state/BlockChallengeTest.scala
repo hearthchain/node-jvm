@@ -1,6 +1,5 @@
 package com.wavesplatform.state
 
-import com.google.common.primitives.Longs
 import com.wavesplatform.TestValues
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.api.http.*
@@ -14,7 +13,6 @@ import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.{Domain, defaultSigner}
 import com.wavesplatform.http.DummyTransactionPublisher
 import com.wavesplatform.lang.ValidationError
@@ -28,14 +26,11 @@ import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.BlockRewardCalculator.BlockRewardShares
 import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult
 import com.wavesplatform.state.appender.{BlockAppender, ExtensionAppender, MicroblockAppender}
-import com.wavesplatform.state.diffs.BlockDiffer.CurrentBlockFeePart
 import com.wavesplatform.state.diffs.{BlockDiffer, ENOUGH_AMT}
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.DomainPresets.{TransactionStateSnapshot}
-import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxValidationError.{BlockAppendError, GenericError, InvalidStateHash, MicroBlockAppendError}
-import com.wavesplatform.transaction.assets.exchange.OrderType
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, Transaction, TxHelpers}
 import com.wavesplatform.utils.{JsonMatchers, SharedSchedulerMixin}
 import com.wavesplatform.wallet.Wallet
@@ -51,7 +46,7 @@ import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.*
 import org.scalatest.{Assertion, BeforeAndAfterAll, ParallelTestExecution}
 import play.api.libs.json.*
-import tech.hearth.crypto.{Crypto, KeyTree, SigningKey, VrfKey}
+import tech.hearth.crypto.{SigningKey, VrfKey}
 
 import java.util.concurrent.locks.ReentrantLock
 import scala.concurrent.duration.DurationInt

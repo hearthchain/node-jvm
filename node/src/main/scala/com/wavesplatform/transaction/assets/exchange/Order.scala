@@ -85,8 +85,8 @@ case class Order(
 
   val json: Coeval[JsObject] = Coeval.evalOnce(OrderSerializer.toJson(this))
 
-  override protected def verifyFirstProof(isRideV6Activated: Boolean): Either[GenericError, Unit] =
-    super.verifyFirstProof(isRideV6Activated)
+  override protected def verifyFirstProof(): Either[GenericError, Unit] =
+    super.verifyFirstProof()
 
   override def toString: String = {
     val matcherFeeAssetIdStr = if (version == 3) s" matcherFeeAssetId=${matcherFeeAssetId.fold("Waves")(_.toString)}," else ""
