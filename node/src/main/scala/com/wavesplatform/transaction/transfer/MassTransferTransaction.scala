@@ -46,7 +46,7 @@ object MassTransferTransaction {
 
   val MaxTransferCount = 100
 
-  val typeId: TxType = 11: Byte
+  val typeId: TxType = TransactionType.MassTransfer.id.toByte
 
   implicit val validator: TxValidator[MassTransferTransaction] = MassTransferTxValidator
 

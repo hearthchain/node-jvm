@@ -41,7 +41,7 @@ package object history {
 
   val DefaultWavesSettings: WavesSettings = settings.copy(
     blockchainSettings = DefaultBlockchainSettings,
-    featuresSettings = settings.featuresSettings.copy(autoShutdownOnUnsupportedFeature = false)
+    autoShutdownOnUnsupportedFeature = false
   )
 
   val defaultSigner          = TestValues.keyPair
@@ -92,7 +92,7 @@ package object history {
         generator = signer,
         transactionData = txs,
         reference = prevTotal.id(),
-        totalResBlockSig = newTotalBlock.signature,
+        wholeBlockSignature = newTotalBlock.signature,
         stateHash = newTotalBlock.header.stateHash,
         finalizationVoting = None
       )
@@ -107,7 +107,7 @@ package object history {
         generator = signer,
         transactionData = txs,
         reference = prevTotal.id(),
-        totalResBlockSig = newTotalBlock.signature,
+        wholeBlockSignature = newTotalBlock.signature,
         stateHash = newTotalBlock.header.stateHash,
         finalizationVoting = None
       )

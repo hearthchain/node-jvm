@@ -34,19 +34,19 @@ class MessageCodec(peerDatabase: PeerDatabase) extends MessageToMessageCodec[Raw
       case e: EndorseBlock               => RawBytes.from(EndorseBlockSpec, e)
 
       // Version switch
-      case gs: GetSignatures if isNewMsgsSupported(ctx) =>
+      case gs: GetBlockIds if isNewMsgsSupported(ctx) =>
         RawBytes.from(GetBlockIdsSpec, gs)
-      case gs: GetSignatures if GetSignaturesSpec.isSupported(gs.signatures) =>
+      case gs: GetBlockIds if GetSignaturesSpec.isSupported(gs.ids) =>
         RawBytes.from(GetSignaturesSpec, gs)
 
-      case s: Signatures =>
+      case s: BlockIds =>
         if (isNewMsgsSupported(ctx)) {
           RawBytes.from(BlockIdsSpec, s)
         } else {
-          val supported = s.signatures
+          val supported = s.ids
             .dropWhile(_.arr.length != crypto.SignatureLength)
             .takeWhile(_.arr.length == crypto.SignatureLength)
-          RawBytes.from(SignaturesSpec, s.copy(signatures = supported))
+          RawBytes.from(SignaturesSpec, s.copy(ids = supported))
         }
 
       case _ =>

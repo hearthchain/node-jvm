@@ -3,7 +3,6 @@ package com.wavesplatform.http
 import com.typesafe.config.ConfigObject
 import com.wavesplatform.*
 import com.wavesplatform.api.http.ApiError.ApiKeyNotValid
-import com.wavesplatform.api.http.DebugApiRoute.AccountMiningInfo
 import com.wavesplatform.api.http.{DebugApiRoute, RouteTimeout}
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
@@ -153,28 +152,25 @@ class DebugApiRouteSpec
           domain.appendBlock()
         }
 
-        val lastButOneHeight               = domain.blockchain.height - 1
-        val lastButOneHeader               = domain.blockchain.blockHeader(lastButOneHeight).value
-        val lastButOneStateHash            = domain.rocksDBWriter.loadStateHash(Height(lastButOneHeight)).value
-        val lastButOneStateHashJson        = StateHash.toJson(lastButOneStateHash)
-        def field(name: String)            = (lastButOneStateHashJson \ name).as[String]
+        val lastButOneHeight        = domain.blockchain.height - 1
+        val lastButOneHeader        = domain.blockchain.blockHeader(lastButOneHeight).value
+        val lastButOneStateHash     = domain.rocksDBWriter.loadStateHash(Height(lastButOneHeight)).value
+        val lastButOneStateHashJson = StateHash.toJson(lastButOneStateHash)
+        def field(name: String)     = (lastButOneStateHashJson \ name).as[String]
 
         val expectedResponse = Json.obj(
-          "stateHash"         -> field("stateHash"),
-          "wavesBalanceHash"  -> field("wavesBalanceHash"),
-          "assetBalanceHash"  -> field("assetBalanceHash"),
-          "dataEntryHash"     -> field("dataEntryHash"),
-          "accountScriptHash" -> field("accountScriptHash"),
-          "assetScriptHash"   -> field("assetScriptHash"),
-          "leaseBalanceHash"  -> field("leaseBalanceHash"),
-          "leaseStatusHash"   -> field("leaseStatusHash"),
-          "sponsorshipHash"   -> field("sponsorshipHash"),
-          "aliasHash"         -> field("aliasHash"),
-          "snapshotHash"      -> domain.rocksDBWriter.snapshotStateHash(lastButOneHeight),
-          "blockId"           -> lastButOneHeader.id().toString,
-          "baseTarget"        -> lastButOneHeader.header.baseTarget,
-          "height"            -> lastButOneHeight,
-          "version"           -> Version.VersionString
+          "stateHash"                      -> field("stateHash"),
+          "wavesBalanceHash"               -> field("wavesBalanceHash"),
+          "assetBalanceHash"               -> field("assetBalanceHash"),
+          "leaseBalanceHash"               -> field("leaseBalanceHash"),
+          "leaseStatusHash"                -> field("leaseStatusHash"),
+          "nextCommittedGeneratorsHash"    -> field("nextCommittedGeneratorsHash"),
+          "committedGeneratorBalancesHash" -> field("committedGeneratorBalancesHash"),
+          "snapshotHash"                   -> domain.rocksDBWriter.snapshotStateHash(lastButOneHeight),
+          "blockId"                        -> lastButOneHeader.id().toString,
+          "baseTarget"                     -> lastButOneHeader.header.baseTarget,
+          "height"                         -> lastButOneHeight,
+          "version"                        -> Version.VersionString
         )
 
         Get(routePath(s"/stateHash/last")) ~> route ~> check {
@@ -215,7 +211,7 @@ class DebugApiRouteSpec
     }
 
     "invalid tx" in {
-      val tx = TxHelpers.transfer(TxHelpers.defaultSigner, TestValues.address, ENOUGH_AMT)
+      val tx = TxHelpers.transfer(TxHelpers.signer(1003), TestValues.address, ENOUGH_AMT)
       validatePost(tx) ~> route ~> check {
         val json = responseAs[JsValue]
         (json \ "valid").as[Boolean] shouldBe false
@@ -224,25 +220,5 @@ class DebugApiRouteSpec
       }
     }
 
-  }
-
-  routePath("/minerInfo") - {
-    "returns info from wallet if miner private keys not specified in config" in {
-      val acc = domain.wallet.generateNewAccount()
-
-      acc shouldBe defined
-      Get(routePath("/minerInfo")) ~> ApiKeyHeader ~> route ~> check {
-        responseAs[Seq[AccountMiningInfo]].map(_.address) shouldBe acc.toSeq.map(_.toAddress.toString)
-      }
-    }
-
-    "returns info only for miner private keys from config when specified" in {
-      val minerAccs   = Seq(TxHelpers.signer(1090), TxHelpers.signer(1091))
-      val debugRoute  = debugApiRoute.copy(ws = debugApiRoute.ws.copy(minerSettings = ???))
-
-      Get(routePath("/minerInfo")) ~> ApiKeyHeader ~> debugRoute.route ~> check {
-        responseAs[Seq[AccountMiningInfo]].map(_.address) shouldBe minerAccs.map(_.toAddress.toString)
-      }
-    }
   }
 }

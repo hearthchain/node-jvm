@@ -5,7 +5,6 @@ import com.wavesplatform.TestValues.commitToGenerationFee
 import com.wavesplatform.api.http.{GeneratorsApiRoute, RouteTimeout}
 import com.wavesplatform.block.{BlockEndorsement, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{WithDomain, WithState}
 import com.wavesplatform.history.Domain
@@ -15,22 +14,21 @@ import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import monix.execution.Scheduler.global
 import org.apache.pekko.http.scaladsl.model.StatusCodes.{NotFound, OK}
 import org.scalactic.source.Position
-import play.api.libs.json.{JsArray, JsObject, Json}
+import play.api.libs.json.{JsArray, JsNull, JsObject, Json}
 import tech.hearth.crypto.SigningKey
 
 import scala.annotation.targetName
 import scala.concurrent.duration.*
 
-/** Scenario:
-  * 1. Activate finalization on 2, generation period length is 3
-  * 2. Commit on 2
-  * 3. Append blocks up to first period start height on 6
-  * 4. Issue conflicting endorsement on 6
-  * 5. Commit on 9
-  * 6. Append blocks up to next period start height on 9
+/** Finalization is active from genesis now, so periods are anchored at height 1: with a length of 3 they are [1, 3],
+  * [4, 6], [7, 9], ... The genesis snapshot commits the miner for the first of them, and the scenario is:
+  *   1. Commit on 2, which lands on period1 = [4, 6]
+  *   2. Append blocks up to 5 - the last block of a period is too late to commit for the next one, see `commit`
+  *   3. Issue a conflicting endorsement there
+  *   4. Commit for period2 = [7, 9]
+  *   5. Append into period2
   */
 class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
-  private val activationHeight       = Height(2)
   private val generationPeriodLength = 3
   private val defaultSettings: WavesSettings = {
     val orig = DomainPresets.DeterministicFinality
@@ -51,18 +49,32 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
 
   private val defaultInitBalances: Seq[WithState.AddrWithBalance] = generators.map(x => AddrWithBalance(x.toAddress, initBalance))
 
-  private val period1 = GenerationPeriod(Height(activationHeight.toInt + 1 + generationPeriodLength), generationPeriodLength)
-  private val period2 = period1.next
-  private val period3 = period2.next
+  // The period the genesis snapshot commits the miner for, and the three that follow
+  private val genesisPeriod = GenerationPeriod(Height(1), generationPeriodLength)
+  private val period1       = genesisPeriod.next
+  private val period2       = period1.next
+  private val period3       = period2.next
 
   "/generators/at/{height}" - {
     "committed to the period 1" in test { d =>
       d.appendBlock()
       val txIds = d.commit(generators*)
 
-      d.checkAt(1) { status shouldBe NotFound } // Before activation
-      d.checkAt(2) { jsonBodyIsEmpty() }
-      d.checkAt() { jsonBodyIsEmpty() }
+      // Every height has a generation period now - `Blockchain.generationPeriodOf` no longer returns None below the
+      // activation height - so height 1 answers with what the genesis snapshot committed: the miner, with no
+      // transaction behind it
+      d.checkAt(1) {
+        jsonBodyIs(Json.obj("address" -> minerAddr, "transactionId" -> JsNull, "balance" -> 0))
+      }
+      // Height 2 is in the same period as height 1, so it answers with the same generator - with a balance this time,
+      // since the height is the chain's own and the generator set for it is known. The deposit is locked out of it.
+      val genesisCommitted = Json.obj(
+        "address"       -> minerAddr,
+        "transactionId" -> JsNull,
+        "balance"       -> (initBalance - CommitToGenerationTransaction.DepositInWavelets)
+      )
+      d.checkAt(2) { jsonBodyIs(genesisCommitted) }
+      d.checkAt() { jsonBodyIs(genesisCommitted) }
 
       d.checkAt(period1.start) {
         jsonBodyIs(
@@ -87,12 +99,10 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     "on start height of period1" in test { d =>
       d.appendBlock()
       val txIds                   = d.commit(generators*)
-      val minerGeneratingBalance2 = d.effBalance(miner.toAddress)
+      val minerBalanceAtCommit = d.effBalance(miner.toAddress)
 
-      (3 to 7).foreach { _ =>
-        d.appender.appendBlock(d.createBlock(strictTime = true, generator = miner))
-      }
-      val minerGeneratingBalance6 = d.effBalance(miner.toAddress)
+      d.appendUpTo(period1.end - 1)
+      val minerBalanceInPeriod1 = d.effBalance(miner.toAddress)
 
       d.checkAt(period1.start) {
         jsonBodyIs(
@@ -109,7 +119,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           Json.obj(
             "address"       -> minerAddr,
             "transactionId" -> txIds(2).toString,
-            "balance"       -> minerGeneratingBalance2
+            "balance"       -> minerBalanceAtCommit
           )
         )
       }
@@ -129,7 +139,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           Json.obj(
             "address"       -> minerAddr,
             "transactionId" -> txIds(2).toString,
-            "balance"       -> minerGeneratingBalance6
+            "balance"       -> minerBalanceInPeriod1
           )
         )
       }
@@ -141,12 +151,10 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     "one generator is conflicting" in test { d =>
       d.appendBlock()
       val txIds                   = d.commit(generators*)
-      val minerGeneratingBalance2 = d.effBalance(miner.toAddress)
+      val minerBalanceAtCommit = d.effBalance(miner.toAddress)
 
-      (3 to 7).foreach { _ =>
-        d.appender.appendBlock(d.createBlock(strictTime = true, generator = miner))
-      }
-      val minerGeneratingBalance6 = d.effBalance(miner.toAddress)
+      d.appendUpTo(period1.end - 1)
+      val minerBalanceInPeriod1 = d.effBalance(miner.toAddress)
       d.appendConflicting()
 
       d.checkAt(period1.start) {
@@ -164,7 +172,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           Json.obj(
             "address"       -> minerAddr,
             "transactionId" -> txIds(2).toString,
-            "balance"       -> minerGeneratingBalance2
+            "balance"       -> minerBalanceAtCommit
           )
         )
       }
@@ -185,7 +193,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           Json.obj(
             "address"       -> minerAddr,
             "transactionId" -> txIds(2).toString,
-            "balance"       -> minerGeneratingBalance6
+            "balance"       -> minerBalanceInPeriod1
           )
         )
       }
@@ -198,10 +206,8 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
       d.appendBlock()
       val txIds1 = d.commit(generators*)
 
-      (3 to 7).foreach { _ =>
-        d.appender.appendBlock(d.createBlock(strictTime = true, generator = miner))
-      }
-      val minerGeneratingBalance = d.effBalance(miner.toAddress)
+      d.appendUpTo(period1.end - 1)
+      val minerBalanceInPeriod1 = d.effBalance(miner.toAddress)
       d.appendConflicting()
       val txIds2 = d.commit(validGenerator, miner)
 
@@ -221,7 +227,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           Json.obj(
             "address"       -> minerAddr,
             "transactionId" -> txIds1(2).toString,
-            "balance"       -> minerGeneratingBalance
+            "balance"       -> minerBalanceInPeriod1
           )
         )
       }
@@ -245,18 +251,14 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     "on the period 2" in test { d =>
       d.appendBlock()
       val txIds1                  = d.commit(generators*)
-      val minerGeneratingBalance2 = d.effBalance(miner.toAddress)
+      val minerBalanceAtCommit = d.effBalance(miner.toAddress)
 
-      (3 to 7).foreach { _ =>
-        d.appender.appendBlock(d.createBlock(strictTime = true, generator = miner))
-      }
+      d.appendUpTo(period1.end - 1)
       d.appendConflicting()
       val txIds2 = d.commit(validGenerator, miner)
 
-      (8 to 9).foreach { _ =>
-        d.appender.appendBlock(d.createBlock(strictTime = true, generator = miner))
-      }
-      val minerGeneratingBalance = d.effBalance(miner.toAddress)
+      d.appendUpTo(period2.start + 1)
+      val minerBalanceInPeriod2 = d.effBalance(miner.toAddress)
 
       d.checkAt(period1.start) {
         jsonBodyIs(
@@ -273,7 +275,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           Json.obj(
             "address"       -> minerAddr,
             "transactionId" -> txIds1(2).toString,
-            "balance"       -> minerGeneratingBalance2
+            "balance"       -> minerBalanceAtCommit
           )
         )
       }
@@ -288,7 +290,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           Json.obj(
             "address"       -> minerAddr,
             "transactionId" -> txIds2(1).toString,
-            "balance"       -> minerGeneratingBalance
+            "balance"       -> minerBalanceInPeriod2
           )
         )
       }
@@ -317,6 +319,10 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
       txs.map(_.id())
     }
 
+    /** Blocks generated by the miner up to and including `height`. */
+    def appendUpTo(height: Height): Unit =
+      (d.blockchain.height + 1 to height.toInt).foreach(_ => d.appender.appendBlock(d.createBlock(strictTime = true, generator = miner)))
+
     def appendConflicting(): Unit = d.appendMicroBlock(
       d.createMicroBlock(
         signer = miner.some,
@@ -326,7 +332,9 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
           aggregatedEndorsement = None,
           conflict = Vector(
             BlockEndorsement.signed(
-              BlsKeyPair(???),
+              // Index 1 of the committed set is the conflicting generator, and an endorsement only counts as its own
+              // if it is signed by the BLS key that generator committed
+              TxHelpers.blsKeyOf(conflictingGenerator),
               GeneratorIndex(1),
               finalizedId = TxHelpers.randomBlockId,
               finalizedHeight = Height(1),

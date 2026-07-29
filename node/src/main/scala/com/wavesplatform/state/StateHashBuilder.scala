@@ -53,8 +53,6 @@ class StateHashBuilder {
     )
   }
 
-  def addDataEntry(address: Address, dataEntry: DataEntry[?]): Unit = {}
-
   def addLeaseBalance(address: Address, leaseIn: Long, leaseOut: Long): Unit = {
     addEntry(Section.LeaseBalance, address.toBytes)(
       Longs.toByteArray(leaseIn),

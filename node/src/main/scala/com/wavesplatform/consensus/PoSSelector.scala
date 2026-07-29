@@ -9,12 +9,20 @@ import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.state.{Blockchain, Height}
 import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.utils.{BaseTargetReachedMaximum, ScorexLogging, forceStopApplication}
+import com.wavesplatform.utils.{ApplicationStopReason, BaseTargetReachedMaximum, ScorexLogging, forceStopApplication}
 import tech.hearth.crypto.{Ecvrf, VrfKey}
 
 import scala.concurrent.duration.FiniteDuration
 
-case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) extends ScorexLogging {
+/** @param onFatalStop
+  *   How the node is brought down when it detects it must not keep running. Injected so tests can observe that the
+  *   shutdown was triggered - it cannot be intercepted from outside any more, since JDK 25 removed SecurityManager.
+  */
+case class PoSSelector(
+    blockchain: Blockchain,
+    maxBaseTarget: Option[Long],
+    onFatalStop: ApplicationStopReason => Unit = forceStopApplication
+) extends ScorexLogging {
   import PoSCalculator.*
   import blockchain.settings as blockchainSettings
 
@@ -77,7 +85,7 @@ case class PoSSelector(blockchain: Blockchain, maxBaseTarget: Option[Long]) exte
         s"Base target reached maximum value (settings: synchronization.max-base-target=${maxBaseTarget.getOrElse(-1)}). Anti-fork protection."
       )
       log.error("FOR THIS REASON THE NODE WAS STOPPED AUTOMATICALLY")
-      forceStopApplication(BaseTargetReachedMaximum)
+      onFatalStop(BaseTargetReachedMaximum)
       GenericError("Base target reached maximum")
     }
 

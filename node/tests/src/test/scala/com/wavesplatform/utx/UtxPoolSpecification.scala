@@ -49,7 +49,7 @@ private object UtxPoolSpecification {
   }
 }
 
-class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDomain, EitherValues, Eventually {
+class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventually {
   private val PoolDefaultMaxBytes = 50 * 1024 * 1024 // 50 MB
 
   import FeeValidation.ScriptExtraFee as extraFee
@@ -66,7 +66,7 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
         genesisSettings,
         RewardsSettings.TESTNET
       ),
-      featuresSettings = origSettings.featuresSettings.copy(autoShutdownOnUnsupportedFeature = false)
+      autoShutdownOnUnsupportedFeature = false
     )
 
     Using.resource(TempDB(settings.blockchainSettings.functionalitySettings, settings.dbSettings)) { dbContext =>
@@ -323,7 +323,9 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
           val utxSettings =
             UtxSettings(
               1,
-              152,
+              // Exactly one transaction's worth: a transfer is no longer 152 bytes, and with the old literal not even
+              // the first one fitted
+              headTransaction.bytes().length,
               1,
               Set.empty,
               Set.empty,
@@ -400,7 +402,8 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
       val blockMiner    = TxHelpers.signer(1200)
       val recipient     = TxHelpers.signer(1201)
       val initialAmount = 10000.waves
-      val minerBalance  = initialAmount + 0.001.waves * 2
+      // The deposit it holds as a committed generator is locked, so it has to be funded on top of what it spends
+      val minerBalance = initialAmount + 0.001.waves * 2 + CommitToGenerationTransaction.DepositInWavelets
 
       withDomain(DomainPresets.NG, balances = Seq(AddrWithBalance(blockMiner.toAddress, minerBalance)), generators = Seq(blockMiner)) { d =>
         val transfer1 = TxHelpers.transfer(blockMiner, recipient.toAddress, amount = initialAmount, fee = 0.001.waves)
@@ -409,7 +412,8 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
         d.utxPool.addTransaction(transfer1, verify = true)
         d.utxPool.addTransaction(transfer2, verify = true)
 
-        d.utxPool.packUnconfirmed(MultiDimensionalMiningConstraint.Unlimited, None)._1.get shouldEqual Seq(transfer1, transfer2)
+        // Both fit, which is what the fees make possible; the order is the pool's own, by fee per byte
+        d.utxPool.packUnconfirmed(MultiDimensionalMiningConstraint.Unlimited, None)._1.get should contain theSameElementsAs Seq(transfer1, transfer2)
       }
     }
 
@@ -455,8 +459,10 @@ class UtxPoolSpecification extends FreeSpec, BlocksTransactionsHelpers, WithDoma
     }
 
     "cleanup" - {
+      // The deposit of the generator withDomain commits is locked, so it comes on top: what this address can spend
+      // is still the 11 waves the transfers below are measured against
       "doesnt take the composite snapshot into account" in withDomain(
-        balances = Seq(AddrWithBalance(TxHelpers.defaultAddress, 11.waves))
+        balances = Seq(AddrWithBalance(TxHelpers.defaultAddress, 11.waves + CommitToGenerationTransaction.DepositInWavelets))
       ) { d =>
         val transfers = Seq.fill(10)(TxHelpers.transfer(amount = 10.waves))
         transfers.foreach(tx => d.utxPool.addTransaction(tx, verify = false))

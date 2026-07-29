@@ -148,29 +148,29 @@ trait BlockIdSeqSpec[A <: AnyRef] extends MessageSpec[A] {
   }
 }
 
-object GetSignaturesSpec extends SignaturesSeqSpec[GetSignatures] {
-  def isSupported(signatures: Seq[ByteStr]): Boolean             = signatures.forall(_.arr.length == SignatureLength)
-  override def wrap(signatures: Seq[Array[Byte]]): GetSignatures = GetSignatures(signatures.map(ByteStr(_)))
-  override def unwrap(v: GetSignatures): Seq[Array[MessageCode]] = v.signatures.map(_.arr)
-  override val messageCode: MessageCode                          = 20: Byte
+object GetSignaturesSpec extends SignaturesSeqSpec[GetBlockIds] {
+  def isSupported(signatures: Seq[ByteStr]): Boolean           = signatures.forall(_.arr.length == SignatureLength)
+  override def wrap(signatures: Seq[Array[Byte]]): GetBlockIds = GetBlockIds(signatures.map(ByteStr(_)))
+  override def unwrap(v: GetBlockIds): Seq[Array[MessageCode]] = v.ids.map(_.arr)
+  override val messageCode: MessageCode                        = 20: Byte
 }
 
-object SignaturesSpec extends SignaturesSeqSpec[Signatures] {
-  override def wrap(signatures: Seq[Array[Byte]]): Signatures = Signatures(signatures.map(ByteStr(_)))
-  override def unwrap(v: Signatures): Seq[Array[Byte]]        = v.signatures.map(_.arr)
-  override val messageCode: MessageCode                       = 21: Byte
+object SignaturesSpec extends SignaturesSeqSpec[BlockIds] {
+  override def wrap(signatures: Seq[Array[Byte]]): BlockIds = BlockIds(signatures.map(ByteStr(_)))
+  override def unwrap(v: BlockIds): Seq[Array[Byte]]        = v.ids.map(_.arr)
+  override val messageCode: MessageCode                     = 21: Byte
 }
 
-object GetBlockIdsSpec extends BlockIdSeqSpec[GetSignatures] {
-  override def wrap(blockIds: Seq[Array[Byte]]): GetSignatures   = GetSignatures(blockIds.map(ByteStr(_)))
-  override def unwrap(v: GetSignatures): Seq[Array[MessageCode]] = v.signatures.map(_.arr)
-  override val messageCode: MessageCode                          = 32: Byte
+object GetBlockIdsSpec extends BlockIdSeqSpec[GetBlockIds] {
+  override def wrap(blockIds: Seq[Array[Byte]]): GetBlockIds   = GetBlockIds(blockIds.map(ByteStr(_)))
+  override def unwrap(v: GetBlockIds): Seq[Array[MessageCode]] = v.ids.map(_.arr)
+  override val messageCode: MessageCode                        = 32: Byte
 }
 
-object BlockIdsSpec extends BlockIdSeqSpec[Signatures] {
-  override def wrap(blockIds: Seq[Array[Byte]]): Signatures = Signatures(blockIds.map(ByteStr(_)))
-  override def unwrap(v: Signatures): Seq[Array[Byte]]      = v.signatures.map(_.arr)
-  override val messageCode: MessageCode                     = 33: Byte
+object BlockIdsSpec extends BlockIdSeqSpec[BlockIds] {
+  override def wrap(blockIds: Seq[Array[Byte]]): BlockIds = BlockIds(blockIds.map(ByteStr(_)))
+  override def unwrap(v: BlockIds): Seq[Array[Byte]]      = v.ids.map(_.arr)
+  override val messageCode: MessageCode                   = 33: Byte
 }
 
 object GetBlockSpec extends MessageSpec[GetBlock] {
@@ -178,7 +178,7 @@ object GetBlockSpec extends MessageSpec[GetBlock] {
 
   override val maxLength: Int = SignatureLength
 
-  override def serializeData(signature: GetBlock): Array[Byte] = signature.signature.arr
+  override def serializeData(signature: GetBlock): Array[Byte] = signature.id.arr
 
   override def deserializeData(bytes: Array[Byte]): Try[GetBlock] = Try {
     require(Block.validateReferenceLength(bytes.length), "Data does not match length")

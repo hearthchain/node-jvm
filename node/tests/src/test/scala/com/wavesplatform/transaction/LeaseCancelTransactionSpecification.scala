@@ -9,26 +9,18 @@ import play.api.libs.json.Json
 
 class LeaseCancelTransactionSpecification extends PropSpec {
 
-  private def assertTxs(first: LeaseCancelTransaction, second: LeaseCancelTransaction): Unit = {
-    first.leaseId shouldEqual second.leaseId
-    first.fee shouldEqual second.fee
-    first.proofs shouldEqual second.proofs
-    first.bytes() shouldEqual second.bytes()
-  }
-
   property("JSON format validation for LeaseCancelTransactionV1") {
     val js = Json.parse("""{
-                       "type": 9,
-                       "id": "7hmabbFS8a2z79a29pzZH1s8LHxrsEAnnLjJxNdZ1gGw",
-                       "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
+                       "type": 5,
+                       "id": "ATVDhiQV5dqSVGf3kobpHrE2GWgESSD4Hz6saUKq5ggt",
+                       "sender": "thrth1ryd2f987gg464uf4q5jte5rcmc2xgq6kr3qe39",
                        "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
                        "fee": 1000000,
                        "feeAssetId": null,
                        "timestamp": 1526646300260,
-                       "signature": "4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3",
                        "proofs": ["4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3"],
-                       "version": 1,
-                       "leaseId": "EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY"
+                       "leaseId": "EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY",
+                       "chainId": 84
                        }
     """)
 
@@ -47,9 +39,9 @@ class LeaseCancelTransactionSpecification extends PropSpec {
 
   property("JSON format validation for LeaseCancelTransactionV2") {
     val js = Json.parse("""{
-                        "type": 9,
-                        "id": "4nvUUiQjTH7D2LFyzaxs8JwaZYZHDggJgq1iP99TvVDM",
-                        "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
+                        "type": 5,
+                        "id": "CcE4JEuKTfrqbEURF7jQyryxWrG1Tr8niEU2C7SA5Pow",
+                        "sender": "thrth1ryd2f987gg464uf4q5jte5rcmc2xgq6kr3qe39",
                         "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
                         "fee": 1000000,
                         "feeAssetId":null,
@@ -57,7 +49,6 @@ class LeaseCancelTransactionSpecification extends PropSpec {
                         "proofs": [
                         "3h5SQLbCzaLoTHUeoCjXUHB6qhNUfHZjQQVsWTRAgTGMEdK5aeULMVUfDq63J56kkHJiviYTDT92bLGc8ELrUgvi"
                         ],
-                        "version": 2,
                         "leaseId": "DJWkQxRyJNqWhq9qSQpK2D4tsrct6eZbjSv3AH4PSha6",
                         "chainId": 84
                        }

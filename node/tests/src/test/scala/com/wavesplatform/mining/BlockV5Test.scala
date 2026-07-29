@@ -14,13 +14,13 @@ import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
 import com.wavesplatform.state.diffs
 import com.wavesplatform.test.{FlatSpec, *}
 import com.wavesplatform.transaction.TxHelpers
-import com.wavesplatform.{BlocksTransactionsHelpers, crypto, protobuf}
+import com.wavesplatform.{crypto, protobuf}
 import org.scalatest.*
 import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.duration.*
 
-class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherValues with BlocksTransactionsHelpers {
+class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherValues {
   private def shiftTime(miner: MinerImpl, minerAcc: SigningKey, time: TestTime): Unit = {
     val offset = miner.nextBlockGenerationOffsets.getOrElse(minerAcc.toAddress, Left("No delay")).explicitGet()
     time.advance(offset + 1.milli)
@@ -108,7 +108,7 @@ class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherV
     withDomainAndMiner(
       settings.copy(minerSettings = settings.minerSettings.copy(quorum = 0)),
       Seq(AddrWithBalance(minerAcc.toAddress, diffs.ENOUGH_AMT)),
-      miningAccounts = Seq(MiningAccount(minerAcc, TxHelpers.defaultVrfKey))
+      minerAccounts = Seq(0) // TxHelpers.signer(0) == defaultSigner; the miner needs its seed, not its key
     ) { (d, miner, append) =>
       (1 to 10).foreach { _ =>
         shiftTime(miner, minerAcc, d.testTime)
@@ -126,7 +126,7 @@ class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherV
       Seq(AddrWithBalance(TxHelpers.defaultAddress, diffs.ENOUGH_AMT)),
       generators = Seq(TxHelpers.defaultSigner)
     ) { d =>
-      val keyBlock = d.appendKeyBlock()
+      d.appendKeyBlock()
 
       val transfer1 = TxHelpers.transfer()
       val transfer2 = TxHelpers.transfer()

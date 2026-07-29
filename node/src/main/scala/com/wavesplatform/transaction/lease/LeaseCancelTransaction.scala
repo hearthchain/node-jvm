@@ -31,8 +31,6 @@ final case class LeaseCancelTransaction(
 object LeaseCancelTransaction {
   type TransactionT = LeaseCancelTransaction
 
-  val typeId: TxType = 9: Byte
-
   implicit val validator: TxValidator[LeaseCancelTransaction] = LeaseCancelTxValidator
 
   def create(

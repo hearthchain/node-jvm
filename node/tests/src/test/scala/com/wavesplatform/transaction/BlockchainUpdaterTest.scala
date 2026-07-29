@@ -8,14 +8,12 @@ import com.wavesplatform.history
 import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import com.wavesplatform.state.*
 import com.wavesplatform.test.DomainPresets.RideV6
-import com.wavesplatform.test.{FreeSpec, HasSecurityManager}
+import com.wavesplatform.test.{FreeSpec, HasFatalStopProbe}
 import com.wavesplatform.utils.UnsupportedFeature
 import org.scalactic.source.Position
 
-import java.util.concurrent.TimeUnit
-import scala.util.Try
 
-class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain with HasSecurityManager {
+class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain with HasFatalStopProbe {
 
   private val ApprovalPeriod      = 100
   private val BlocksForActivation = (ApprovalPeriod * 0.9).toInt
@@ -25,8 +23,14 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       functionalitySettings = history.DefaultWavesSettings.blockchainSettings.functionalitySettings
         .copy(featureCheckBlocksPeriod = ApprovalPeriod, blocksForFeatureActivation = BlocksForActivation, preActivatedFeatures = Map.empty)
     ),
-    featuresSettings = history.DefaultWavesSettings.featuresSettings.copy(autoShutdownOnUnsupportedFeature = true)
+    // Off by default: most tests here vote a chain into activating a feature the node does not implement, and with this
+    // on that calls forceStopApplication - which really does exit the JVM and take the whole test run with it. Only the
+    // test that asserts the shutdown turns it on, and that one injects a probe in place of the real exit.
+    autoShutdownOnUnsupportedFeature = false
   )
+
+  private val WavesSettingsWithShutdown =
+    WavesSettings.copy(autoShutdownOnUnsupportedFeature = true)
 
   private val WavesSettingsWithDoubling = WavesSettings.copy(
     blockchainSettings = WavesSettings.blockchainSettings.copy(
@@ -418,21 +422,22 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     b.featureStatus(1, b.height) shouldBe BlockchainFeatureStatus.Approved
   }
 
-  "block processing should fail if unimplemented feature was activated on blockchain when autoShutdownOnUnsupportedFeature = yes and exit with code 38" in withDomain(
-    WavesSettings
-  ) { domain =>
-    val b = domain.blockchainUpdater
-    withSecurityManager(UnsupportedFeature) { signal =>
+  "block processing should fail if unimplemented feature was activated on blockchain when autoShutdownOnUnsupportedFeature = yes and exit with code 38" in {
+    val stopProbe = fatalStopProbe(UnsupportedFeature)
+    withDomain(WavesSettingsWithShutdown, onFatalStop = stopProbe.onFatalStop) { domain =>
+      val b = domain.blockchainUpdater
       b.processBlock(genesisBlock)
 
       (1 to ApprovalPeriod * 2 - 2).foreach { _ =>
         b.processBlock(getNextTestBlockWithVotes(b, Seq(-1))) should beRight
       }
 
-      Try(b.processBlock(getNextTestBlockWithVotes(b, Seq(-1)))).recover[Any] { case _: SecurityException => // NOP
-      }
+      b.processBlock(getNextTestBlockWithVotes(b, Seq(-1)))
 
-      signal.tryAcquire(10, TimeUnit.SECONDS)
+      withClue("the node was stopped: ") {
+        stopProbe.awaitStop() shouldBe true
+        stopProbe.stopReason shouldBe Some(UnsupportedFeature)
+      }
     }
   }
 
@@ -519,7 +524,11 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     b.featureStatus(2, b.height) should be(BlockchainFeatureStatus.Activated)
   }
 
-  "doubling of feature periods should work after defined height" in withDomain(WavesSettingsWithDoubling) { domain =>
+  /* Feature periods do not double any more: `activationWindowSize` is `featureCheckBlocksPeriod` at every height, and
+   * the setting that used to turn doubling on is gone from FunctionalitySettings. What is left to check is that a
+   * window is the same length late in the chain as it is at the start, which is what the counts below say.
+   */
+  "feature periods keep their length at any height" in withDomain(WavesSettingsWithDoubling) { domain =>
     val b = domain.blockchainUpdater
 
     b.processBlock(genesisBlock)
@@ -544,14 +553,14 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       b.processBlock(getNextTestBlock(b)) should beRight
     }
 
-    (0 until ApprovalPeriod * 2 - 1).foreach { _ =>
+    (0 until ApprovalPeriod - 1).foreach { _ =>
       b.processBlock(getNextTestBlockWithVotes(b, Seq(2))) should beRight
     }
     b.featureStatus(2, b.height) should be(BlockchainFeatureStatus.Undefined)
     b.processBlock(getNextTestBlockWithVotes(b, Seq(2))) should beRight
     b.featureStatus(2, b.height) should be(BlockchainFeatureStatus.Approved)
 
-    (0 until ApprovalPeriod * 2 - 1).foreach { _ =>
+    (0 until ApprovalPeriod - 1).foreach { _ =>
       b.processBlock(getNextTestBlock(b)) should beRight
     }
     b.featureStatus(2, b.height) should be(BlockchainFeatureStatus.Approved)

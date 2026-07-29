@@ -126,6 +126,8 @@ object GenesisBlockGenerator {
            |  timestamp = ${settings.timestamp}
            |  block-timestamp = ${settings.blockTimestamp}
            |  signature = "${settings.signature.get}"
+           |  state-hash = "${settings.stateHash.get}"
+           |  block-id = "${settings.blockId.get}"
            |  generators = [
            |    ${settings.generators
             .map(x => s"""{public-key = "${x.publicKey}", endorser-public-key = "${x.endorserPublicKey}", vrf-public-key = "${x.vrfPublicKey}"}""")
@@ -172,32 +174,22 @@ object GenesisBlockGenerator {
         .getOrElse(mkGenesisSettings(calcInitialBaseTarget()))
 
     def mkGenesisSettings(baseTarget: Long): GenesisSettings = {
-      val reference     = ByteStr(Array.fill(SignatureLength)(-1: Byte))
-      val genesisSigner = Block.GenesisGenerator
-
-      // The genesis block carries no transactions, so its signature covers the header only
-      val genesis = Block
-        .buildAndSign(
-          timestamp = timestamp,
-          reference = reference,
-          baseTarget,
-          ByteStr(Array.fill(crypto.DigestLength)(0: Byte)),
-          txs = Seq.empty,
-          signer = genesisSigner,
-          featureVotes = Seq.empty,
-          stateHash = None,
-          challengedHeader = None,
-          finalizationVoting = None
-        )
-        .explicitGet()
-
-      GenesisSettings(
+      val unpinned = GenesisSettings(
         timestamp,
-        Some(genesis.signature),
-        genesis.header.baseTarget,
+        None,
+        baseTarget,
         settings.averageBlockDelay,
         generators = genesisGenerators,
         balances = genesisBalances
+      )
+
+      // Build the very block the node will build from these settings, so the emitted commitments are the ones it computes
+      val genesis = Block.genesis(unpinned).explicitGet()
+
+      unpinned.copy(
+        signature = Some(genesis.signature),
+        stateHash = genesis.header.stateHash,
+        blockId = Some(genesis.id())
       )
     }
 

@@ -73,7 +73,7 @@ class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISetting
 
       domain.appendBlock(TxHelpers.transfer(richAccount, lessor.toAddress, 30.006.waves))
 
-      forAll(transactionVersions) { v =>
+      forAll(transactionVersions) { _ =>
         val leaseTransaction = TxHelpers.lease(lessor, leaseRecipient)
         val expectedDetails  = Seq(leaseTransaction.id() -> toDetails(leaseTransaction, domain.blockchain))
 
@@ -137,8 +137,8 @@ class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISetting
       response should matchJson(s"""{
                                    |  "id" : "${lease.id()}",
                                    |  "originTransactionId" : "${lease.id()}",
-                                   |  "sender" : "hrtht1qpyfckvtr83y0v7zj0q0dycfxf2u7r5geusv7x39",
-                                   |  "recipient" : "hrtht1qqpv238whmmc5uqn3p50v7pnzdcxdc4h8sxkec4j",
+                                   |  "sender" : "thrth1fzw9nzceufrm8s5ncrmfxzfj2h8sazx0essmag",
+                                   |  "recipient" : "thrth1qtz5fm477798qyugdrm8svcnwpnw9deung20t0",
                                    |  "amount" : 1000000000,
                                    |  "height" : $leaseHeight,
                                    |  "status" : "canceled",
@@ -150,8 +150,8 @@ class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISetting
     val leasesListJson = Json.parse(s"""[{
                                        |  "id" : "${lease.id()}",
                                        |  "originTransactionId" : "${lease.id()}",
-                                       |  "sender" : "hrtht1qpyfckvtr83y0v7zj0q0dycfxf2u7r5geusv7x39",
-                                       |  "recipient" : "hrtht1qqpv238whmmc5uqn3p50v7pnzdcxdc4h8sxkec4j",
+                                       |  "sender" : "thrth1fzw9nzceufrm8s5ncrmfxzfj2h8sazx0essmag",
+                                       |  "recipient" : "thrth1qtz5fm477798qyugdrm8svcnwpnw9deung20t0",
                                        |  "amount" : 1000000000,
                                        |  "height" : $leaseHeight,
                                        |  "status" : "canceled",
@@ -161,8 +161,8 @@ class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISetting
                                        {
                                        |  "id" : "${lease.id()}",
                                        |  "originTransactionId" : "${lease.id()}",
-                                       |  "sender" : "hrtht1qpyfckvtr83y0v7zj0q0dycfxf2u7r5geusv7x39",
-                                       |  "recipient" : "hrtht1qqpv238whmmc5uqn3p50v7pnzdcxdc4h8sxkec4j",
+                                       |  "sender" : "thrth1fzw9nzceufrm8s5ncrmfxzfj2h8sazx0essmag",
+                                       |  "recipient" : "thrth1qtz5fm477798qyugdrm8svcnwpnw9deung20t0",
                                        |  "amount" : 1000000000,
                                        |  "height" : $leaseHeight,
                                        |  "status" : "canceled",

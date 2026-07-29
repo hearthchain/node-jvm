@@ -19,10 +19,10 @@ case class WavesSettings(
     restAPISettings: RestAPISettings,
     synchronizationSettings: SynchronizationSettings,
     utxSettings: UtxSettings,
-    featuresSettings: FeaturesSettings,
     rewardsSettings: RewardsVotingSettings,
     metrics: Metrics.Settings,
     enableLightMode: Boolean,
+    autoShutdownOnUnsupportedFeature: Boolean,
     config: Config
 )
 
@@ -44,10 +44,12 @@ object WavesSettings {
     val restAPISettings           = wavesConfigSource.at("rest-api").loadOrThrow[RestAPISettings]
     val synchronizationSettings   = wavesConfigSource.at("synchronization").loadOrThrow[SynchronizationSettings]
     val utxSettings               = wavesConfigSource.at("utx").loadOrThrow[UtxSettings]
-    val featuresSettings          = wavesConfigSource.at("features").loadOrThrow[FeaturesSettings]
     val rewardsSettings           = wavesConfigSource.at("rewards").loadOrThrow[RewardsVotingSettings]
-    val metrics                   = ConfigSource.fromConfig(rootConfig).at("metrics").loadOrThrow[Metrics.Settings] // TODO: Move to waves section
+    val metrics                   = wavesConfigSource.at("metrics").loadOrThrow[Metrics.Settings]
     val enableLightMode           = wavesConfigSource.at("enable-light-mode").loadOrThrow[Boolean]
+
+    val autoShutdownOnUnsupportedFeature =
+      wavesConfigSource.at("auto-shutdown-on-unsupported-feature").loadOrThrow[Boolean]
 
     WavesSettings(
       directory,
@@ -63,10 +65,10 @@ object WavesSettings {
       restAPISettings,
       synchronizationSettings,
       utxSettings,
-      featuresSettings,
       rewardsSettings,
       metrics,
       enableLightMode,
+      autoShutdownOnUnsupportedFeature,
       rootConfig
     )
   }

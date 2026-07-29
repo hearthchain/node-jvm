@@ -126,7 +126,7 @@ class MicroBlockAppendingAfterFinalizationSpec extends BaseFinalizationSpec {
       AddrWithBalance(generator3.toAddress, 3000.waves)
     )
 
-    withDomain(defaultSettings, initBalances) { d =>
+    withDomain(defaultSettings, initBalances, generators = generators) { d =>
       val genesisBlockId = d.blockchain.lastBlockId.value
 
       log.debug("Append block 2 with commitments")
@@ -178,7 +178,7 @@ class MicroBlockAppendingAfterFinalizationSpec extends BaseFinalizationSpec {
       AddrWithBalance(generator2.toAddress, 2000.waves)
     )
 
-    withDomain(defaultSettings, initBalances) { d =>
+    withDomain(defaultSettings, initBalances, generators = generators) { d =>
       val genesisBlockId = d.blockchain.lastBlockId.value
 
       log.debug("Append block 2 with commitments")

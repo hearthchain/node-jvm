@@ -37,6 +37,13 @@ class ConflictEndorserBlocksNgSuite extends BaseFinalizationSpec {
   private val generators             = Seq(validGenerator, conflictGenerator)
   private val conflictGeneratorIndex = GeneratorIndex(1)
 
+  private val otherAcc1 = TxHelpers.signer(1000)
+  private val otherAcc2 = TxHelpers.signer(1001)
+
+  // Everything WAVES there is on this chain: the genesis snapshot mints exactly these balances
+  private val genesisBalances = AddrWithBalance.enoughBalances(validGenerator, conflictGenerator, otherAcc1)
+  private val initialSupply   = genesisBalances.map(_.balance).sum
+
   "finalization happens in next keyblock" in new Scenario[Height] {
     override def getData = d => d.blockchain.finalizedHeight.value
 
@@ -63,7 +70,7 @@ class ConflictEndorserBlocksNgSuite extends BaseFinalizationSpec {
   "waves amount" in new Scenario[Long] {
     override def getData = d => d.blockchain.wavesAmount(d.blockchain.height).toLong
 
-    def base(height: Int): IgnorePosition[Long] = 100_000_000.waves + (height - 1) * 6.waves // init + n * mining rewards
+    def base(height: Int): IgnorePosition[Long] = initialSupply + (height - 1) * 6.waves // init + n * mining rewards
 
     override def after2WithCommitmentsCheck                   = _ shouldBe base(2)
     override def after3KeyBlockWithNewPeriodCheck             = _ shouldBe base(3)
@@ -160,13 +167,7 @@ class ConflictEndorserBlocksNgSuite extends BaseFinalizationSpec {
     def after4WithPunishmentCheck: Check
     def after5WithNewPeriodCheck: Check
 
-    private val otherAcc1 = TxHelpers.signer(1000)
-    private val otherAcc2 = TxHelpers.signer(1001)
-
-    def run(): Assertion = withDomain(
-      defaultSettings,
-      AddrWithBalance.enoughBalances(validGenerator, conflictGenerator, otherAcc1)
-    ) { d =>
+    def run(): Assertion = withDomain(defaultSettings, genesisBalances) { d =>
       def data(using Position) = getData(d)
 
       log.debug(s"Append block 2 with commitments")

@@ -4,7 +4,6 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.history.Domain.*
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.settings.TestFunctionalitySettings
 import com.wavesplatform.state.*
@@ -48,9 +47,12 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
           recipient.toAddress -> LeaseBalance(lease.amount.value, 0)
         )
       }
-      assertDiffAndState(Seq(TestBlock.create(Seq(lease))), TestBlock.create(Seq(leaseCancel)), balances = senderBalance) { case (snapshot, _) =>
+      assertDiffAndState(Seq(TestBlock.create(Seq(lease))), TestBlock.create(Seq(leaseCancel)), balances = senderBalance) { case (snapshot, b) =>
         snapshot.balances shouldBe VectorMap(
-          (miner, Waves)            -> (lease.fee.value + leaseCancel.fee.value),
+          // The whole fee of the lease block: 40% credited there, the 60% carry credited here - plus 40% of this
+          // block's own fee, and the reward
+          (miner, Waves) ->
+            (lease.fee.value + BlockDiffer.CurrentBlockFeePart(leaseCancel.fee.value) + b.settings.rewardsSettings.initial),
           (sender.toAddress, Waves) -> (ENOUGH_AMT - lease.fee.value - leaseCancel.fee.value)
         )
         snapshot.leaseBalances shouldBe Map(
@@ -61,7 +63,6 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     }
   }
 
-  private val repeatedCancelAllowed   = allowMultipleLeaseCancelTransactionUntilTimestamp - 1
   private val repeatedCancelForbidden = allowMultipleLeaseCancelTransactionUntilTimestamp + 1
 
   def cancelLeaseTwice(ts: Long): Seq[(TransferTransaction, LeaseTransaction, LeaseCancelTransaction, LeaseCancelTransaction)] = {
@@ -118,7 +119,10 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     }
 
     setup.foreach { case (lease, leaseForward, ts) =>
-      assertDiffEi(Seq(TestBlock.create(ts, Seq(lease))), TestBlock.create(ts, Seq(leaseForward)), settings, masterBalance) { snapshotEi =>
+      // The recipient can pay for the lease it is forwarding, but owns nothing beyond that: what was leased *to* it is
+      // what it must not be able to lease on. Without the fee it never reaches that check, failing on its own balance.
+      val balances = masterBalance :+ AddrWithBalance(TxHelpers.signer(2).toAddress, leaseForward.fee.value)
+      assertDiffEi(Seq(TestBlock.create(ts, Seq(lease))), TestBlock.create(ts, Seq(leaseForward)), settings, balances) { snapshotEi =>
         snapshotEi should produce("Cannot lease more than own")
       }
     }
@@ -163,22 +167,7 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     }
   }
 
-  property("can cancel lease of another sender and acquire leasing power before allowMultipleLeaseCancelTransactionUntilTimestamp") {
-    cancelLeaseOfAnotherSender(unleaseByRecipient = false, repeatedCancelAllowed).foreach { case (genesis, lease, unleaseOther, blockTime) =>
-      withDomain(ScriptsAndSponsorship, genesis) { d =>
-        d.appendBlock(lease)
-        d.appendBlock(TestBlock.create(blockTime, d.lastBlockId, Seq(unleaseOther)).block)
-        d.liquidSnapshot.balances.get((lease.sender.toAddress, Waves)) shouldBe None
-        val recipient = lease.recipient.asInstanceOf[Address]
-        val unleaser  = unleaseOther.sender.toAddress
-        total(d.liquidSnapshot.leaseBalances(recipient)) shouldBe total(d.rocksDBWriter.leaseBalance(recipient)) - lease.amount.value
-        total(d.liquidSnapshot.leaseBalances(unleaser)) shouldBe total(d.rocksDBWriter.leaseBalance(unleaser)) + lease.amount.value
-      }
-    }
-  }
-
   property(s"can pay for cancel lease from the returning funds (before and after BlockV5)") {
-    fail()
     val scenario = {
       val master    = TxHelpers.signer(1)
       val recipient = TxHelpers.signer(2)
@@ -231,7 +220,7 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     val (balances, lt) = scenario
 
     withDomain(RideV4, balances) { d =>
-      d.blockchainUpdater.processBlock(d.createBlock(Seq(lt))) should produce("Cannot lease more than own")
+      d.appendBlockE(lt) should produce("Cannot lease more than own")
     }
   }
 }

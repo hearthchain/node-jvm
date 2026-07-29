@@ -76,20 +76,15 @@ class DebugApiRouteStateHashGenesisSpec
         val genesisHeight      = 1
         val genesisBlockHeader = domain.blockchain.blockHeader(genesisHeight).value
         val expectedResponse = Json.obj(
-          "stateHash"         -> "79a65a809de9879bb8010d308333961c34764ff65444ff0028a982ca0cdd6732",
-          "wavesBalanceHash"  -> "a3766f502f4bba124d9f6fff49adcac44e309bdbc72c437a0607de9c315bcdfa",
+          "stateHash"         -> "d2ba495b9f3ffded5d9f53a518d77713b89b1e9273b603b08c8484712a3a8330",
+          "wavesBalanceHash"  -> "13efdbee131f5f02c49c7558a185a5933946754bb0f9258d9823660f363bebd3",
           "assetBalanceHash"  -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "dataEntryHash"     -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "accountScriptHash" -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "assetScriptHash"   -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseBalanceHash"  -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseStatusHash"   -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "sponsorshipHash"   -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "aliasHash"         -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           // Note: "nextCommittedGeneratorsHash" and "committedGeneratorBalancesHash" fields are present
-          "nextCommittedGeneratorsHash"    -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
+          "nextCommittedGeneratorsHash"    -> "be516123bf31843e0b6003004cb2f0e445e5007e04bfd4b2951b4a2d70588bc4",
           "committedGeneratorBalancesHash" -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "snapshotHash"                   -> "2ydpHRFSFwcaQ8s9hPyZwcmJFk4cKDNFcb3DRcvyrXZ9",
+          "snapshotHash"                   -> "8yruyNMUCnAjxoP2RqoUeQa4wHYzgzQhAKVTw7ea8JZh",
           "blockId"                        -> genesisBlockHeader.id().toString,
           "baseTarget"                     -> genesisBlockHeader.header.baseTarget,
           "height"                         -> genesisHeight,

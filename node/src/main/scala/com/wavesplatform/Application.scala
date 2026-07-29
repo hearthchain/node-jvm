@@ -22,7 +22,7 @@ import com.wavesplatform.features.api.ActivationApiRoute
 import com.wavesplatform.history.{History, StorageFactory}
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.metrics.Metrics
-import com.wavesplatform.mining.{BlockChallengerImpl, Miner, MinerDebugInfo, MinerImpl}
+import com.wavesplatform.mining.{BlockChallengerImpl, GeneratorKeys, Miner, MinerDebugInfo, MinerImpl}
 import com.wavesplatform.network.*
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.appender.{BlockAppender, ExtensionAppender, MicroblockAppender}
@@ -143,19 +143,21 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
     val pos = PoSSelector(blockchainUpdater, settings.synchronizationSettings.maxBaseTarget)
 
     val endorsementStorage = EndorsementStorage.InMemory((blockId, height) => blockchainUpdater.blockId(height.toInt).contains(blockId))
+    // The accounts this node generates with, from waves.miner.accounts. The endorser and the REST API need them
+    // whether or not mining is enabled here, so they are not the miner's to own.
+    val generatorKeys = GeneratorKeys.fromSettings(settings.minerSettings)
     val blockEndorser =
-      new BlockEndorser.InMemory(settings.synchronizationSettings.maxRollback, blockchainUpdater, wallet, endorsementStorage, allChannels)
+      new BlockEndorser.InMemory(settings.synchronizationSettings.maxRollback, blockchainUpdater, generatorKeys, endorsementStorage, allChannels)
 
     if (settings.minerSettings.enable)
       miner = new MinerImpl(
         allChannels,
         blockchainUpdater,
-        settings,
+        settings.minerSettings,
         time,
         utxStorage,
         blockEndorser,
         endorsementStorage,
-        Seq.empty,
         pos,
         minerScheduler,
         appenderScheduler,
@@ -170,7 +172,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           new BlockChallengerImpl(
             blockchainUpdater,
             allChannels,
-            Seq.empty,
+            generatorKeys,
             settings,
             time,
             pos,
@@ -336,7 +338,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
       peerDatabase,
       knownInvalidBlocks,
       messageObserver.blocks,
-      messageObserver.signatures,
+      messageObserver.blockIds,
       messageObserver.blockSnapshots,
       syncWithChannelClosed,
       extensionLoaderScheduler,
@@ -407,6 +409,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           settings.restAPISettings,
           extensionContext.transactionsApi,
           wallet,
+          generatorKeys,
           blockchainUpdater,
           () => blockchainUpdater.snapshotBlockchain,
           () => utxStorage.size,
@@ -425,6 +428,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
         AddressApiRoute(
           settings.restAPISettings,
           wallet,
+          generatorKeys,
           blockchainUpdater,
           transactionPublisher,
           time,
@@ -467,7 +471,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           settings.dbSettings.maxRollbackDepth,
           routeTimeout
         ),
-        ActivationApiRoute(settings.restAPISettings, settings.featuresSettings, blockchainUpdater),
+        ActivationApiRoute(settings.restAPISettings, settings.minerSettings.supportedFeatures.distinct, blockchainUpdater),
         LeaseApiRoute(
           settings.restAPISettings,
           wallet,

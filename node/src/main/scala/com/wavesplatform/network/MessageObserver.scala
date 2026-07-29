@@ -13,8 +13,8 @@ class MessageObserver extends ChannelInboundHandlerAdapter {
 
   private implicit val scheduler: SchedulerService = Schedulers.fixedPool(2, "message-observer")
 
-  private val signaturesSubj                    = ConcurrentSubject.publish[(Channel, Signatures)]
-  val signatures: ChannelObservable[Signatures] = signaturesSubj
+  private val signaturesSubj                = ConcurrentSubject.publish[(Channel, BlockIds)]
+  val blockIds: ChannelObservable[BlockIds] = signaturesSubj
 
   private val blocksSubj               = ConcurrentSubject.publish[(Channel, Block)]
   val blocks: ChannelObservable[Block] = blocksSubj
@@ -43,7 +43,7 @@ class MessageObserver extends ChannelInboundHandlerAdapter {
   override def channelRead(ctx: ChannelHandlerContext, msg: AnyRef): Unit = msg match {
     case b: Block                       => blocksSubj.onNext((ctx.channel(), b))
     case sc: BigInt                     => blockchainScoresSubj.onNext((ctx.channel(), sc))
-    case s: Signatures                  => signaturesSubj.onNext((ctx.channel(), s))
+    case s: BlockIds                    => signaturesSubj.onNext((ctx.channel(), s))
     case mbInv: MicroBlockInv           => microblockInvsSubj.onNext((ctx.channel(), mbInv))
     case mb: MicroBlockResponse         => microblockResponsesSubj.onNext((ctx.channel(), mb))
     case tx: Transaction                => transactionsSubj.onNext((ctx.channel(), tx))
@@ -68,7 +68,7 @@ class MessageObserver extends ChannelInboundHandlerAdapter {
 
 object MessageObserver {
   type Messages = (
-      ChannelObservable[Signatures],
+      ChannelObservable[BlockIds],
       ChannelObservable[Block],
       ChannelObservable[BigInt],
       ChannelObservable[MicroBlockInv],

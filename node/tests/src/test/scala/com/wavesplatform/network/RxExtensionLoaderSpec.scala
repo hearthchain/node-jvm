@@ -36,13 +36,13 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
       f: (
           InMemoryInvalidBlockStorage,
           PS[(Channel, Block)],
-          PS[(Channel, Signatures)],
+          PS[(Channel, BlockIds)],
           PS[ChannelClosedAndSyncWith],
           Observable[(Channel, Block, Option[BlockSnapshotResponse])]
       ) => Any
   ) = {
     val blocks          = PS[(Channel, Block)]()
-    val sigs            = PS[(Channel, Signatures)]()
+    val sigs            = PS[(Channel, BlockIds)]()
     val ccsw            = PS[ChannelClosedAndSyncWith]()
     val snapshots       = PS[(Channel, BlockSnapshotResponse)]()
     val timeout         = PS[Channel]()
@@ -89,7 +89,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     })
   }
 
-  "should blacklist GetSignatures timeout" in withExtensionLoader(Seq.tabulate(100)(byteStr), 1.millis) { (_, _, _, ccsw, _) =>
+  "should blacklist GetSignatures timeout" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) { (_, _, _, ccsw, _) =>
     val ch = new EmbeddedChannel()
     test(for {
       _ <- send(ccsw, timeout = 1000)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
@@ -98,42 +98,42 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     })
   }
 
-  "should request GetSignatures and then span blocks from peer" in withExtensionLoader(Seq.tabulate(100)(byteStr)) { (_, _, sigs, ccsw, _) =>
+  "should request GetSignatures and then span blocks from peer" in withExtensionLoader(Seq.tabulate(100)(ref)) { (_, _, sigs, ccsw, _) =>
     val ch                   = new EmbeddedChannel()
     val totalBlocksInHistory = 100
     test(for {
       _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
-      _ = ch.readOutbound[GetSignatures].signatures shouldBe Range(totalBlocksInHistory - MaxRollback, totalBlocksInHistory).map(byteStr).reverse
-      _ <- send(sigs)((ch, Signatures(Range(97, 102).map(byteStr))))
+      _ = ch.readOutbound[GetBlockIds].ids shouldBe Range(totalBlocksInHistory - MaxRollback, totalBlocksInHistory).map(ref).reverse
+      _ <- send(sigs)((ch, BlockIds(Range(97, 102).map(ref))))
     } yield {
-      ch.readOutbound[GetBlock].signature shouldBe byteStr(100)
-      ch.readOutbound[GetBlock].signature shouldBe byteStr(101)
+      ch.readOutbound[GetBlock].id shouldBe ref(100)
+      ch.readOutbound[GetBlock].id shouldBe ref(101)
     })
   }
 
-  "should blacklist if received Signatures contains banned id" in withExtensionLoader(Seq.tabulate(100)(byteStr), 1.millis) {
+  "should blacklist if received Signatures contains banned id" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) {
     (invBlockStorage, _, sigs, ccsw, _) =>
-      invBlockStorage.add(byteStr(105), GenericError("Some error"))
+      invBlockStorage.add(ref(105), GenericError("Some error"))
       val ch = new EmbeddedChannel()
       test(for {
         _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
-        _ = ch.readOutbound[GetSignatures].signatures.size shouldBe MaxRollback
-        _ <- send(sigs)((ch, Signatures(Range(99, 110).map(byteStr))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(Range(99, 110).map(ref))))
       } yield {
         ch.isOpen shouldBe false
       })
   }
 
-  "should blacklist if some blocks didn't arrive in due time" in withExtensionLoader(Seq.tabulate(100)(byteStr), 1.second) {
+  "should blacklist if some blocks didn't arrive in due time" in withExtensionLoader(Seq.tabulate(100)(ref), 1.second) {
     (_, blocks, sigs, ccsw, _) =>
       val ch = new EmbeddedChannel()
 
       test(for {
         _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
-        _ = ch.readOutbound[GetSignatures].signatures.size shouldBe MaxRollback
-        _ <- send(sigs)((ch, Signatures(Range(97, 102).map(byteStr))))
-        _ = ch.readOutbound[GetBlock].signature shouldBe byteStr(100)
-        _ = ch.readOutbound[GetBlock].signature shouldBe byteStr(101)
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(Range(97, 102).map(ref))))
+        _ = ch.readOutbound[GetBlock].id shouldBe ref(100)
+        _ = ch.readOutbound[GetBlock].id shouldBe ref(101)
         _ <- send(blocks)((ch, block(100)))
         _ <- ch.closeF()
       } yield ())
@@ -146,16 +146,17 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         applied = true
         Right(None)
       }
-    withExtensionLoader(Seq.tabulate(100)(byteStr), applier = successfulApplier) { (_, blocks, sigs, ccsw, _) =>
+    val allBlocks = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = successfulApplier) { (_, blocks, sigs, ccsw, _) =>
       val ch = new EmbeddedChannel()
       test(for {
         _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
-        _ = ch.readOutbound[GetSignatures].signatures.size shouldBe MaxRollback
-        _ <- send(sigs)((ch, Signatures(Range(97, 102).map(byteStr))))
-        _ = ch.readOutbound[GetBlock].signature shouldBe byteStr(100)
-        _ = ch.readOutbound[GetBlock].signature shouldBe byteStr(101)
-        _ <- send(blocks)((ch, block(100)))
-        _ <- send(blocks)((ch, block(101)))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
       } yield {
         applied shouldBe true
       })
@@ -163,13 +164,13 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
   }
 
   "should blacklist peer after receiving empty signature list" in {
-    withExtensionLoader(Seq.tabulate(100)(byteStr)) { (_, _, sigs, ccsw, _) =>
+    withExtensionLoader(Seq.tabulate(100)(ref)) { (_, _, sigs, ccsw, _) =>
       val ch = new EmbeddedChannel()
 
       test(for {
         _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
-        _ = ch.readOutbound[GetSignatures].signatures.size shouldBe MaxRollback
-        _ <- send(sigs)((ch, Signatures(Seq.empty)))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(Seq.empty)))
         _ <- ch.closeF()
       } yield ())
     }

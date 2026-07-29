@@ -1,10 +1,8 @@
 package com.wavesplatform.history
 
-import com.wavesplatform.block.Block
-import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.history.Domain.BlockchainUpdaterExt
+import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.diffs.*
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.*
@@ -16,19 +14,41 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
 
   import BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest.*
 
+  /** The miner is a committed generator - nothing else may produce a block - funded with exactly its generation
+    * deposit, so that what it holds beyond that is exactly what it has earned. The reward is zeroed for the same
+    * reason: these properties are about fees.
+    */
+  private val settings: WavesSettings = {
+    val bs = MicroblocksActivatedAt0WavesSettings.blockchainSettings
+    MicroblocksActivatedAt0WavesSettings.copy(blockchainSettings = bs.copy(rewardsSettings = bs.rewardsSettings.copy(initial = 0)))
+  }
+
+  private def minerDeposit(miner: SigningKey): AddrWithBalance =
+    AddrWithBalance(miner.toAddress, CommitToGenerationTransaction.DepositInWavelets)
+
+  /** Appends the sequence the sizes describe, as blocks and the micro blocks extending them. Built one at a time
+    * through the domain, because each block's proof and state hash depend on the state the previous one left.
+    */
+  private def appendSequence(d: Domain, txs: Seq[Transaction], sizes: BlockAndMicroblockSizes, miner: SigningKey, ts: Long): Unit =
+    sizes.foldLeft(txs) { case (rest, (blockAmt, microAmts)) =>
+      val (blockTxs, afterBlock) = rest.splitAt(blockAmt)
+      d.appendBlockAt(ts, miner)(blockTxs*)
+      microAmts.foldLeft(afterBlock) { case (pool, amt) =>
+        val (microTxs, next) = pool.splitAt(amt)
+        d.appendMicroBlockBy(miner)(microTxs*)
+        next
+      }
+    }
+
   property("resulting miner balance should not depend on tx distribution among blocks and microblocks") {
     // The accounts are credited by the genesis snapshot, so the sequences are chained onto the domain's genesis block
     forAll(g(100, 5)) { case (balances, miner, payments, intSeqs, ts) =>
       val finalMinerBalances = intSeqs.map { intSeq =>
-        withDomain(MicroblocksActivatedAt0WavesSettings, balances) { d =>
-          val bmb  = r(payments, intSeq, d.lastBlockId, miner, ts)
-          val last = customBuildBlockOfTxs(bestRef(bmb.last), Seq.empty, miner, ts)
-          bmb.foreach { case (b, mbs) =>
-            d.blockchainUpdater.processBlock(b) should beRight
-            mbs.foreach(mb => d.blockchainUpdater.processMicroBlock(mb, None) should beRight)
-          }
-          d.blockchainUpdater.processBlock(last)
-          d.balance(last.header.generator.toAddress)
+        withDomain(settings, balances :+ minerDeposit(miner), generators = Seq(miner)) { d =>
+          appendSequence(d, payments, intSeq, miner, ts)
+          // One more block, so that the carry of the last one is credited too
+          d.appendBlockAt(ts, miner)()
+          d.balance(miner.toAddress)
         }
       }
       finalMinerBalances.toSet.size shouldBe 1
@@ -46,16 +66,16 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
     } yield (master, miner, payment, ts)
     scenario(
       preconditionsAndPayments,
-      MicroblocksActivatedAt0WavesSettings,
-      s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
+      settings,
+      s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT), minerDeposit(s._2)),
+      s => Seq(s._2)
     ) { case (domain, (master, miner, payment, ts)) =>
-      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, Seq(Seq(payment)), miner, ts)
-      val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, ts)
-      domain.blockchainUpdater.processBlock(base) should beRight
-      domain.blockchainUpdater.processMicroBlock(micros.head, None) should beRight
-      domain.blockchainUpdater.processBlock(emptyBlock) should beRight
+      domain.appendBlockAt(ts, miner)()
+      domain.appendMicroBlockBy(miner)(payment)
+      domain.appendBlockAt(ts, miner)()
 
-      domain.balance(miner.toAddress) shouldBe payment.fee.value
+      // 40% of the fee credited in the block the micro extends, the 60% carry in the one after it
+      domain.balance(miner.toAddress) shouldBe (CommitToGenerationTransaction.DepositInWavelets + payment.fee.value)
       domain.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment.fee.value)
     }
   }
@@ -77,14 +97,13 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       } yield (master, miner, microBlockTxs, ts)
     scenario(
       preconditionsAndPayments,
-      MicroblocksActivatedAt0WavesSettings,
-      s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
+      settings,
+      s => Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT), minerDeposit(s._2)),
+      s => Seq(s._2)
     ) { case (domain, (_, miner, microBlockTxs, ts)) =>
-      val (base, micros) = chainBaseAndMicro(domain.lastBlockId, Seq.empty, microBlockTxs, miner, ts)
-      val emptyBlock     = customBuildBlockOfTxs(micros.last.totalResBlockSig, Seq.empty, miner, ts)
-      domain.blockchainUpdater.processBlock(base) should beRight
-      micros.foreach(domain.blockchainUpdater.processMicroBlock(_, None) should beRight)
-      domain.blockchainUpdater.processBlock(emptyBlock) should beRight
+      domain.appendBlockAt(ts, miner)()
+      microBlockTxs.foreach(txs => domain.appendMicroBlockBy(miner)(txs*))
+      domain.appendBlockAt(ts, miner)()
 
       domain.rocksDBWriter.lastBlock.get.transactionData shouldBe microBlockTxs.flatten
     }
@@ -140,10 +159,8 @@ object BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest {
 
   def genSplitSizes(total: Int): Gen[(Int, Seq[Int])] = genSizes(total).map(s => s.head -> s.tail)
 
-  type BlockAndMicroblockSize     = (Int, Seq[Int])
-  type BlockAndMicroblockSizes    = Seq[BlockAndMicroblockSize]
-  type BlockAndMicroblocks        = (Block, Seq[MicroBlockWithTotalId])
-  type BlockAndMicroblockSequence = Seq[BlockAndMicroblocks]
+  type BlockAndMicroblockSize  = (Int, Seq[Int])
+  type BlockAndMicroblockSizes = Seq[BlockAndMicroblockSize]
 
   def randomSizeSequence(total: Int): Gen[BlockAndMicroblockSizes] =
     for {
@@ -160,47 +177,4 @@ object BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest {
         h <- randomSizeSequence(total)
         t <- randomSequences(total, sequences - 1)
       } yield h +: t
-
-  def take(txs: Seq[Transaction], sizes: BlockAndMicroblockSize): ((Seq[Transaction], Seq[Seq[Transaction]]), Seq[Transaction]) = {
-    val (blockAmt, microsAmts) = sizes
-    val (blockTxs, rest)       = txs.splitAt(blockAmt)
-    val (reversedMicroblockTxs, res) = microsAmts.foldLeft((Seq.empty[Seq[Transaction]], rest)) { case ((acc, pool), amt) =>
-      val (step, next) = pool.splitAt(amt)
-      (step +: acc, next)
-    }
-    ((blockTxs, reversedMicroblockTxs.reverse), res)
-  }
-
-  def stepR(
-      txs: Seq[Transaction],
-      sizes: BlockAndMicroblockSize,
-      prev: ByteStr,
-      signer: SigningKey,
-      timestamp: Long
-  ): (BlockAndMicroblocks, Seq[Transaction]) = {
-    val ((blockTxs, microblockTxs), rest) = take(txs, sizes)
-    (chainBaseAndMicro(prev, blockTxs, microblockTxs, signer, timestamp), rest)
-  }
-
-  def bestRef(r: BlockAndMicroblocks): ByteStr = r._2.lastOption match {
-    case Some(mb) => mb.totalBlockId
-    case None     => r._1.id()
-  }
-
-  def r(
-      txs: Seq[Transaction],
-      sizes: BlockAndMicroblockSizes,
-      initial: ByteStr,
-      signer: SigningKey,
-      timestamp: Long
-  ): BlockAndMicroblockSequence = {
-    sizes
-      .foldLeft((Seq.empty[BlockAndMicroblocks], txs)) { case ((acc, rest), s) =>
-        val prev         = acc.headOption.map(bestRef).getOrElse(initial)
-        val (step, next) = stepR(rest, s, prev, signer, timestamp)
-        (step +: acc, next)
-      }
-      ._1
-      .reverse
-  }
 }

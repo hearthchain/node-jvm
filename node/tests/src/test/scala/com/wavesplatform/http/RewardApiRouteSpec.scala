@@ -43,11 +43,13 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
       d.appendBlock()
       d.appendBlock()
 
+      // `rewardSharesAt` pins the capped-reward activation height at 1, so its term is the one reported from the
+      // start - there is no earlier regime to walk out of
       checkVoteParams(
         d,
-        d.blockchain.settings.rewardsSettings.term,
-        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.term - d.blockchain.settings.rewardsSettings.votingInterval,
-        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.term - 1
+        d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature,
+        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature - d.blockchain.settings.rewardsSettings.votingInterval,
+        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature - 1
       )
 
       d.appendBlock() // activation height, vote parameters should be changed
@@ -69,8 +71,9 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
   }
 
   routePath("/rewards/{height} (NODE-856)") in {
-    checkWithSettings(settingsWithoutAddresses, Some(1))
-    checkWithSettings(settingsWithDaoAddress, Some(1))
+    // Height 2: the genesis block earns no reward, so height 1 has nothing to report
+    checkWithSettings(settingsWithoutAddresses, Some(2))
+    checkWithSettings(settingsWithDaoAddress, Some(2))
 
     withDomain(settingsWithVoteParams) { d =>
       d.appendBlock()
@@ -80,9 +83,9 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
 
       checkVoteParams(
         d,
-        d.blockchain.settings.rewardsSettings.term,
-        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.term - d.blockchain.settings.rewardsSettings.votingInterval,
-        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.term - 1,
+        d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature,
+        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature - d.blockchain.settings.rewardsSettings.votingInterval,
+        blockRewardActivationHeight + d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature - 1,
         Some(2)
       )
 
@@ -120,14 +123,14 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
   private def expectedResponse(d: Domain) =
     s"""
        |{
-       |  "height" : 1,
+       |  "height" : ${d.blockchain.height},
        |  "totalWavesAmount" : ${d.blockchain.settings.genesisSettings.initialBalance + d.blockchain.settings.rewardsSettings.initial},
        |  "currentReward" : ${d.blockchain.settings.rewardsSettings.initial},
        |  "minIncrement" : ${d.blockchain.settings.rewardsSettings.minIncrement},
-       |  "term" : ${d.blockchain.settings.rewardsSettings.term},
-       |  "nextCheck" : ${d.blockchain.settings.rewardsSettings.nearestTermEnd(Height(0), Height(1), modifyTerm = false)},
+       |  "term" : ${d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature},
+       |  "nextCheck" : ${d.blockchain.settings.rewardsSettings.nearestTermEnd(Height(blockRewardActivationHeight), Height(d.blockchain.height), modifyTerm = true)},
        |  "votingIntervalStart" : ${d.blockchain.settings.rewardsSettings
-      .nearestTermEnd(Height(0), Height(1), modifyTerm = false) - d.blockchain.settings.rewardsSettings.votingInterval + 1},
+      .nearestTermEnd(Height(blockRewardActivationHeight), Height(d.blockchain.height), modifyTerm = true) - d.blockchain.settings.rewardsSettings.votingInterval + 1},
        |  "votingInterval" : ${d.blockchain.settings.rewardsSettings.votingInterval},
        |  "votingThreshold" : ${d.blockchain.settings.rewardsSettings.votingInterval / 2 + 1},
        |  "votes" : {

@@ -44,10 +44,10 @@ class MicroBlockSynchronizerSpec extends FreeSpec with RxScheduler with BlockGen
     val microblockData = newItems(r)
     val ch             = new EmbeddedChannel()
     test(for {
-      _ <- send(lastBlockIds)(byteStr(0))
-      _ <- send(microInvs)((ch, MicroBlockInv(signer, byteStr(1), byteStr(0))))
-      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(byteStr(1))
-      _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0))))
+      _ <- send(lastBlockIds)(ref(0))
+      _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
+      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
+      _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0), ref(1))))
       _ = microblockData().size shouldBe 1
     } yield ())
   }
@@ -57,13 +57,13 @@ class MicroBlockSynchronizerSpec extends FreeSpec with RxScheduler with BlockGen
     val ch              = new EmbeddedChannel()
     val ch2             = new EmbeddedChannel()
     test(for {
-      _ <- send(lastBlockIds)(byteStr(0))
-      _ <- send(microInvs)((ch, MicroBlockInv(signer, byteStr(1), byteStr(0))))
-      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(byteStr(1))
-      _ <- send(microInvs)((ch2, MicroBlockInv(signer, byteStr(1), byteStr(0))))
+      _ <- send(lastBlockIds)(ref(0))
+      _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
+      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
+      _ <- send(microInvs)((ch2, MicroBlockInv(signer, ref(1), ref(0))))
       _ = Thread.sleep(2000)
-      _ = ch2.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(byteStr(1))
-      _ <- send(microResponses)((ch2, MicroBlockResponse(microBlock(1, 0))))
+      _ = ch2.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
+      _ <- send(microResponses)((ch2, MicroBlockResponse(microBlock(1, 0), ref(1))))
     } yield {
       val mbd = microblockDatas()
       mbd.size shouldBe 1
@@ -74,12 +74,12 @@ class MicroBlockSynchronizerSpec extends FreeSpec with RxScheduler with BlockGen
   "should not request the same micro if received before" in withMs { (lastBlockIds, microInvs, microResponses, _) =>
     val ch = new EmbeddedChannel()
     test(for {
-      _ <- send(lastBlockIds)(byteStr(0))
-      _ <- send(microInvs)((ch, MicroBlockInv(signer, byteStr(1), byteStr(0))))
-      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(byteStr(1))
+      _ <- send(lastBlockIds)(ref(0))
+      _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
+      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
       _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0))))
-      _ <- send(lastBlockIds)(byteStr(1))
-      _ <- send(microInvs)((ch, MicroBlockInv(signer, byteStr(1), byteStr(0))))
+      _ <- send(lastBlockIds)(ref(1))
+      _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
     } yield Option(ch.readOutbound[MicroBlockRequest]) shouldBe None)
   }
 
@@ -87,10 +87,10 @@ class MicroBlockSynchronizerSpec extends FreeSpec with RxScheduler with BlockGen
     val ch  = new EmbeddedChannel()
     val ch2 = new EmbeddedChannel()
     test(for {
-      _ <- send(lastBlockIds)(byteStr(0))
-      _ <- send(microInvs)((ch, MicroBlockInv(signer, byteStr(1), byteStr(0))))
-      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(byteStr(1))
-      _ <- send(microInvs)((ch2, MicroBlockInv(signer, byteStr(2), byteStr(0))))
+      _ <- send(lastBlockIds)(ref(0))
+      _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
+      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
+      _ <- send(microInvs)((ch2, MicroBlockInv(signer, ref(2), ref(0))))
     } yield Option(ch2.readOutbound[MicroBlockRequest]) shouldBe None)
   }
 
@@ -98,13 +98,13 @@ class MicroBlockSynchronizerSpec extends FreeSpec with RxScheduler with BlockGen
     val ch  = new EmbeddedChannel()
     val ch2 = new EmbeddedChannel()
     test(for {
-      _ <- send(lastBlockIds)(byteStr(0))
-      _ <- send(microInvs)((ch, MicroBlockInv(signer, byteStr(1), byteStr(0))))
-      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(byteStr(1))
-      _ <- send(microInvs)((ch2, MicroBlockInv(signer, byteStr(2), byteStr(1))))
+      _ <- send(lastBlockIds)(ref(0))
+      _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
+      _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
+      _ <- send(microInvs)((ch2, MicroBlockInv(signer, ref(2), ref(1))))
       _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0))))
-      _ <- send(lastBlockIds)(byteStr(1))
-    } yield ch2.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(byteStr(2)))
+      _ <- send(lastBlockIds)(ref(1))
+    } yield ch2.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(2)))
   }
 
 }

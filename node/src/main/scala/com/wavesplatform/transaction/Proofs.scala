@@ -20,7 +20,7 @@ case class Proofs(proofs: Seq[ByteStr]) {
 }
 
 object Proofs {
-  val Version: TxVersion      = 1: Byte
+  val Version: Byte           = 1: Byte
   val MaxProofs: Int          = 8
   val MaxProofSize: Int       = 64
   val MaxProofStringSize: Int = base58Length(MaxProofSize)

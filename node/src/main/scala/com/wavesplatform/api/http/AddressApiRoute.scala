@@ -11,6 +11,7 @@ import com.wavesplatform.transaction.Asset
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.GenericError
 import com.wavesplatform.utils.Time
+import com.wavesplatform.mining.GeneratorKeys
 import com.wavesplatform.wallet.Wallet
 import monix.execution.Scheduler
 import org.apache.pekko.http.scaladsl.marshalling.ToResponseMarshallable
@@ -20,6 +21,7 @@ import play.api.libs.json.*
 case class AddressApiRoute(
     settings: RestAPISettings,
     wallet: Wallet,
+    generatorKeys: GeneratorKeys,
     blockchain: Blockchain,
     transactionPublisher: TransactionPublisher,
     time: Time,
@@ -38,7 +40,7 @@ case class AddressApiRoute(
   override lazy val route: Route =
     pathPrefix("addresses") {
       balanceDetails ~ validate ~ balance ~ balances ~ balancesPost ~ balanceWithConfirmations ~ deleteAddress ~
-        seq ~ publicKey ~ effectiveBalance ~ effectiveBalanceWithConfirmations
+        seq ~ publicKey ~ effectiveBalance ~ effectiveBalanceWithConfirmations ~ blsPublicKey
     } ~ root ~ create
 
   def deleteAddress: Route = (delete & withAuth & path(AddrSegment)) { address =>
@@ -107,6 +109,17 @@ case class AddressApiRoute(
         complete(effectiveBalanceJson(address, confirmations))
       )
     }
+  }
+
+  /** The endorser public key of one of this node's generators, so that an operator can see what a commitment from this
+    * node would register. Only the accounts in `waves.miner.accounts` have one - the wallet holds no BLS keys.
+    */
+  def blsPublicKey: Route = (path("bls" / AddrSegment) & get) { address =>
+    complete(
+      generatorKeys
+        .endorserPublicKey(address)
+        .fold[ToResponseMarshallable](MissingSenderPrivateKey)(pk => Json.obj("blsPublicKey" -> pk.base58))
+    )
   }
 
   def validate: Route = (path("validate" / Segment) & get) { addressBytes =>

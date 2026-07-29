@@ -223,7 +223,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "finalized with less votes after conflict endorsement" in withDomain(
     defaultSettings,
-    Seq(node0Acc, node1Acc, node2Acc, node3Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves))
+    Seq(node0Acc, node1Acc, node2Acc, node3Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+    generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
     d.appendBlock()
@@ -304,12 +305,16 @@ class FinalizationSuite extends BaseFinalizationSpec {
   "increasing generating balance" - {
     "reaching finalization" - {
       "miner" in withDomain(
-        defaultSettings,
+        // generatingBalance is a minimum over the last 1000 blocks (GeneratingBalanceProvider.balance), so the
+        // transfer below only counts once the chain is past height 1000 - and the commitment is for the period
+        // starting right after that, so that has to be the period length too.
+        defaultSettings.configure(_.copy(generationPeriodLength = 1001)),
         AddrWithBalance(node3Acc.toAddress, 6000.waves) +:
-          Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves))
+          Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+        generators = Seq(TxHelpers.defaultSigner, node1Acc)
       ) { d =>
         // This is block #2
-        // Generating balance of node1Acc increased on 2 + 50 (generationBalanceDepthFrom50To1000AfterHeight) = 52
+        // Generating balance of node1Acc increased on 2 + 1000 (generatingBalance depth) = 1002
         d.appendBlock(
           TxHelpers.transfer(
             node3Acc,                                                                            // Not endorser
@@ -320,36 +325,40 @@ class FinalizationSuite extends BaseFinalizationSpec {
         )
 
         log.debug("Append empty blocks to reach the required period")
-        (3 to 50).foreach(_ => d.appendBlock())
+        (3 to 1000).foreach(_ => d.appendBlock())
 
         log.debug("Append block with commitments")
         val endorsers = Seq(node0Acc, node1Acc, node2Acc)
         d.appendBlock(
           d.createBlock(
-            txs = endorsers.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(52), x)),
+            txs = endorsers.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(1002), x)),
             generator = node1Acc
           )
-        ) // 51
+        ) // 1001
 
         log.debug(s"Append block without votes, but increased miner's generating balance")
-        d.appender.appendBlock(d.createBlock(generator = node1Acc, strictTime = true)) // 52
+        d.appender.appendBlock(d.createBlock(generator = node1Acc, strictTime = true)) // 1002
 
         log.debug("Append block to calculate finalization height")
-        d.appender.appendBlock(d.createBlock(generator = node1Acc, strictTime = true)) // 53
-        d.allFinalizedHeightIs(51)
+        d.appender.appendBlock(d.createBlock(generator = node1Acc, strictTime = true)) // 1003
+        d.allFinalizedHeightIs(1001)
       }
 
       "voter" in {
         withDomain(
-          defaultSettings,
+          // generatingBalance is a minimum over the last 1000 blocks (GeneratingBalanceProvider.balance), so the
+          // transfer below only counts once the chain is past height 1000 - and the commitment is for the period
+          // starting right after that, so that has to be the period length too.
+          defaultSettings.configure(_.copy(generationPeriodLength = 1001)),
           AddrWithBalance(node3Acc.toAddress, 6000.waves) +:
             AddrWithBalance(node2Acc.toAddress, 4000.waves) +:
-            Seq(node0Acc, node1Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves))
+            Seq(node0Acc, node1Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+          generators = Seq(TxHelpers.defaultSigner, node1Acc)
         ) { d =>
           val genesisBlockId = d.blockchain.lastBlockId.value
 
           // This is block #2
-          // Generating balance of node1Acc increased on 2 + 50 (generationBalanceDepthFrom50To1000AfterHeight) = 52
+          // Generating balance of node0Acc increased on 2 + 1000 (generatingBalance depth) = 1002
           d.appendBlock(
             TxHelpers.transfer(
               node3Acc,                                                                            // Not endorser
@@ -360,16 +369,16 @@ class FinalizationSuite extends BaseFinalizationSpec {
           )
 
           log.debug("Append empty blocks to reach the required period")
-          (3 to 50).foreach(_ => d.appendBlock())
+          (3 to 1000).foreach(_ => d.appendBlock())
 
           log.debug("Append block with commitments")
           val endorsers = Seq(node0Acc, node1Acc, node2Acc)
           d.appendBlock(
             d.createBlock(
-              txs = endorsers.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(52), x)),
+              txs = endorsers.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(1002), x)),
               generator = node1Acc
             )
-          ) // 51
+          ) // 1001
 
           log.debug(s"Append block with vote")
           d.appender.appendBlock(
@@ -381,19 +390,22 @@ class FinalizationSuite extends BaseFinalizationSpec {
                   .signed(endorsedId = d.blockchain.lastBlockId.value, finalizedId = genesisBlockId, validEndorsers = node0Acc)
               )
             )
-          ) // 52
+          ) // 1002
 
           log.debug("Append block to calculate finalization height")
-          d.appender.appendBlock(d.createBlock(generator = node1Acc, strictTime = true)) // 53
-          d.allFinalizedHeightIs(51)
+          d.appender.appendBlock(d.createBlock(generator = node1Acc, strictTime = true)) // 1003
+          d.allFinalizedHeightIs(1001)
         }
       }
     }
 
     "not reaching finalization" in withDomain(
-      defaultSettings,
+      // Heights 2-51 must stay within a single period (no re-commitment as defaultSigner mines them), and the
+      // commitment below is for the period starting at height 52, so that has to be the period length.
+      defaultSettings.configure(_.copy(generationPeriodLength = 51)),
       AddrWithBalance(node3Acc.toAddress, 6000.waves) +:
-        Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves))
+        Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+      generators = Seq(TxHelpers.defaultSigner, node1Acc)
     ) { d =>
       val genesisBlockId = d.blockchain.lastBlockId.value
 

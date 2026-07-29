@@ -1,6 +1,6 @@
 package com.wavesplatform.transaction
 
-import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
+import com.wavesplatform.account.{AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.PropSpec
@@ -41,41 +41,14 @@ class TransferTransactionV2Specification extends PropSpec {
     }
   }
 
-  private def assertTxs(first: TransferTransaction, second: TransferTransaction): Unit = {
-    first.sender shouldEqual second.sender
-    first.timestamp shouldEqual second.timestamp
-    first.fee shouldEqual second.fee
-    first.amount shouldEqual second.amount
-    first.recipient shouldEqual second.recipient
-    first.assetId shouldEqual second.assetId
-    first.feeAssetId shouldEqual second.feeAssetId
-    first.proofs shouldEqual second.proofs
-    first.bytes() shouldEqual second.bytes()
-  }
-
   property("JSON format validation") {
-    val js = Json.parse("""{
-                       "type": 4,
-                       "id": "2qMiGUpNMuRpeyTnXLa1mLuVP1cYEtxys55cQbDaXd5g",
-                       "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
-                       "fee": 100000000,
-                       "timestamp": 1526641218066,
-                       "proofs": [
-                       "4bfDaqBcnK3hT8ywFEFndxtS1DTSYfncUqd4s5Vyaa66PZHawtC73rDswUur6QZu5RpqM7L9NFgBHT1vhCoox4vi"
-                       ],
-                       "version": 2,
-                       "recipient": "3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8",
-                       "assetId": null,
-                       "feeAsset": null,
-                       "feeAssetId":null,
-                       "amount": 100000000,
-                       "attachment": "4t2Xazb2SX"}
-    """)
+    // Addresses are bech32 and the id is a hash over the whole transaction, so both are derived rather than pasted in:
+    // the base58 literals this fixture used to carry no longer parse. Everything else is still pinned.
+    val sender    = PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet()
+    val recipient = TxHelpers.signer(1).toAddress
 
-    val recipient = Address.fromString("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8").explicitGet()
     val tx = TransferTransaction(
-      PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
+      sender,
       recipient,
       Waves,
       TxPositiveAmount.unsafeFrom(100000000),
@@ -86,6 +59,25 @@ class TransferTransactionV2Specification extends PropSpec {
       Proofs(Seq(ByteStr.decodeBase58("4bfDaqBcnK3hT8ywFEFndxtS1DTSYfncUqd4s5Vyaa66PZHawtC73rDswUur6QZu5RpqM7L9NFgBHT1vhCoox4vi").get)),
       AddressScheme.current.chainId
     )
+
+    val js = Json.parse(s"""{
+                       "type": 2,
+                       "id": "${tx.id()}",
+                       "sender": "${sender.toAddress}",
+                       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                       "fee": 100000000,
+                       "timestamp": 1526641218066,
+                       "chainId": ${AddressScheme.current.chainId},
+                       "proofs": [
+                       "4bfDaqBcnK3hT8ywFEFndxtS1DTSYfncUqd4s5Vyaa66PZHawtC73rDswUur6QZu5RpqM7L9NFgBHT1vhCoox4vi"
+                       ],
+                       "recipient": "$recipient",
+                       "assetId": null,
+                       "feeAsset": null,
+                       "feeAssetId":null,
+                       "amount": 100000000,
+                       "attachment": "4t2Xazb2SX"}
+    """)
 
     tx.json() shouldEqual js
   }

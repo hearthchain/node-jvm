@@ -5,7 +5,6 @@ import org.apache.pekko.http.scaladsl.model.MediaTypes.`application/json`
 import org.apache.pekko.http.scaladsl.model.headers.Accept
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
-import com.wavesplatform.api.http.assets.AssetsApiRoute
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.http.{ApiErrorMatchers, DummyTransactionPublisher, RestAPISettingsHelper}
 import com.wavesplatform.settings.WavesSettings
@@ -51,6 +50,7 @@ class CustomJsonMarshallerSpec
       restAPISettings,
       domain.transactionsApi,
       domain.wallet,
+      domain.generatorKeys,
       domain.blockchain,
       () => domain.blockchain,
       () => domain.utxPool.size,
@@ -80,19 +80,6 @@ class CustomJsonMarshallerSpec
   property("/debug/stateWaves") {
     pending // todo: fix when distributions/portfolio become testable
   }
-
-  private val assetsRoute = AssetsApiRoute(
-    restAPISettings,
-    60.seconds,
-    domain.wallet,
-    domain.blockchain,
-    () => domain.blockchain,
-    ntpTime,
-    domain.accountsApi,
-    domain.assetsApi,
-    1000,
-    new RouteTimeout(60.seconds)(using sharedScheduler)
-  ).route
 
   property("/assets/{assetId}/distribution/{height}/limit/{limit}") {
     pending // todo: fix when distributions/portfolio become testable

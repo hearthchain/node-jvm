@@ -13,7 +13,6 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.*
 import com.wavesplatform.crypto.bls.BlsPublicKey
 import com.wavesplatform.database.protobuf as pb
-import com.wavesplatform.database.protobuf.DataEntry.Value
 import com.wavesplatform.database.protobuf.TransactionData.Transaction as TD
 import com.wavesplatform.protobuf.block.PBBlocks
 import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
@@ -305,44 +304,6 @@ package object database {
     ndo.writeByteStr(sh.totalHash.ensuring(_.arr.length == DigestLength))
     ndo.toByteArray
   }
-
-  private def readDataEntry(key: String)(bs: Array[Byte]): DataEntry[?] =
-    if (bs == null || bs.length == 0) EmptyDataEntry(key)
-    else
-      pb.DataEntry.parseFrom(bs).value match {
-        case Value.Empty              => EmptyDataEntry(key)
-        case Value.IntValue(value)    => IntegerDataEntry(key, value)
-        case Value.BoolValue(value)   => BooleanDataEntry(key, value)
-        case Value.BinaryValue(value) => BinaryDataEntry(key, value.toByteStr)
-        case Value.StringValue(value) => StringDataEntry(key, value)
-      }
-
-  private def writeDataEntry(e: DataEntry[?]): Array[Byte] =
-    pb.DataEntry(e match {
-      case IntegerDataEntry(_, value) => pb.DataEntry.Value.IntValue(value)
-      case BooleanDataEntry(_, value) => pb.DataEntry.Value.BoolValue(value)
-      case BinaryDataEntry(_, value)  => pb.DataEntry.Value.BinaryValue(ByteString.copyFrom(value.arr))
-      case StringDataEntry(_, value)  => pb.DataEntry.Value.StringValue(value)
-      case _: EmptyDataEntry          => pb.DataEntry.Value.Empty
-    }).toByteArray
-
-  def readCurrentData(key: String)(bs: Array[Byte]): CurrentData = if (bs == null) CurrentData.empty(key)
-  else
-    CurrentData(
-      readDataEntry(key)(bs.drop(8)),
-      Height(Ints.fromByteArray(bs.take(4))),
-      Height(Ints.fromByteArray(bs.slice(4, 8)))
-    )
-
-  def writeCurrentData(cdn: CurrentData): Array[Byte] =
-    cdn.height.toByteArray ++ cdn.prevHeight.toByteArray ++ writeDataEntry(cdn.entry)
-
-  def readDataNode(key: String)(bs: Array[Byte]): DataNode = if (bs == null) DataNode.empty(key)
-  else
-    DataNode(readDataEntry(key)(bs.drop(4)), Height(Ints.fromByteArray(bs.take(4))))
-
-  def writeDataNode(dn: DataNode): Array[Byte] =
-    dn.prevHeight.toByteArray ++ writeDataEntry(dn.entry)
 
   def readCurrentBalance(bs: Array[Byte]): CurrentBalance = if (bs != null && bs.length == 16)
     CurrentBalance(Longs.fromByteArray(bs.take(8)), Height(Ints.fromByteArray(bs.slice(8, 12))), Height(Ints.fromByteArray(bs.takeRight(4))))

@@ -23,15 +23,15 @@ case object GetPeers extends Message
 
 case class KnownPeers(peers: Seq[InetSocketAddress]) extends Message
 
-case class GetSignatures(signatures: Seq[ByteStr]) extends Message {
-  override def toString: String = s"GetSignatures(${formatSignatures(signatures)})"
+case class GetBlockIds(ids: Seq[ByteStr]) extends Message {
+  override def toString: String = s"GetSignatures(${formatSignatures(ids)})"
 }
 
-case class Signatures(signatures: Seq[ByteStr]) extends Message {
-  override def toString: String = s"Signatures(${formatSignatures(signatures)})"
+case class BlockIds(ids: Seq[ByteStr]) extends Message {
+  override def toString: String = s"Signatures(${formatSignatures(ids)})"
 }
 
-case class GetBlock(signature: ByteStr) extends Message
+case class GetBlock(id: ByteStr) extends Message
 
 case class LocalScoreChanged(newLocalScore: BigInt) extends Message
 
@@ -67,7 +67,7 @@ case class MicroBlockResponse(microblock: MicroBlock, totalBlockId: BlockId) ext
 
 object MicroBlockResponse {
   def apply(mb: MicroBlock): MicroBlockResponse = {
-    MicroBlockResponse(mb, mb.totalResBlockSig)
+    MicroBlockResponse(mb, mb.wholeBlockSignature)
   }
 }
 

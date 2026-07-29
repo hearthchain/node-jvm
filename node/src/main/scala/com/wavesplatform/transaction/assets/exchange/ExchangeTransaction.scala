@@ -12,8 +12,6 @@ import com.wavesplatform.transaction.validation.impl.ExchangeTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-import scala.util.chaining.scalaUtilChainingOps
-
 case class ExchangeTransaction(
     order1: Order,
     order2: Order,
@@ -36,11 +34,14 @@ case class ExchangeTransaction(
 
   val (buyOrder, sellOrder) = if (order1.orderType == OrderType.BUY) (order1, order2) else (order2, order1)
 
+  /** The matcher's own proof plus both orders': `tap` used to discard the orders' results, so an order signed by the
+    * wrong key was accepted.
+    */
   override protected def verifyFirstProof(): Either[GenericError, Unit] =
-    super.verifyFirstProof().tap { _ =>
-      order1.firstProofIsValidSignatureAfterV6
-      order2.firstProofIsValidSignatureAfterV6
-    }
+    super
+      .verifyFirstProof()
+      .flatMap(_ => order1.firstProofIsValidSignatureAfterV6)
+      .flatMap(_ => order2.firstProofIsValidSignatureAfterV6)
 
   override val sender: PublicKey = buyOrder.matcherPublicKey
 

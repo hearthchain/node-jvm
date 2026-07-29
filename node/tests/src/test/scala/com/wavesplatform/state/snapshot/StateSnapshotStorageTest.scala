@@ -1,10 +1,13 @@
 package com.wavesplatform.state.snapshot
 
+import com.wavesplatform.utils.randomBytes
 import com.wavesplatform.TestValues.fee
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
+import com.wavesplatform.settings.GenesisAssetSettings
 import com.wavesplatform.state.*
 import com.wavesplatform.state.TxMeta.Status.{Failed, Succeeded}
 import com.wavesplatform.state.diffs.BlockDiffer.CurrentBlockFeePart
@@ -21,8 +24,13 @@ import scala.math.pow
 
 class StateSnapshotStorageTest extends PropSpec with WithDomain {
   property("transaction snapshot storage") {
+    val asset = IssuedAsset(ByteStr(randomBytes()))
     // The sender used to be credited by a genesis transaction, which the genesis snapshot replaces
-    withDomain(RideV6, Seq(AddrWithBalance(defaultAddress, ENOUGH_AMT), AddrWithBalance(secondAddress, ENOUGH_AMT))) { d =>
+    withDomain(
+      RideV6.configure(_.copy(daoAddress = None)),
+      Seq(AddrWithBalance(defaultAddress, ENOUGH_AMT, Map(asset -> 1000000000)), AddrWithBalance(secondAddress, ENOUGH_AMT)),
+      assets = Seq(GenesisAssetSettings(asset.id, Base58.encode(randomBytes()), "AAAA", 8, 1000000000))
+    ) { d =>
       val sender           = secondSigner
       val senderAddress    = secondAddress
       val recipientSigner  = TxHelpers.signer(2)
@@ -60,9 +68,9 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
       )
 
       // Exchange
-      val asset = IssuedAsset(ByteStr(Array.fill(32)(1.toByte)))
       d.appendBlock(
         transfer(to = recipient2, amount = 1.waves),
+        transfer(to = senderAddress, amount = 1.waves, asset = asset),
         transfer(from = sender, to = recipient2, amount = 1.waves, asset = asset, fee = fee)
       )
       val order1         = order(BUY, asset, Waves, matcher = sender, sender = recipientSigner, amount = 123, price = 40_000_000, fee = 777)

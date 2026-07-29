@@ -17,6 +17,7 @@ import com.wavesplatform.state.{Blockchain, Height}
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.transfer.MassTransferTransaction
 import com.wavesplatform.utils.Time
+import com.wavesplatform.mining.GeneratorKeys
 import com.wavesplatform.wallet.Wallet
 import monix.eval.Task
 import monix.reactive.Observable
@@ -28,6 +29,7 @@ case class TransactionsApiRoute(
     settings: RestAPISettings,
     commonApi: CommonTransactionsApi,
     wallet: Wallet,
+    generatorKeys: GeneratorKeys,
     blockchain: Blockchain,
     compositeBlockchain: () => Blockchain,
     utxPoolSize: () => Int,
@@ -184,13 +186,14 @@ case class TransactionsApiRoute(
 
   def sign: Route = (pathPrefix("sign") & withAuth) {
     pathEndOrSingleSlash(jsonPost[JsObject] { jsv =>
-      TransactionFactory.parseRequestAndSign(jsv, wallet, None, None, blockchain.currentGenerationPeriod.map(_.next.start.toInt))
+      TransactionFactory.parseRequestAndSign(jsv, wallet, generatorKeys, None, blockchain.currentGenerationPeriod.map(_.next.start.toInt))
     }) ~ signWithSigner
   }
 
   def signWithSigner: Route = path(AddrSegment) { address =>
     jsonPost[JsObject](
-      TransactionFactory.parseRequestAndSign(_, wallet, Some(address.toString), None, blockchain.currentGenerationPeriod.map(_.next.start.toInt))
+      TransactionFactory
+        .parseRequestAndSign(_, wallet, generatorKeys, Some(address.toString), blockchain.currentGenerationPeriod.map(_.next.start.toInt))
     )
   }
 

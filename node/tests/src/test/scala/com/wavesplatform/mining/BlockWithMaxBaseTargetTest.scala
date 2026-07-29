@@ -5,7 +5,7 @@ import com.wavesplatform.WithNewDBForEachTest
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.PoSSelector
-import com.wavesplatform.db.DBCacheSettings
+import com.wavesplatform.db.{DBCacheSettings, WithState}
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.mining.BlockWithMaxBaseTargetTest.Env
 import com.wavesplatform.settings.*
@@ -13,20 +13,18 @@ import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.state.*
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.diffs.ENOUGH_AMT
-import com.wavesplatform.test.{FreeSpec, HasSecurityManager}
+import com.wavesplatform.test.{FreeSpec, HasFatalStopProbe, TestTime}
 import com.wavesplatform.transaction.BlockchainUpdater
 import com.wavesplatform.utils.BaseTargetReachedMaximum
 import com.wavesplatform.utx.UtxPoolImpl
 import io.netty.channel.group.DefaultChannelGroup
 import io.netty.util.concurrent.GlobalEventExecutor
-import monix.eval.Task
 import monix.execution.Scheduler
 import monix.execution.schedulers.SchedulerService
 import monix.reactive.Observable
 import org.scalacheck.{Arbitrary, Gen}
 import tech.hearth.crypto.SigningKey
 
-import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.duration.*
 import com.wavesplatform.test.DomainPresets.*
@@ -35,52 +33,58 @@ import com.wavesplatform.utils.SystemTime
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.db.WithState.AddrWithBalance
 
-class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with DBCacheSettings with HasSecurityManager {
+class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with DBCacheSettings with HasFatalStopProbe {
   "base target limit" - {
     "node should stop if base target greater than maximum in block creation " in {
-      withEnv { case Env(settings, pos, bcu, utxPoolStub, scheduler, account, lastBlock) =>
+      withEnv { case (Env(settings, pos, bcu, utxPoolStub, scheduler, account, lastBlock), stopProbe) =>
         val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
+        // The miner checks the forged block's time against the clock before it computes consensus data, and with
+        // max-base-target pinned to 1 the PoS delay puts that time minutes ahead. Drive it from a clock set to the
+        // block's own time so the attempt reaches the base target limit, which is what this test is about.
+        val minerTime = TestTime()
         val miner = new MinerImpl(
           allChannels,
           bcu,
-          settings,
-          ntpTime,
+          settings.minerSettings,
+          minerTime,
           utxPoolStub,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          Seq.empty,
+
           pos,
           scheduler,
           scheduler,
           Observable.empty
         )
 
-        withSecurityManager(BaseTargetReachedMaximum) { signal =>
-          try {
-            miner.forgeBlock(account, TxHelpers.vrfKeyOf(account))
-          } catch {
-            case _: SecurityException => // NOP
-          }
+        val vrfKey     = TxHelpers.vrfKeyOf(account)
+        val refHeader  = bcu.lastBlockHeader.get.header
+        val blockDelay = pos.getValidBlockDelay(bcu.height, vrfKey, refHeader.baseTarget, bcu.generatingBalance(account.toAddress)).explicitGet()
+        minerTime.setTime(refHeader.timestamp + blockDelay)
 
-          signal.tryAcquire(10, TimeUnit.SECONDS)
+        miner.forgeBlock(account, vrfKey)
+
+        withClue("the node was stopped: ") {
+          stopProbe.awaitStop() shouldBe true
+          stopProbe.stopReason shouldBe Some(BaseTargetReachedMaximum)
         }
       }
     }
 
     "node should stop if base target greater than maximum in block append" in {
-      withEnv { case Env(settings, pos, bcu, utxPoolStub, scheduler, _, lastBlock) =>
-        withSecurityManager(BaseTargetReachedMaximum) { signal =>
-          val blockAppendTask = BlockAppender(bcu, ntpTime, utxPoolStub, pos, BlockEndorser.Disabled, scheduler)(lastBlock, None)
-            .onErrorRecoverWith[Any] { case _: SecurityException => Task.unit }
-          Await.result(blockAppendTask.runToFuture(using scheduler), 1.minute)
+      withEnv { case (Env(settings, pos, bcu, utxPoolStub, scheduler, _, lastBlock), stopProbe) =>
+        val blockAppendTask = BlockAppender(bcu, ntpTime, utxPoolStub, pos, BlockEndorser.Disabled, scheduler)(lastBlock, None)
+        Await.result(blockAppendTask.runToFuture(using scheduler), 1.minute)
 
-          signal.tryAcquire(10, TimeUnit.SECONDS)
+        withClue("the node was stopped: ") {
+          stopProbe.awaitStop() shouldBe true
+          stopProbe.stopReason shouldBe Some(BaseTargetReachedMaximum)
         }
       }
     }
   }
 
-  def withEnv(f: Env => Unit): Unit = {
+  def withEnv(f: (Env, FatalStopProbe) => Unit): Unit = {
     // The account has to exist before the state does: it is credited by the genesis snapshot, which is built from
     // the settings the state is created with
     val account = Gen
@@ -89,10 +93,12 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
       .sample
       .get
 
+    val writerSettings = TestSettings.Default
+      .withFunctionalitySettings(TestFunctionalitySettings.Stub)
+      .withGenesisBalances(AddrWithBalance(account.toAddress, ENOUGH_AMT))
+
     val defaultWriter = TestStorageFactory(
-      TestSettings.Default
-        .withFunctionalitySettings(TestFunctionalitySettings.Stub)
-        .withGenesisBalances(AddrWithBalance(account.toAddress, ENOUGH_AMT)),
+      writerSettings,
       db,
       SystemTime,
       BlockchainUpdateTriggers.noop
@@ -100,20 +106,20 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
 
     val settings0     = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
     val minerSettings = settings0.minerSettings.copy(quorum = 0)
-    val blockchainSettings0 = settings0.blockchainSettings.copy(
-      functionalitySettings = settings0.blockchainSettings.functionalitySettings
-    )
     val synchronizationSettings0 = settings0.synchronizationSettings.copy(maxBaseTarget = Some(1L))
     val settings = settings0.copy(
-      blockchainSettings = blockchainSettings0,
+      // The updater builds the genesis snapshot from its own settings, so it has to see the same genesis as the writer -
+      // otherwise it applies the packaged config's balances, whose base58 addresses no longer parse.
+      blockchainSettings = writerSettings.blockchainSettings,
       minerSettings = minerSettings,
       synchronizationSettings = synchronizationSettings0,
-      featuresSettings = settings0.featuresSettings.copy(autoShutdownOnUnsupportedFeature = false)
+      autoShutdownOnUnsupportedFeature = false
     )
 
     val bcu =
       new BlockchainUpdaterImpl(defaultWriter, settings, ntpTime, ignoreBlockchainUpdateTriggers)
-    val pos = PoSSelector(bcu, settings.synchronizationSettings.maxBaseTarget)
+    val stopProbe = fatalStopProbe(BaseTargetReachedMaximum)
+    val pos       = PoSSelector(bcu, settings.synchronizationSettings.maxBaseTarget, stopProbe.onFatalStop)
 
     val utxPoolStub = new UtxPoolImpl(ntpTime, bcu, settings0.utxSettings, settings.maxTxErrorLogSize, settings0.minerSettings.enable)
     val schedulerService: SchedulerService = Scheduler.singleThread("appender")
@@ -121,8 +127,17 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
     try {
 
       val ts = ntpTime.correctedTime() - 60000
-      // The block at height 1 is empty: it carries the genesis snapshot that credits the account
-      val firstBlock = TestBlock.create(ts + 2, Seq.empty).block
+      // The block at height 1 is empty: it carries the genesis snapshot that credits the account. TestBlock cannot give
+      // it a state hash - that has to be computed against the state it is applied to - so it is rebuilt here.
+      val firstBlock = WithState
+        .blockOnTopOf(TestBlock.create(ts + 2, Seq.empty).block, TestBlock.defaultSigner, bcu)
+        .resultE
+        .explicitGet()
+
+      bcu.processBlock(firstBlock, firstBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty).explicitGet()
+
+      // Built after the first block is applied: carrying a state hash changes that block's id, so this has to reference
+      // the rebuilt one
       val secondBlock = TestBlock
         .create(
           ts + 3,
@@ -132,9 +147,7 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
         )
         .block
 
-      bcu.processBlock(firstBlock, firstBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty).explicitGet()
-
-      f(Env(settings, pos, bcu, utxPoolStub, schedulerService, account, secondBlock))
+      f(Env(settings, pos, bcu, utxPoolStub, schedulerService, account, secondBlock), stopProbe)
     } finally {
       schedulerService.shutdown()
       utxPoolStub.close()

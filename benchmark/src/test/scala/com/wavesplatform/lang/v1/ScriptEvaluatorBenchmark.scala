@@ -1,4 +1,4 @@
-package com.wavesplatform.lang.v1
+Vpackage com.wavesplatform.lang.v1
 
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58

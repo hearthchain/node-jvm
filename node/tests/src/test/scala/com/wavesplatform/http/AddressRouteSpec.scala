@@ -4,7 +4,6 @@ import com.google.common.primitives.Longs
 import com.wavesplatform.api.http.ApiError.{ApiKeyNotValid, MissingSenderPrivateKey}
 import com.wavesplatform.api.http.{AddressApiRoute, RouteTimeout}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.settings.{WalletSettings, WavesSettings}
@@ -23,7 +22,11 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
 
   private val richAccount = TxHelpers.signer(0xaaff)
 
-  override def settings: WavesSettings                         = DomainPresets.RideV6.copy(restAPISettings = restAPISettings)
+  // signer(500) is one of this node's generators, so that /addresses/bls has something to answer with
+  override def settings: WavesSettings = {
+    val base = DomainPresets.RideV6.copy(restAPISettings = restAPISettings)
+    base.copy(minerSettings = base.minerSettings.copy(accounts = Seq(TxHelpers.miningAccountSettings(500))))
+  }
   override def genesisBalances: Seq[WithState.AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 10_000.waves))
 
   private val wallet = Wallet(WalletSettings(None, Some("123"), Some(ByteStr(Longs.toByteArray(System.nanoTime())))))
@@ -33,8 +36,9 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
 
   private val utxPoolSynchronizer = DummyTransactionPublisher.accepting
 
+  private val timer: HashedWheelTimer = new HashedWheelTimer()
   private val timeLimited: SchedulerService = Schedulers.timeBoundedFixedPool(
-    new HashedWheelTimer(),
+    timer,
     5.seconds,
     1,
     "rest-time-limited"
@@ -42,6 +46,7 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
 
   override def afterAll(): Unit = {
     timeLimited.shutdown()
+    timer.stop()
     super.afterAll()
   }
 
@@ -51,6 +56,7 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
     AddressApiRoute(
       restAPISettings,
       wallet,
+      domain.generatorKeys,
       domain.blockchain,
       utxPoolSynchronizer,
       new TestTime,
@@ -137,9 +143,9 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
   }
 
   routePath("/bls/{address}") in {
-    val kp                   = wallet.privateKeyAccounts.head
-    val address              = kp.toAddress
-    val expectedBlsPublicKey = BlsKeyPair(???).publicKey
+    // The endorser key of one of this node's generators, which come from waves.miner.accounts - the wallet holds none
+    val address              = domain.generatorKeys.accounts.head.address
+    val expectedBlsPublicKey = domain.generatorKeys.endorserPublicKey(address).value
 
     Get(routePath(s"/bls/${TxHelpers.address(100)}")) ~> route ~> check {
       response.status shouldBe MissingSenderPrivateKey.code

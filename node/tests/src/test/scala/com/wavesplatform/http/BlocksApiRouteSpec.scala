@@ -18,7 +18,9 @@ import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.state.{BlockRewardCalculator, Blockchain, GeneratorIndex, Height}
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*
-import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.settings.GenesisAssetSettings
+import com.wavesplatform.state.diffs.ENOUGH_AMT
+import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.assets.exchange.{Order, OrderType}
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.{SharedSchedulerMixin, SystemTime}
@@ -426,15 +428,34 @@ class BlocksApiRouteSpec
 
     val sender = TxHelpers.signer(1)
     val issuer = TxHelpers.signer(2)
-    withDomain(TransactionStateSnapshot, balances = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender, issuer)) { d =>
+    // Nothing issues an asset any more, so the price asset of the pair comes from the genesis snapshot, held in full
+    // by the buyer - the side that pays with it
+    val priceAsset = IssuedAsset(ByteStr.fill(32)(7))
+    withDomain(
+      TransactionStateSnapshot,
+      balances = AddrWithBalance.enoughBalances(sender, issuer) :+
+        AddrWithBalance(TxHelpers.defaultAddress, ENOUGH_AMT, Map(priceAsset -> 1000L)),
+      assets = Seq(
+        GenesisAssetSettings(
+          id = priceAsset.id,
+          issuer = ByteStr(issuer.publicKey()).toString,
+          name = "Price",
+          decimals = 2,
+          quantity = 1000L
+        )
+      )
+    ) { d =>
       val attachment = ByteStr.fill(32)(1)
       val exchange =
         TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, Waves, ???, version = Order.V4, attachment = Some(attachment)),
-          TxHelpers.order(OrderType.SELL, Waves, ???, version = Order.V4, sender = issuer),
+          TxHelpers.order(OrderType.BUY, Waves, priceAsset, version = Order.V4, attachment = Some(attachment)),
+          TxHelpers.order(OrderType.SELL, Waves, priceAsset, version = Order.V4, sender = issuer),
         )
 
       val exchangeBlock = d.appendBlock(exchange)
+      // The asset comes from the genesis snapshot rather than an issue transaction, so this block is one height lower
+      // than it used to be
+      val exchangeHeight = d.blockchain.height
 
       val route = new BlocksApiRoute(
         d.settings.restAPISettings,
@@ -448,15 +469,15 @@ class BlocksApiRouteSpec
       }
 
       d.liquidAndSolidAssert { () =>
-        Get(s"/blocks/at/3") ~> route ~> check {
+        Get(s"/blocks/at/$exchangeHeight") ~> route ~> check {
           checkOrderAttachment(responseAs[JsObject], attachment)
         }
 
-        Get(s"/blocks/seq/3/3") ~> route ~> check {
+        Get(s"/blocks/seq/$exchangeHeight/$exchangeHeight") ~> route ~> check {
           checkOrderAttachment(responseAs[JsArray].value.head.as[JsObject], attachment)
         }
 
-        Get(s"/blocks/address/${exchangeBlock.sender.toAddress}/3/3") ~> route ~> check {
+        Get(s"/blocks/address/${exchangeBlock.sender.toAddress}/$exchangeHeight/$exchangeHeight") ~> route ~> check {
           checkOrderAttachment(responseAs[JsArray].value.head.as[JsObject], attachment)
         }
 
@@ -485,21 +506,14 @@ class BlocksApiRouteSpec
 
       val miner = d.appendBlock().sender.toAddress
 
-      // Only the DAO takes a share of the reward: the XTN buy-back share was removed
-      // BlockRewardDistribution activated
-      val configAddrReward3 = d.blockchain.settings.rewardsSettings.initial / 3
-      val minerReward3      = d.blockchain.settings.rewardsSettings.initial - configAddrReward3
+      // Only the DAO takes a share of the reward: the XTN buy-back share was removed. The shares are the same at every
+      // height - `rewardSharesAt` pins both the distribution and the capped-reward activation heights at 1, so the
+      // regimes this used to walk through (whole reward to the miner, then a third to the DAO) cannot be reached.
+      val daoShare    = BlockRewardCalculator.MaxAddressReward
+      val minerShare  = d.blockchain.settings.rewardsSettings.initial - daoShare
+      val everyHeight = Map(miner.toString -> minerShare, daoAddress.toString -> daoShare)
 
-      // CappedReward activated
-      val configAddrReward4 = BlockRewardCalculator.MaxAddressReward
-      val minerReward4      = d.blockchain.settings.rewardsSettings.initial - configAddrReward4
-
-      val heightToResult = Map(
-        2 -> Map(miner.toString -> d.blockchain.settings.rewardsSettings.initial),
-        3 -> Map(miner.toString -> minerReward3, daoAddress.toString -> configAddrReward3),
-        4 -> Map(miner.toString -> minerReward4, daoAddress.toString -> configAddrReward4),
-        5 -> Map(miner.toString -> minerReward4, daoAddress.toString -> configAddrReward4)
-      )
+      val heightToResult = (2 to 5).map(_ -> everyHeight).toMap
 
       val heightToBlock = (2 to 5).map { h =>
         val block = d.appendBlock()

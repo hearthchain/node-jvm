@@ -53,8 +53,9 @@ class BlockAppenderSpec extends FlatSpec with WithDomain with BeforeAndAfterAll 
       d.blockchainUpdater
         .processBlock(
           block,
+          // The proof verifies against the VRF key the generator committed, which is the one derived for `sender`
           com.wavesplatform.crypto
-            .verifyVRF(block.header.generationSignature, d.blockchain.hitSource(1).get.arr, ByteStr(TxHelpers.defaultVrfKey.publicKey()))
+            .verifyVRF(block.header.generationSignature, d.blockchain.hitSource(1).get.arr, ByteStr(TxHelpers.vrfKeyOf(sender).publicKey()))
             .explicitGet(),
           snapshot = None,
           generatorSet = Seq.empty

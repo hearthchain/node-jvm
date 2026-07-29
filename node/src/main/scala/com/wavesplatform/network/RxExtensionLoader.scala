@@ -42,7 +42,7 @@ object RxExtensionLoader extends ScorexLogging {
       peerDatabase: PeerDatabase,
       invalidBlocks: InvalidBlockStorage,
       blocks: Observable[(Channel, Block)],
-      signatures: Observable[(Channel, Signatures)],
+      blockIds: Observable[(Channel, BlockIds)],
       snapshots: Observable[(Channel, BlockSnapshotResponse)],
       syncWithChannelClosed: Observable[ChannelClosedAndSyncWith],
       scheduler: SchedulerService,
@@ -92,7 +92,7 @@ object RxExtensionLoader extends ScorexLogging {
                   )
 
                   val blacklisting = scheduleBlacklist(ch, s"Timeout loading extension").runAsyncLogErr
-                  ch.writeAndFlush(GetSignatures(knownSigs)).addListener { (f: ChannelFuture) =>
+                  ch.writeAndFlush(GetBlockIds(knownSigs)).addListener { (f: ChannelFuture) =>
                     if (!f.isSuccess) log.trace(s"Error requesting signatures: $ch", f.cause())
                   }
 
@@ -124,15 +124,15 @@ object RxExtensionLoader extends ScorexLogging {
       }
     }
 
-    def onNewSignatures(state: State, ch: Channel, sigs: Signatures): State = {
+    def onNewSignatures(state: State, ch: Channel, sigs: BlockIds): State = {
       state.loaderState match {
-        case LoaderState.ExpectingSignatures(c, _, _) if c.channel == ch && sigs.signatures.isEmpty =>
+        case LoaderState.ExpectingSignatures(c, _, _) if c.channel == ch && sigs.ids.isEmpty =>
           peerDatabase.blacklistAndClose(ch, s"Peer did not return any signatures and is likely on a fork")
           syncNext(state.withIdleLoader)
         case LoaderState.ExpectingSignatures(c, known, _) if c.channel == ch =>
-          val (_, unknown) = sigs.signatures.span(id => known.contains(id))
+          val (_, unknown) = sigs.ids.span(id => known.contains(id))
 
-          val firstInvalid = sigs.signatures.view.flatMap { sig =>
+          val firstInvalid = sigs.ids.view.flatMap { sig =>
             invalidBlocks.find(sig).map(sig -> _)
           }.headOption
 
@@ -166,7 +166,7 @@ object RxExtensionLoader extends ScorexLogging {
               }
           }
         case _ =>
-          log.trace(s"${id(ch)} Received unexpected signatures ${formatSignatures(sigs.signatures)}, ignoring at $state")
+          log.trace(s"${id(ch)} Received unexpected signatures ${formatSignatures(sigs.ids)}, ignoring at $state")
           state
       }
     }
@@ -338,7 +338,7 @@ object RxExtensionLoader extends ScorexLogging {
     }
 
     Observable(
-      signatures.observeOn(scheduler).map { case (ch, sigs) => stateValue = onNewSignatures(stateValue, ch, sigs) },
+      blockIds.observeOn(scheduler).map { case (ch, sigs) => stateValue = onNewSignatures(stateValue, ch, sigs) },
       blocks.observeOn(scheduler).map { case (ch, block) => stateValue = onBlock(stateValue, ch, block) },
       snapshots.observeOn(scheduler).map { case (ch, snapshot) => stateValue = onSnapshot(stateValue, ch, snapshot) },
       syncWithChannelClosed.observeOn(scheduler).map { ch =>

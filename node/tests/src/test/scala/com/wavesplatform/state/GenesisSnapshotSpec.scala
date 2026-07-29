@@ -6,6 +6,7 @@ import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
+import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
@@ -209,6 +210,65 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       block.header.stateHash.value shouldBe r.computedStateHash
       // The signature covers the state hash, because the genesis block is protobuf-serialized
       block.signatureValid() shouldBe true
+    }
+  }
+
+  "the genesis block commitments" - {
+    // Everything the genesis block puts into the state comes from these settings, so a node started with the wrong ones
+    // silently builds its own chain. The commitments below are what stops it.
+    val unpinned = settingsWith(balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves))).blockchainSettings.genesisSettings
+    val genesis  = Block.genesis(unpinned).explicitGet()
+    val pinned   = unpinned.copy(stateHash = genesis.header.stateHash, blockId = Some(genesis.id()))
+
+    val otherHash = ByteStr(Array.fill[Byte](DigestLength)(1))
+
+    "are optional" in {
+      unpinned.stateHash shouldBe None
+      unpinned.blockId shouldBe None
+      Block.genesis(unpinned) should beRight
+    }
+
+    "are accepted when they match the settings they were derived from" in {
+      val block = Block.genesis(pinned).explicitGet()
+      block.header.stateHash shouldBe pinned.stateHash
+      block.id() shouldBe pinned.blockId.value
+    }
+
+    "reject a state hash that is not the hash of the configured snapshot" in {
+      Block.genesis(unpinned.copy(stateHash = Some(otherHash))).left.value.toString should include(
+        s"Genesis state hash mismatch: settings declare $otherHash"
+      )
+    }
+
+    "reject a block id that is not the id of the configured block" in {
+      Block.genesis(unpinned.copy(blockId = Some(otherHash))).left.value.toString should include(
+        s"Genesis block id mismatch: settings declare $otherHash"
+      )
+    }
+
+    "reject a balance that was changed without updating them" in {
+      val extraBalance = pinned.copy(balances = pinned.balances :+ GenesisBalanceSettings(address(2).toBech32, 5.waves))
+      Block.genesis(extraBalance).left.value.toString should include("Genesis state hash mismatch")
+    }
+
+    "reject a generator that was committed without updating them" in {
+      val generator = TxHelpers.signer(4)
+      val extraGenerator = pinned.copy(
+        generators = Seq(generatorSettings(generator, blsKeyPair(4), vrfKey(4))),
+        balances = pinned.balances :+ GenesisBalanceSettings(generator.toAddress.toBech32, 100000.waves)
+      )
+      Block.genesis(extraGenerator).left.value.toString should include("Genesis state hash mismatch")
+    }
+
+    // The state hash covers the snapshot only; the header fields around it are pinned by the block id alone
+    "reject a timestamp that was changed without updating them" in {
+      val moved = pinned.copy(timestamp = pinned.timestamp + 1)
+      Block.genesis(moved).left.value.toString should include(s"Genesis block id mismatch: settings declare ${pinned.blockId.value}")
+    }
+
+    "reject a base target that was changed without updating them" in {
+      val retargeted = pinned.copy(initialBaseTarget = pinned.initialBaseTarget + 1)
+      Block.genesis(retargeted).left.value.toString should include("Genesis block id mismatch")
     }
   }
 

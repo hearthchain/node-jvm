@@ -111,7 +111,8 @@ class TxStateSnapshotHashSpec extends PropSpec {
     generationCommitment = Some(
       TSS.GenerationCommitment(
         bs(signer101.publicKey()),
-        bs(BlsKeyPair.fromSeed(Ints.toByteArray(101)).publicKey.byteStr.arr)
+        bs(BlsKeyPair.fromSeed(Ints.toByteArray(101)).publicKey.byteStr.arr),
+        bs(signer101.publicKey)
       )
     )
   )
@@ -134,74 +135,50 @@ class TxStateSnapshotHashSpec extends PropSpec {
     (
       "waves balances",
       wavesBalances,
-      "CiQKGgFUYP1Q7yDeRXEgffuciL58HC+KIscK2I+1EgYQgJTr3AMKJAoaAVRCxcljc/UP2BNQYE8cFPKmySVq2v0ZsCoSBhCAqNa5Bw==",
+      "Ch4KFPDjERx1UoettFtdN7y5oQgF6T5uEgYQgJTr3AMKHgoUBBIwcyZ6gOgX+RqInVgBe4bf9wESBhCAqNa5Bw==",
       ByteStr.empty,
       Hex.toHexString(TxStateSnapshotHashBuilder.InitStateHash.arr),
-      "f0a8b6745534c2d20412f40cdb097b7050898e44531a661ef64fc5be0744ac72"
+      "06fd242c1ba1417d15f3b123f9f67a9b8dd40c7350aa294a3bc18c2dada0dc3c"
     ),
     (
       "asset balances",
       assetBalances,
-      "CkMKGgFUYP1Q7yDeRXEgffuciL58HC+KIscK2I+1EiUKIF5mn4IKZ9CIbYdHjPBDoqx4XMevVdwxzhB1OUvTUKJbEJBOCkQKGgFUQsXJY3P1D9gTUGBPHBTypsklatr9GbAqEiYKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEKCcAQ==",
+      "Cj0KFPDjERx1UoettFtdN7y5oQgF6T5uEiUKIF5mn4IKZ9CIbYdHjPBDoqx4XMevVdwxzhB1OUvTUKJbEJBOCj4KFAQSMHMmeoDoF/kaiJ1YAXuG3/cBEiYKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEKCcAQ==",
       ByteStr.empty,
-      "f0a8b6745534c2d20412f40cdb097b7050898e44531a661ef64fc5be0744ac72",
-      "16c4803d12ee8e9d6c705ca6334fd84f57c0e78c4ed8a9a3dc6c28dcd9b29a34"
+      "06fd242c1ba1417d15f3b123f9f67a9b8dd40c7350aa294a3bc18c2dada0dc3c",
+      "c8a6184bb152feafb8a76a3a0b094c0e2368aa3643e1c4c3d7186f15812fbcbc"
     ),
     (
       "new lease",
       newLease,
-      "EiIKGgFUYP1Q7yDeRXEgffuciL58HC+KIscK2I+1GICa4uEQEiIKGgFUQsXJY3P1D9gTUGBPHBTypsklatr9GbAqEICuzb4UGmYKILiCMyyFggW8Zd2LGt/AtMr7WWp+kfWbzlN93pXZqzqNEiBQx1mvQnelVPDNtCyxR82wU73hEX9bBDsNfUlEuNBgaBoaAVRCxcljc/UP2BNQYE8cFPKmySVq2v0ZsCoggPKLqAk=",
+      "EhwKFPDjERx1UoettFtdN7y5oQgF6T5uGICa4uEQEhwKFAQSMHMmeoDoF/kaiJ1YAXuG3/cBEICuzb4UGmAKILiCMyyFggW8Zd2LGt/AtMr7WWp+kfWbzlN93pXZqzqNEiCMSZz6RORPZ7kUf0a79isEvdRsoCS6DFzKGcvWL14jyBoUBBIwcyZ6gOgX+RqInVgBe4bf9wEggPKLqAk=",
       ByteStr.empty,
-      "d3c7f2aeb1d978ecebc2fe1f0555e4378cef5171db460d8bbfebef0e59c3a44c",
-      "2665ce187b867f2dae95699882d9fd7c31039c505b8af93ed22cada90524ff37"
+      "c8a6184bb152feafb8a76a3a0b094c0e2368aa3643e1c4c3d7186f15812fbcbc",
+      "405c3e52047647b024b7a25358784bc4e6fb1a2594440d722b06e50299ccf79e"
     ),
     (
       "cancelled lease",
       cancelledLease,
-      "EiIKGgFUMCPLqLW81X2Atgaj2KwF9QkaJq47Cev9GICo1rkHEhwKGgFUYSJd8vzI9rq7GdIuDy65JMc8zi497E98IiIKILiCMyyFggW8Zd2LGt/AtMr7WWp+kfWbzlN93pXZqzqN",
+      "EhwKFHutVCUNFNB+ZP+4Rk1pFws2xX+oGICo1rkHEhYKFDYQIRFQuTQphCjri0+rTlgfsu7pIiIKILiCMyyFggW8Zd2LGt/AtMr7WWp+kfWbzlN93pXZqzqN",
       ByteStr.empty,
-      "2665ce187b867f2dae95699882d9fd7c31039c505b8af93ed22cada90524ff37",
-      "dafc56fb4f5e13ddd3e82547874e154c5c61ac556e76e9e9766b5d7ccbc1e1be"
+      "405c3e52047647b024b7a25358784bc4e6fb1a2594440d722b06e50299ccf79e",
+      "b2210a20dbfaa01248e6b5a882a3595d35f5aade4327f45f38680b72a9e3c389"
     ),
     (
       "order fill",
       volumeAndFee,
       "UisKIMkknO8yHpMUT/XKkkdlrbYCG0Dt+qvVgphfgtRbyRDMEICU69wDGNAPUisKIJZ9YwvJObbWItHAD2zhbaFOTFx2zQ4p0Xbo81GXHKeEEICU69wDGNAP",
       ByteStr.empty,
-      "eaa251c161cfe875932275ce6ff8873cd169099e021f09245f4069ccd58d6669",
-      "de22575b5c2ef7de6388c0ea96e6d0f172802f4c8e33684473c91af65866b1d4"
+      "b2210a20dbfaa01248e6b5a882a3595d35f5aade4327f45f38680b72a9e3c389",
+      "ad08b2cdcf276172198ac60568a1e207ab9e6247c6eedd353b12f9bcd7ef6426"
     ),
     (
       "new asset",
       newAsset,
       "KkYKIF5mn4IKZ9CIbYdHjPBDoqx4XMevVdwxzhB1OUvTUKJbEiDcYGFqY9MotHTpDpskoycN/Mt62bZfPxIC4fpU0ZTBniABKkYKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEiDcYGFqY9MotHTpDpskoycN/Mt62bZfPxIC4fpU0ZTBnhgIMi8KIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEAEaCQT/////////9jIlCiBeZp+CCmfQiG2HR4zwQ6KseFzHr1XcMc4QdTlL01CiWxoBAQ==",
       ByteStr.empty,
-      "de22575b5c2ef7de6388c0ea96e6d0f172802f4c8e33684473c91af65866b1d4",
-      "5f09358e944a386ad12b4f6e22c79a5c614967f6da40465e30d878e9b58e75e2"
-    ),
-    (
-      "reissued asset",
-      reissuedAsset,
-      "MigKIDhvjT3TTlJ+v4Ni205vcYc1m9WWgnQPFovjmJI1H62yGgQ7msoA",
-      ByteStr.empty,
-      "5f09358e944a386ad12b4f6e22c79a5c614967f6da40465e30d878e9b58e75e2",
-      "6d5e0f4e2a4b650541b66711bbc687f51fea7bc3aa35b43642e21ab3dd064743"
-    ),
-    (
-      "renamed asset",
-      renamedAsset,
-      "OkMKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEgduZXduYW1lGhZzb21lIGZhbmN5IGRlc2NyaXB0aW9u",
-      ByteStr.empty,
-      "6d5e0f4e2a4b650541b66711bbc687f51fea7bc3aa35b43642e21ab3dd064743",
-      "885ac4b03397e63cdc1a2e3fe60d2aae0d4701e5cfb8c19ca80feb912a028a48"
-    ),
-    (
-      "failed transaction",
-      failedTransaction,
-      "CiQKGgFUQsXJY3P1D9gTUGBPHBTypsklatr9GbAqEgYQ4PHE1wlwAQ==",
-      ByteStr(fastHash(Ints.toByteArray(0xaabbef20))),
-      "885ac4b03397e63cdc1a2e3fe60d2aae0d4701e5cfb8c19ca80feb912a028a48",
-      "4185fb099c6dd4f483d4488045cc0912f02b9c292128b90142367af680ce2a32"
+      "ad08b2cdcf276172198ac60568a1e207ab9e6247c6eedd353b12f9bcd7ef6426",
+      "2643d5d21f3af883518ebc409e35f891b73f93b451ef3864ce620ba6cc45be83"
     ),
     (
       "elided transaction",
@@ -214,18 +191,18 @@ class TxStateSnapshotHashSpec extends PropSpec {
     (
       "with generation commitment",
       withCommitment,
-      "elQKIFDHWa9Cd6VU8M20LLFHzbBTveERf1sEOw19SUS40GBoEjCtMabxDUdbtJ7shen9xp6fdysl8gapeJylu5iJR4Jzxq24ikwORqZLNx+7yclBPNc=",
+      "enYKIIxJnPpE5E9nuRR/Rrv2KwS91GygJLoMXMoZy9YvXiPIEjDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaIIxJnPpE5E9nuRR/Rrv2KwS91GygJLoMXMoZy9YvXiPI",
       ByteStr.empty,
       "7a15507d73ff9f98c3c777e687e23a4c8b33d02212203be73f0518403e91d431",
-      "d1c70160c781e977203a7450f5478945fce259a657950775e1920099c57bc434"
+      "8d980f5400c62017dce2d4a038341dcf1d14149bb77840fef68f08fc7e366bb8"
     ),
     (
       "all together",
       all,
-      "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",
+      "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",
       ByteStr(fastHash(Ints.toByteArray(0xaabbef50))),
       "9ef6a85dd20ebb3834bcf391baff065803ba90e8cc3db1ff81062466a866d56f",
-      "1baa059a1e12ee2a7fc3793ec2bd877b7981e925602b7b8b6dd1aadf0d78ec56"
+      "f0397c7dafcdfba107462a74eb384e3fa97b9fe7b6198d63adfedcbb873d9af4"
     )
   )
 

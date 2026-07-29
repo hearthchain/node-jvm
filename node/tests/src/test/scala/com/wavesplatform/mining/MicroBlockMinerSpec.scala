@@ -74,22 +74,9 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
         }
       }
 
-      val baseBlock = Block
-        .buildAndSign(
-          TestValues.timestamp,
-          d.lastBlockId,
-          d.lastBlock.header.baseTarget,
-          d.lastBlock.header.generationSignature,
-          txs = Nil,
-          acc,
-          featureVotes = Nil,
-          stateHash = None,
-          challengedHeader = None,
-          finalizationVoting = None
-        )
-        .explicitGet()
-
-      d.appendBlock(baseBlock)
+      // Through the domain: a hand-built key block would carry the genesis block's generation signature, which is not
+      // an Ecvrf proof for this height and fails verification inside sodium
+      val baseBlock = d.appendBlock()
 
       val constraint = OneDimensionalMiningConstraint(5, TxEstimators.one, "limit")
       val lastBlock  = generateBlocks(baseBlock, constraint, 0)
@@ -123,7 +110,9 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
             strategy: UtxPool.PackStrategy,
             cancelled: () => Boolean
         ): (Option[Seq[Transaction]], MiningConstraint, Option[ByteStr]) = {
-          val (txs, constraint, stateHash) = inner.packUnconfirmed(rest, None, strategy, cancelled)
+          // Passed through: with it dropped the packed micro block carries no state hash, which is not valid any more,
+          // so nothing was ever appended and the test waited for a micro block that could not exist
+          val (txs, constraint, stateHash) = inner.packUnconfirmed(rest, prevStateHash, strategy, cancelled)
           val waitingConstraint = new MiningConstraint {
             def isFull: Boolean = { eventHasBeenSent.await(60, TimeUnit.SECONDS); constraint.isFull }
             def isOverfilled: Boolean                                                   = constraint.isOverfilled
@@ -168,7 +157,9 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
         .generateMicroBlockSequence(defaultSigner, block, constraint, 0)
         .runToFuture(using mbminer)
 
-      utxPool.putIfNew(transfer(amount = 123))
+      // Checked: a rejected transaction used to leave the UTX empty and the test waiting for a micro block that could
+      // never be packed, failing 30s later with nothing to point at the cause
+      utxPool.putIfNew(transfer(amount = 123)).resultE.explicitGet()
 
       // Bounded: if the micro block never gets appended this has to fail the test rather than hang the whole suite
       val deadline = System.nanoTime() + 30.seconds.toNanos

@@ -21,7 +21,7 @@ import com.wavesplatform.state.diffs.BlockDiffer
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{BlockAppendError, GenericError, MicroBlockAppendError}
-import com.wavesplatform.utils.{ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
+import com.wavesplatform.utils.{ApplicationStopReason, ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
 import kamon.Kamon
 import monix.reactive.Observable
 import monix.reactive.subjects.ReplaySubject
@@ -34,7 +34,10 @@ class BlockchainUpdaterImpl(
     wavesSettings: WavesSettings,
     time: Time,
     blockchainUpdateTriggers: BlockchainUpdateTriggers,
-    miner: Miner = Miner.StrictDisabledMiner
+    miner: Miner = Miner.StrictDisabledMiner,
+    // How the node is brought down on an unimplemented activated feature. Injected so tests can observe that the
+    // shutdown was triggered - it cannot be intercepted from outside any more, since JDK 25 removed SecurityManager.
+    onFatalStop: ApplicationStopReason => Unit = forceStopApplication
 ) extends Blockchain
     with BlockchainUpdater
     with NG
@@ -137,9 +140,9 @@ class BlockchainUpdaterImpl(
       if (unimplementedActivated.nonEmpty) {
         log.error(s"UNIMPLEMENTED ${displayFeatures(unimplementedActivated)} ACTIVATED ON BLOCKCHAIN")
         log.error("PLEASE, UPDATE THE NODE IMMEDIATELY")
-        if (wavesSettings.featuresSettings.autoShutdownOnUnsupportedFeature) {
+        if (wavesSettings.autoShutdownOnUnsupportedFeature) {
           log.error("FOR THIS REASON THE NODE WAS STOPPED AUTOMATICALLY")
-          forceStopApplication(UnsupportedFeature)
+          onFatalStop(UnsupportedFeature)
         } else log.error("OTHERWISE THE NODE WILL END UP ON A FORK")
       }
 
@@ -192,7 +195,7 @@ class BlockchainUpdaterImpl(
       val notImplementedFeatures: Set[Short] = rocksdb.activatedFeaturesAt(height).diff(BlockchainFeatures.implemented)
 
       Either
-        .raiseWhen(wavesSettings.featuresSettings.autoShutdownOnUnsupportedFeature && notImplementedFeatures.nonEmpty)(
+        .raiseWhen(wavesSettings.autoShutdownOnUnsupportedFeature && notImplementedFeatures.nonEmpty)(
           GenericError(s"UNIMPLEMENTED ${displayFeatures(notImplementedFeatures)} ACTIVATED ON BLOCKCHAIN, UPDATE THE NODE IMMEDIATELY")
         )
         .flatMap[ValidationError, BlockApplyResult](_ =>
@@ -517,7 +520,7 @@ class BlockchainUpdaterImpl(
                   Block.create(
                     liquid.block,
                     liquid.block.transactionData ++ microBlock.transactionData,
-                    microBlock.totalResBlockSig,
+                    microBlock.wholeBlockSignature,
                     microBlock.stateHash,
                     FinalizationVoting.combine(liquid.block.header.finalizationVoting, microBlock.finalizationVoting)
                   ) -> liquid.data.liquidStateHash
@@ -602,7 +605,6 @@ class BlockchainUpdaterImpl(
           val prevWavesAmount            = rocksdb.wavesAmount(height - 1)
           val ngReward                   = BigInt(ng.reward.getOrElse(0L))
           val rewardBoost                = this.blockRewardBoost(Height(height))
-          println(s"$prevWavesAmount + $ngReward * $rewardBoost = ${prevWavesAmount + ngReward * rewardBoost}")
           prevWavesAmount +
             ngReward * rewardBoost -
             parentConflictEndorsements * CommitToGenerationTransaction.DepositInWavelets

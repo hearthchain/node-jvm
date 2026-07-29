@@ -70,7 +70,7 @@ package object http {
       (JsPath \ "attachment").readWithDefault(ByteStr.empty) and
       (JsPath \ "proofs").readNullable[Proofs] and
       (JsPath \ "signature").readNullable[ByteStr]
-  ) { (version, sender, recipient, asset, amount, timestamp, feeAsset, fee, attachment, proofs, signature) =>
+  ) { (_, sender, recipient, asset, amount, timestamp, feeAsset, fee, attachment, proofs, signature) =>
     TransferTransaction
       .create(
         sender,

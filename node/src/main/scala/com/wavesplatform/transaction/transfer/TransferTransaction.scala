@@ -39,8 +39,6 @@ object TransferTransaction {
   val MaxAttachmentSize            = 140
   val MaxAttachmentStringSize: Int = base58Length(MaxAttachmentSize)
 
-  val typeId: TxType = 4: Byte
-
   implicit val validator: TxValidator[TransferTransaction] = TransferTxValidator
 
   def create(

@@ -1,16 +1,15 @@
 package com.wavesplatform.state.diffs
 
-import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithDomain
+import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.lagonaki.mocks.TestBlock.create as block
 import com.wavesplatform.settings.{FunctionalitySettings, GenesisAssetSettings, TestFunctionalitySettings}
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.ScriptsAndSponsorship
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.ParsedTransfer
-import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.transaction.{Asset, TxHelpers}
 import tech.hearth.crypto.SigningKey
 
 class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
@@ -30,10 +29,8 @@ class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
       withDomain(ScriptsAndSponsorship, masterBalance) { d =>
         d.appendBlock(transfer)
 
-        val carryFee = -transfer.fee.value * 3 / 5
-//        assertBalanceInvariant(d.liquidSnapshot, d.rocksDBWriter, carryFee)
-
-        d.liquidSnapshot.balances shouldBe (Map((master.toAddress, Waves) -> 100L) ++ transfers.map { case (a, b) => (a -> Waves) -> b}.toMap)
+        val carryFee = -transfer.fee.value * 3 / 5 + 6.waves
+        assertBalanceInvariant(d.liquidSnapshot, d.rocksDBWriter, carryFee)
 
         val totalAmount = transfer.transfers.map(_.amount.value).sum
         val fees        = transfer.fee.value
@@ -53,7 +50,7 @@ class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
   property("MassTransfer fails on non-issued asset") {
     val recipient = TxHelpers.address(2)
     val asset     = IssuedAsset(ByteStr.fill(32)(1))
-    val assets = Seq(GenesisAssetSettings(asset.id, ByteStr.fill(32)(3).toString, "AAAA", 8, 100000000))
+    val assets    = Seq(GenesisAssetSettings(asset.id, ByteStr.fill(32)(3).toString, "AAAA", 8, 100000000))
     val transfer =
       TxHelpers.massTransfer(master, Seq(recipient -> 100000L), asset)
 

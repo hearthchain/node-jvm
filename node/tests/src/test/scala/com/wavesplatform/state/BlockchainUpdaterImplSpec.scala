@@ -6,13 +6,10 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{DBCacheSettings, WithDomain}
 import com.wavesplatform.events.BlockchainUpdateTriggers
-import com.wavesplatform.history.Domain.BlockchainUpdaterExt
-import com.wavesplatform.history.chainBaseAndMicro
-import com.wavesplatform.lagonaki.mocks.TestBlock
+import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.test.*
-import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxValidationError.BlockAppendError
 import com.wavesplatform.transaction.transfer.TransferTransaction
 import com.wavesplatform.transaction.{Transaction, TxHelpers}
@@ -24,24 +21,37 @@ import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.duration.DurationInt
 
-class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDomain with NTPTime with DBCacheSettings with MockFactory {
+class BlockchainUpdaterImplSpec extends FreeSpec, EitherMatchers, WithDomain, NTPTime, DBCacheSettings, MockFactory {
   import DomainPresets.*
 
   private val FEE_AMT = 1000000L
 
-  // The master is credited by the genesis snapshot, so withDomain appends the genesis block itself and the triggers
-  // see it as the block at height 1
-  def baseTest(setup: (Time, ByteStr) => (SigningKey, Seq[Block]), enableNg: Boolean = false, triggers: BlockchainUpdateTriggers = BlockchainUpdateTriggers.noop)(
+  /** These assertions are about how transaction fees reach the miner, so the block reward is zeroed out to keep it from
+    * showing up in the same balances.
+    */
+  private def withoutReward(ws: WavesSettings): WavesSettings =
+    ws.copy(blockchainSettings = ws.blockchainSettings.copy(rewardsSettings = ws.blockchainSettings.rewardsSettings.copy(initial = 0)))
+
+  /** `setup` yields the transactions of each block rather than the blocks themselves: only the domain can build one
+    * that references the chain head *and* carries a VRF proof made with the generator's committed key, so the blocks
+    * are built here by `d.appendBlock` instead of by the caller.
+    */
+  def baseTest(
+      setup: Time => (SigningKey, Seq[Seq[Transaction]]),
+      enableNg: Boolean = false,
+      triggers: BlockchainUpdateTriggers = BlockchainUpdateTriggers.noop
+  )(
       f: (CompleteBlockchainUpdater, SigningKey) => Unit
   ): Unit = {
     val master = TxHelpers.signer(1)
-    withDomain(if (enableNg) NG else SettingsFromDefaultConfig, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, master)) { d =>
+    withDomain(withoutReward(if (enableNg) NG else SettingsFromDefaultConfig), AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, master)) { d =>
+      // withDomain has already appended the genesis block by now, so the triggers below only see the blocks from `setup`
       d.triggers = d.triggers :+ triggers
 
-      val (account, blocks) = setup(ntpTime, d.lastBlockId)
+      val (account, blocks) = setup(ntpTime)
 
-      blocks.foreach { block =>
-        d.appendBlock(block)
+      blocks.foreach { txs =>
+        d.appendBlock(txs*)
       }
 
       f(d.blockchainUpdater, account)
@@ -51,93 +61,33 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
   def createTransfer(master: SigningKey, recipient: Address, ts: Long): TransferTransaction =
     TxHelpers.transfer(master, recipient, ENOUGH_AMT / 5, fee = 1000000, timestamp = ts)
 
-  def commonPreconditions(ts: Long, genesisBlockId: ByteStr): (SigningKey, List[Block]) = {
+  def commonPreconditions(ts: Long): (SigningKey, List[Seq[Transaction]]) = {
     val master    = TxHelpers.signer(1)
     val recipient = TxHelpers.signer(2)
 
-    val b1 = TestBlock
-      .create(
-        ts + 10,
-        genesisBlockId,
-        Seq(
-          createTransfer(master, recipient.toAddress, ts + 1),
-          createTransfer(master, recipient.toAddress, ts + 2),
-          createTransfer(recipient, master.toAddress, ts + 3),
-          createTransfer(master, recipient.toAddress, ts + 4),
-          createTransfer(master, recipient.toAddress, ts + 5)
-        )
-      )
-      .block
-    val b2 = TestBlock
-      .create(
-        ts + 20,
-        b1.id(),
-        Seq(
-          createTransfer(master, recipient.toAddress, ts + 11),
-          createTransfer(recipient, master.toAddress, ts + 12),
-          createTransfer(recipient, master.toAddress, ts + 13),
-          createTransfer(recipient, master.toAddress, ts + 14)
-        )
-      )
-      .block
+    val b1 = Seq(
+      createTransfer(master, recipient.toAddress, ts + 1),
+      createTransfer(master, recipient.toAddress, ts + 2),
+      createTransfer(recipient, master.toAddress, ts + 3),
+      createTransfer(master, recipient.toAddress, ts + 4),
+      createTransfer(master, recipient.toAddress, ts + 5)
+    )
+    val b2 = Seq(
+      createTransfer(master, recipient.toAddress, ts + 11),
+      createTransfer(recipient, master.toAddress, ts + 12),
+      createTransfer(recipient, master.toAddress, ts + 13),
+      createTransfer(recipient, master.toAddress, ts + 14)
+    )
 
     (master, List(b1, b2))
   }
 
   "blockchain update events sending" - {
-    "without NG" - {
-      "genesis block and two transfers blocks" in {
-        val triggersMock = mock[BlockchainUpdateTriggers]
-
-        inSequence {
-          (triggersMock.onProcessBlock)
-            .expects(where { (block, snapshot, _, _, bc) =>
-              // The genesis block: no transactions, the balances come from the predefined snapshot
-              bc.height == 0 &&
-              block.transactionData.isEmpty &&
-              snapshot.transactions.isEmpty &&
-              snapshot.balances.head._2 == ENOUGH_AMT
-            })
-            .once()
-
-          (triggersMock.onProcessBlock)
-            .expects(where { (block, snapshot, _, _, bc) =>
-              val txInfo = snapshot.transactions.head
-              val tx     = txInfo._2.transaction.asInstanceOf[TransferTransaction]
-
-              bc.height == 1 &&
-              block.transactionData.length == 5 &&
-              // miner reward, no NG — all txs fees
-              snapshot.balances.size == 1 &&
-              snapshot.balances.head._2 == FEE_AMT * 5 &&
-              // first Tx updated balances
-              snapshot.transactions.head._2.snapshot.balances((tx.recipient.asInstanceOf[Address], Waves)) == (ENOUGH_AMT / 5) &&
-              snapshot.transactions.head._2.snapshot.balances((tx.sender.toAddress, Waves)) == ENOUGH_AMT - ENOUGH_AMT / 5 - FEE_AMT
-            })
-            .once()
-
-          (triggersMock.onProcessBlock).expects(*, *, *, *, *).once()
-        }
-
-        baseTest((time, genesisId) => commonPreconditions(time.correctedTime(), genesisId), enableNg = false, triggersMock)((_, _) => ())
-      }
-    }
-
     "with NG" - {
       "genesis block and two transfers blocks" in {
         val triggersMock = mock[BlockchainUpdateTriggers]
 
         inSequence {
-          (triggersMock.onProcessBlock)
-            .expects(where { (block, snapshot, _, _, bc) =>
-              // The genesis block: no transactions, the balances come from the predefined snapshot
-              bc.height == 0 &&
-              block.transactionData.isEmpty &&
-              snapshot.transactions.isEmpty &&
-              snapshot.balances.head._2 == ENOUGH_AMT
-            })
-            .once()
-
           (triggersMock.onProcessBlock)
             .expects(where { (block, snapshot, _, _, bc) =>
               bc.height == 1 &&
@@ -151,91 +101,105 @@ class BlockchainUpdaterImplSpec extends FreeSpec with EitherMatchers with WithDo
               bc.height == 2 &&
               block.transactionData.length == 4 &&
               snapshot.balances.size == 1 &&
-              snapshot.balances.head._2 == FEE_AMT * 5 // all fee from previous block
+              // The miner now holds all of the previous block's fees: 40% credited per transaction as that block was
+              // applied, the remaining 60% as the carry in this block's initial snapshot. Balances are absolute, and
+              // defaultSigner mines every block here, so this is its genesis credit plus those fees.
+              snapshot.balances.head._2 == ENOUGH_AMT + FEE_AMT * 5
             })
             .once()
         }
 
-        baseTest((time, genesisId) => commonPreconditions(time.correctedTime(), genesisId), enableNg = true, triggersMock)((_, _) => ())
+        baseTest(time => commonPreconditions(time.correctedTime()), enableNg = true, triggersMock)((_, _) => ())
       }
 
       "block, then 2 microblocks, then block referencing previous microblock" in
-        withDomain(NG, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, TxHelpers.signer(1))) { d =>
-        def preconditions(ts: Long): Seq[Transaction] = {
-          val master    = TxHelpers.signer(1)
-          val recipient = TxHelpers.signer(2)
+        withDomain(withoutReward(NG), AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, TxHelpers.signer(1))) { d =>
+          def preconditions(ts: Long): Seq[Transaction] = {
+            val master    = TxHelpers.signer(1)
+            val recipient = TxHelpers.signer(2)
 
-          val transfers = Seq(
-            createTransfer(master, recipient.toAddress, ts + 1),
-            createTransfer(master, recipient.toAddress, ts + 2),
-            createTransfer(master, recipient.toAddress, ts + 3),
-            createTransfer(recipient, master.toAddress, ts + 4),
-            createTransfer(master, recipient.toAddress, ts + 5)
-          )
+            Seq(
+              createTransfer(master, recipient.toAddress, ts + 1),
+              createTransfer(master, recipient.toAddress, ts + 2),
+              createTransfer(master, recipient.toAddress, ts + 3),
+              createTransfer(recipient, master.toAddress, ts + 4),
+              createTransfer(master, recipient.toAddress, ts + 5)
+            )
+          }
 
-          transfers
+          // Real timestamps now that the domain builds the blocks: the appender rejects transactions dated far in the
+          // past relative to the previous block.
+          val transfers = preconditions(ntpTime.correctedTime())
+
+          // The key block goes in before the mock is attached, so the expectations below start at the first microblock.
+          d.appendBlock(transfers.head)
+          val microBlock1 = d.createMicroBlock()(transfers(1))
+
+          val triggersMock = mock[BlockchainUpdateTriggers]
+          d.triggers = d.triggers :+ triggersMock
+
+          // A reference is a 32-byte block id, not the 64-byte total signature the microblock carries, and the id of
+          // the liquid state only exists once the microblock has been applied - so the expectations below read it from
+          // here, which is set by the time the calls that use it happen.
+          var microBlock1TotalId: ByteStr = ByteStr.empty
+          var block2Id: ByteStr           = ByteStr.empty
+
+          inSequence {
+            // microblock 1
+            (triggersMock.onProcessMicroBlock)
+              .expects(where { (microBlock, snapshot, bc, _, _) =>
+                bc.height == 2 &&
+                microBlock.transactionData.length == 1 &&
+                snapshot.balances.isEmpty // no txs with fee in previous block
+              })
+              .once()
+
+            // microblock 2
+            (triggersMock.onProcessMicroBlock)
+              .expects(where { (microBlock, snapshot, bc, _, _) =>
+                bc.height == 2 &&
+                microBlock.transactionData.length == 1 &&
+                snapshot.balances.isEmpty // no txs with fee in previous block
+              })
+              .once()
+
+            // rollback microblock
+            (triggersMock.onMicroBlockRollback)
+              .expects(where { (_, toId) =>
+                toId == microBlock1TotalId
+              })
+              .once()
+
+            // next keyblock
+            (triggersMock.onProcessBlock)
+              .expects(where { (block, _, _, _, bc) =>
+                bc.height == 2 &&
+                block.header.reference == microBlock1TotalId
+              })
+              .once()
+
+            // microblock 3
+            (triggersMock.onProcessMicroBlock)
+              .expects(where { (microBlock, _, bc, _, _) =>
+                bc.height == 3 && microBlock.reference == block2Id
+              })
+              .once()
+          }
+
+          microBlock1TotalId = d.appendMicroBlock(microBlock1)
+
+          // Built while microBlock1 is still the chain head, so it references that liquid state - appending it after
+          // the second microblock is what makes the updater roll that one back.
+          val block2 = d.createBlock(Seq(transfers(3)))
+          block2Id = block2.id()
+
+          d.appendMicroBlock(d.createMicroBlock()(transfers(2)))
+          d.appendBlockE(block2) should beRight // this should remove the second microblock
+
+          d.appendMicroBlock(d.createMicroBlock()(transfers(4)))
+          d.blockchainUpdater.shutdown()
         }
-
-        val triggersMock = mock[BlockchainUpdateTriggers]
-
-        // The genesis block is applied by withDomain before the mock is attached, so only the blocks below are seen
-        d.triggers = d.triggers :+ triggersMock
-
-        val transfers                  = preconditions(0)
-        val (block1, microBlocks1And2) = chainBaseAndMicro(d.lastBlockId, transfers.head, Seq(Seq(transfers(1)), Seq(transfers(2))))
-        val (block2, microBlock3)      = chainBaseAndMicro(microBlocks1And2.head.totalResBlockSig, transfers(3), Seq(Seq(transfers(4))))
-
-        inSequence {
-          // microblock 1
-          (triggersMock.onProcessMicroBlock)
-            .expects(where { (microBlock, snapshot, bc, _, _) =>
-              bc.height == 1 &&
-              microBlock.transactionData.length == 2 &&
-              snapshot.balances.isEmpty // no txs with fee in previous block
-            })
-            .once()
-
-          // microblock 2
-          (triggersMock.onProcessMicroBlock)
-            .expects(where { (microBlock, snapshot, bc, _, _) =>
-              bc.height == 1 &&
-              microBlock.transactionData.length == 1 &&
-              snapshot.balances.isEmpty // no txs with fee in previous block
-            })
-            .once()
-
-          // rollback microblock
-          (triggersMock.onMicroBlockRollback)
-            .expects(where { (_, toSig) =>
-              toSig == microBlocks1And2.head.totalResBlockSig
-            })
-            .once()
-
-          // next keyblock
-          (triggersMock.onProcessBlock)
-            .expects(where { (block, _, _, _, bc) =>
-              bc.height == 1 &&
-              block.header.reference == microBlocks1And2.head.totalResBlockSig
-            })
-            .once()
-
-          // microblock 3
-          (triggersMock.onProcessMicroBlock)
-            .expects(where { (microBlock, _, bc, _, _) =>
-              bc.height == 2 && microBlock.reference == block2.signature
-            })
-            .once()
-        }
-
-        d.blockchainUpdater.processBlock(block1) should beRight
-        d.blockchainUpdater.processMicroBlock(microBlocks1And2.head, None) should beRight
-        d.blockchainUpdater.processMicroBlock(microBlocks1And2.last, None) should beRight
-        d.blockchainUpdater.processBlock(block2) should beRight // this should remove previous microblock
-        d.blockchainUpdater.processMicroBlock(microBlock3.head, None) should beRight
-        d.blockchainUpdater.shutdown()
-      }
     }
-
   }
 
   "BlockchainUpdater should replace current liquid block with better one" in {

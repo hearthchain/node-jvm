@@ -12,16 +12,16 @@ class MinerSettingsSpecification extends FlatSpec {
       .parseString(s"""
                       |waves {
                       |  miner {
-                      |    enable: yes
-                      |    quorum: 1
-                      |    interval-after-last-block-then-generation-is-allowed: 1d
+                      |    enable = yes
+                      |    quorum = 1
+                      |    interval-after-last-block-then-generation-is-allowed = 1d
                       |    no-quorum-mining-delay = 5s
-                      |    micro-block-interval: 5s
-                      |    minimal-block-generation-offset: 500ms
-                      |    max-transactions-in-micro-block: 400
-                      |    min-micro-block-age: 3s
-                      |    private-keys: []
-                      |    miner-accounts: []
+                      |    micro-block-interval = 5s
+                      |    minimal-block-generation-offset = 500ms
+                      |    max-transactions-in-micro-block = 400
+                      |    min-micro-block-age = 3s
+                      |    accounts = []
+                      |    supported-features = [1, 2, 4]
                       |  }
                       |}
       """.stripMargin)
@@ -36,5 +36,6 @@ class MinerSettingsSpecification extends FlatSpec {
     settings.minimalBlockGenerationOffset should be(500.millis)
     settings.maxTransactionsInMicroBlock should be(400)
     settings.minMicroBlockAge should be(3.seconds)
+    settings.supportedFeatures shouldBe Seq(1, 2, 4)
   }
 }

@@ -6,6 +6,7 @@ import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.PropSpec
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.assets.exchange.OrderJson.*
 import com.wavesplatform.utils.JsonMatchers
 import play.api.libs.json.*
@@ -13,9 +14,12 @@ import tech.hearth.crypto.SigningKey
 
 class OrderJsonSpecification extends PropSpec with JsonMatchers {
 
+  // A fixed, arbitrary sender. `SigningKey.fromSeed` takes a 32-byte Ed25519 seed, so the short literal this used to
+  // hash into a key no longer works
+  private val keyPair: SigningKey = TxHelpers.signer(1)
+  private val pubKeyStr: String   = PublicKey(keyPair.publicKey).toString
+
   property("Read Order from json") {
-    val keyPair   = SigningKey.fromSeed("123".getBytes("UTF-8"))
-    val pubKeyStr = PublicKey(keyPair.publicKey).toString
 
     val json = Json.parse(s"""
         {
@@ -109,7 +113,9 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
       case JsError(e) =>
         fail("Error: " + e.toString())
       case JsSuccess(o, _) =>
-        o.id().toString shouldBe "BVJs4ip16nbh2vmuZkQmg8TMbN4vhnRAiACAfffQxSr7"
+        // Pinned against the fixed sender above, so a change in how an order id is computed shows up here. Rebaselined
+        // when that sender changed: the id is a function of it, and the old key could not be kept
+        o.id().toString shouldBe "HanJfjSFt7JWuHZj7Y1dzN4A2MYwdxM7az3pE4mUSYRP"
         o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
         o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
         o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
@@ -195,7 +201,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
     def mkJson(priceAsset: String): String =
       s"""
         {
-          "senderPublicKey": "${PublicKey(SigningKey.fromSeed("123".getBytes("UTF-8")).publicKey).toString}",
+          "senderPublicKey": "$pubKeyStr",
           "matcherPublicKey": "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ",
            "assetPair": {
              "amountAsset": "",

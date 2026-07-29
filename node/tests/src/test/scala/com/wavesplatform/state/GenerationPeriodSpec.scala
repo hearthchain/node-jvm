@@ -4,49 +4,25 @@ import cats.syntax.option.*
 import com.wavesplatform.test.*
 
 class GenerationPeriodSpec extends FreeSpec {
-  private val defaultActivation             = 7
   private val defaultGenerationPeriodLength = 3
 
   "from" - {
     "start is expected" - {
-      "different h" in {
-        forAll(
-          Table(
-            ("title", "h", "expectedStart"),
-            ("Zero period", 7, 7),
-            ("Zero period on second block", 8, 7),
-            ("Zero period includes last block", 10, 7),
-            ("First period", 11, 11),
-            ("First period on second block", 12, 11),
-            ("First period includes last block", 13, 11),
-            ("Second period", 14, 14)
-          )
-        ) { (_, h, expectedStart) =>
-          generationPeriodFrom(h).start shouldBe Height(expectedStart)
-        }
-      }
-
-      "another activation height" in {
-        generationPeriodFrom(h = 1, activation = 0).start shouldBe Height(0)
-        generationPeriodFrom(h = 4, activation = 0).start shouldBe Height(4)
-        generationPeriodFrom(h = 100, activation = 100).start shouldBe Height(100)
-      }
-
       "another generation period length" in {
-        generationPeriodFrom(h = 10, activation = 10, len = 100).start shouldBe Height(10)
+        generationPeriodFrom(h = 10, len = 100).start shouldBe Height(1)
       }
     }
   }
 
   "end" in {
-    generationPeriodOf(start = 7, activation = 7, len = 3).end shouldBe Height(10)
-    generationPeriodOf(start = 11, activation = 7, len = 3).end shouldBe Height(13)
+    generationPeriodOf(start = 7, len = 3).end shouldBe Height(9)
+    generationPeriodOf(start = 11, len = 3).end shouldBe Height(13)
   }
 
   "next" in forAll(
     Table(
       ("title", "start", "expectedStart"),
-      ("Zero period", 7, 11),
+      ("Zero period", 7, 10),
       ("First period", 11, 14)
     )
   ) { (_, start, expectedStart) =>
@@ -56,8 +32,7 @@ class GenerationPeriodSpec extends FreeSpec {
   "prev" in forAll(
     Table(
       ("title", "start", "expectedStart"),
-      ("Zero period", 7, none),
-      ("First period", 11, 7.some),
+      ("First period", 4, 1.some),
       ("Second period", 14, 11.some)
     )
   ) { (_, start, expectedStart) =>
@@ -67,72 +42,41 @@ class GenerationPeriodSpec extends FreeSpec {
   "enclosedPeriods" in forAll(
     Table(
       ("title", "start", "end", "expected"),
-      ("All before activation", defaultActivation - 3, defaultActivation - 2, none),
       (
-        "Before and on activation",
-        defaultActivation - 3,
-        defaultActivation,
-        (zeroPeriod(), generationPeriodN(1)).some
+        "First two",
+        1,
+        5,
+        (generationPeriodN(0), generationPeriodN(1)).some
       ),
       (
-        "Before and after activation",
-        defaultActivation - 3,
-        defaultActivation + 1,
-        (zeroPeriod(), generationPeriodN(1)).some
+        "end < start",
+        5,
+        1,
+        None
       ),
       (
-        "On activation",
-        defaultActivation,
-        defaultActivation,
-        (zeroPeriod(), generationPeriodN(1)).some
-      ),
-      (
-        "After activation on zero period",
-        defaultActivation + 1,
-        defaultActivation + 2,
-        (zeroPeriod(), generationPeriodN(1)).some
-      ),
-      (
-        "After activation on zero and first period",
-        defaultActivation + 1,
-        defaultActivation + defaultGenerationPeriodLength + 1,
-        (zeroPeriod(), generationPeriodN(2)).some
-      ),
-      (
-        "After activation on first and second period",
-        defaultActivation + defaultGenerationPeriodLength + 1,
-        defaultActivation + defaultGenerationPeriodLength * 2 + 1,
-        (zeroPeriod(), generationPeriodN(3)).some
-      ),
-      (
-        "Before activation and on second period",
-        defaultActivation - 1,
-        defaultActivation + defaultGenerationPeriodLength * 2 + 1,
-        (zeroPeriod(), generationPeriodN(3)).some
+        "3rd thru 5th",
+        7,
+        14,
+        (generationPeriodN(2), generationPeriodN(4)).some
       )
     )
   ) { (_, start, end, expected) =>
     enclosedPeriods(start, end) shouldBe expected
   }
 
-  private def generationPeriodFrom(h: Int, activation: Int = defaultActivation, len: Int = defaultGenerationPeriodLength) =
+  private def generationPeriodFrom(h: Int, len: Int) =
     GenerationPeriod.from(Height(h), len)
 
-  private def generationPeriodOf(start: Int, activation: Int = defaultActivation, len: Int = defaultGenerationPeriodLength) =
-    GenerationPeriod(Height(activation), len)
+  private def generationPeriodOf(start: Int, len: Int = defaultGenerationPeriodLength) =
+    GenerationPeriod(Height(start), len)
 
-  // "Zero", because can't commit on this period
-  private def zeroPeriod(activation: Int = defaultActivation, generationPeriodLength: Int = defaultGenerationPeriodLength) =
-    generationPeriodOf(activation, activation, generationPeriodLength)
-
-  private def generationPeriodN(n: Int, activation: Int = defaultActivation, len: Int = defaultGenerationPeriodLength) =
-    if (n == 0) zeroPeriod(activation, len)
-    else generationPeriodOf(activation + n * len + 1, activation, len)
+  private def generationPeriodN(n: Int, len: Int = defaultGenerationPeriodLength) =
+    generationPeriodOf(n * len + 1, len)
 
   private def enclosedPeriods(
       start: Int,
       end: Int,
-      activation: Int = defaultActivation,
       len: Int = defaultGenerationPeriodLength
   ): Option[(start: GenerationPeriod, end: GenerationPeriod)] =
     GenerationPeriod.enclosedPeriods(len, Height(start), Height(end))

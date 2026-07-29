@@ -19,7 +19,6 @@ import com.wavesplatform.transaction.{BlockchainUpdater, DiscardedBlocks, LastBl
 import com.wavesplatform.transaction.TxValidationError.BlockFromFuture
 import com.wavesplatform.utils.EmptyBlockchain
 import com.wavesplatform.utx.UtxPoolImpl
-import com.wavesplatform.wallet.Wallet
 import io.netty.channel.group.DefaultChannelGroup
 import io.netty.util.concurrent.GlobalEventExecutor
 import monix.eval.Task
@@ -36,7 +35,10 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
 
   it should "generate valid blocks ignoring time errors " in {
     @volatile var minedBlock: Block = null
-    val genesis                     = TestBlock.create(System.currentTimeMillis(), Nil).block
+    val account                     = accountGen.sample.get
+    // A base target high enough that this account's turn comes within the wait below: the delay PoS gives it is
+    // inversely proportional to it, and TestBlock's default of 2 puts the next attempt ten minutes out
+    val genesis = TestBlock.create(System.currentTimeMillis(), TestBlock.randomSignature(), Nil, baseTarget = 1000000L).block
     val blockchainUpdater = new EmptyBlockchain with BlockchainUpdater with NG {
       override def height: Int = 1
 
@@ -114,6 +116,17 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
       override def snapshotBlockchain: SnapshotBlockchain = ???
 
       override def currentGeneratorSet: Option[GeneratorSet] = ???
+
+      // A block only verifies against the VRF key its generator committed, so the account mining here has to be a
+      // committed generator of this mock chain
+      override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] =
+        IndexedSeq(
+          CommittedGenerator(
+            account.toAddress,
+            TxHelpers.blsKeyOf(account).publicKey,
+            ByteStr(TxHelpers.vrfKeyOf(account).publicKey())
+          )
+        )
     }
 
     val wavesSettings = {
@@ -140,19 +153,18 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
     val (miner, appenderScheduler) = {
       val scheduler   = Scheduler.singleThread("appender")
       val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
-      val wallet      = Wallet(WalletSettings(None, Some("123"), None))
       val utxPool =
         new UtxPoolImpl(ntpTime, blockchainUpdater, wavesSettings.utxSettings, wavesSettings.maxTxErrorLogSize, wavesSettings.minerSettings.enable)
       val pos = PoSSelector(blockchainUpdater, wavesSettings.synchronizationSettings.maxBaseTarget)
       new MinerImpl(
         allChannels,
         blockchainUpdater,
-        wavesSettings.copy(blockchainSettings = blockchainSettings),
+        wavesSettings.copy(blockchainSettings = blockchainSettings).minerSettings,
         ntpTime,
         utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        Seq.empty,
+        
         pos,
         scheduler,
         scheduler,
@@ -160,7 +172,6 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
       ) -> scheduler
     }
 
-    val account       = accountGen.sample.get
     val generateBlock = generateBlockTask(miner)(account)
     generateBlock.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")) shouldBe ((): Unit)
     minedBlock.header.featureVotes shouldBe empty

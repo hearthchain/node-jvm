@@ -9,7 +9,7 @@ import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{GenericError, OrderValidationError}
 import com.wavesplatform.transaction.assets.exchange.AssetPair.extractAssetId
 import com.wavesplatform.transaction.serialization.impl.PBTransactionSerializer
-import com.wavesplatform.transaction.{Asset, Proofs, TxExchangeAmount, TxHelpers, TxMatcherFee, TxOrderPrice, TxVersion}
+import com.wavesplatform.transaction.{Asset, Proofs, TxExchangeAmount, TxHelpers, TxMatcherFee, TxOrderPrice}
 import com.wavesplatform.utils.JsonMatchers
 import com.wavesplatform.NTPTime
 import org.scalacheck.Gen
@@ -64,7 +64,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       val buyMatcherFee  = 1
       val sellMatcherFee = 2
 
-      val (buyV, sellV, exchangeV) = versions
+      val (buyV, sellV, _) = versions
 
       val buy = TxHelpers
         .buy(
@@ -104,7 +104,6 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
           sellMatcherFee: Long = 1,
           fee: Long = 1,
           timestamp: Long = expirationTimestamp - Order.MaxLiveTime,
-          version: Byte = exchangeV
       ): Either[ValidationError, ExchangeTransaction] = {
         ExchangeTransaction
           .create(
@@ -134,7 +133,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       create(buyMatcherFee = Order.MaxAmount + 1) shouldBe an[Left[?, ?]]
       create(fee = Order.MaxAmount + 1) shouldBe an[Left[?, ?]]
 
-      create(buyOrder = buy.copy(orderType = OrderType.SELL)) shouldBe Left(GenericError("order1 should have OrderType.BUY"))
+      create(buyOrder = buy.copy(orderType = OrderType.SELL)) shouldBe Left(GenericError("buyOrder should has OrderType.BUY"))
       create(buyOrder = buy.copy(assetPair = buy.assetPair.copy(amountAsset = sell.assetPair.priceAsset))) shouldBe an[Left[?, ?]]
       create(buyOrder = buy.copy(expiration = 1L)) shouldBe an[Left[?, ?]]
       create(buyOrder = buy.copy(expiration = buy.expiration + 1)) shouldBe an[Left[?, ?]]
@@ -146,10 +145,10 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       create(sellOrder = sell.copy(expiration = sell.expiration + 1)) shouldBe an[Left[?, ?]]
       create(sellOrder = sell.copy(matcherPublicKey = PublicKey(sender2.publicKey))) shouldBe an[Left[?, ?]]
 
-      create(sellOrder = buy, buyOrder = sell) shouldBe Left(GenericError("order1 should have OrderType.BUY"))
-      create(version = TxVersion.V3, sellOrder = buy, buyOrder = sell) shouldBe an[Right[?, ?]]
-      create(version = TxVersion.V3, sellOrder = sell, buyOrder = sell) shouldBe Left(GenericError("buyOrder should has OrderType.BUY"))
-      create(version = TxVersion.V3, sellOrder = buy, buyOrder = buy) shouldBe Left(GenericError("sellOrder should has OrderType.SELL"))
+      // Passing the sell order as order1 is allowed - see "ExchangeTransaction V3 can have SELL order as order1"
+      create(sellOrder = buy, buyOrder = sell) shouldBe an[Right[?, ?]]
+      create(sellOrder = sell, buyOrder = sell) shouldBe Left(GenericError("buyOrder should has OrderType.BUY"))
+      create(sellOrder = buy, buyOrder = buy) shouldBe Left(GenericError("sellOrder should has OrderType.SELL"))
 
       create(
         buyOrder = buy.copy(assetPair = buy.assetPair.copy(amountAsset = Waves)),
@@ -158,7 +157,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     }
   }
 
-  def createExTx(buy: Order, sell: Order, price: Long, version: TxVersion): Either[ValidationError, ExchangeTransaction] = {
+  def createExTx(buy: Order, sell: Order, price: Long): Either[ValidationError, ExchangeTransaction] = {
     val matcherFee = 300000L
     val amount     = math.min(buy.amount.value, sell.amount.value)
 
@@ -182,7 +181,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       val buyPrice                 = 1 * Order.PriceConstant
       val sellPrice                = (0.50 * Order.PriceConstant).toLong
       val matcherFee               = 300000L
-      val (sellV, buyV, exchangeV) = versions
+      val (sellV, buyV, _) = versions
 
       val sell =
         TxHelpers
@@ -215,68 +214,18 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
           )
           .explicitGet()
 
-      createExTx(buy, sell, sellPrice, exchangeV) shouldBe an[Right[?, ?]]
+      createExTx(buy, sell, sellPrice) shouldBe an[Right[?, ?]]
 
       val sell1 =
         if (sellV == 3) {
           TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee, sellerMatcherFeeAssetId).explicitGet()
         } else TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee).explicitGet()
 
-      createExTx(buy, sell1, buyPrice, exchangeV) shouldBe Left(OrderValidationError(sell1, "expiration should be > currentTime"))
+      createExTx(buy, sell1, buyPrice) shouldBe Left(OrderValidationError(sell1, "expiration should be > currentTime"))
     }
   }
 
   property("JSON format validation") {
-    val js = Json.parse("""{
-         "version": 1,
-         "type":7,
-         "id":"FaDrdKax2KBZY6Mh7K3tWmanEdzZx6MhYUmpjV3LBJRp",
-         "sender":"3N22UCTvst8N1i1XDvGHzyqdgmZgwDKbp44",
-         "senderPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-         "fee":1,
-         "feeAssetId": null,
-         "timestamp":1526992336241,
-         "signature":"5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa",
-         "proofs":["5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa"],
-         "order1":{
-            "version": 1,
-            "id":"EdUTcUZNK3NYKuPrsPCkZGzVUwpjx6qVjd4TgBwna7po",
-            "sender":"3MthkhReCHXeaPZcWXcT3fa6ey1XWptLtwj",
-            "senderPublicKey":"BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
-            "orderType":"buy",
-            "price":6000000000,
-            "amount":2,
-            "timestamp":1526992336241,
-            "expiration":1529584336241,
-            "matcherFee":1,
-            "signature":"2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs",
-            "proofs":["2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs"]
-         },
-         "order2":{
-            "version": 1,
-            "id":"DS9HPBGRMJcquTb3sAGAJzi73jjMnFFSWWHfzzKK32Q7",
-            "sender":"3MswjKzUBKCD6i1w4vCosQSbC8XzzdBx1mG",
-            "senderPublicKey":"7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
-            "orderType":"sell",
-            "price":5000000000,
-            "amount":3,
-            "timestamp":1526992336241,
-            "expiration":1529584336241,
-            "matcherFee":2,
-            "signature":"2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq",
-            "proofs":["2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq"]
-         },
-         "price":5000000000,
-         "amount":2,
-         "buyMatcherFee":1,
-         "sellMatcherFee":1
-      }
-      """)
-
     val buy = Order(
       Order.V1,
       OrderAuthentication.OrderProofs(
@@ -323,24 +272,22 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       )
       .explicitGet()
 
-    js should matchJson(tx.json())
-  }
-
-  property("JSON format validation V2") {
-    val js = Json.parse("""{
-         "version": 2,
-         "type":7,
-         "id":"5KUDbPKjAoNHTMyae9zJZpFjYFAbeSQMQ9rzgkDEEUx6",
-         "sender":"3N22UCTvst8N1i1XDvGHzyqdgmZgwDKbp44",
+    // Ids and addresses are derived rather than pasted in: an address is bech32 now and an id is a hash over bytes
+    // that have changed. An ExchangeTransaction also has no version any more, is type 3, and carries its chain id.
+    val js = Json.parse(s"""{
+         "type":3,
+         "id":"${tx.id()}",
+         "sender":"${tx.sender.toAddress}",
          "senderPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
+         "chainId":${tx.chainId},
          "proofs":["5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa"],
          "order1":{
-            "version": 2,
-            "id":"EcndU4vU3SJ58KZAXJPKACvMhijTzgRjLTsuWxSWaQUK",
-            "sender":"3MthkhReCHXeaPZcWXcT3fa6ey1XWptLtwj",
+            "version": 1,
+            "id":"${buy.id()}",
+            "sender":"${buy.sender.toAddress}",
             "senderPublicKey":"BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ",
             "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
             "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
@@ -355,8 +302,8 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          },
          "order2":{
             "version": 1,
-            "id":"DS9HPBGRMJcquTb3sAGAJzi73jjMnFFSWWHfzzKK32Q7",
-            "sender":"3MswjKzUBKCD6i1w4vCosQSbC8XzzdBx1mG",
+            "id":"${sell.id()}",
+            "sender":"${sell.sender.toAddress}",
             "senderPublicKey":"7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV",
             "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
             "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
@@ -375,6 +322,11 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "sellMatcherFee":1
       }
       """)
+
+    js should matchJson(tx.json())
+  }
+
+  property("JSON format validation V2") {
 
     val buy = Order(
       Order.V2,
@@ -422,24 +374,21 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       )
       .explicitGet()
 
-    js should matchJson(tx.json())
-  }
-
-  property("JSON format validation V2 OrderV3") {
-    val js = Json.parse("""{
-         "version": 2,
-         "type":7,
-         "id":"3G1U1UX2mtWXVdZTZNjEYvPeNn6cyYmmjHYUePrg4zM5",
-         "sender":"3N22UCTvst8N1i1XDvGHzyqdgmZgwDKbp44",
+    // Same as above: no transaction version, type 3, chain id, and derived ids and addresses
+    val js = Json.parse(s"""{
+         "type":3,
+         "id":"${tx.id()}",
+         "sender":"${tx.sender.toAddress}",
          "senderPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
+         "chainId":${tx.chainId},
          "proofs":["5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa"],
          "order1":{
-            "version": 3,
-            "id":"8KZby2jXfFCaFtEKejqBbutQvyimgeQykwPKGi3ufNiA",
-            "sender":"3MthkhReCHXeaPZcWXcT3fa6ey1XWptLtwj",
+            "version": 2,
+            "id":"${buy.id()}",
+            "sender":"${buy.sender.toAddress}",
             "senderPublicKey":"BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ",
             "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
             "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
@@ -449,14 +398,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
             "timestamp":1526992336241,
             "expiration":1529584336241,
             "matcherFee":1,
-            "matcherFeeAssetId":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy",
             "signature":"2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs",
             "proofs":["2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs"]
          },
          "order2":{
             "version": 1,
-            "id":"DS9HPBGRMJcquTb3sAGAJzi73jjMnFFSWWHfzzKK32Q7",
-            "sender":"3MswjKzUBKCD6i1w4vCosQSbC8XzzdBx1mG",
+            "id":"${sell.id()}",
+            "sender":"${sell.sender.toAddress}",
             "senderPublicKey":"7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV",
             "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
             "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
@@ -475,6 +423,11 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "sellMatcherFee":1
       }
       """)
+
+    js should matchJson(tx.json())
+  }
+
+  property("JSON format validation V2 OrderV3") {
 
     val buy = Order(
       Order.V3,
@@ -522,6 +475,57 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         Proofs(Seq(ByteStr.decodeBase58("5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa").get))
       )
       .explicitGet()
+
+    // Same as above: no transaction version, type 3, chain id, and derived ids and addresses
+    val js = Json.parse(s"""{
+         "type":3,
+         "id":"${tx.id()}",
+         "sender":"${tx.sender.toAddress}",
+         "senderPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
+         "fee":1,
+         "feeAssetId": null,
+         "timestamp":1526992336241,
+         "chainId":${tx.chainId},
+         "proofs":["5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa"],
+         "order1":{
+            "version": 3,
+            "id":"${buy.id()}",
+            "sender":"${buy.sender.toAddress}",
+            "senderPublicKey":"BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ",
+            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
+            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "orderType":"buy",
+            "price":6000000000,
+            "amount":2,
+            "timestamp":1526992336241,
+            "expiration":1529584336241,
+            "matcherFee":1,
+            "matcherFeeAssetId":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy",
+            "signature":"2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs",
+            "proofs":["2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs"]
+         },
+         "order2":{
+            "version": 1,
+            "id":"${sell.id()}",
+            "sender":"${sell.sender.toAddress}",
+            "senderPublicKey":"7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV",
+            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
+            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "orderType":"sell",
+            "price":5000000000,
+            "amount":3,
+            "timestamp":1526992336241,
+            "expiration":1529584336241,
+            "matcherFee":2,
+            "signature":"2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq",
+            "proofs":["2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq"]
+         },
+         "price":5000000000,
+         "amount":2,
+         "buyMatcherFee":1,
+         "sellMatcherFee":1
+      }
+      """)
 
     js should matchJson(tx.json())
   }

@@ -9,7 +9,6 @@ import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.crypto.{DigestLength, SignatureLength}
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.mining.MiningAccount
 import com.wavesplatform.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
 import com.wavesplatform.state.{Height, TransactionId}
 import com.wavesplatform.test.*
@@ -20,17 +19,22 @@ import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransac
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.ParsedTransfer
 import com.wavesplatform.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import monix.execution.atomic.AtomicLong
-import tech.hearth.crypto.{Crypto, SigningKey, VrfKey}
+import com.wavesplatform.settings.MiningAccount as MiningAccountSettings
+import tech.hearth.crypto.{Crypto, Hex, SigningKey, VrfKey}
 
 import java.util.concurrent.ThreadLocalRandom
 
 object TxHelpers {
-  def signer(i: Int): SigningKey = SigningKey.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(i)))
+
+  /** The seed `signer(i)` is derived from.
+    *
+    * `MinerSettings` configures a mining account with a hex-encoded *seed*, not a key, and a seed cannot be recovered
+    * from a `SigningKey` - so a test that has to configure the miner needs this rather than the key itself.
+    */
+  def signerSeed(i: Int): Array[Byte] = Crypto.defaultBackend().sha256(Ints.toByteArray(i))
+
+  def signer(i: Int): SigningKey = SigningKey.fromSeed(signerSeed(i))
   def address(i: Int): Address   = signer(i).toAddress
-  def miningAccount(i: Int): MiningAccount = {
-    val hash = Crypto.defaultBackend().sha256(Ints.toByteArray(i))
-    MiningAccount(SigningKey.fromSeed(hash), VrfKey.fromSeed(hash))
-  }
 
   val defaultSigner: SigningKey = signer(0)
   val defaultAddress: Address   = defaultSigner.toAddress
@@ -43,7 +47,9 @@ object TxHelpers {
   /** A generator's VRF key, derived from its public key. A VRF key can only be committed once, so deriving it per
     * sender keeps two generators from colliding on the same key.
     */
-  def vrfKeyOf(sender: SigningKey): VrfKey = VrfKey.fromSeed(Crypto.defaultBackend().sha256(sender.publicKey()))
+  def vrfSeedOf(sender: SigningKey): Array[Byte] = Crypto.defaultBackend().sha256(sender.publicKey())
+
+  def vrfKeyOf(sender: SigningKey): VrfKey = VrfKey.fromSeed(vrfSeedOf(sender))
 
   /** The VRF key blocks are generated with by default, see history.defaultVrfKey. A generator has to commit to this one
     * for its blocks to verify, which is why it is the key [[vrfKeyOf]] derives for the default signer.
@@ -134,7 +140,7 @@ object TxHelpers {
   }
 
   def selfSigned(
-      version: TxVersion,
+      version: Byte,
       sender: SigningKey,
       matcher: PublicKey,
       assetPair: AssetPair,
@@ -172,7 +178,7 @@ object TxHelpers {
     }
 
   def buy(
-      version: TxVersion,
+      version: Byte,
       sender: SigningKey,
       matcher: PublicKey,
       pair: AssetPair,
@@ -202,7 +208,7 @@ object TxHelpers {
     )
 
   def sell(
-      version: TxVersion,
+      version: Byte,
       sender: SigningKey,
       matcher: PublicKey,
       pair: AssetPair,
@@ -244,7 +250,7 @@ object TxHelpers {
       matcher: SigningKey = defaultSigner,
       timestamp: TxTimestamp = timestamp,
       expiration: TxTimestamp = timestamp + 100000,
-      version: TxVersion = Order.V3,
+      version: Byte = Order.V3,
       attachment: Option[ByteStr] = None
   ): Order = {
 
@@ -363,7 +369,24 @@ object TxHelpers {
   ): CommitToGenerationTransaction =
     commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, chainId, vrfKey)
 
-  def blsKeyOf(sender: SigningKey): BlsKeyPair = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(sender.publicKey()))
+  /** A generator's BLS key, derived per sender for the same reason as its VRF key. */
+  def blsSeedOf(sender: SigningKey): Array[Byte] = Crypto.defaultBackend().sha256(sender.publicKey())
+
+  def blsKeyOf(sender: SigningKey): BlsKeyPair = BlsKeyPair.fromSeed(blsSeedOf(sender))
+
+  /** The `waves.miner.accounts` entry for one of these signers: the seeds a node has to be configured with for its
+    * miner, endorser and API to act as `signer(i)`. `MinerImpl` builds its accounts from settings and nothing else, so
+    * a test that expects a node to generate, endorse or commit as this account has to configure it here.
+    */
+  def miningAccountSettings(i: Int): MiningAccountSettings = {
+    val signer = TxHelpers.signer(i)
+    MiningAccountSettings(
+      mnemonic = None,
+      signingKey = Some(Hex.encode(signerSeed(i))),
+      vrfKey = Some(Hex.encode(vrfSeedOf(signer))),
+      blsKey = Some(Hex.encode(blsSeedOf(signer)))
+    )
+  }
 
   def commitToGenerationWithEndorserKey(
       generationPeriodStart: Height,

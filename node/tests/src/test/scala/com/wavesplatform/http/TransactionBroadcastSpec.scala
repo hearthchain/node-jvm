@@ -3,6 +3,7 @@ package com.wavesplatform.http
 import com.wavesplatform.api.http.{RouteTimeout, TransactionsApiRoute}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithDomain
+import com.wavesplatform.mining.GeneratorKeys
 import com.wavesplatform.network.TransactionPublisher
 import com.wavesplatform.test.TestTime
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
@@ -37,6 +38,7 @@ class TransactionBroadcastSpec
     restAPISettings,
     null,
     null,
+    GeneratorKeys.Empty,
     EmptyBlockchain,
     () => ???,
     () => 0,

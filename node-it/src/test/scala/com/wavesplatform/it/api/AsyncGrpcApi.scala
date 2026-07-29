@@ -518,14 +518,12 @@ object AsyncGrpcApi {
         updatedDescription: String,
         fee: Long,
         feeAsset: Asset = Waves,
-        version: TxVersion = TxVersion.V1
     ): Future[SignedTransaction] = {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(sender.publicKey.arr),
         Some(Amount.of(if (feeAsset == Waves) ByteString.EMPTY else ByteString.copyFrom(Base58.decode(feeAsset.maybeBase58Repr.get)), fee)),
         System.currentTimeMillis(),
-        version,
         PBTransaction.Data.UpdateAssetInfo(
           UpdateAssetInfoTransactionData.of(
             ByteString.copyFrom(Base58.decode(assetId)),

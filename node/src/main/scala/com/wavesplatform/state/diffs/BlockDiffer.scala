@@ -298,8 +298,8 @@ object BlockDiffer {
       verify: Boolean,
       txSignParCheck: Boolean
   ): TracedResult[ValidationError, Result] = {
-    val timestamp       = blockchain.lastBlockTimestamp.get
-    val blockGenerator  = blockchain.lastBlockHeader.get.header.generator.toAddress
+    val timestamp      = blockchain.lastBlockTimestamp.get
+    val blockGenerator = blockchain.lastBlockHeader.get.header.generator.toAddress
 
     val txDiffer = TransactionDiffer(prevBlockTimestamp, timestamp, verify)
 

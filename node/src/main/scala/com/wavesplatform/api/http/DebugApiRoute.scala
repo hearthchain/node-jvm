@@ -7,7 +7,7 @@ import com.wavesplatform.api.common.{CommonAccountsApi, CommonAssetsApi, CommonT
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database.RocksDBWriter
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.mining.{Miner, MinerDebugInfo}
+import com.wavesplatform.mining.MinerDebugInfo
 import com.wavesplatform.network.{PeerDatabase, PeerInfo, *}
 import com.wavesplatform.settings.{RestAPISettings, WavesSettings}
 import com.wavesplatform.state.diffs.TransactionDiffer
@@ -43,7 +43,7 @@ case class DebugApiRoute(
     establishedConnections: ConcurrentMap[Channel, PeerInfo],
     rollbackTask: (ByteStr, Boolean) => Task[Either[ValidationError, Unit]],
     utxStorage: UtxPool,
-    miner: Miner & MinerDebugInfo,
+    miner: MinerDebugInfo,
     historyReplier: HistoryReplier,
     extLoaderStateReporter: Coeval[RxExtensionLoader.State],
     mbsCacheSizesReporter: Coeval[MicroBlockSynchronizer.CacheSizes],

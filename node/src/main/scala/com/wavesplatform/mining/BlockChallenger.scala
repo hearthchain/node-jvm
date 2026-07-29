@@ -41,7 +41,7 @@ trait BlockChallenger {
 class BlockChallengerImpl(
     blockchainUpdater: BlockchainUpdater & Blockchain,
     allChannels: ChannelGroup,
-    keys: Seq[(SigningKey, VrfKey)],
+    generatorKeys: GeneratorKeys,
     settings: WavesSettings,
     timeService: Time,
     pos: PoSSelector,
@@ -82,7 +82,7 @@ class BlockChallengerImpl(
   }
 
   override def challengeMicroblock(md: MicroblockData, ch: Channel): Task[Unit] = {
-    val idStr = md.invOpt.map(_.totalBlockId.toString).getOrElse(s"(sig=${md.microBlock.totalResBlockSig})")
+    val idStr = md.invOpt.map(_.totalBlockId.toString).getOrElse(s"(sig=${md.microBlock.wholeBlockSignature})")
     log.debug(s"Challenging microblock $idStr")
 
     (for {
@@ -95,7 +95,7 @@ class BlockChallengerImpl(
             createChallengingBlock(
               block,
               md.microBlock.stateHash,
-              md.microBlock.totalResBlockSig,
+              md.microBlock.wholeBlockSignature,
               txs,
               blockchainUpdater.lastStateHash(Some(block.header.reference)),
               FinalizationVoting.combine(block.header.finalizationVoting, md.microBlock.finalizationVoting)
@@ -126,7 +126,7 @@ class BlockChallengerImpl(
 
   override def getChallengingAccounts(challengedMiner: Address): Either[ValidationError, Seq[((SigningKey, VrfKey), Long)]] = {
     lazy val challengedBalance = blockchainUpdater.generatingBalance(challengedMiner)
-    keys.traverse { case acc @ (sk, vk) =>
+    generatorKeys.accounts.map(a => (a.signingKey, a.vrfKey)).traverse { case acc @ (sk, vk) =>
       val ownBalance = blockchainUpdater.generatingBalance(sk.toAddress)
       pos
         .getValidBlockDelay(
@@ -155,11 +155,12 @@ class BlockChallengerImpl(
       prevStateHash: ByteStr,
       challengedFinalizationVoting: Option[FinalizationVoting]
   ): Task[Either[ValidationError, Block]] = Task {
-    val prevBlockHeader = blockchainUpdater
+    // The challenging block takes the place of the challenged one, so it is built on the same parent
+    val prevBlock = blockchainUpdater
       .heightOf(challengedBlock.header.reference)
       .flatMap(blockchainUpdater.blockHeader)
-      .map(_.header)
-      .getOrElse(blockchainUpdater.lastBlockHeader.get.header)
+      .getOrElse(blockchainUpdater.lastBlockHeader.get)
+    val prevBlockHeader = prevBlock.header
 
     for {
       allAccounts       <- getChallengingAccounts(challengedBlock.sender.toAddress)
@@ -201,8 +202,14 @@ class BlockChallengerImpl(
         blockchainUpdater.computeNextReward,
         None
       )
-      // todo: prev block is required for proper initial snapshot
-      initialBlockSnapshot <- BlockDiffer.createInitialBlockSnapshot(blockchainUpdater, challengedBlock.header.reference, sk.toAddress, ???)
+      // The parent, so that the penalties it carries land in the initial snapshot: the differ applies the same ones
+      // when this block is appended, and the state hash computed here has to match what it arrives at
+      initialBlockSnapshot <- BlockDiffer.createInitialBlockSnapshot(
+        blockchainUpdater,
+        challengedBlock.header.reference,
+        sk.toAddress,
+        Some(prevBlock)
+      )
       stateHash <- TxStateSnapshotHashBuilder
         .computeStateHash(
           txs,
@@ -250,7 +257,7 @@ class BlockChallengerImpl(
   private def blockFeatures(blockchain: Blockchain, settings: WavesSettings): Seq[Short] = {
     val exclude = blockchain.approvedFeatures.keySet ++ settings.blockchainSettings.functionalitySettings.preActivatedFeatures.keySet
 
-    settings.featuresSettings.supported
+    settings.minerSettings.supportedFeatures
       .filterNot(exclude)
       .filter(BlockchainFeatures.implemented)
       .sorted

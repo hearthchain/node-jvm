@@ -75,7 +75,10 @@ object PBTransactions {
             feeAmount,
             attachment.toByteStr,
             timestamp,
-            proofs
+            proofs,
+            // An address no longer carries the network it belongs to, so the chain id has to come from the transaction
+            // itself - without it, `create` defaults to the network this node runs on and the round trip loses it
+            chainId
           )
         } yield tx
 

@@ -26,7 +26,7 @@ class BlockDifferDetailedSnapshotTest extends FreeSpec with WithState with WithD
     *   Credited by the genesis snapshot, which the domain applies as its own block at height 1, so `block` is differed
     *   as a regular block on top of it.
     */
-  private def assertDetailedSnapshot(txs: Seq[Transaction], generator: SigningKey, ws: WavesSettings, balances: Seq[AddrWithBalance] = Seq.empty)(
+  private def assertDetailedSnapshot(txs: Seq[Transaction], generator: SigningKey, ws: WavesSettings, balances: Seq[AddrWithBalance])(
       assertion: (StateSnapshot, StateSnapshot) => Unit
   ): Unit =
     withDomain(withoutReward(ws), AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: balances, generators = Seq(generator)) { d =>

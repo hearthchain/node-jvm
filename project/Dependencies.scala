@@ -4,7 +4,7 @@ import sbt.{Def, *}
 import scalapb.compiler.Version.scalapbVersion
 
 object Dependencies {
-  private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.15.Final"
+  private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.16.Final"
 
   val gProtoVersion = "4.35.1"
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
@@ -41,7 +41,7 @@ object Dependencies {
 
   private def pekkoModule(module: String) = "org.apache.pekko" %% s"pekko-$module" % "1.6.0"
 
-  private def pekkoHttpModule(module: String, version: String = "1.3.0") = "org.apache.pekko" %% module % version
+  private def pekkoHttpModule(module: String, version: String = "1.4.0") = "org.apache.pekko" %% module % version
 
   private def kamonModule(module: String) = "io.kamon" %% s"kamon-$module" % "2.8.1"
 
@@ -51,13 +51,13 @@ object Dependencies {
 
   def monixModule(module: String): Def.Initialize[ModuleID] = Def.setting("io.monix" %%% s"monix-$module" % "3.4.1")
 
-  private def grpcModule(module: String) = "io.grpc" % module % "1.82.1"
+  private def grpcModule(module: String) = "io.grpc" % module % "1.83.0"
 
   val pekkoHttp       = pekkoHttpModule("pekko-http")
   val googleGuava     = "com.google.guava"    % "guava"             % "33.6.0-jre"
   val kamonCore       = kamonModule("core")
   val machinist       = "org.typelevel"      %% "machinist"         % "0.6.8"
-  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.5.37"
+  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.1"
   val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "3.0.11"
   val curve25519      = "com.wavesplatform"   % "curve25519-java"   % "0.6.6"
   val nettyHandler    = nettyModule("handler")
@@ -78,11 +78,11 @@ object Dependencies {
 
   val cryptoProviders = Seq(
     // Windows x86_64, Windows x86, macOS x86_64, linux x86_64
-    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.5.2",
+    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.6.1",
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java
-    "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
+    "org.bouncycastle" % "bcprov-jdk18on" % "1.85",
     "tech.hearth" % "crypto" % "0.1.0-SNAPSHOT"
   )
 
@@ -95,9 +95,9 @@ object Dependencies {
 
   lazy val it = scalaTest +: Seq(
     logback,
-    "com.github.jnr" % "jnr-unixsocket" % "0.39.1", // To support Apple ARM
+    "com.github.jnr" % "jnr-unixsocket" % "0.39.2", // To support Apple ARM
     "com.spotify"    % "docker-client"  % "8.16.0",
-    jacksonModule("dataformat", "dataformat-properties", "2.22.0"),
+    jacksonModule("dataformat", "dataformat-properties", "2.22.1"),
     asyncHttpClient
   ).map(_ % Test)
 

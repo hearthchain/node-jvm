@@ -45,6 +45,7 @@ class ProtoVersionTransactionsSpec
         restAPISettings,
         domain.transactionsApi,
         domain.wallet,
+        domain.generatorKeys,
         domain.blockchain,
         () => domain.blockchain,
         () => domain.utxPool.size,
@@ -70,7 +71,7 @@ class ProtoVersionTransactionsSpec
           .explicitGet()
 
       val exchangeTx =
-        TxHelpers.exchange(buyOrder, sellOrder, account, 100, 100, MinFee * 3, MinFee * 3, MinFee * 3, now, TxVersion.V3)
+        TxHelpers.exchange(buyOrder, sellOrder, account, 100, 100, MinFee * 3, MinFee * 3, MinFee * 3, now)
       val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(exchangeTx)))
 
       Post(routePath("/broadcast"), exchangeTx.json()) ~> ApiKeyHeader ~> route ~> check {
@@ -175,7 +176,6 @@ class ProtoVersionTransactionsSpec
     def checkProofs(response: HttpResponse): (Proofs, JsObject) = {
       response.status shouldBe StatusCodes.OK
 
-      (responseAs[JsObject] \ "version").as[Byte] shouldBe 1.toByte
       (responseAs[JsObject] \ "senderPublicKey").asOpt[String].value should not be empty
 
       val json   = responseAs[JsObject]

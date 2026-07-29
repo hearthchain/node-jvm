@@ -27,8 +27,8 @@ class HistoryReplier(score: => BigInt, history: History, settings: Synchronizati
   }
 
   override def channelRead(ctx: ChannelHandlerContext, msg: AnyRef): Unit = msg match {
-    case GetSignatures(otherSigs) =>
-      respondWith(ctx, Signatures(history.blockIdsAfter(otherSigs, settings.maxRollback)))
+    case GetBlockIds(otherSigs) =>
+      respondWith(ctx, BlockIds(history.blockIdsAfter(otherSigs, settings.maxRollback)))
 
     case GetBlock(sig) =>
       respondWith(

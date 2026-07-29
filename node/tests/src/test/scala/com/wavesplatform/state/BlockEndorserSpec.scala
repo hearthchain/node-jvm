@@ -9,7 +9,7 @@ import com.wavesplatform.history.Domain
 import com.wavesplatform.network.{EndorseBlock, MessageCodec, PeerDatabase}
 import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.test.{FreeSpec, NumericExt, WithResourceManager}
-import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.EmbeddedChannelOps
 import com.wavesplatform.wallet.Wallet
 import io.netty.channel.embedded.EmbeddedChannel
@@ -17,13 +17,20 @@ import io.netty.channel.group.DefaultChannelGroup
 import io.netty.util.concurrent.GlobalEventExecutor
 
 class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, EmbeddedChannelOps {
-  private val defaultSettings = DomainPresets.DeterministicFinality
-    .copy(synchronizationSettings = DomainPresets.DeterministicFinality.synchronizationSettings.copy(maxRollback = 2))
-    .configure(
-      _.copy(
-        generationPeriodLength = 2,
+  private val defaultSettings = {
+    val base = DomainPresets.DeterministicFinality
+    base
+      .copy(
+        synchronizationSettings = base.synchronizationSettings.copy(maxRollback = 2),
+        // This node's own generators: the endorser signs with the keys the settings name, not with what the wallet holds
+        minerSettings = base.minerSettings.copy(accounts = Seq(Domain.walletMiningAccount(0), Domain.walletMiningAccount(1)))
       )
-    )
+      .configure(
+        _.copy(
+          generationPeriodLength = 2,
+        )
+      )
+  }
 
   "vote" - {
     "starts voting with increased height" in withManager { manager =>
@@ -44,7 +51,7 @@ class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, Embed
 
         val channels = manager(new DefaultChannelGroup(GlobalEventExecutor.INSTANCE))
         val endorser =
-          new BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.wallet, endorsementStorage, channels)
+          new BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.generatorKeys, endorsementStorage, channels)
 
         log.debug("Append block 2 with commitments")
         val txs                   = generators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
@@ -70,9 +77,7 @@ class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, Embed
         val generators         = Seq(generator1, generator2, otherNodeGenerator)
         val generator2Index    = 1
 
-        withDomain(defaultSettings, AddrWithBalance.enoughBalances(generators*)) { d =>
-          d.wallet.generateNewAccounts(2)
-
+        withDomain(defaultSettings, AddrWithBalance.enoughBalances(generators*), generators = generators) { d =>
           val endorsementStorage = new EndorsementStorage {
             override def tryAdd(msg: EndorseBlock): Either[String, Boolean]                  = true.asRight
             override def startVoting(filter: EndorsementFilter): Boolean                     = true
@@ -83,7 +88,7 @@ class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, Embed
           val channel1 = manager(new EmbeddedChannel(new MessageCodec(PeerDatabase.NoOp)))
           channels.add(channel1)
           val endorser =
-            new BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.wallet, endorsementStorage, channels)
+            new BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.generatorKeys, endorsementStorage, channels)
 
           log.debug("Append block 2 with commitments")
           val txs                   = generators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
@@ -97,7 +102,9 @@ class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, Embed
                 TxHelpers.transfer(
                   from = generator2,
                   to = generator1.toAddress,
-                  amount = d.blockchain.balance(generator2.toAddress) - CommitToGenerationTransaction.DepositInWavelets - 1.waves,
+                  // Everything it can spend but the fee and a waves - its deposits are locked, and it holds two of
+                  // them, being committed for both the genesis period and the one under test
+                  amount = d.blockchain.balance(generator2.toAddress) - d.blockchain.generationDeposit(generator2.toAddress) - 2.waves,
                   fee = 1.waves
                 )
               ),

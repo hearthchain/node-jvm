@@ -43,6 +43,8 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |        timestamp = 1460678400000
           |        block-timestamp = 1460678400000
           |        signature = "BASE58BLKSGNATURE"
+          |        state-hash = "BASE58STATEHASH"
+          |        block-id = "BASE58BLKHASH"
           |        initial-base-target = 153722867
           |        average-block-delay = 60s
           |        assets = [
@@ -77,6 +79,8 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.genesisSettings.blockTimestamp should be(1460678400000L)
     settings.genesisSettings.timestamp should be(1460678400000L)
     settings.genesisSettings.signature should be(ByteStr.decodeBase58("BASE58BLKSGNATURE").toOption)
+    settings.genesisSettings.stateHash should be(ByteStr.decodeBase58("BASE58STATEHASH").toOption)
+    settings.genesisSettings.blockId should be(ByteStr.decodeBase58("BASE58BLKHASH").toOption)
     settings.genesisSettings.initialBaseTarget should be(153722867)
     settings.genesisSettings.averageBlockDelay should be(60.seconds)
     settings.genesisSettings.assets should be(

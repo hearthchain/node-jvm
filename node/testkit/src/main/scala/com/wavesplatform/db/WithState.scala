@@ -23,6 +23,7 @@ import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxHelpers.defaultAddress
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
 import com.wavesplatform.transaction.{BlockchainUpdater, Transaction, TxHelpers}
+import com.wavesplatform.utils.{ApplicationStopReason, forceStopApplication}
 import com.wavesplatform.{NTPTime, TestHelpers}
 import org.rocksdb.RocksDB
 import org.scalatest.matchers.should.Matchers
@@ -146,7 +147,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       )
 
     preconditions.foreach { precondition =>
-      val preconditionBlock = blockWithComputedStateHash(precondition.block, precondition.signer, bcu).resultE.explicitGet()
+      val preconditionBlock = blockOnTopOf(precondition.block, precondition.signer, bcu).resultE.explicitGet()
       val reward            = nextReward(state)
       val BlockDiffer.Result(snapshot, carryFee, totalFee, _, _, computedStateHash) = differ(state, preconditionBlock).explicitGet()
       state.append(
@@ -162,7 +163,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       )
     }
     val snapshot =
-      blockWithComputedStateHash(block.block, block.signer, bcu).resultE
+      blockOnTopOf(block.block, block.signer, bcu).resultE
         .flatMap(differ(state, _))
         .map(_.snapshot)
     assertion(snapshot)
@@ -197,7 +198,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
 
     preconditions.foreach { precondition =>
       (for {
-        preconditionBlock <- blockWithComputedStateHash(precondition.block, precondition.signer, bcu).resultE
+        preconditionBlock <- blockOnTopOf(precondition.block, precondition.signer, bcu).resultE
         diffResult        <- differ(state, state.lastBlockHeader, preconditionBlock).resultE
       } yield state.append(
         diffResult.snapshot,
@@ -213,7 +214,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     }
 
     val snapshot1 =
-      (blockWithComputedStateHash(block.block, block.signer, bcu) match {
+      (blockOnTopOf(block.block, block.signer, bcu) match {
         case right @ TracedResult(Right(_), _, _) => right.copy(trace = Nil)
         case err                                  => err
       }).flatMap(differ(state, state.lastBlockHeader, _))
@@ -221,7 +222,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     assertion(snapshot1.map(_.snapshot))
   }
 
-  private def assertDiffAndState(
+  def assertDiffAndState(
       preconditions: Seq[BlockWithSigner],
       block: BlockWithSigner,
       fs: FunctionalitySettings,
@@ -247,7 +248,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
 
     preconditions.foldLeft[Option[SignedBlockHeader]](None) { (prevBlock, curBlock) =>
       (for {
-        preconditionBlock <- blockWithComputedStateHash(curBlock.block, curBlock.signer, bcu).resultE
+        preconditionBlock <- blockOnTopOf(curBlock.block, curBlock.signer, bcu).resultE
         diffResult        <- differ(state, prevBlock, preconditionBlock)
       } yield {
         state.append(
@@ -266,7 +267,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     }
 
     (for {
-      checkedBlock <- blockWithComputedStateHash(block.block, block.signer, bcu).resultE
+      checkedBlock <- blockOnTopOf(block.block, block.signer, bcu).resultE
       diffResult   <- differ(state, state.lastBlockHeader, checkedBlock)
     } yield {
       val ngState = NgState(
@@ -370,9 +371,10 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       preconditions: Seq[BlockWithSigner],
       block: BlockWithSigner,
       fs: FunctionalitySettings = TFS.Enabled,
-      balances: Seq[AddrWithBalance] = Seq.empty
+      balances: Seq[AddrWithBalance] = Seq.empty,
+      assets: Seq[GenesisAssetSettings] = Seq.empty
   )(errorMessage: String): Unit =
-    assertDiffEi(preconditions, block, fs, balances)(_ should produce(errorMessage))
+    assertDiffEi(preconditions, block, fs, balances, assets)(_ should produce(errorMessage))
 
   def blockWithComputedStateHash(
       blockWithoutStateHash: Block,
@@ -380,6 +382,13 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
       blockchain: BlockchainUpdater & Blockchain
   ): TracedResult[ValidationError, Block] =
     WithState.blockWithComputedStateHash(blockWithoutStateHash, signer, blockchain)
+
+  def blockOnTopOf(
+      blockWithoutStateHash: Block,
+      signer: SigningKey,
+      blockchain: BlockchainUpdater & Blockchain
+  ): TracedResult[ValidationError, Block] =
+    WithState.blockOnTopOf(blockWithoutStateHash, signer, blockchain)
 }
 
 trait WithDomain extends WithState {
@@ -397,16 +406,22 @@ trait WithDomain extends WithState {
       miner: Miner = Miner.StrictDisabledMiner,
       time: TestTime = TestTime(),
       generators: Seq[SigningKey] = Nil,
-      assets: Seq[GenesisAssetSettings] = Seq.empty
+      assets: Seq[GenesisAssetSettings] = Seq.empty,
+      // How the updater brings the node down on an unimplemented activated feature; pass a probe to observe it
+      onFatalStop: ApplicationStopReason => Unit = forceStopApplication
   )(test: Domain => A): A = {
     val noExplicitGenerators = generators.isEmpty && settings.blockchainSettings.genesisSettings.generators.isEmpty
     val effectiveGenerators  = if (noExplicitGenerators) Seq(TxHelpers.defaultSigner) else generators
     // When defaultSigner is auto-committed as the generator (no explicit generators), it also has to be funded to cover
     // its generation deposit. Fund it unless the caller already did, so an explicit defaultSigner balance still wins.
-    val effectiveBalances =
+    val withDefaultSignerFunded =
       if (noExplicitGenerators && !balances.exists(_.address == TxHelpers.defaultSigner.toAddress))
         AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: balances
       else balances
+    // Every committed generator needs a genesis balance covering its deposit, for the same reason: the genesis snapshot
+    // is rejected with "balance 0 is less than required for generation" otherwise. These entries go last, and
+    // withGenesisBalances dedupes by address keeping the first, so whatever the caller declared still wins.
+    val effectiveBalances = withDefaultSignerFunded ++ effectiveGenerators.map(g => AddrWithBalance(g.toAddress))
     val settingsWithGenesis =
       settings.withGenesisBalances(effectiveBalances*).withGenesisGenerators(effectiveGenerators*).withGenesisAssets(assets*)
 
@@ -418,7 +433,8 @@ trait WithDomain extends WithState {
           settingsWithGenesis,
           time,
           BlockchainUpdateTriggers.combined(domain.triggers),
-          miner
+          miner,
+          onFatalStop
         )
       )
 
@@ -468,6 +484,31 @@ object WithState {
       TxHelpers.blsKeyOf(signer).publicKey.base58,
       ByteStr(TxHelpers.vrfKeyOf(signer).publicKey()).toString
     )
+
+  /** [[blockWithComputedStateHash]], but with the block retargeted onto the chain it is about to be applied to.
+    *
+    * `TestBlock.create` overloads that take no explicit `ref` fill in `randomSignature()`, and `BlockDiffer` requires a
+    * block to reference the blockchain it is applied to (`Block references X, but the blockchain it is applied to is at
+    * Y`). The assert* helpers below chain blocks onto a growing state, so only they know the right reference - a caller
+    * building the block cannot. Retarget it here rather than making every test thread the id through.
+    *
+    * Note that this *overrides* whatever reference the block carried: these helpers always apply blocks in sequence on
+    * top of the state they are building, so there is no forking to preserve. A test that needs a specific reference -
+    * to fork, or to check that a bad one is rejected - has to go through `withDomain`/`Domain.appendBlock`, which is
+    * where `BlockchainUpdaterImpl` validates references in the first place (`BlockDiffer` never did).
+    */
+  def blockOnTopOf(
+      blockWithoutStateHash: Block,
+      signer: SigningKey,
+      blockchain: BlockchainUpdater & Blockchain
+  ): TracedResult[ValidationError, Block] = {
+    val retargeted = blockchain.lastBlockId match {
+      case Some(head) if head != blockWithoutStateHash.header.reference =>
+        blockWithoutStateHash.copy(header = blockWithoutStateHash.header.copy(reference = head))
+      case _ => blockWithoutStateHash
+    }
+    blockWithComputedStateHash(retargeted, signer, blockchain)
+  }
 
   def blockWithComputedStateHash(
       blockWithoutStateHash: Block,

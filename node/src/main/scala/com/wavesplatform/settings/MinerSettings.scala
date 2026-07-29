@@ -1,6 +1,5 @@
 package com.wavesplatform.settings
 
-import com.wavesplatform.account.PrivateKey
 import com.wavesplatform.mining.Miner
 import pureconfig.*
 
@@ -15,8 +14,8 @@ case class MinerSettings(
     minimalBlockGenerationOffset: FiniteDuration,
     maxTransactionsInMicroBlock: Int,
     minMicroBlockAge: FiniteDuration,
-    privateKeys: Seq[PrivateKey],
-    accounts: Seq[MiningAccount]
+    accounts: Seq[MiningAccount],
+    supportedFeatures: Seq[Short]
 ) derives ConfigReader {
   require(maxTransactionsInMicroBlock <= Miner.MaxTransactionsPerMicroblock)
 }

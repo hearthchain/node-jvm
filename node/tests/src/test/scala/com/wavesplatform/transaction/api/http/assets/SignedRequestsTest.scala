@@ -4,16 +4,21 @@ import com.wavesplatform.api.http.requests.*
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.test.FunSuite
+import com.wavesplatform.transaction.TxHelpers
 import play.api.libs.json.Json
 
 class SignedRequestsTest extends FunSuite {
 
+  // Addresses are bech32 and carry the network's scheme character, so they are derived rather than pasted in: the
+  // base58 literals these fixtures used to carry no longer parse at all. The signatures are never verified here.
+  private val firstRecipient  = TxHelpers.signer(1).toAddress.toBech32
+  private val secondRecipient = TxHelpers.signer(2).toAddress.toBech32
 
   test("AssetTransfer json parsing works") {
     val json =
-      """
+      s"""
         |{
-        |   "recipient":"3Myss6gmMckKYtka3cKCM563TBJofnxvfD7",
+        |   "recipient":"$firstRecipient",
         |   "timestamp":1479462208828,
         |   "assetId":"GAXAj8T4pSjunDqpz6Q3bit4fJJN9PD4t8AK8JZVSa5u",
         |   "amount":100000,
@@ -24,7 +29,7 @@ class SignedRequestsTest extends FunSuite {
         |}
       """.stripMargin
     val req = Json.parse(json).validate[SignedTransferV1Request].get
-    req.recipient shouldBe "3Myss6gmMckKYtka3cKCM563TBJofnxvfD7"
+    req.recipient shouldBe firstRecipient
     req.timestamp shouldBe 1479462208828L
     req.assetId shouldBe Some("GAXAj8T4pSjunDqpz6Q3bit4fJJN9PD4t8AK8JZVSa5u")
     req.amount shouldBe 100000
@@ -45,10 +50,10 @@ class SignedRequestsTest extends FunSuite {
 
   test("AssetTransfer with a fee in an asset json parsing works") {
     val json =
-      """
+      s"""
         |{
         |   "senderPublicKey":"FJuErRxhV9JaFUwcYLabFK5ENvDRfyJbRz8FeVfYpBLn",
-        |   "recipient":"3N9UuGeWuDt9NfWbC5oEACHyRoeEMApXAeq",
+        |   "recipient":"$secondRecipient",
         |   "timestamp":1489054107569,
         |   "assetId":"6MPKrD5B7GrfbciHECg1MwdvRUhRETApgNZspreBJ8JL",
         |   "amount":1000,
@@ -59,7 +64,7 @@ class SignedRequestsTest extends FunSuite {
         |}
       """.stripMargin
     val req = Json.parse(json).validate[SignedTransferV1Request].get
-    req.recipient shouldBe "3N9UuGeWuDt9NfWbC5oEACHyRoeEMApXAeq"
+    req.recipient shouldBe secondRecipient
     req.timestamp shouldBe 1489054107569L
     req.assetId shouldBe Some("6MPKrD5B7GrfbciHECg1MwdvRUhRETApgNZspreBJ8JL")
     req.feeAssetId shouldBe Some("6MPKrD5B7GrfbciHECg1MwdvRUhRETApgNZspreBJ8JL")

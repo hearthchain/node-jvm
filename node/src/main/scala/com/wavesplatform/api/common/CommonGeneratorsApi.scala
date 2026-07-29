@@ -45,7 +45,8 @@ object CommonGeneratorsApi {
             }
         }
 
-        val addresses = ArrayBuffer.from(ro.multiGet(addressIds.map(Keys.idToAddress), Address.AddressLength))
+        // An address is stored as the bytes of its hash, see Keys.idToAddress
+        val addresses = ArrayBuffer.from(ro.multiGet(addressIds.map(Keys.idToAddress), tech.hearth.crypto.Address.HASH_LEN))
         val balances: Map[GeneratorIndex, Long] =
           if (at.toInt == blockchain.height) blockchain.currentGeneratorSet.fold(Map.empty)(_.map(x => x.index -> x.balance).toMap)
           else ro.get(Keys.generatorBalances(at, rdb.apiHandle)).fold(Map.empty)(_.toMap)

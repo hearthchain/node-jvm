@@ -6,14 +6,15 @@ import com.wavesplatform.api.http.{CustomJson, RouteTimeout, TransactionsApiRout
 import com.wavesplatform.common.merkle.Merkle
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
-import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.defaultSigner
 import com.wavesplatform.protobuf.transaction.PBTransactions
-import com.wavesplatform.settings.WavesSettings
+import com.wavesplatform.settings.{GenesisAssetSettings, WavesSettings}
+import com.wavesplatform.test.DomainPresets.withGenesisAssets
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
+import com.wavesplatform.transaction.TransactionType
 import com.wavesplatform.transaction.TxHelpers.defaultAddress
 import com.wavesplatform.transaction.assets.exchange.{Order, OrderType}
 import com.wavesplatform.transaction.transfer.TransferTransaction
@@ -43,19 +44,38 @@ class TransactionsRouteSpec
   private val richAccount = TxHelpers.signer(10001)
   private val richAddress = richAccount.toAddress
 
-  override def settings: WavesSettings = DomainPresets.DeterministicFinality.copy(
-    restAPISettings = restAPISettings.copy(transactionsByAddressLimit = 5)
-  )
+  // Nothing issues an asset any more, so one a test trades has to be declared in the genesis snapshot, and the genesis
+  // balances have to hold exactly the quantity declared - here, all of it on the account that pays with it below.
+  private val tradedAssetIssuer   = TxHelpers.signer(1101)
+  private val tradedAsset         = IssuedAsset(ByteStr(new Array[Byte](AssetIdLength)))
+  private val tradedAssetQuantity = 100_000_000L
+
+  override def settings: WavesSettings = {
+    val base = DomainPresets.DeterministicFinality.copy(restAPISettings = restAPISettings.copy(transactionsByAddressLimit = 5))
+    // signer(500) is one of this node's generators, so that a CommitToGeneration can be signed for it
+    base
+      .copy(minerSettings = base.minerSettings.copy(accounts = Seq(TxHelpers.miningAccountSettings(500))))
+      .withGenesisAssets(
+        GenesisAssetSettings(
+          id = tradedAsset.id,
+          issuer = ByteStr(tradedAssetIssuer.publicKey()).toString,
+          name = "test",
+          decimals = 8,
+          quantity = tradedAssetQuantity
+        )
+      )
+  }
 
   override def genesisBalances: Seq[AddrWithBalance] = Seq(
     AddrWithBalance(richAddress, 1_000_000.waves),
-    AddrWithBalance(defaultAddress, 1_000_000.waves)
+    AddrWithBalance(defaultAddress, 1_000_000.waves, assets = Map(tradedAsset -> tradedAssetQuantity))
   )
 
   private val transactionsApiRoute = new TransactionsApiRoute(
     settings.restAPISettings,
     domain.transactionsApi,
     domain.wallet,
+    domain.generatorKeys,
     domain.blockchain,
     () => domain.blockchain,
     () => domain.utxPool.size,
@@ -76,7 +96,9 @@ class TransactionsRouteSpec
         "amount"          -> 1000000,
         "feeAssetId"      -> JsNull,
         "senderPublicKey" -> PublicKey(TestValues.keyPair.publicKey),
-        "recipient"       -> TestValues.address
+        // Not TestValues.address: that is this very sender's, and a transfer to yourself is rejected before any fee
+        // is calculated
+        "recipient"       -> TxHelpers.secondAddress
       )
 
       Post(routePath("/calculateFee"), transferTx) ~> route ~> check {
@@ -105,15 +127,14 @@ class TransactionsRouteSpec
       Json
         .parse(s"""{
                   |  "applicationStatus": "succeeded",
-                  |  "type" : 9,
+                  |  "type" : ${TransactionType.LeaseCancel.id},
                   |  "id" : "${leaseCancel.id()}",
                   |  "sender" : "${sender.toAddress}",
-                  |  "senderPublicKey" : "${sender.publicKey}",
+                  |  "senderPublicKey" : "${PublicKey(sender.publicKey())}",
                   |  "fee" : ${0.001.waves},
                   |  "feeAssetId" : null,
                   |  "timestamp" : ${leaseCancel.timestamp},
                   |  "proofs" : [ "${leaseCancel.signature}" ],
-                  |  "version" : 2,
                   |  "leaseId" : "${lease.id()}",
                   |  "chainId" : 84,
                   |  "spentComplexity" : 0,
@@ -166,10 +187,9 @@ class TransactionsRouteSpec
         Get(routePath(s"/address/${Base58.encode(new Array[Byte](24))}/limit/1")) ~> route should produce(InvalidAddress)
       }
 
-      "invalid base58 encoding" in {
-        Get(routePath(s"/address/${"1" * 23 + "0"}/limit/1")) ~> route should produce(
-          CustomValidationError("requirement failed: Wrong char '0' in Base58 string '111111111111111111111110'")
-        )
+      // Addresses are bech32 now, so nothing base58-decodes them and a malformed one is simply not an address
+      "invalid encoding" in {
+        Get(routePath(s"/address/${"1" * 23 + "0"}/limit/1")) ~> route should produce(InvalidAddress)
       }
 
       "invalid limit" - {
@@ -250,15 +270,14 @@ class TransactionsRouteSpec
       Get(routePath(s"/info/${leaseCancel.id()}")) ~> route ~> check {
         val json = responseAs[JsObject]
         json shouldBe Json.parse(s"""{
-                                    |  "type" : 9,
+                                    |  "type" : ${TransactionType.LeaseCancel.id},
                                     |  "id" : "${leaseCancel.id()}",
                                     |  "sender" : "${lessor.toAddress}",
-                                    |  "senderPublicKey" : "${lessor.publicKey}",
+                                    |  "senderPublicKey" : "${PublicKey(lessor.publicKey())}",
                                     |  "fee" : 100000,
                                     |  "feeAssetId" : null,
                                     |  "timestamp" : ${leaseCancel.timestamp},
                                     |  "proofs" : [ "${leaseCancel.signature}" ],
-                                    |  "version" : 2,
                                     |  "leaseId" : "${lease.id()}",
                                     |  "chainId" : 84,
                                     |  "height" : $cancelHeight,
@@ -367,11 +386,13 @@ class TransactionsRouteSpec
 
   routePath("/sign") - {
     "CommitToGenerationTransaction" in {
-      val sender = domain.wallet.generateNewAccount().get
-      val blsKP  = BlsKeyPair(???)
+      // A CommitToGeneration registers the account's own generator keys, so it is signed with the mining account -
+      // the wallet holds neither those keys nor, necessarily, that account
+      val sender = TxHelpers.signer(500)
+      val blsKP  = TxHelpers.blsKeyOf(sender)
       val unsignedTxnJson = Json.parse(
         s"""{
-           |  "type": 19,
+           |  "type": ${TransactionType.CommitToGeneration.id},
            |  "sender": "${sender.toAddress}"
            |}""".stripMargin
       )
@@ -382,7 +403,7 @@ class TransactionsRouteSpec
           status shouldEqual StatusCodes.OK
         }
         (jsObject \ "generationPeriodStart").as[Int] shouldBe 3001
-        (jsObject \ "senderPublicKey").as[String] shouldBe sender.publicKey.toString
+        (jsObject \ "senderPublicKey").as[String] shouldBe PublicKey(sender.publicKey()).toString
         (jsObject \ "endorserPublicKey").as[String] shouldBe blsKP.publicKey.base58
         (jsObject \ "commitmentSignature").asOpt[String] shouldBe defined
       }
@@ -399,12 +420,12 @@ class TransactionsRouteSpec
         .copy(attachment = ByteStr(Base58.decode(attachmentStr))) // to bypass a validation
         .signWith(defaultSigner)
 
+      // Too long to base58-decode at all: the reader reports that rather than measuring the string, see
+      // `utils.byteArrayFromString`
       Post(routePath("/broadcast"), tx.json()) ~> route should produce(
         WrongJson(
           errors = Seq(
-            JsPath \ "attachment" -> Seq(
-              JsonValidationError(s"base58-encoded string length ($attachmentSizeInSymbols) exceeds maximum length of 192")
-            )
+            JsPath \ "attachment" -> Seq(JsonValidationError(s"Can't parse '$attachmentStr' as base58 encoded byte array"))
           ),
           msg = Some("json data validation error, see validationErrors for details")
         )
@@ -474,9 +495,10 @@ class TransactionsRouteSpec
       domain.appendBlock(tx1, tx2)
 
       val transactions = Seq(tx1, tx2)
+      // The block holds these two transactions and nothing else, so they are at 0 and 1
       val proofs = Seq(
-        (tx1.id(), crypto.fastHash(PBTransactions.toByteArrayMerkle(tx1)), 2),
-        (tx2.id(), crypto.fastHash(PBTransactions.toByteArrayMerkle(tx2)), 3)
+        (tx1.id(), crypto.fastHash(PBTransactions.toByteArrayMerkle(tx1)), 0),
+        (tx2.id(), crypto.fastHash(PBTransactions.toByteArrayMerkle(tx2)), 1)
       )
 
       val queryParams = transactions.map(t => s"id=${t.id()}").mkString("?", "&", "")
@@ -492,10 +514,12 @@ class TransactionsRouteSpec
     }
 
     "returns error in case of all transactions are filtered" in {
-      val genesisTransactions = domain.blocksApi.blockAtHeight(Height(1)).value._2.collect { case (_, tx) => tx.id() }
+      // The genesis block carries no transactions any more - it is a snapshot - so this asks about transactions that
+      // exist as ids and belong to no block
+      val unknownTransactions = Seq(TxHelpers.transfer(richAccount, TxHelpers.address(1391), 1.waves).id())
 
-      val queryParams = genesisTransactions.map(id => s"id=$id").mkString("?", "&", "")
-      val requestBody = Json.obj("ids" -> genesisTransactions)
+      val queryParams = unknownTransactions.map(id => s"id=$id").mkString("?", "&", "")
+      val requestBody = Json.obj("ids" -> unknownTransactions.map(_.toString))
 
       Get(routePath(s"/merkleProof$queryParams")) ~> route ~> check {
         validateFailure(response)
@@ -576,10 +600,10 @@ class TransactionsRouteSpec
       (txInfo \ "order1" \ "attachment").asOpt[ByteStr] shouldBe Some(expectedAttachment)
     }
 
-    val sender     = TxHelpers.signer(1100)
-    val issuer     = TxHelpers.signer(1101)
-    val attachment = ByteStr.fill(32)(1)
-    val issuedAsset = IssuedAsset(ByteStr(new Array[Byte](32)))
+    val sender      = TxHelpers.signer(1100)
+    val issuer      = tradedAssetIssuer
+    val attachment  = ByteStr.fill(32)(1)
+    val issuedAsset = tradedAsset
     val exchange =
       TxHelpers.exchangeFromOrders(
         TxHelpers.order(OrderType.BUY, Waves, issuedAsset, version = Order.V4, attachment = Some(attachment)),

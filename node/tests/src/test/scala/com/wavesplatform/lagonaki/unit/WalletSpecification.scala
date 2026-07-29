@@ -18,17 +18,19 @@ class WalletSpecification extends FunSuite {
     w.generateNewAccounts(walletSize)
 
     w.privateKeyAccounts.size shouldBe walletSize
+    // Derived from the fixed seed above, in order. Rebaselined when accounts moved to KeyTree/Ed25519 and addresses to
+    // bech32: the base58 ones this pinned are not reachable from any seed any more.
     w.privateKeyAccounts.map(_.toAddress.toString) shouldBe Seq(
-      "3MqMwwHW4v2nSEDHVWoh8RCQL8QrsWLkkeB",
-      "3MuwVgJA8EXHukxo6rcakT5tD6FpvACtitG",
-      "3MuAvUG4EAsG9RP9jaWjewCVmggaQD2t39B",
-      "3MqoX4A3UGBYU7cX2JPs6BCzntNC8K8FBR4",
-      "3N1Q9VVVQtY3GqhwHtJDEyHb3oWBcerZL8X",
-      "3NARifVFHthMDnCwBacXijPB2szAgNTeBCz",
-      "3N6dsnfD88j5yKgpnEavaaJDzAVSRBRVbMY",
-      "3MufvXKZxLuNn5SHcEgGc2Vo7nLWnKVskfJ",
-      "3Myt4tocZmj7o3d1gnuWRrnQWcoxvx5G7Ac",
-      "3N3keodUiS8WLEw9W4BKDNxgNdUpwSnpb3K"
+      "thrth1kzut0rxj9hn4pn8etx77yy9myuays8t00s4f2s",
+      "thrth1pw3lu6nwl5lunxx9prj9smr6jhg0cz5afg7g7l",
+      "thrth1hu3wrcx2jfeccyyvlj8f5cynhvhgskem8j2hvw",
+      "thrth1vy26tvr49pal6syda48r5m60eptwcsclfhpjlm",
+      "thrth18pwwtfsngyuncsz8uqp6tsfsr3jcu5dwvs3t7q",
+      "thrth17ch0k2jw4mf2spk954g4rftf7whqy8gc3gp007",
+      "thrth1hyh0qgnuts225nm6l2c2chkxc6y3d3mr7v6vhh",
+      "thrth1mz3je8fz8ucazehcyajawjjm5adn9yjv6w9meh",
+      "thrth1qehyqndn0e67gu94cnycvrtnk5yapufrznzl86",
+      "thrth1754x44xr9h3l7cavp0hk4chnm5l3gt5zuwzzar"
     )
   }
 
@@ -55,7 +57,8 @@ class WalletSpecification extends FunSuite {
 
     val w2 = Wallet(WalletSettings(walletFile, "cookies".some, None))
     w2.privateKeyAccounts.nonEmpty shouldBe true
-    w2.privateKeyAccounts shouldEqual w1PrivateKeys
+    // A SigningKey compares by identity, so the reopened accounts are compared by what identifies them instead
+    w2.privateKeyAccounts.map(_.toAddress) shouldEqual w1PrivateKeys.map(_.toAddress)
 
     val seedError = intercept[IllegalArgumentException](Wallet(WalletSettings(walletFile, "cookies".some, ByteStr.decodeBase58("fake").toOption)))
     seedError.getMessage should include("Seed from config doesn't match the actual seed")

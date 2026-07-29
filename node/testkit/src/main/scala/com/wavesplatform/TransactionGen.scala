@@ -4,7 +4,6 @@ import com.wavesplatform.account.*
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.state.*
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
@@ -18,7 +17,6 @@ import org.scalatest.Suite
 import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.duration.*
-import scala.util.Random
 
 trait TransactionGenBase extends NTPTime { suite: Suite =>
 
@@ -411,13 +409,13 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       sellMatcherFeeAssetId: Asset = Waves,
       fixedMatcher: Option[SigningKey] = None
   ): Gen[ExchangeTransaction] = {
-    def mkBuyOrder(version: TxVersion): OrderConstructor = (version: @unchecked) match {
+    def mkBuyOrder(version: Byte): OrderConstructor = (version: @unchecked) match {
       case Order.V1 => TxHelpers.buy(Order.V1, _, _, _, _, _, _, _, _).explicitGet()
       case Order.V2 => TxHelpers.buy(Order.V2, _, _, _, _, _, _, _, _).explicitGet()
       case Order.V3 => TxHelpers.buy(Order.V3, _, _, _, _, _, _, _, _, buyMatcherFeeAssetId).explicitGet()
     }
 
-    def mkSellOrder(version: TxVersion): OrderConstructor = (version: @unchecked) match {
+    def mkSellOrder(version: Byte): OrderConstructor = (version: @unchecked) match {
       case Order.V1 => TxHelpers.sell(Order.V1, _, _, _, _, _, _, _, _).explicitGet()
       case Order.V2 => TxHelpers.sell(Order.V2, _, _, _, _, _, _, _, _).explicitGet()
       case Order.V3 => TxHelpers.sell(Order.V3, _, _, _, _, _, _, _, _, sellMatcherFeeAssetId).explicitGet()
@@ -457,16 +455,6 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     for {
       transactions <- Gen.listOfN(count, randomTransactionGen)
     } yield transactions
-
-  import DataEntry.MaxKeySize
-
-  val dataKeyGen: Gen[String] = for {
-    size <- Gen.choose(1, MaxKeySize)
-  } yield Random.nextString(size)
-
-  val dataScriptsKeyGen: Gen[String] = for {
-    size <- Gen.choose(1, 10)
-  } yield Random.nextString(size)
 }
 
 trait TransactionGen extends TransactionGenBase { suite: Suite => }

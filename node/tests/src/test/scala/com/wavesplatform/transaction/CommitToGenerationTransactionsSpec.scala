@@ -2,7 +2,7 @@ package com.wavesplatform.transaction
 
 import com.google.common.primitives.Ints
 import tech.hearth.crypto.{Crypto, VrfKey}
-import com.wavesplatform.account.{AddressScheme, PrivateKey, PublicKey}
+import com.wavesplatform.account.{AddressScheme, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
@@ -37,13 +37,12 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
 
   "JSON parsing" in {
     val js = Json.parse(s"""{
-      "id": "FEjd4wn3HMmEvayqGVoBGHcf7uxn2GhR1zhKxL72935a",
-      "type": 19,
-      "version": 1,
+      "id": "9aB9jayz4RWeNq9AMAmqEFZFg8m5wzVj6H9adHtQfUuV",
+      "type": 7,
       "fee": 100000000,
       "feeAssetId": null,
       "timestamp": 1526287561757,
-      "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
+      "sender": "thrth1ryd2f987gg464uf4q5jte5rcmc2xgq6kr3qe39",
       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
       "generationPeriodStart": 3000,
       "endorserPublicKey": "6CagLT3FjEcaNHPYCaG2dcfEfzDj6ynVeZbxbLHkHdfzvbfBmBMkkatTYcBXD9cHMU",
@@ -69,9 +68,11 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
   }
 
   "Expected BLS key and PoP" in {
-    val wavesPk = PrivateKey(ByteStr.decodeBase58("7UR2CZi6Gv6v1yqmgcPDD98ZtosvtHnNZRxvrHA2Tuyn").get)
+    // A fixed 32-byte seed. It used to be wrapped in a `PrivateKey`, which is a 64-byte expanded Ed25519 secret key
+    // now and rejects it - and `BlsKeyPair.fromSeed` wants the raw bytes anyway
+    val seed = ByteStr.decodeBase58("7UR2CZi6Gv6v1yqmgcPDD98ZtosvtHnNZRxvrHA2Tuyn").get
 
-    val blsKp = BlsKeyPair.fromSeed(wavesPk.arr)
+    val blsKp = BlsKeyPair.fromSeed(seed.arr)
     blsKp.publicKey.byteStr.base64Raw shouldBe "jrugi0W0es2WxuHoptQtchqwactZsldOGucYObZrEIOpxbWmhL8dodvpnzA+2qUf"
 
     CommitToGenerationTransaction.mkPopSignature(blsKp, Height(1001)).byteStr.base64Raw shouldBe

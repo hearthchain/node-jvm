@@ -46,7 +46,7 @@ object TxValidationError {
   case class InvalidStateHash(blockStateHash: Option[ByteStr], computedStateHash: Option[ByteStr]) extends ValidationError
 
   case class MicroBlockAppendError(err: String, microBlock: MicroBlock) extends ValidationError {
-    override def toString: String = s"MicroBlockAppendError($err, ${microBlock.totalResBlockSig} ~> ${microBlock.reference.trim}])"
+    override def toString: String = s"MicroBlockAppendError($err, ${microBlock.wholeBlockSignature} ~> ${microBlock.reference.trim}])"
   }
 
   case object EmptyDataKey extends ValidationError {

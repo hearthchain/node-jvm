@@ -1,69 +1,40 @@
 package com.wavesplatform.history
 
 import cats.syntax.option.*
-import com.wavesplatform.api.http.RewardApiRoute
-import com.wavesplatform.block.{Block, SignedBlockHeader}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.database.{DBExt, Keys}
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.history.Domain.BlockchainUpdaterExt
-import com.wavesplatform.lagonaki.mocks.TestBlock
-import com.wavesplatform.mining.MiningConstraint
-import com.wavesplatform.settings.{Constants, FunctionalitySettings, RewardsSettings}
-import com.wavesplatform.state.diffs.BlockDiffer
-import com.wavesplatform.state.{BlockRewardCalculator, Blockchain, GenesisBlockHeight, Height}
+import com.wavesplatform.settings.{Constants, FunctionalitySettings, RewardsSettings, WavesSettings}
+import com.wavesplatform.state.BlockRewardCalculator
 import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.*
-import com.wavesplatform.test.DomainPresets.{RideV6, BlockRewardDistribution as BlockRewardDistributionSettings}
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxHelpers
-import org.scalacheck.Gen
-import org.scalactic.source.Position
-import tech.hearth.crypto.SigningKey
 
+/** The block reward is a constant: `BlockRewardCalculator.fullRewardAt` returns `rewardsSettings.initial` at every
+  * height, and a block header carries no reward vote, so nothing can change it. What is left to test is how a block's
+  * reward and the fees it collects are shared out - between the miner and the DAO address, and between the block that
+  * collects a fee and the one that references it.
+  *
+  * Gone with the vote: the properties that drove a chain through a voting window and watched the reward move, and the
+  * ones that asserted what happened before BlockRewardDistribution or CappedReward activated - `rewardSharesAt` pins
+  * both activation heights at 1, so those states cannot be reached.
+  */
 class BlockRewardSpec extends FreeSpec with WithDomain {
-  // the persisted meta keeps the total fee per asset; these scenarios only ever collect WAVES
-  private def totalFeeInWaves(m: com.wavesplatform.database.protobuf.BlockMeta): Long =
-    m.totalFee.collectFirst { case a if a.assetId.isEmpty => a.amount }.getOrElse(0L)
 
-  private val BlockRewardActivationHeight = 5
-  private val InitialReward               = 6 * Constants.UnitsInWave
-  private val rewardSettings = settings.copy(
-    blockchainSettings = DefaultBlockchainSettings.copy(
-      functionalitySettings = FunctionalitySettings(
-        featureCheckBlocksPeriod = 10,
-        blocksForFeatureActivation = 1
-      ),
-      rewardsSettings = RewardsSettings(
-        10,
-        5,
-        InitialReward,
-        1 * Constants.UnitsInWave,
-        4
-      )
-    )
-  )
-
-  private def mkEmptyBlock(ref: ByteStr, signer: SigningKey): Block = TestBlock.create(ntpNow, ref, Seq.empty, signer).block
-
-  private def mkEmptyBlockIncReward(ref: ByteStr, signer: SigningKey): Block =
-    TestBlock.create(ntpNow, ref, Seq.empty, signer).block
-
-  private def mkEmptyBlockDecReward(ref: ByteStr, signer: SigningKey): Block =
-    TestBlock.create(ntpNow, ref, Seq.empty, signer).block
-
-  private def mkEmptyBlockReward(ref: ByteStr, signer: SigningKey): Block =
-    TestBlock.create(ntpNow, ref, Seq.empty, signer).block
-
+  private val InitialReward       = 6 * Constants.UnitsInWave
   private val InitialMinerBalance = 10000 * Constants.UnitsInWave
   private val OneTotalFee         = 100000
   private val OneCarryFee         = (OneTotalFee * 0.6).toLong
   private val OneFee              = (OneTotalFee * 0.4).toLong
 
-  // These used to be generated, but the balances they are credited with now have to be known before the domain exists:
-  // they go into the genesis snapshot the settings are built with. Nothing here depends on the accounts being random.
+  private val rewardSettings: WavesSettings = MicroblocksActivatedAt0WavesSettings.copy(
+    blockchainSettings = DefaultBlockchainSettings.copy(
+      functionalitySettings = FunctionalitySettings(featureCheckBlocksPeriod = 10, blocksForFeatureActivation = 1),
+      rewardsSettings = RewardsSettings(10, 5, InitialReward, 1 * Constants.UnitsInWave, 4)
+    )
+  )
+
+  // Credited by the genesis snapshot, so they have to be known before the domain exists
   private val sourceAddress = TxHelpers.signer(101)
   private val issuer        = TxHelpers.signer(102)
   private val miner1        = TxHelpers.signer(103)
@@ -76,822 +47,169 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
     AddrWithBalance(miner2.toAddress, InitialMinerBalance)
   )
 
-  /** The block at height 1: empty, since the genesis snapshot replaced the genesis transactions it used to hold.
-    * BlockDiffer applies the snapshot to whatever block is at height 1, so the domains below run with
-    * appendGenesis = false and this block credits the accounts.
-    */
-  private val genesis = Gen.const((sourceAddress, issuer, miner1, miner2, TestBlock.create(ntpTime.correctedTime(), Seq.empty).block))
-
-  private val activationScenario = for {
-    (sourceAddress, _, miner, _, genesisBlock) <- genesis
-    recipient                                  <- accountGen
-    transfers <- Gen.listOfN(10, transferGeneratorP(ntpNow, sourceAddress, recipient.toAddress, 1000 * Constants.UnitsInWave))
-    b2              = TestBlock.create(ntpNow, genesisBlock.id(), transfers, miner).block
-    b3              = mkEmptyBlock(b2.id(), miner)
-    b4              = mkEmptyBlock(b3.id(), miner)
-    b5              = mkEmptyBlock(b4.id(), miner)
-    b6              = mkEmptyBlock(b5.id(), miner)
-    b7              = mkEmptyBlock(b6.id(), miner)
-    b8              = mkEmptyBlock(b7.id(), miner)
-    b9              = mkEmptyBlock(b8.id(), miner)
-    b10             = mkEmptyBlock(b9.id(), miner)
-    b11             = mkEmptyBlockIncReward(b10.id(), miner)
-    b12             = mkEmptyBlockIncReward(b11.id(), miner)
-    b13             = mkEmptyBlockIncReward(b12.id(), miner)
-    b14             = mkEmptyBlockIncReward(b13.id(), miner)
-    b15             = mkEmptyBlockIncReward(b14.id(), miner)
-    secondTermStart = BlockRewardActivationHeight + 10
-    b16 = Range
-      .inclusive(secondTermStart + 1, secondTermStart + rewardSettings.blockchainSettings.rewardsSettings.term)
-      .foldLeft(Seq(b15)) {
-        case (prev, i)
-            if rewardSettings.blockchainSettings.rewardsSettings.votingWindow(BlockRewardActivationHeight, i, modifyTerm = false).contains(i) =>
-          prev :+ mkEmptyBlockDecReward(prev.last.id(), miner)
-        case (prev, _) => prev :+ mkEmptyBlock(prev.last.id(), miner)
-      }
-      .tail
-    thirdTermStart = BlockRewardActivationHeight + 10 + 10
-    b17 = Range
-      .inclusive(thirdTermStart + 1, thirdTermStart + rewardSettings.blockchainSettings.rewardsSettings.term)
-      .foldLeft(Seq(b16.last)) {
-        case (prev, i)
-            if rewardSettings.blockchainSettings.rewardsSettings.votingWindow(BlockRewardActivationHeight, i, modifyTerm = false).contains(i) =>
-          prev :+ mkEmptyBlockReward(prev.last.id(), miner)
-        case (prev, _) => prev :+ mkEmptyBlock(prev.last.id(), miner)
-      }
-      .tail
-    fourthTermStart = BlockRewardActivationHeight + 10 + 10 + 10
-    b18 = Range
-      .inclusive(fourthTermStart + 1, fourthTermStart + rewardSettings.blockchainSettings.rewardsSettings.term)
-      .foldLeft(Seq(b17.last)) {
-        case (prev, i)
-            if rewardSettings.blockchainSettings.rewardsSettings.votingWindow(BlockRewardActivationHeight, i, modifyTerm = false).contains(i) =>
-          prev :+ mkEmptyBlockReward(prev.last.id(), miner)
-        case (prev, _) => prev :+ mkEmptyBlock(prev.last.id(), miner)
-      }
-      .tail
-  } yield (miner, transfers, Seq(genesisBlock, b2), Seq(b3, b4), b5, Seq(b6, b7, b8, b9), Seq(b10, b11, b12, b13, b14), b15, b16, b17, b18)
-
-  "Miner receives reward as soon as the feature is activated and changes reward amount after voting" in forAll(activationScenario) {
-    case (miner, transfers, b1s, b2s, activationBlock, b3s, b4s, newTermBlock, b5s, b6s, b7s) =>
-      withDomain(rewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
-        val totalFee = transfers.map(_.fee.value).sum
-
-        b1s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-
-        b2s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight - 1
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight - 1) shouldBe None
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe InitialMinerBalance + totalFee
-
-        d.blockchainUpdater.processBlock(activationBlock) should beRight
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight) shouldBe Some(InitialReward)
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe InitialReward + InitialMinerBalance + totalFee
-
-        b3s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 4
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 4) shouldBe InitialReward.some
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe 5 * InitialReward + InitialMinerBalance + totalFee
-
-        b4s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 9
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 9) shouldBe InitialReward.some
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + InitialMinerBalance + totalFee
-
-        val NextReward = InitialReward + 1 * Constants.UnitsInWave
-
-        d.blockchainUpdater.processBlock(newTermBlock) should beRight
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10
-
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + NextReward + InitialMinerBalance + totalFee
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10) shouldBe NextReward.some
-
-        b5s.init.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 - 1
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 - 1) shouldBe NextReward.some
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + 10 * NextReward + InitialMinerBalance + totalFee
-
-        d.blockchainUpdater.processBlock(b5s.last) should beRight
-
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10) shouldBe InitialReward.some
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe 10 * InitialReward + 10 * NextReward + InitialReward + InitialMinerBalance + totalFee
-
-        b6s.init.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10 - 1
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10 - 1) shouldBe InitialReward.some
-        d.blockchainUpdater.balance(
-          miner.toAddress
-        ) shouldBe 10 * InitialReward + 10 * NextReward + 10 * InitialReward + InitialMinerBalance + totalFee
-
-        d.blockchainUpdater.processBlock(b6s.last) should beRight
-
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10) shouldBe InitialReward.some
-        d.blockchainUpdater.balance(
-          miner.toAddress
-        ) shouldBe 10 * InitialReward + 10 * NextReward + 11 * InitialReward + InitialMinerBalance + totalFee
-
-        b7s.init.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10 + 10 - 1
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10 + 10 - 1) shouldBe InitialReward.some
-        d.blockchainUpdater.balance(
-          miner.toAddress
-        ) shouldBe 10 * InitialReward + 10 * NextReward + 20 * InitialReward + InitialMinerBalance + totalFee
-
-        val DecreasedReward = InitialReward - 1 * Constants.UnitsInWave
-
-        d.blockchainUpdater.processBlock(b7s.last) should beRight
-
-        d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10 + 10 + 10 + 10
-
-        d.blockchainUpdater.blockReward(BlockRewardActivationHeight + 10 + 10 + 10 + 10) shouldBe DecreasedReward.some
-        d.blockchainUpdater.balance(
-          miner.toAddress
-        ) shouldBe 10 * InitialReward + 10 * NextReward + 20 * InitialReward + DecreasedReward + InitialMinerBalance + totalFee
-      }
-  }
+  private def feePayingTransfer =
+    TxHelpers.transfer(issuer, sourceAddress.toAddress, 10 * Constants.UnitsInWave, Waves, OneTotalFee, Waves, ByteStr.empty)
 
   "Miner receives reward and fees" - {
-    val ngEmptyScenario = for {
-      (sourceAddress, issuer, miner1, miner2, genesisBlock) <- genesis
-      tx1 = TxHelpers.transfer(
-        issuer,
-        sourceAddress.toAddress,
-        10 * Constants.UnitsInWave,
-        Waves,
-        OneTotalFee,
-        Waves,
-        ByteStr.empty
-      )
-      tx2 = TxHelpers
-        .transfer(
-          issuer,
-          sourceAddress.toAddress,
-          10 * Constants.UnitsInWave,
-          Waves,
-          OneTotalFee,
-          Waves,
-          ByteStr.empty
-        )
-      b2        = mkEmptyBlock(genesisBlock.id(), miner1)
-      b3        = mkEmptyBlock(b2.id(), miner1)
-      b4        = TestBlock.create(ntpNow, b3.id(), Seq(tx1), miner1).block
-      (b5, m5s) = chainBaseAndMicro(b4.id(), Seq.empty, Seq(Seq(tx2)), miner2, ntpNow)
-    } yield (miner1, miner2, Seq(genesisBlock, b2, b3, b4), b5, m5s)
-
-    def differ(blockchain: Blockchain, prevBlock: Option[SignedBlockHeader], b: Block): BlockDiffer.Result =
-      BlockDiffer.fromBlock(blockchain, prevBlock, b, None, MiningConstraint.Unlimited: MiningConstraint, b.header.generationSignature).explicitGet()
-
-    "when NG state is empty" in forAll(ngEmptyScenario) { case (miner1, miner2, b2s, b3, m3s) =>
+    "40% of a fee in the block that collects it, the carry in the block that references it" in
       withDomain(rewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
-        b2s.foldLeft[Option[SignedBlockHeader]](None) { (prevBlock, curBlock) =>
-          val BlockDiffer.Result(snapshot, carryFee, totalFee, _, _, computedStateHash) = differ(d.rocksDBWriter, prevBlock, curBlock)
-          d.rocksDBWriter.append(
-            snapshot,
-            carryFee,
-            totalFee,
-            reward = None,
-            curBlock.header.generationSignature,
-            computedStateHash,
-            curBlock,
-            newFinalizedHeight = GenesisBlockHeight,
-            generatorSet = Seq.empty
-          )
-          Some(curBlock.signedHeader)
-        }
+        d.appendBlock(d.createBlock(Seq(feePayingTransfer), generator = miner1))
 
-        d.rocksDBWriter.height shouldBe BlockRewardActivationHeight - 1
-        d.rocksDBWriter.balance(miner1.toAddress) shouldBe InitialMinerBalance + OneFee
-        d.rdb.db.get(Keys.blockMetaAt(Height(BlockRewardActivationHeight - 1))).map(totalFeeInWaves) shouldBe OneTotalFee.some
-        d.rocksDBWriter.carryFee(d.rocksDBWriter.lastBlockId.get).map(_.wavesAmount) shouldBe Right(OneCarryFee)
-
-        d.blockchainUpdater.processBlock(b3) should beRight
-        d.blockchainUpdater.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward + OneCarryFee
-        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe 0L.some
-        d.blockchainUpdater.carryFee(d.blockchainUpdater.lastBlockId.get).map(_.wavesAmount) shouldBe Right(0L)
-
-        m3s.foreach(mb => d.blockchainUpdater.processMicroBlock(mb, None) should beRight)
-
-        d.blockchainUpdater.height shouldBe BlockRewardActivationHeight
-        d.blockchainUpdater.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee + OneCarryFee
+        d.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee
         d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe OneTotalFee.some
-        d.blockchainUpdater.carryFee(d.blockchainUpdater.lastBlockId.get).map(_.wavesAmount) shouldBe Right(OneCarryFee)
+        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(OneCarryFee)
+
+        // The next block collects no fee of its own, so all it gets on top of its reward is the carry
+        d.appendBlock(d.createBlock(Nil, generator = miner2))
+
+        d.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward + OneCarryFee
+        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe 0L.some
+        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(0L)
       }
-    }
 
-    val betterBlockScenario = for {
-      (sourceAddress, issuer, miner, _, genesisBlock) <- genesis
-      tx = TxHelpers.transfer(
-        issuer,
-        sourceAddress.toAddress,
-        10 * Constants.UnitsInWave,
-        Waves,
-        OneTotalFee,
-        Waves,
-        ByteStr.empty
-      )
-      b2        = mkEmptyBlock(genesisBlock.id(), miner)
-      b3        = mkEmptyBlock(b2.id(), miner)
-      b4        = mkEmptyBlock(b3.id(), miner)
-      (b5, m5s) = chainBaseAndMicro(b4.id(), Seq.empty, Seq(Seq(tx)), miner, ntpNow)
-      b6a       = TestBlock.create(ntpNow, m5s.last.totalResBlockSig, Seq.empty, miner).block
-      b6b = TestBlock
-        .sign(
-          miner,
-          b6a.copy(header = b6a.header.copy(timestamp = b6a.header.timestamp - 1L))
-        )
-        .block
-    } yield (miner, Seq(genesisBlock, b2, b3, b4, b5), m5s, b6a, b6b)
-
-    "when received better liquid block" in forAll(betterBlockScenario) { case (miner, b1s, m1s, b2a, b2b) =>
+    "a fee collected by a micro block is carried like any other" in
       withDomain(rewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
-        b1s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        m1s.foreach(m => d.blockchainUpdater.processMicroBlock(m, None) should beRight)
+        d.appendBlock(d.createBlock(Nil, generator = miner2))
+        d.appendMicroBlockBy(miner2)(feePayingTransfer)
 
-        d.blockchainUpdater.height shouldBe BlockRewardActivationHeight
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee
+        d.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee
         d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe OneTotalFee.some
-        d.blockchainUpdater.carryFee(d.blockchainUpdater.lastBlockId.get).map(_.wavesAmount) shouldBe Right(OneCarryFee)
+        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(OneCarryFee)
 
-        d.blockchainUpdater.processBlock(b2a) should beRight
-        d.blockchainUpdater.processBlock(b2b) should beRight
+        d.appendBlock(d.createBlock(Nil, generator = miner1))
 
-        d.blockchainUpdater.balance(miner.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee + InitialReward + OneCarryFee
-        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe 0L.some
-        d.blockchainUpdater.carryFee(d.blockchainUpdater.lastBlockId.get).map(_.wavesAmount) shouldBe Right(0L)
+        d.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward + OneCarryFee
+        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(0L)
       }
-    }
-    val blockWithoutFeesScenario = for {
-      (_, _, miner1, miner2, genesisBlock) <- genesis
-      b2 = mkEmptyBlock(genesisBlock.id(), miner1)
-      b3 = mkEmptyBlock(b2.id(), miner1)
-      b4 = mkEmptyBlock(b3.id(), miner1)
-      b5 = mkEmptyBlockIncReward(b4.id(), miner1)
-      b6s = Range
-        .inclusive(BlockRewardActivationHeight + 1, BlockRewardActivationHeight + rewardSettings.blockchainSettings.rewardsSettings.term)
-        .foldLeft(Seq(b5)) {
-          case (prev, i)
-              if rewardSettings.blockchainSettings.rewardsSettings.votingWindow(BlockRewardActivationHeight, i, modifyTerm = false).contains(i) =>
-            prev :+ mkEmptyBlockIncReward(prev.last.id(), if (i % 2 == 0) miner2 else miner1)
-          case (prev, i) => prev :+ mkEmptyBlock(prev.last.id(), if (i % 2 == 0) miner2 else miner1)
-        }
-        .tail
-    } yield (miner1, miner2, Seq(genesisBlock, b2, b3, b4), b5, b6s.init, b6s.last)
 
-    "when all blocks without fees" in forAll(blockWithoutFeesScenario) { case (miner1, miner2, b1s, b2, b3s, b4) =>
+    "when received better liquid block" in
+      withDomain(rewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
+        val parent = d.lastBlockId
+        // Timestamped from the test clock rather than from PoS: this suite's genesis sits at the epoch, and the micro
+        // block below carries a transaction stamped with the current time
+        val now   = d.testTime.getTimestamp()
+        val first = d.createBlock(Nil, generator = miner1, strictTime = true, timestamp = Some(now))
+        // Same parent, earlier timestamp: better, so it replaces the liquid block and the fee it collected with it.
+        // Both are built here, while that parent is still the head, so each carries the state hash of its own branch.
+        val better =
+          d.createBlock(Nil, ref = Some(parent), generator = miner2, strictTime = true, timestamp = Some(now - 1))
+
+        d.appendBlock(first)
+        d.appendMicroBlockBy(miner1)(feePayingTransfer)
+
+        d.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee
+        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(OneCarryFee)
+
+        d.appendBlockE(better) should beRight
+
+        d.balance(miner1.toAddress) shouldBe InitialMinerBalance
+        d.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward
+        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe 0L.some
+        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(0L)
+      }
+
+    "when all blocks without fees" in
       withDomain(rewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
         val initialWavesAmount = BigInt(Constants.TotalWaves) * BigInt(Constants.UnitsInWave)
-        val term               = rewardSettings.blockchainSettings.rewardsSettings.term
-        val minIncrement       = rewardSettings.blockchainSettings.rewardsSettings.minIncrement
-        b1s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-        d.blockchainUpdater.height shouldBe BlockRewardActivationHeight - 1
-        d.blockchainUpdater.wavesAmount(BlockRewardActivationHeight - 1) shouldBe initialWavesAmount
-        d.blockchainUpdater.balance(miner1.toAddress) shouldBe InitialMinerBalance
-        d.blockchainUpdater.balance(miner2.toAddress) shouldBe InitialMinerBalance
-        d.blockchainUpdater.processBlock(b2) should beRight
-        d.blockchainUpdater.height shouldBe BlockRewardActivationHeight
-        d.blockchainUpdater.wavesAmount(BlockRewardActivationHeight) shouldBe initialWavesAmount + InitialReward
-        d.blockchainUpdater.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward
-        d.blockchainUpdater.balance(miner2.toAddress) shouldBe InitialMinerBalance
-        b3s.zipWithIndex.foreach { case (b, i) =>
-          d.blockchainUpdater.processBlock(b) should beRight
-          d.blockchainUpdater.height shouldBe BlockRewardActivationHeight + i + 1
-          d.blockchainUpdater.wavesAmount(BlockRewardActivationHeight + i + 1) shouldBe initialWavesAmount + BigInt(InitialReward * (i + 2))
-          d.blockchainUpdater.balance(miner1.toAddress) shouldBe InitialMinerBalance + ((i + 1) / 2) * InitialReward + InitialReward
-          d.blockchainUpdater.balance(miner2.toAddress) shouldBe InitialMinerBalance + (i / 2 + 1) * InitialReward
+
+        (1 to 6).foreach { i =>
+          val miner = if (i % 2 == 0) miner2 else miner1
+          d.appendBlock(d.createBlock(Nil, generator = miner))
+
+          // Every block mints the same reward, so the supply grows by it and the miner that produced the block holds it
+          d.blockchain.height shouldBe i + 1
+          d.blockchain.wavesAmount(i + 1) shouldBe initialWavesAmount + BigInt(InitialReward) * i
+          d.balance(miner1.toAddress) shouldBe InitialMinerBalance + ((i + 1) / 2) * InitialReward
+          d.balance(miner2.toAddress) shouldBe InitialMinerBalance + (i / 2) * InitialReward
         }
-        d.blockchainUpdater.processBlock(b4) should beRight
-        d.blockchainUpdater.height shouldBe BlockRewardActivationHeight + term
-        d.blockchainUpdater.wavesAmount(
-          BlockRewardActivationHeight + term
-        ) shouldBe initialWavesAmount + term * InitialReward + InitialReward + minIncrement
-        d.blockchainUpdater.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward * 5 + InitialReward + minIncrement
-        d.blockchainUpdater.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward * 5
       }
-    }
   }
 
-  private val calcRewardSettings = rewardSettings.copy(
-    blockchainSettings = rewardSettings.blockchainSettings.copy(
-      functionalitySettings = FunctionalitySettings(
-        featureCheckBlocksPeriod = 10,
-        blocksForFeatureActivation = 1
-      ),
-      rewardsSettings = RewardsSettings(12, 6, 6 * Constants.UnitsInWave, 1 * Constants.UnitsInWave, 6)
-    )
-  )
-
-  private val calcScenario = for {
-    (_, _, miner, _, genesisBlock) <- genesis
-    b2  = mkEmptyBlock(genesisBlock.id(), miner)
-    b3  = mkEmptyBlock(b2.id(), miner)
-    b4  = mkEmptyBlock(b3.id(), miner)
-    b5  = mkEmptyBlock(b4.id(), miner)
-    b6  = mkEmptyBlock(b5.id(), miner)
-    b7  = mkEmptyBlock(b6.id(), miner)
-    b8  = mkEmptyBlock(b7.id(), miner)
-    b9  = mkEmptyBlock(b8.id(), miner)
-    b10 = mkEmptyBlockIncReward(b9.id(), miner)
-    b11 = mkEmptyBlockIncReward(b10.id(), miner)
-    b12 = mkEmptyBlockIncReward(b11.id(), miner)
-    b13 = mkEmptyBlockIncReward(b12.id(), miner)
-    b14 = mkEmptyBlockIncReward(b13.id(), miner)
-    b15 = mkEmptyBlockIncReward(b14.id(), miner)
-    b16 = mkEmptyBlockIncReward(b15.id(), miner)
-  } yield (Seq(genesisBlock, b2, b3), b4, Seq(b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15), b16)
-
-  "Reward calculated correctly" in forAll(calcScenario) { case (b1s, b2, b3s, b4) =>
-    withDomain(calcRewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
-      b1s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-
-      d.blockchainUpdater.processBlock(b2)
-
-      b3s.foreach(b => d.blockchainUpdater.processBlock(b))
-
-      d.blockchainUpdater.height shouldBe 15
-
-      val calcSettings = calcRewardSettings.blockchainSettings.rewardsSettings
-      calcSettings.nearestTermEnd(Height(4), Height(9), modifyTerm = false) shouldBe Height(15)
-      calcSettings.nearestTermEnd(Height(4), Height(10), modifyTerm = false) shouldBe Height(15)
-
-      val route = RewardApiRoute(d.blockchainUpdater)
-
-      d.blockchainUpdater.blockReward(9) shouldBe (6 * Constants.UnitsInWave).some
-      d.blockchainUpdater.blockReward(15) shouldBe (6 * Constants.UnitsInWave).some
-
-      d.blockchainUpdater.processBlock(b4) should beRight
-      d.blockchainUpdater.blockReward(16) shouldBe (7 * Constants.UnitsInWave).some
-
-      route.getRewards(Height(9)).explicitGet().votes.increase shouldBe 0
-      route.getRewards(Height(10)).explicitGet().votes.increase shouldBe 1
-
-    }
-  }
-
-  private val smallPeriodRewardSettings = rewardSettings.copy(
-    blockchainSettings = rewardSettings.blockchainSettings.copy(
-      functionalitySettings = FunctionalitySettings(
-        featureCheckBlocksPeriod = 10,
-        blocksForFeatureActivation = 1
-      ),
-      rewardsSettings = RewardsSettings(3, 2, 6 * Constants.UnitsInWave, 1 * Constants.UnitsInWave, 2)
-    )
-  )
-
-  private val smallCalcScenario = for {
-    (_, _, miner, _, genesisBlock) <- genesis
-    b2 = mkEmptyBlock(genesisBlock.id(), miner)
-    b3 = mkEmptyBlock(b2.id(), miner)
-    b4 = mkEmptyBlock(b3.id(), miner)
-    b5 = mkEmptyBlockIncReward(b4.id(), miner)
-    b6 = mkEmptyBlockIncReward(b5.id(), miner)
-    b7 = mkEmptyBlockIncReward(b6.id(), miner)
-  } yield (Seq(genesisBlock, b2, b3), b4, Seq(b5, b6, b7))
-
-  "Reward calculated correctly for small voting period" in forAll(smallCalcScenario) { case (b1s, b2, b3s) =>
-    withDomain(smallPeriodRewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
-      b1s.foreach(b => d.blockchainUpdater.processBlock(b) should beRight)
-
-      d.blockchainUpdater.processBlock(b2)
-
-      b3s.foreach(b => d.blockchainUpdater.processBlock(b))
-
-      d.blockchainUpdater.height shouldBe 7
-
-      d.blockchainUpdater.blockReward(7) shouldBe (7 * Constants.UnitsInWave).some
-    }
-  }
-
-  // BlockDiffer now gives the genesis block the predefined snapshot instead of a miner reward, so the reward at
-  // height 1 is 0 whether or not ConsensusImprovements is active - the first case below no longer holds. Whether the
-  // genesis block should earn a reward at all is a behaviour question, see the PR notes.
-  s"Reward for genesis block should be 0 after activation of $ConsensusImprovements" ignore {
-    withDomain(RideV6) { d =>
-      val block = d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 6_0000_0000
-      d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 12_0000_0000
-    }
-
-    withDomain(RideV6) { d =>
-      val block = d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 0
-      d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 6_0000_0000
-    }
-
-    withDomain(RideV6) { d =>
-      val block = d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 0
-      d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 6_0000_0000
-    }
-
-    withDomain(RideV6) { d =>
-      val block = d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 0
-      d.appendBlock()
-      d.blockchain.balance(block.sender.toAddress) shouldBe 6_0000_0000
-    }
-  }
-
-  s"Reward should be distributed between miner and daoAddress after BlockRewardDistribution activation" in {
-    val daoAddress = TxHelpers.address(101)
-
-    val settingsWithoutAddresses = RideV6.copy(blockchainSettings =
-      RideV6.blockchainSettings.copy(functionalitySettings = RideV6.blockchainSettings.functionalitySettings.copy(daoAddress = None))
-    )
-    val settingsWithDaoAddress = RideV6.copy(blockchainSettings =
-      RideV6.blockchainSettings.copy(functionalitySettings =
-        RideV6.blockchainSettings.functionalitySettings.copy(daoAddress = Some(daoAddress.toString))
-      )
-    )
-
-    // BlockRewardDistribution is activated, BlockReward is not
-    withDomain(settingsWithDaoAddress) { d =>
-      d.appendBlock()
-      val miner = d.appendBlock().sender.toAddress
-
-      d.balance(daoAddress) shouldBe 0L
-      d.balance(miner) shouldBe 0L
-    }
-
-    // daoAddress is not defined
-    withDomain(settingsWithoutAddresses) { d =>
-      val firstBlock       = d.appendBlock()
-      val prevMinerBalance = d.balance(firstBlock.sender.toAddress)
-      val miner            = d.appendBlock().sender.toAddress
-
-      d.balance(daoAddress) shouldBe 0L
-      d.balance(miner) - prevMinerBalance shouldBe d.blockchain.settings.rewardsSettings.initial
-    }
-
-    // daoAddress is defined
-    withDomain(settingsWithDaoAddress) { d =>
-      val firstBlock                   = d.appendBlock()
-      val prevMinerBalance             = d.balance(firstBlock.sender.toAddress)
-      val miner                        = d.appendBlock().sender.toAddress
-      val beforeActivationMinerBalance = d.balance(miner)
-
-      d.balance(daoAddress) shouldBe 0L
-      beforeActivationMinerBalance - prevMinerBalance shouldBe d.blockchain.settings.rewardsSettings.initial
-
-      d.appendBlock()
-
-      val daoAddressBalance = d.balance(daoAddress)
-      daoAddressBalance shouldBe d.blockchain.settings.rewardsSettings.initial / 3
-      d.balance(miner) - beforeActivationMinerBalance shouldBe d.blockchain.settings.rewardsSettings.initial - daoAddressBalance
-    }
-  }
-
-  "Rewards for miner and daoAddress should be changed after voting" in {
-    val daoAddress = TxHelpers.address(100)
-
-    val votingInterval = 10
-    val term           = 10
-
-    val settings = BlockRewardDistributionSettings
-      .copy(blockchainSettings =
-        BlockRewardDistributionSettings.blockchainSettings.copy(
-          functionalitySettings = BlockRewardDistributionSettings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString)),
-          rewardsSettings = BlockRewardDistributionSettings.blockchainSettings.rewardsSettings.copy(votingInterval = votingInterval, term = term)
+  "The reward is shared with the dao address" - {
+    /** The share the DAO address gets of a block reward, by `BlockRewardCalculator.rewardSharesAt`: nothing at all
+      * below the guaranteed miner reward, half of what is above it below the full reward, and a flat maximum from
+      * there. Measured as the change across one block, since the miner also holds what the genesis gave it.
+      */
+    def daoShareOf(fullBlockReward: Long, withDaoAddress: Boolean): Unit = {
+      val daoAddress = TxHelpers.address(1)
+      val base       = DomainPresets.ConsensusImprovements
+      val settings = base.copy(blockchainSettings =
+        base.blockchainSettings.copy(
+          rewardsSettings = base.blockchainSettings.rewardsSettings.copy(initial = fullBlockReward),
+          functionalitySettings = base.blockchainSettings.functionalitySettings
+            .copy(daoAddress = Some(daoAddress.toString).filter(_ => withDaoAddress))
         )
       )
 
-    withDomain(settings) { d =>
-      val initReward              = d.settings.blockchainSettings.rewardsSettings.initial
-      val rewardDelta             = d.settings.blockchainSettings.rewardsSettings.minIncrement
-      val initialConfigAddrReward = initReward / 3
-      val miner                   = d.appendBlock().sender.toAddress
-      (1 until votingInterval).foreach { _ =>
-        val prevMinerBalance = d.balance(miner)
-        val prevDaoBalance   = d.balance(daoAddress)
-        d.appendBlock(d.createBlock())
-
-        d.balance(miner) shouldBe prevMinerBalance + initReward - initialConfigAddrReward
-        d.balance(daoAddress) shouldBe prevDaoBalance + initialConfigAddrReward
-      }
-
-      val prevMinerBalance = d.balance(miner)
-      val prevDaoBalance   = d.balance(daoAddress)
-
-      val newReward           = initReward - rewardDelta
-      val newConfigAddrReward = newReward / 3
-
-      d.appendBlock()
-
-      d.balance(miner) shouldBe prevMinerBalance + newReward - newConfigAddrReward
-      d.balance(daoAddress) shouldBe prevDaoBalance + newConfigAddrReward
-    }
-  }
-
-  s"NODE-815. The dao address should get 2 WAVES when full block reward >= 6 WAVES after CappedReward activation" in {
-    Seq(6.waves, 7.waves).foreach { fullBlockReward =>
-      cappedRewardFeatureTestCase(fullBlockReward, Some(_ => BlockRewardCalculator.MaxAddressReward))
-    }
-  }
-
-  s"NODE-816. The dao address should get max((R - 2)/2, 0) WAVES when full block reward < 6 WAVES after CappedReward activation" in {
-    Seq(1.waves, 2.waves, 3.waves).foreach { fullBlockReward =>
-      cappedRewardFeatureTestCase(fullBlockReward, Some(r => Math.max((r - BlockRewardCalculator.GuaranteedMinerReward) / 2, 0)))
-    }
-  }
-
-  s"NODE-820. Miner should get full block reward when daoAddress is not defined after CappedReward activation" in {
-    Seq(1.waves, 2.waves, 3.waves, 6.waves, 7.waves).foreach { fullBlockReward =>
-      cappedRewardFeatureTestCase(fullBlockReward, None)
-    }
-  }
-
-  s"NODE-821. Miner should get full block reward after CappedRewardΩ activation if BlockRewardDistribution is not activated" in {
-    Seq(1.waves, 2.waves, 3.waves, 6.waves, 7.waves).foreach { fullBlockReward =>
-      // daoAddress defined
-      cappedRewardFeatureTestCase(fullBlockReward, Some(_ => 0L), blockRewardDistributionActivated = false)
-
-      // daoAddress not defined
-      cappedRewardFeatureTestCase(fullBlockReward, None, blockRewardDistributionActivated = false)
-    }
-  }
-
-  s"NODE-822. termAfterCappedRewardFeature option should be used instead of term option after CappedReward activation" in {
-    val votingInterval               = 1
-    val term                         = 10
-    val termAfterCappedRewardFeature = 5
-
-    Seq(5 -> true, 6 -> false, 10 -> true).foreach { case (cappedRewardActivationHeight, rewardChanged) =>
-      val settings = BlockRewardDistributionSettings
-        .copy(blockchainSettings =
-          BlockRewardDistributionSettings.blockchainSettings.copy(
-            functionalitySettings = BlockRewardDistributionSettings.blockchainSettings.functionalitySettings
-              .copy(daoAddress = None),
-            rewardsSettings = BlockRewardDistributionSettings.blockchainSettings.rewardsSettings
-              .copy(votingInterval = votingInterval, term = term, termAfterCappedRewardFeature = termAfterCappedRewardFeature)
-          )
-        )
+      val expectedDaoShare =
+        if (!withDaoAddress) 0L
+        else if (fullBlockReward < BlockRewardCalculator.GuaranteedMinerReward) 0L
+        else if (fullBlockReward < BlockRewardCalculator.FullRewardInit)
+          (fullBlockReward - BlockRewardCalculator.GuaranteedMinerReward) / 2
+        else BlockRewardCalculator.MaxAddressReward
 
       withDomain(settings) { d =>
-        val initReward  = d.settings.blockchainSettings.rewardsSettings.initial
-        val rewardDelta = d.settings.blockchainSettings.rewardsSettings.minIncrement
-        val miner       = d.appendBlock().sender.toAddress
-        (1 until cappedRewardActivationHeight - 1).foreach { _ =>
-          val prevMinerBalance = d.balance(miner)
+        val miner = d.appendBlock().sender.toAddress
 
-          d.appendBlock(d.createBlock())
-
-          d.balance(miner) shouldBe prevMinerBalance + initReward
-        }
-
-        // activation height, if it == last voting interval height then reward for next block will be changed
-        d.appendBlock(
-          d.createBlock()
-        )
-
-        val prevMinerBalance = d.balance(miner)
-        val newReward        = if (rewardChanged) initReward - rewardDelta else initReward
+        val minerBefore = d.balance(miner)
+        val daoBefore   = d.balance(daoAddress)
 
         d.appendBlock()
 
-        d.balance(miner) shouldBe prevMinerBalance + newReward
+        withClue(s"full reward $fullBlockReward, dao address ${if (withDaoAddress) "defined" else "not defined"}: ") {
+          d.balance(daoAddress) - daoBefore shouldBe expectedDaoShare
+          d.balance(miner) - minerBefore shouldBe fullBlockReward - expectedDaoShare
+        }
       }
     }
+
+    "the dao address gets 2 WAVES when the full block reward is at least 6 WAVES" in
+      Seq(6.waves, 7.waves).foreach(daoShareOf(_, withDaoAddress = true))
+
+    "the dao address gets half of what is above the guaranteed miner reward below that" in
+      Seq(2.waves, 3.waves).foreach(daoShareOf(_, withDaoAddress = true))
+
+    "the miner gets the full block reward when it is below the guaranteed miner reward" in
+      Seq(1.waves).foreach(daoShareOf(_, withDaoAddress = true))
+
+    "the miner gets the full block reward when no dao address is defined" in
+      Seq(1.waves, 2.waves, 3.waves, 6.waves, 7.waves).foreach(daoShareOf(_, withDaoAddress = false))
   }
 
-  s"NODE-858. Rollback on height before BlockRewardDistribution activation should be correct" in {
+  "Rolling back returns the reward shares of the blocks that were dropped" in {
     val daoAddress = TxHelpers.address(1)
-    val settings   = DomainPresets.ConsensusImprovements
-    val rewardSettings = settings
-      .copy(blockchainSettings =
-        settings.blockchainSettings.copy(
-          functionalitySettings = settings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString)),
-          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
-        )
+    val fullReward = BlockRewardCalculator.FullRewardInit + 1.waves
+    val base       = DomainPresets.ConsensusImprovements
+    val settings = base.copy(blockchainSettings =
+      base.blockchainSettings.copy(
+        rewardsSettings = base.blockchainSettings.rewardsSettings.copy(initial = fullReward),
+        functionalitySettings = base.blockchainSettings.functionalitySettings.copy(daoAddress = Some(daoAddress.toString))
       )
+    )
 
-    withDomain(rewardSettings) { d =>
-      val fullReward = d.blockchain.settings.rewardsSettings.initial
-
+    withDomain(settings) { d =>
       val miner = d.appendBlock().sender.toAddress
-      d.appendBlock() // rollback height
-      val prevDaoAddressBalance = d.balance(daoAddress)
-      val prevMinerBalance      = d.balance(miner)
-
-      prevDaoAddressBalance shouldBe 0
-      prevMinerBalance shouldBe fullReward
-
-      d.appendBlock()
-      d.appendBlock() // block reward distribution activation height
       d.appendBlock()
 
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + 2 * (fullReward / 3)
-      d.balance(miner) shouldBe prevMinerBalance + fullReward + 2 * (fullReward - fullReward / 3)
-
-      d.appendBlock()
-      d.rollbackTo(2)
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance
-      d.balance(miner) shouldBe prevMinerBalance
-
-      d.appendBlock()
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance
-      d.balance(miner) shouldBe prevMinerBalance + fullReward
-
-      d.appendBlock() // block reward distribution activation height
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + fullReward / 3
-      d.balance(miner) shouldBe prevMinerBalance + fullReward + fullReward - fullReward / 3
-    }
-  }
-
-  s"NODE-859. Rollback on height after BlockRewardDistribution activation should be correct" in {
-    val daoAddress = TxHelpers.address(1)
-    val settings   = DomainPresets.ConsensusImprovements
-    val rewardSettings = settings
-      .copy(blockchainSettings =
-        settings.blockchainSettings.copy(
-          functionalitySettings = settings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString)),
-          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
-        )
-      )
-
-    withDomain(rewardSettings) { d =>
-      val fullReward = d.blockchain.settings.rewardsSettings.initial
-
-      val miner = d.appendBlock().sender.toAddress
-      d.appendBlock() // block reward distribution activation height
-      d.appendBlock() // rollback height
-
-      val prevDaoAddressBalance = d.balance(daoAddress)
-      val prevMinerBalance      = d.balance(miner)
-
-      prevDaoAddressBalance shouldBe 2 * fullReward / 3
-      prevMinerBalance shouldBe 2 * (fullReward - (2 * fullReward / 3))
+      val minerBefore  = d.balance(miner)
+      val daoBefore    = d.balance(daoAddress)
+      val heightBefore = d.blockchain.height
 
       d.appendBlock()
       d.appendBlock()
 
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + 2 * (fullReward / 3)
-      d.balance(miner) shouldBe prevMinerBalance + 2 * (fullReward - fullReward / 3)
+      d.balance(daoAddress) shouldBe daoBefore + 2 * BlockRewardCalculator.MaxAddressReward
+      d.balance(miner) shouldBe minerBefore + 2 * (fullReward - BlockRewardCalculator.MaxAddressReward)
 
-      d.appendBlock()
-      d.rollbackTo(3)
+      d.rollbackTo(heightBefore)
 
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance
-      d.balance(miner) shouldBe prevMinerBalance
-
-      d.appendBlock()
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + fullReward / 3
-      d.balance(miner) shouldBe prevMinerBalance + fullReward - fullReward / 3
-    }
-  }
-
-  s"NODE-860. Rollback on height before CappedReward activation should be correct" in {
-    val daoAddress = TxHelpers.address(1)
-    val settings   = DomainPresets.ConsensusImprovements
-    val rewardSettings = settings
-      .copy(blockchainSettings =
-        settings.blockchainSettings.copy(
-          functionalitySettings = settings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString)),
-          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
-        )
-      )
-
-    withDomain(rewardSettings) { d =>
-      val fullReward = d.blockchain.settings.rewardsSettings.initial
-
-      val miner = d.appendBlock().sender.toAddress
-      d.appendBlock() // block reward distribution activation height
-      d.appendBlock() // rollback height
-
-      val prevDaoAddressBalance = d.balance(daoAddress)
-      val prevMinerBalance      = d.balance(miner)
-
-      prevDaoAddressBalance shouldBe 2 * fullReward / 3
-      prevMinerBalance shouldBe 2 * (fullReward - (2 * fullReward / 3))
-
-      d.appendBlock()
-      d.appendBlock() // capped reward activation height
-      d.appendBlock()
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + fullReward / 3 + 2 * BlockRewardCalculator.MaxAddressReward
-      d.balance(miner) shouldBe prevMinerBalance + fullReward - fullReward / 3 + 2 * (fullReward - BlockRewardCalculator.MaxAddressReward)
-
-      d.appendBlock()
-      d.rollbackTo(3)
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance
-      d.balance(miner) shouldBe prevMinerBalance
+      d.balance(daoAddress) shouldBe daoBefore
+      d.balance(miner) shouldBe minerBefore
 
       d.appendBlock()
 
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + fullReward / 3
-      d.balance(miner) shouldBe prevMinerBalance + fullReward - fullReward / 3
-
-      d.appendBlock() // capped reward activation height
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + fullReward / 3 + BlockRewardCalculator.MaxAddressReward
-      d.balance(miner) shouldBe prevMinerBalance + fullReward - fullReward / 3 + fullReward - BlockRewardCalculator.MaxAddressReward
-    }
-  }
-
-  s"NODE-861. Rollback on height after CappedReward activation should be correct" in {
-    val daoAddress = TxHelpers.address(1)
-    val settings   = DomainPresets.ConsensusImprovements
-    val rewardSettings = settings
-      .copy(blockchainSettings =
-        settings.blockchainSettings.copy(
-          functionalitySettings = settings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString)),
-          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
-        )
-      )
-
-    withDomain(rewardSettings) { d =>
-      val fullReward = d.blockchain.settings.rewardsSettings.initial
-
-      val miner = d.appendBlock().sender.toAddress
-      d.appendBlock() // block reward distribution and capped reward activation height
-      d.appendBlock() // rollback height
-
-      val prevDaoAddressBalance = d.balance(daoAddress)
-      val prevMinerBalance      = d.balance(miner)
-
-      prevDaoAddressBalance shouldBe 2 * BlockRewardCalculator.MaxAddressReward
-      prevMinerBalance shouldBe 2 * (fullReward - BlockRewardCalculator.MaxAddressReward)
-
-      d.appendBlock()
-      d.appendBlock()
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + 2 * BlockRewardCalculator.MaxAddressReward
-      d.balance(miner) shouldBe prevMinerBalance + 2 * (fullReward - BlockRewardCalculator.MaxAddressReward)
-
-      d.appendBlock()
-      d.rollbackTo(3)
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance
-      d.balance(miner) shouldBe prevMinerBalance
-
-      d.appendBlock()
-
-      d.balance(daoAddress) shouldBe prevDaoAddressBalance + BlockRewardCalculator.MaxAddressReward
-      d.balance(miner) shouldBe prevMinerBalance + fullReward - BlockRewardCalculator.MaxAddressReward
-    }
-  }
-
-  private def cappedRewardFeatureTestCase(
-      fullBlockReward: Long,
-      daoAddressRewardF: Option[Long => Long],
-      blockRewardDistributionActivated: Boolean = true
-  ) = {
-    val daoAddress = TxHelpers.address(1)
-
-    val settings                      = DomainPresets.ConsensusImprovements
-    val modifiedRewardSettings = settings
-      .copy(blockchainSettings =
-        settings.blockchainSettings.copy(
-          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = fullBlockReward),
-          functionalitySettings = settings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString).filter(_ => daoAddressRewardF.isDefined))
-        )
-      )
-
-    withDomain(modifiedRewardSettings) { d =>
-      val firstBlock = d.appendBlock()
-      val miner      = firstBlock.sender.toAddress
-
-      d.balance(daoAddress) shouldBe 0
-      d.balance(miner) shouldBe 0
-
-      d.appendBlock()
-
-      val prevDaoAddressBalance = d.balance(daoAddress)
-      val prevMinerBalance      = d.balance(miner)
-
-      prevDaoAddressBalance shouldBe (if (daoAddressRewardF.isDefined && blockRewardDistributionActivated) fullBlockReward / 3 else 0L)
-      prevMinerBalance shouldBe fullBlockReward - prevDaoAddressBalance
-
-      d.appendBlock()
-
-      val daoAddressReward = d.balance(daoAddress) - prevDaoAddressBalance
-      val minerReward      = d.balance(miner) - prevMinerBalance
-
-      daoAddressReward shouldBe daoAddressRewardF.map(_.apply(fullBlockReward)).getOrElse(0L)
-      minerReward shouldBe fullBlockReward - daoAddressReward
+      d.balance(daoAddress) shouldBe daoBefore + BlockRewardCalculator.MaxAddressReward
+      d.balance(miner) shouldBe minerBefore + fullReward - BlockRewardCalculator.MaxAddressReward
     }
   }
 }

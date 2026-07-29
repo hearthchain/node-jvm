@@ -45,14 +45,14 @@ class CommonValidationTest extends PropSpec with WithState {
       val amount = 100.waves
       val asset  = IssuedAsset(ByteStr.fill(32)(1))
 
-      val invChainId    = '#'.toByte
-      val invChainAddr  = recipient.toAddress
+      val invChainId   = '#'.toByte
+      val invChainAddr = recipient.toAddress
       Seq(
         TxHelpers.transfer(master, invChainAddr, amount, chainId = invChainId),
         TxHelpers.lease(master, invChainAddr, amount, chainId = invChainId),
         TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, sender = master),
-          TxHelpers.order(OrderType.SELL, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, sender = recipient),
+          TxHelpers.order(OrderType.BUY, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = master),
+          TxHelpers.order(OrderType.SELL, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = recipient),
           master,
           chainId = invChainId
         ),
@@ -65,7 +65,7 @@ class CommonValidationTest extends PropSpec with WithState {
     preconditionsAndPayment.foreach { tx =>
       tx.chainId should not be AddressScheme.current.chainId
       assertDiffEi(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(tx)), balances = masterBalance) { blockDiffEi =>
-        blockDiffEi should produce("Address belongs to another network")
+        blockDiffEi should produce("Transaction from another network")
       }
     }
   }

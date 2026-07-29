@@ -4,17 +4,15 @@ import com.wavesplatform.BlockGen
 import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.db.{InterferableDB, WithDomain}
 import com.wavesplatform.history.Domain
-import com.wavesplatform.lagonaki.mocks.TestBlock
-import com.wavesplatform.settings.{Constants, GenesisBalanceSettings, GenesisSettings, WavesSettings}
+import com.wavesplatform.settings.Constants
 import com.wavesplatform.test.DomainPresets.RideV5
 import com.wavesplatform.test.FreeSpec
 import com.wavesplatform.transaction.TxHelpers.{defaultAddress, secondSigner}
 import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{Transaction, TransactionType, TxHelpers}
+import com.wavesplatform.transaction.{TransactionType, TxHelpers}
 import org.scalactic.source.Position
 import tech.hearth.crypto.SigningKey
 
@@ -30,69 +28,34 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
       TxHelpers.transfer(sender, rs, amount)
     )
 
-  def mkBlock(sender: SigningKey, reference: ByteStr, transactions: Seq[Transaction]): Block =
-    Block
-      .buildAndSign(ntpNow, reference, 1000, ByteStr(new Array[Byte](Block.GenerationVRFSignatureLength)), transactions, sender, Seq.empty, None, None, None)
-      .explicitGet()
+  private val sender     = TxHelpers.signer(1)
+  private val recipient1 = TxHelpers.signer(2)
+  private val recipient2 = TxHelpers.signer(3)
 
-  private val genesisTimestamp = ntpNow
-
-  private val genesisSettings: GenesisSettings = GenesisSettings(
-    genesisTimestamp,
-    None,
-    1000,
-    1.minute,
-    balances = Seq(GenesisBalanceSettings(TxHelpers.signer(1).toAddress.toBech32, Constants.TotalWaves))
-  )
-
-  // The genesis snapshot is built from the settings, so the domain has to run with the very same genesis settings
-  private val domainSettings: WavesSettings = {
-    val base = DomainPresets.SettingsFromDefaultConfig
-    base.copy(blockchainSettings = base.blockchainSettings.copy(genesisSettings = genesisSettings))
-  }
-
-  val setup: Seq[(SigningKey, SigningKey, SigningKey, Seq[Block])] = {
-    val sender     = TxHelpers.signer(1)
-    val recipient1 = TxHelpers.signer(2)
-    val recipient2 = TxHelpers.signer(3)
-
-    val genesisBlock = Block
-      .genesis(
-        genesisSettings,
-      )
-      .explicitGet()
-
+  /** Blocks come from the domain: one signed by a random account with a zeroed generation signature is not a block any
+    * chain will take, and the results used to be discarded, so the chain simply stayed empty. The genesis balance goes
+    * through `balances` too - `withDomain` replaces whatever the settings carried.
+    */
+  private def test(f: (Address, Seq[Block], Domain) => Unit): Unit = {
     val txCount1 = 20
     val txCount2 = 30
 
-    Seq(recipient1, recipient2).map { recipient =>
-      val transactions1 = (1 to txCount1 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalWaves / 2 / txCount1))
-      val block1        = mkBlock(sender, genesisBlock.id(), transactions1)
-      val transactions2 = (1 to txCount2 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalWaves / 2 / txCount2))
-      val block2        = mkBlock(sender, block1.id(), transactions2)
+    Seq(recipient1, recipient2).foreach { recipient =>
+      withDomain(DomainPresets.RideV6, Seq(AddrWithBalance(sender.toAddress))) { d =>
+        val genesisBlock  = d.lastBlock
+        val transactions1 = (1 to txCount1 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalWaves / 2 / txCount1))
+        val block1        = d.appendBlock(transactions1*)
+        val transactions2 = (1 to txCount2 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalWaves / 2 / txCount2))
+        val block2        = d.appendBlock(transactions2*)
 
-      (sender, recipient1, recipient2, Seq(genesisBlock, block1, block2))
-    }
-  }
+        val blocks = Seq(genesisBlock, block1, block2)
 
-  private def test(f: (Address, Seq[Block], Domain) => Unit): Unit = {
-    setup.foreach { case (sender, r1, r2, blocks) =>
-      withDomain(domainSettings) { d =>
-        for (b <- blocks) {
-          d.blockchainUpdater.processBlock(b, b.header.generationSignature, snapshot = None, generatorSet = Seq.empty, verify = false)
-        }
+        Seq[Address](sender.toAddress, recipient1.toAddress, recipient2.toAddress).foreach(f(_, blocks, d))
 
-        Seq[Address](sender.toAddress, r1.toAddress, r2.toAddress).foreach(f(_, blocks, d))
+        // An empty block on top: what an address has done must not change with it
+        d.appendBlock()
 
-        d.blockchainUpdater.processBlock(
-          TestBlock.create(System.currentTimeMillis(), blocks.last.signature, Seq.empty).block,
-          ByteStr(new Array[Byte](32)),
-          snapshot = None,
-          generatorSet = Seq.empty,
-          verify = false
-        )
-
-        Seq[Address](sender.toAddress, r1.toAddress, r2.toAddress).foreach(f(_, blocks, d))
+        Seq[Address](sender.toAddress, recipient1.toAddress, recipient2.toAddress).foreach(f(_, blocks, d))
       }
     }
   }

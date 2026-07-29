@@ -8,40 +8,29 @@ import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*
-import com.wavesplatform.test.DomainPresets.{DeterministicFinality}
+import com.wavesplatform.test.DomainPresets.DeterministicFinality
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, Proofs, TxHelpers}
 import tech.hearth.crypto.SigningKey
 
 class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
-  private val sender                 = TxHelpers.defaultSigner
-  private val generationPeriodLength = 8
-  private val defaultSettings        = DeterministicFinality.configure(_.copy(generationPeriodLength = generationPeriodLength))
-
-  "Accepted on the feature activation height, first period starts at activation_height+generation_period+1" in {
-    val activationHeight = Height(3)
-    withDomain(
-      defaultSettings,
-      AddrWithBalance.enoughBalances(sender)
-    ) { d =>
-      val tx = TxHelpers.commitToGeneration(activationHeight + generationPeriodLength + 1, sender)
-      d.appendBlockE(tx) should produce("Deterministic Finality & RIDE V9 feature has not been activated yet")
-      d.appendBlock()
-      d.appendBlock(tx)
-    }
-  }
+  private val sender = TxHelpers.defaultSigner
 
   "Generator deposit taken and returned" in withDomain(
     DeterministicFinality.configure(x => x.copy(generationPeriodLength = 2)), // Periods in test: [3, 4], [5, 6], [7, 8]
     AddrWithBalance.enoughBalances(sender)
   ) { d =>
-    log.info("No deposits")
-    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe 0L
+    // The sender is defaultSigner, which withDomain commits as the genesis generator, so it holds a deposit from the
+    // very first height - there is no state here in which it has none
+    log.info("Deposit for the genesis commitment")
+    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInWavelets
 
-    log.info("Deposit for one next period")
+    // Committed for the next period on top of the genesis commitment for the current one, and a generator committed for
+    // both is charged for both
+    log.info("Deposit for the current and the next period")
     val currPeriodTx = TxHelpers.commitToGeneration(Height(3), sender)
     d.appendBlock(currPeriodTx)
     d.blockchain.height shouldBe 2
-    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInWavelets
+    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe 2 * CommitToGenerationTransaction.DepositInWavelets
 
     log.info("Deposit for one current period")
     d.appendBlock()

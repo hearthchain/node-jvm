@@ -45,7 +45,7 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
           .explicitGet()
 
       val exchangeTx =
-        TxHelpers.exchange(buyOrder, sellOrder, Account, 100, 100, MinFee * 3, MinFee * 3, MinFee * 3, Now, TxVersion.V3)
+        TxHelpers.exchange(buyOrder, sellOrder, Account, 100, 100, MinFee * 3, MinFee * 3, MinFee * 3, Now)
       val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(exchangeTx)))
 
       decode(base64Str) shouldBe exchangeTx

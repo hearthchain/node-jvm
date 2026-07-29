@@ -72,7 +72,8 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
 
         withDomain(
           defaultSettings.configure(_.copy(generationPeriodLength = 3)),
-          AddrWithBalance.enoughBalances(committedGenerators*)
+          AddrWithBalance.enoughBalances(committedGenerators*),
+          generators = committedGenerators
         ) { d =>
           log.debug(s"Append block 2 with commitments")
           val txs = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(4), x))
@@ -108,7 +109,8 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
 
         withDomain(
           defaultSettings.configure(_.copy(generationPeriodLength = 3)),
-          AddrWithBalance.enoughBalances(committedGenerators*)
+          AddrWithBalance.enoughBalances(committedGenerators*),
+          generators = committedGenerators
         ) { d =>
           log.debug(s"Append block 2 with commitments")
           val txs = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(4), x))
@@ -144,7 +146,8 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
 
         withDomain(
           defaultSettings.configure(_.copy(generationPeriodLength = 3)),
-          AddrWithBalance.enoughBalances(committedGenerators*)
+          AddrWithBalance.enoughBalances(committedGenerators*),
+          generators = committedGenerators
         ) { d =>
           log.debug(s"Append block 2 with commitments")
           val txs = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(4), x))
@@ -179,15 +182,24 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
     "if sent LeaseCancel in the last microblock, that removed" in {
       val committedGenerators = Seq(committedGenerator1, committedGenerator2)
       withDomain(
+        // generatingBalance is a minimum over the last 1000 blocks (GeneratingBalanceProvider.balance), so the
+        // lease-in below only counts once the chain is past height 1000 - and the commitment is for the period
+        // starting right after that, so that has to be the period length too.
         defaultSettings.configure(
           _.copy(
-            generationPeriodLength = 51,
+            generationPeriodLength = 1001,
           )
         ),
         AddrWithBalance.enoughBalances(committedGenerator1) :+ AddrWithBalance(
           committedGenerator2Addr,
-          CommitToGenerationTransaction.DepositInWavelets + 1.waves
-        )
+          // Two deposits: committed in genesis (below) as well as for the period it mines in - the first block of a
+          // period is checked against the committed set of the parent's period, so a generator that only commits for
+          // the period it starts cannot produce that block.
+          2 * CommitToGenerationTransaction.DepositInWavelets + 1.waves
+        ),
+        // committedGenerator2 mines the first block of the new period, so PoSSelector needs to resolve its VRF key
+        // at the parent height, which is still in the genesis period - it must be committed on both sides.
+        generators = committedGenerators
       ) { d =>
         log.debug(s"Append block 2 with leasing")
         val leasingTxn = TxHelpers.lease(committedGenerator1, committedGenerator2Addr, amount = 20_000.waves)
@@ -199,26 +211,32 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
           )
         )
 
-        log.debug("Appending [3; 51] blocks")
-        (3 to 50).foreach { _ =>
+        log.debug("Appending [3; 1001] blocks")
+        (3 to 1000).foreach { _ =>
           d.appendBlock(d.createBlock(generator = committedGenerator1, strictTime = true))
         }
         d.appender.appendBlock(
           d.createBlock(generator = committedGenerator1, strictTime = true)
         )
 
+        // strictTime block generation over 1000 blocks runs the chain's clock far past TxHelpers' own timestamp
+        // counter, so these transactions need to be stamped with a current, chain-relative timestamp.
+        val chainNow = d.lastBlock.header.timestamp
+
         log.debug("Commit to generation")
         d.appendMicroBlock(
           d.createMicroBlock(signer = Some(committedGenerator1))(
-            committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(52), x))*
+            committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(1002), x, timestamp = chainNow))*
           )
         )
         val block51Id = d.lastBlockId
 
         log.debug("Cancel leasing for committedGenerator2 in microblock")
-        d.appendMicroBlock(d.createMicroBlock(signer = Some(committedGenerator1))(TxHelpers.leaseCancel(leasingTxn.id(), committedGenerator1)))
+        d.appendMicroBlock(
+          d.createMicroBlock(signer = Some(committedGenerator1))(TxHelpers.leaseCancel(leasingTxn.id(), committedGenerator1, timestamp = chainNow))
+        )
 
-        log.debug(s"Append block 52 referencing keyblock")
+        log.debug(s"Append block 1002 referencing keyblock")
         d.appender.appendBlock(
           d.createBlock(ref = Some(block51Id), generator = committedGenerator2, strictTime = true)
         )

@@ -1,14 +1,12 @@
 package com.wavesplatform.mining
 
 import cats.effect.Resource
-import com.typesafe.config.ConfigFactory
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.database.{RDB, TestStorageFactory}
 import com.wavesplatform.db.DBCacheSettings
-import com.wavesplatform.features.BlockchainFeature
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.settings.*
 import com.wavesplatform.state.diffs.ENOUGH_AMT
@@ -16,7 +14,6 @@ import com.wavesplatform.state.{BlockEndorser, Blockchain, BlockchainUpdaterImpl
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.{BlockchainUpdater, Transaction, TxHelpers}
 import com.wavesplatform.utx.UtxPoolImpl
-import com.wavesplatform.wallet.Wallet
 import com.wavesplatform.{TransactionGen, WithNewDBForEachTest}
 import io.netty.channel.group.DefaultChannelGroup
 import io.netty.util.concurrent.GlobalEventExecutor
@@ -32,10 +29,13 @@ import tech.hearth.crypto.SigningKey
 import scala.concurrent.Future
 import scala.concurrent.duration.*
 import com.wavesplatform.test.DomainPresets.*
+import com.wavesplatform.db.WithState
 import com.wavesplatform.db.WithState.AddrWithBalance
+import com.wavesplatform.test.{BaseSuite, DomainPresets}
 
 class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBForEachTest with TransactionGen with DBCacheSettings {
   import MiningWithRewardSuite.*
+  BaseSuite.configureDefaultNetwork()
 
   behavior of "Miner with activated reward feature"
 
@@ -55,7 +55,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
   }
 
   it should "generate valid empty block of version 4 after block of version 3" in {
-    withEnv(Seq((ts, reference, _) => TestBlock.create(time = ts, ref = reference, txs = Nil).block)) {
+    withEnv(Seq((ts, reference, account) => TestBlock.create(time = ts, ref = reference, txs = Nil, signer = account).block)) {
       case Env(_, account, miner, blockchain) =>
         val generateBlock = generateBlockTask(miner)(account)
         val oldBalance    = blockchain.balance(account.toAddress)
@@ -74,7 +74,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       val recipient2 = createAccount.toAddress
       val tx1 = TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
       val tx2 = TxHelpers.transfer(from = account, to = recipient2, amount = 5 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
-      TestBlock.create(time = ts, ref = reference, txs = Seq(tx1, tx2)).block
+      TestBlock.create(time = ts, ref = reference, txs = Seq(tx1, tx2), signer = account).block
     })
 
     val txs: Seq[TransactionProducer] = Seq((ts, account) => {
@@ -93,8 +93,8 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       }
     }
 
-    // Test for empty key block with NG
-    withEnv(bps, txs, settingsWithFeatures()) { case Env(_, account, miner, _) =>
+    // Transactions go into micro blocks, so the key block the miner forges is empty
+    withEnv(bps, txs) { case Env(_, account, miner, _) =>
       val block = forgeBlock(miner)(account).explicitGet().newBlock
       Task(block.transactionData shouldBe empty)
     }
@@ -105,8 +105,12 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
   ): Task[Assertion] = {
     // The account has to exist before the state does: it is credited by the genesis snapshot, which is built from
     // the settings the state is created with
-    val account             = createAccount
-    val settingsWithGenesis = settings.withGenesisBalances(AddrWithBalance(account.toAddress, ENOUGH_AMT))
+    val account = createAccount
+    // Committed as well as credited: it generates every block below, and the appender the miner goes through only
+    // accepts a block from a committed generator, verifying its VRF proof against the key committed here.
+    val settingsWithGenesis = settings
+      .withGenesisBalances(AddrWithBalance(account.toAddress, ENOUGH_AMT))
+      .withGenesisGenerators(account)
 
     resources(settingsWithGenesis).use { case (blockchainUpdater, _) =>
       for {
@@ -121,38 +125,43 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
         )
         scheduler   = Scheduler.singleThread("appender")
         allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
-        wallet      = Wallet(WalletSettings(None, Some("123"), None))
         miner = new MinerImpl(
           allChannels,
           blockchainUpdater,
-          settingsWithGenesis,
+          settingsWithGenesis.minerSettings,
           ntpTime,
           utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-          Seq.empty,
+
           pos,
           scheduler,
           scheduler,
           Observable.empty
         )
         ts = ntpTime.correctedTime() - 60000
-        // The block at height 1 is empty: it carries the genesis snapshot that credits the account
-        genesisBlock = TestBlock.create(ts + 2, Seq.empty).block
-        _ <- Task {
-          blockchainUpdater.processBlock(genesisBlock, genesisBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty)
+        // The block at height 1 carries the genesis snapshot that credits and commits the account
+        genesisBlock = WithState.createGenesisBlock(settingsWithGenesis)
+        _ <- Task(
+          blockchainUpdater
+            .processBlock(genesisBlock, genesisBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty)
+            .explicitGet()
+        )
+        // `TestBlock.create` leaves the state hash empty and the differ requires one, so each block a test asks for is
+        // retargeted onto the head and hashed before it is applied
+        extra <- Task.traverse(bps.zipWithIndex.toList) { case (bp, i) =>
+          Task {
+            val raw = bp(ts + 3 * (i + 1), blockchainUpdater.lastBlockId.get, account)
+            // TestBlock defaults to a base target of 2, and the miner's delay for the block after this one is derived
+            // from it - leaving it would put that block minutes into the future. Keep the chain's own.
+            val onChain = raw.copy(header = raw.header.copy(baseTarget = blockchainUpdater.lastBlockHeader.get.header.baseTarget))
+            val block   = WithState.blockOnTopOf(onChain, account, blockchainUpdater).resultE.explicitGet()
+            blockchainUpdater.processBlock(block, block.header.generationSignature, snapshot = None, generatorSet = Seq.empty).explicitGet()
+            block
+          }
         }
-        blocks = bps.foldLeft {
-          (ts + 1, Seq[Block](genesisBlock))
-        } { case ((ts, chain), bp) =>
-          (ts + 3, bp(ts + 3, chain.head.id(), account) +: chain)
-        }._2
-        added <- Task.traverse(blocks.reverse) { b =>
-          Task(blockchainUpdater.processBlock(b, b.header.generationSignature, snapshot = None, generatorSet = Seq.empty))
-        }
-        _   = added.foreach(_.explicitGet())
         _   = txs.foreach(tx => utxPool.putIfNew(tx(ts + 6, account)).resultE.explicitGet())
-        env = Env(blocks, account, miner, blockchainUpdater)
+        env = Env(genesisBlock +: extra, account, miner, blockchainUpdater)
         r <- f(env)
         _ = scheduler.shutdown()
         _ = utxPool.close()
@@ -179,7 +188,6 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
 }
 
 object MiningWithRewardSuite {
-  import TestFunctionalitySettings.Enabled
   import monix.execution.Scheduler.Implicits.global
 
   type BlockProducer       = (Long, ByteStr, SigningKey) => Block
@@ -187,27 +195,18 @@ object MiningWithRewardSuite {
 
   case class Env(blocks: Seq[Block], account: SigningKey, miner: MinerImpl, blockchain: Blockchain & BlockchainUpdater & NG)
 
+  /** A domain preset rather than the packaged config: the chain has to start at a plausible genesis timestamp, and the
+    * blocks below are stamped from the current time. No DAO address is set, so the whole block reward goes to the
+    * miner - which is what the balance expectations are about.
+    */
   val settings: WavesSettings = {
-    val commonSettings: WavesSettings = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
-    val minerSettings: MinerSettings =
-      commonSettings.minerSettings.copy(quorum = 0, intervalAfterLastBlockThenGenerationIsAllowed = 1 hour)
-
-    val functionalitySettings: FunctionalitySettings = Enabled
-    val blockchainSettings: BlockchainSettings =
-      commonSettings.blockchainSettings
-        .copy(functionalitySettings = functionalitySettings)
-        .copy(rewardsSettings = RewardsSettings.TESTNET)
-    commonSettings.copy(minerSettings = minerSettings, blockchainSettings = blockchainSettings)
-  }
-
-  def settingsWithFeatures(features: BlockchainFeature*): WavesSettings = {
-    val blockchainSettings = settings.blockchainSettings
-
-    settings.copy(
-      blockchainSettings = blockchainSettings.copy(
-        functionalitySettings = blockchainSettings.functionalitySettings.copy(preActivatedFeatures = features.map(_.id -> 0).toMap)
+    val base = DomainPresets.TransactionStateSnapshot
+    base
+      .copy(
+        minerSettings = base.minerSettings.copy(quorum = 0, intervalAfterLastBlockThenGenerationIsAllowed = 1 hour),
+        blockchainSettings = base.blockchainSettings.copy(rewardsSettings = RewardsSettings.TESTNET)
       )
-    )
+      .configure(_.copy(daoAddress = None))
   }
 
   def createAccount: SigningKey =

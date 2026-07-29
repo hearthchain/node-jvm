@@ -17,8 +17,9 @@ import scala.concurrent.duration.*
 class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, PropertyChecks {
   protected override implicit val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(20.seconds)
 
+  private val timer: HashedWheelTimer = new HashedWheelTimer()
   private val timeBounded: SchedulerService = Schedulers.timeBoundedFixedPool(
-    new HashedWheelTimer(),
+    timer,
     5.seconds,
     1,
     "rest-time-limited"
@@ -33,6 +34,7 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
 
   override def afterAll(): Unit = {
     timeBounded.shutdown()
+    timer.stop()
     super.afterAll()
   }
 

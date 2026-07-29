@@ -15,9 +15,9 @@ import com.wavesplatform.database.{DBExt, Keys, RDB, RocksDBWriter}
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.lang.ValidationError
-import com.wavesplatform.mining.{BlockChallenger, BlockChallengerImpl, MiningAccount}
+import com.wavesplatform.mining.{BlockChallenger, BlockChallengerImpl, GeneratorKeys, MiningAccount}
 import com.wavesplatform.network.{MessageCodec, PeerDatabase}
-import com.wavesplatform.settings.WavesSettings
+import com.wavesplatform.settings.{MiningAccount as MiningAccountSettings, WavesSettings}
 import com.wavesplatform.state.*
 import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult
 import com.wavesplatform.state.BlockchainUpdaterImpl.BlockApplyResult.{Applied, Ignored}
@@ -39,7 +39,7 @@ import monix.execution.ExecutionModel.SynchronousExecution
 import monix.execution.schedulers.SchedulerService
 import org.rocksdb.RocksDB
 import org.scalatest.matchers.should.Matchers.*
-import tech.hearth.crypto.{SigningKey, VrfKey}
+import tech.hearth.crypto.{Hex, SigningKey, VrfKey}
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.Future
@@ -87,8 +87,12 @@ case class Domain(
     new UtxPoolImpl(SystemTime, blockchain, settings.utxSettings, settings.maxTxErrorLogSize, settings.minerSettings.enable)
 
   lazy val endorsementStorage: EndorsementStorage = EndorsementStorage.Disabled
+
+  /** The accounts this domain generates with, as a node takes them from `waves.miner.accounts`. */
+  lazy val generatorKeys: GeneratorKeys = GeneratorKeys.fromSettings(settings.minerSettings)
+
   def createBlockEndorser(allChannels: ChannelGroup, storage: EndorsementStorage = endorsementStorage): BlockEndorser =
-    new BlockEndorser.InMemory(settings.synchronizationSettings.maxRollback, blockchain, wallet, storage, allChannels)
+    new BlockEndorser.InMemory(settings.synchronizationSettings.maxRollback, blockchain, generatorKeys, storage, allChannels)
 
   lazy val wallet: Wallet = Wallet(settings.walletSettings.copy(file = None, seed = Some(ByteStr(DefaultWalletSeed))))
 
@@ -100,7 +104,7 @@ case class Domain(
         new BlockChallengerImpl(
           blockchain,
           new DefaultChannelGroup(GlobalEventExecutor.INSTANCE),
-          Seq.empty,
+          generatorKeys,
           settings,
           testTime,
           posSelector,
@@ -283,6 +287,27 @@ case class Domain(
     lastBlock
   }
 
+  /** Builds the block at an explicit timestamp rather than the one PoS would put it at, the way the `history` package
+    * builders used to take it from the first transaction. The older property suites stamp their transactions near the
+    * epoch - which is why `DefaultWavesSettings` starts its genesis there - and a block the domain timestamps itself
+    * would be `maxTransactionTimeForwardOffset` away from them.
+    */
+  def appendBlockAtE(timestamp: Long, generator: SigningKey = defaultSigner)(txs: Transaction*): Either[ValidationError, BlockApplyResult] =
+    // strictTime, or the block is stamped with the current test time and the timestamp asked for reaches the consensus
+    // data only - leaving the transactions a lifetime away from the block that carries them
+    createBlockE(txs, strictTime = true, timestamp = Some(timestamp), generator = generator).flatMap(appendBlockE(_))
+
+  def appendBlockAt(timestamp: Long, generator: SigningKey = defaultSigner)(txs: Transaction*): Block = {
+    appendBlockAtE(timestamp, generator)(txs*).explicitGet()
+    lastBlock
+  }
+
+  /** A micro block is signed by the generator of the block it extends, so a chain mined by somebody other than
+    * defaultSigner has to say so here too.
+    */
+  def appendMicroBlockBy(signer: SigningKey)(txs: Transaction*): BlockId =
+    blockchainUpdater.processMicroBlock(createMicroBlock(signer = Some(signer))(txs*), None).explicitGet()
+
   def appendKeyBlock(signer: SigningKey = defaultSigner, ref: Option[ByteStr] = None): Block = {
     val block = createBlock(
       ref = ref.orElse(Some(lastBlockId)),
@@ -347,7 +372,7 @@ case class Domain(
         blockSigner,
         txs,
         reference = ref.getOrElse(blockchainUpdater.lastBlockId.get),
-        totalResBlockSig = block.signature,
+        wholeBlockSignature = block.signature,
         block.header.stateHash,
         finalizationVoting
       )
@@ -609,6 +634,20 @@ case class Domain(
 object Domain {
   val DefaultWalletSeed = "wallet".getBytes
 
+  /** The `waves.miner.accounts` entry for one of this domain's wallet accounts. A miner takes its accounts from the
+    * settings and nowhere else, so an account the wallet holds is not one it will mine with; the VRF and BLS seeds are
+    * the ones `TxHelpers` derives, because those are the keys the genesis snapshot commits for a generator.
+    */
+  def walletMiningAccount(nonce: Int): MiningAccountSettings = {
+    val account = Wallet.generateNewAccount(DefaultWalletSeed, nonce)
+    MiningAccountSettings(
+      mnemonic = None,
+      signingKey = Some(Hex.encode(Wallet.generateAccountSeed(DefaultWalletSeed, nonce))),
+      vrfKey = Some(Hex.encode(TxHelpers.vrfSeedOf(account))),
+      blsKey = Some(Hex.encode(TxHelpers.blsSeedOf(account)))
+    )
+  }
+
   implicit class BlockchainUpdaterExt[A <: BlockchainUpdater & Blockchain](bcu: A) {
     def processBlock(block: Block, snapshot: Option[BlockSnapshot] = None): Either[ValidationError, BlockApplyResult] = {
       val hitSourcesE =
@@ -661,7 +700,7 @@ class DefaultAppender(d: Domain)(implicit appenderScheduler: SchedulerService) {
   private val blockChallenger = new BlockChallengerImpl(
     d.blockchain,
     allChannelGroup,
-    Seq.empty,
+    d.generatorKeys,
     d.settings,
     d.testTime,
     d.posSelector,
@@ -669,7 +708,7 @@ class DefaultAppender(d: Domain)(implicit appenderScheduler: SchedulerService) {
   )
 
   private val blockEndorser =
-    new BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.wallet, d.endorsementStorage, allChannelGroup)
+    new BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.generatorKeys, d.endorsementStorage, allChannelGroup)
 
   private val appenderWithCatching = BlockAppender(
     d.blockchain,

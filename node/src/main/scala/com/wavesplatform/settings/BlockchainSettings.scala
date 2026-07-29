@@ -161,11 +161,26 @@ object GenesisBalanceSettings {
   given ConfigReader[GenesisBalanceSettings] = deriveReader
 }
 
+/** The genesis block, and the state it puts into an empty node, are derived from the settings below, so a node that
+  * disagrees about any of them silently builds a chain of its own. [[stateHash]] and [[blockId]] pin that derivation:
+  * when either is set, [[com.wavesplatform.block.Block.genesis]] refuses to build a genesis block that does not match
+  * it, and the node stops on start instead of forking.
+  *
+  * @param stateHash
+  *   The hash of the snapshot built from `assets`, `generators` and `balances`. Pins the state the genesis block
+  *   carries.
+  * @param blockId
+  *   The id of the genesis block, which is the hash of its header, so it covers the state hash along with `timestamp`
+  *   and `initial-base-target`. It does not cover `signature`, which is not part of the header and is verified on its
+  *   own. This is the value peers compare when they decide whether they are on the same chain.
+  */
 case class GenesisSettings(
     timestamp: Long,
     signature: Option[ByteStr],
     initialBaseTarget: Long,
     averageBlockDelay: FiniteDuration,
+    stateHash: Option[ByteStr] = None,
+    blockId: Option[ByteStr] = None,
     assets: Seq[GenesisAssetSettings] = Seq.empty,
     generators: Seq[GenesisGeneratorSettings] = Seq.empty,
     balances: Seq[GenesisBalanceSettings] = Seq.empty

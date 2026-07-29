@@ -30,11 +30,8 @@ import com.wavesplatform.transaction.transfer.{MassTransferTransaction, Transfer
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, *}
 import com.wavesplatform.utils.ScorexLogging
 import io.netty.util.concurrent.DefaultThreadFactory
-import org.rocksdb.Status
 import org.slf4j.LoggerFactory
-import sun.nio.ch.Util
 
-import java.nio.ByteBuffer
 import java.time.Duration
 import java.util
 import java.util.concurrent.*
@@ -110,8 +107,6 @@ object RocksDBWriter extends ScorexLogging {
 
     loop(whs.head, whs.tail, lhs.head, lhs.tail, dhs.head, dhs.tail, ArrayBuffer.empty).toSeq
   }
-
-  private implicit val buffersReleaseable: Releasable[collection.IndexedSeq[ByteBuffer]] = _.foreach(Util.releaseTemporaryDirectBuffer)
 
   def apply(
       rdb: RDB,
@@ -677,12 +672,6 @@ class RocksDBWriter(
                 rw = rw
               )
 
-              batchCleanupAccountData(
-                fromInclusive = firstDirtyHeight,
-                toExclusive = toHeightExclusive,
-                rw = rw
-              )
-
               lastCleanupHeight = toHeightExclusive - 1
               rw.put(Keys.lastCleanupHeight, lastCleanupHeight)
             }
@@ -790,70 +779,6 @@ class RocksDBWriter(
     rw.deleteRange(Keys.changedBalancesAtPrefix(fromInclusive), Keys.changedBalancesAtPrefix(toExclusive))
   }
 
-  private def batchCleanupAccountData(fromInclusive: Height, toExclusive: Height, rw: RW): Unit = {
-    val changedDataAddresses = mutable.Set.empty[AddressId]
-    val lastUpdateAt         = mutable.HashMap.empty[(AddressId, String), Height]
-
-    val updateAt     = new ArrayBuffer[(AddressId, String, Height)]() // First height of update in this range
-    val updateAtKeys = new ArrayBuffer[Key[DataNode]]()
-
-    val changedAddressesPrefix  = KeyTag.ChangedAddresses.prefixBytes
-    val changedAddressesFromKey = Keys.changedAddresses(fromInclusive)
-    rw.iterateOverWithSeek(changedAddressesPrefix, changedAddressesFromKey.keyBytes) { e =>
-      val currHeight = Height(Ints.fromByteArray(e.getKey.drop(changedAddressesPrefix.length)))
-      val continue   = currHeight < toExclusive
-      if (continue)
-        changedAddressesFromKey.parse(e.getValue).foreach { addressId =>
-          val changedDataKeys = rw.get(Keys.changedDataKeys(currHeight, addressId))
-          if (changedDataKeys.nonEmpty) {
-            changedDataAddresses.addOne(addressId)
-            changedDataKeys.foreach { accountDataKey =>
-              lastUpdateAt.updateWith((addressId, accountDataKey)) { orig =>
-                if (orig.isEmpty) {
-                  updateAt.addOne((addressId, accountDataKey, currHeight))
-                  updateAtKeys.addOne(Keys.dataAt(addressId, accountDataKey)(currHeight))
-                }
-                Some(currHeight)
-              }
-            }
-          }
-        }
-
-      continue
-    }
-
-    val valueBuff = new Array[Byte](Ints.BYTES) // height of DataNode
-    Using.resources(
-      database.getKeyBuffersFromKeys(updateAtKeys),
-      database.getValueBuffers(updateAtKeys.size, valueBuff.length)
-    ) { (keyBuffs, valBuffs) =>
-      rdb.db
-        .multiGetByteBuffers(keyBuffs.asJava, valBuffs.asJava)
-        .asScala
-        .view
-        .zip(updateAt)
-        .foreach { case (status, (addressId, accountDataKey, firstHeight)) =>
-          val firstDeleteHeight = if (status.status.getCode == Status.Code.Ok) {
-            status.value.get(valueBuff)
-            val r = readDataNode(accountDataKey)(valueBuff).prevHeight
-            if (r == Height(0)) firstHeight else r
-          } else firstHeight
-
-          val lastDeleteHeight = lastUpdateAt((addressId, accountDataKey))
-          if (firstDeleteHeight != lastDeleteHeight)
-            rw.deleteRange(
-              Keys.dataAt(addressId, accountDataKey)(firstDeleteHeight),
-              Keys.dataAt(addressId, accountDataKey)(lastDeleteHeight)
-            )
-        }
-    }
-
-    rw.deleteRange(Keys.changedAddresses(fromInclusive), Keys.changedAddresses(toExclusive))
-    changedDataAddresses.foreach { addressId =>
-      rw.deleteRange(Keys.changedDataKeys(fromInclusive, addressId), Keys.changedDataKeys(toExclusive, addressId))
-    }
-  }
-
   override protected def doRollback(targetHeight: Height): DiscardedBlocks = {
     val targetBlockId = readOnly(_.get(Keys.blockMetaAt(targetHeight)))
       .map(_.id)
@@ -865,7 +790,6 @@ class RocksDBWriter(
       for (currentHeightInt <- height until targetHeight.toInt by -1; currentHeight = Height(currentHeightInt)) yield {
         val balancesToInvalidate     = Seq.newBuilder[(Address, Asset)]
         val ordersToInvalidate       = Seq.newBuilder[ByteStr]
-        val accountDataToInvalidate  = Seq.newBuilder[(Address, String)]
         val blockHeightsToInvalidate = Seq.newBuilder[ByteStr]
 
         val currentPeriod = this.generationPeriodOf(currentHeight)
@@ -899,11 +823,6 @@ class RocksDBWriter(
           }
 
           for ((addressId, address) <- changedAddresses) {
-            for (k <- rw.get(Keys.changedDataKeys(currentHeight, addressId))) {
-              accountDataToInvalidate += (address -> k)
-
-              rollbackDataEntry(rw, k, address, addressId, currentHeight)
-            }
             rw.delete(Keys.changedDataKeys(currentHeight, addressId))
 
             balancesToInvalidate += (address -> Waves)
@@ -1026,24 +945,6 @@ class RocksDBWriter(
 
     log.debug(s"Rollback to block $targetBlockId at $targetHeight completed")
     discardedBlocks.reverse
-  }
-
-  private def rollbackDataEntry(rw: RW, key: String, address: Address, addressId: AddressId, currentHeight: Height): Unit = {
-    val currentDataKey = Keys.data(addressId, key)
-    val currentData    = rw.get(currentDataKey)
-    rw.delete(Keys.dataAt(addressId, key)(currentHeight))
-    if (currentData.height == currentHeight) {
-      if (currentData.prevHeight > Height(0)) {
-        val prevDataNode = rw.get(Keys.dataAt(addressId, key)(currentData.prevHeight))
-        log.trace(
-          s"PUT $address($addressId)/$key: ${currentData.entry}@$currentHeight => ${prevDataNode.entry}@${currentData.prevHeight}>${prevDataNode.prevHeight}"
-        )
-        rw.put(currentDataKey, CurrentData(prevDataNode.entry, currentData.prevHeight, prevDataNode.prevHeight))
-      } else {
-        log.trace(s"DEL $address($addressId)/$key: ${currentData.entry}@$currentHeight => EMPTY@${currentData.prevHeight}")
-        rw.delete(currentDataKey)
-      }
-    }
   }
 
   private def rollbackBalanceHistory(rw: RW, curBalanceKey: Key[CurrentBalance], balanceNodeKey: Height => Key[BalanceNode], height: Height): Unit = {
@@ -1386,7 +1287,8 @@ class RocksDBWriter(
         }
       }
 
-      ro.multiGet(addressIds.map(Keys.idToAddress), Address.AddressLength)
+      // An address is stored as the bytes of its hash, see Keys.idToAddress
+      ro.multiGet(addressIds.map(Keys.idToAddress), tech.hearth.crypto.Address.HASH_LEN)
     }
 
     addresses.view

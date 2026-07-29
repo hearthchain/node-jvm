@@ -305,22 +305,32 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       )
     }
     val defaultWriter = TestStorageFactory(writerSettings, rdb, SystemTime, BlockchainUpdateTriggers.noop)._2
-    val settings0     = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
-    val settings      = settings0.copy(featuresSettings = settings0.featuresSettings.copy(autoShutdownOnUnsupportedFeature = false))
+    val settings0 = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    // The updater builds the genesis snapshot from its own settings, so it has to see the same genesis as the writer -
+    // otherwise it applies the packaged config's balances, whose base58 addresses no longer parse.
+    val settings = settings0.copy(
+      autoShutdownOnUnsupportedFeature = false,
+      blockchainSettings = writerSettings.blockchainSettings
+    )
     val bcu =
       new BlockchainUpdaterImpl(defaultWriter, settings, ntpTime, ignoreBlockchainUpdateTriggers)
     val pos = PoSSelector(bcu, settings.synchronizationSettings.maxBaseTarget)
     try {
-      blocks.foreach { block =>
+      // The generator can only produce block templates: a state hash has to be computed against the state the block is
+      // applied to, and carrying one changes the block's id, so each block also has to be retargeted onto the previous
+      // rebuilt one. blockOnTopOf does both, against the chain as it grows here.
+      val appendedBlocks = blocks.map { template =>
+        val block = WithState.blockOnTopOf(template, TestBlock.defaultSigner, bcu).resultE.explicitGet()
         bcu.processBlock(
           block,
           block.header.generationSignature.take(Block.HitSourceLength),
           snapshot = None,
           generatorSet = Seq.empty
         ) should beRight
+        block
       }
 
-      f(Env(pos, bcu, accounts, blocks))
+      f(Env(pos, bcu, accounts, appendedBlocks))
       bcu.shutdown()
     } finally {
       bcu.shutdown()
@@ -379,26 +389,22 @@ object FPoSSelectorTest {
         forkChain.head._1.header.timestamp + delay
       )
 
-      val newBlock = WithState
-        .blockWithComputedStateHash(
-          Block
-            .buildAndSign(
-              forkChain.head._1.header.timestamp + delay,
-              forkChain.head._1.id(),
-              bt,
-              ByteStr(gs),
-              txs = Nil,
-              miner,
-              featureVotes = Seq.empty,
-              stateHash = None,
-              challengedHeader = None,
-              finalizationVoting = None
-            )
-            .explicitGet(),
+      // No state hash: this fork is only ever built in memory - the caller reads base targets and timestamps off it to
+      // compare delays, and never appends it. Computing one is impossible anyway, since from the second block on the
+      // reference is a fork block that the blockchain has never seen (BlockDiffer requires the block to sit on its head).
+      val newBlock = Block
+        .buildAndSign(
+          forkChain.head._1.header.timestamp + delay,
+          forkChain.head._1.id(),
+          bt,
+          ByteStr(gs),
+          txs = Nil,
           miner,
-          blockchain
+          featureVotes = Seq.empty,
+          stateHash = None,
+          challengedHeader = None,
+          finalizationVoting = None
         )
-        .resultE
         .explicitGet()
 
       (newBlock, ByteStr(hitSource)) :: forkChain

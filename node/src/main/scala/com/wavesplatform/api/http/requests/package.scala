@@ -6,7 +6,7 @@ import com.wavesplatform.crypto.{DigestLength, SignatureLength}
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{GenericError, Validation}
-import com.wavesplatform.transaction.{Asset, AssetIdStringLength, Proofs, TxValidationError, TxVersion}
+import com.wavesplatform.transaction.{Asset, AssetIdStringLength, Proofs, TxValidationError}
 import com.wavesplatform.utils.base58Length
 import play.api.libs.json.*
 
@@ -84,6 +84,5 @@ package object requests {
 
   implicit val byteStrFormat: Format[ByteStr] = com.wavesplatform.utils.byteStrFormat
 
-  private[requests] def defaultVersion   = TxVersion.V1
   private[requests] def defaultTimestamp = System.currentTimeMillis()
 }

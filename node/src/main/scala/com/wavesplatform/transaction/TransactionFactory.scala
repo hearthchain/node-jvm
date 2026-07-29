@@ -1,62 +1,86 @@
 package com.wavesplatform.transaction
 
+import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.api.http.requests.*
-import com.wavesplatform.crypto.bls.BlsKeyPair
 import com.wavesplatform.lang.ValidationError
+import com.wavesplatform.mining.GeneratorKeys
 import com.wavesplatform.state.Height
 import com.wavesplatform.transaction.TxValidationError.*
 import com.wavesplatform.wallet.Wallet
 import play.api.libs.json.*
-import supranational.blst.SecretKey
 import tech.hearth.crypto.SigningKey
 
 object TransactionFactory {
+
+  /** Signs a request with the key of the account it names.
+    *
+    * A CommitToGeneration request is the one case that needs more than a signing key: it registers the account's own
+    * generator keys, so it carries their public keys and a proof of possession for each. Those come from
+    * `waves.miner.accounts` through [[GeneratorKeys]], and so does the key it is signed with - an account commits to
+    * generating for itself, and the wallet holds neither the generator keys nor, necessarily, that account.
+    */
   def parseRequestAndSign(
       request: JsObject,
-      signer: SigningKey,
-      blsKey: Option[SecretKey],
+      wallet: Wallet,
+      generatorKeys: GeneratorKeys,
+      signer: Option[String | SigningKey],
       generationPeriodStart: => Option[Int]
-  ): Either[ValidationError, Transaction] = {
+  ): Either[ValidationError, Transaction] =
+    if ((request \ "type").asOpt[Int].contains(TransactionType.CommitToGeneration.id))
+      signCommitToGeneration(request, generatorKeys, signer, generationPeriodStart)
+    else
+      resolveSigner(request, wallet, signer).flatMap(signWith(request, _))
+
+  private def resolveSigner(request: JsObject, wallet: Wallet, signer: Option[String | SigningKey]): Either[ValidationError, SigningKey] =
+    signer.fold((request \ "sender").asOpt[String].toRight(GenericError("invalid.sender")).flatMap(wallet.findPrivateKey)) {
+      case signerAddress: String => wallet.findPrivateKey(signerAddress)
+      case signerKP: SigningKey  => Right(signerKP)
+    }
+
+  private def signCommitToGeneration(
+      request: JsObject,
+      generatorKeys: GeneratorKeys,
+      signer: Option[String | SigningKey],
+      generationPeriodStart: => Option[Int]
+  ): Either[ValidationError, Transaction] =
+    for {
+      address <- signer.fold((request \ "sender").asOpt[String].toRight(GenericError("invalid.sender")))(Right(_)) match {
+        case Right(addr: String)      => Address.fromString(addr)
+        case Right(key: SigningKey)   => Right(key.toAddress)
+        case Left(err)                => Left(err)
+      }
+      signingKey <- generatorKeys
+        .signingKey(address)
+        .toRight(GenericError(s"$address is not one of this node's generators, see waves.miner.accounts"))
+      periodStart <- ((request \ "generationPeriodStart").asOpt[Int] orElse generationPeriodStart)
+        .toRight(GenericError("missing generation period start"))
+      commitment <- generatorKeys
+        .commitment(address, Height(periodStart))
+        .toRight(GenericError(s"$address is not one of this node's generators, see waves.miner.accounts"))
+      overrides = Json.obj(
+        "senderPublicKey"        -> PublicKey(signingKey.publicKey()).toString,
+        "generationPeriodStart"  -> periodStart,
+        "endorserPublicKey"      -> commitment.endorserPublicKey.base58,
+        "commitmentSignature"    -> commitment.commitmentSignature.base58,
+        "vrfPublicKey"           -> commitment.vrfPublicKey.toString,
+        "vrfCommitmentSignature" -> commitment.vrfCommitmentSignature.toString
+      )
+      tx <- parseRequest(overrides ++ request - "sender")
+    } yield tx.signWith(signingKey)
+
+  /** Signs with a key the caller already has. A CommitToGeneration request cannot be completed this way: its generator
+    * public keys and proofs of possession come from `waves.miner.accounts`, which a caller holding a lone signing key
+    * does not have - such a request has to carry those fields itself.
+    */
+  def parseRequestAndSign(request: JsObject, signer: SigningKey): Either[ValidationError, Transaction] = signWith(request, signer)
+
+  private def signWith(request: JsObject, signer: SigningKey): Either[ValidationError, Transaction] = {
     val overrides = Json.newBuilder
     if (!request.keys.contains("senderPublicKey")) {
       overrides += "senderPublicKey" -> signer.publicKey
     }
-
-    val extendedRequest = if ((request \ "type").as[Int] == TransactionType.CommitToGeneration.id) {
-      for {
-        k <- blsKey.toRight(GenericError("Missing BLS secret key"))
-        periodStart <- ((request \ "generationPeriodStart").asOpt[Int] orElse generationPeriodStart)
-          .toRight(GenericError("missing generation period start"))
-      } yield {
-        val endorserKP = BlsKeyPair(k)
-        overrides ++= Seq(
-          "commitmentSignature"   -> CommitToGenerationTransaction.mkPopSignature(endorserKP, Height(periodStart)).base58,
-          "generationPeriodStart" -> periodStart,
-          "endorserPublicKey"     -> endorserKP.publicKey.base58
-        )
-        overrides.result()
-      }
-    } else Right(overrides.result())
-
-    for {
-      req <- extendedRequest
-      tx  <- parseRequest(req ++ request)
-    } yield tx.signWith(signer)
+    parseRequest(overrides.result() ++ request).map(_.signWith(signer))
   }
-
-  def parseRequestAndSign(
-      request: JsObject,
-      wallet: Wallet,
-      signer: Option[String | SigningKey],
-      blsKey: Option[SecretKey],
-      generationPeriodStart: => Option[Int]
-  ): Either[ValidationError, Transaction] =
-    signer
-      .fold((request \ "sender").asOpt[String].toRight(GenericError("invalid.sender")).flatMap(wallet.findPrivateKey)) {
-        case signerAddress: String => wallet.findPrivateKey(signerAddress)
-        case signerKP: SigningKey  => Right(signerKP)
-      }
-      .flatMap(signer => parseRequestAndSign(request, signer, blsKey, generationPeriodStart))
 
   def parseRequest(request: JsObject): Either[ValidationError, Transaction & ProvenTransaction] = {
     val overrides = Json.newBuilder

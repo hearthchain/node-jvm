@@ -16,7 +16,7 @@ case class MicroBlock(
     sender: PublicKey,
     transactionData: Seq[Transaction],
     reference: BlockId,
-    totalResBlockSig: ByteStr,
+    wholeBlockSignature: ByteStr,
     signature: ByteStr,
     stateHash: Option[ByteStr],
     finalizationVoting: Option[FinalizationVoting]
@@ -37,7 +37,7 @@ object MicroBlock {
       generator: SigningKey,
       transactionData: Seq[Transaction],
       reference: BlockId,
-      totalResBlockSig: BlockId,
+      wholeBlockSignature: ByteStr,
       stateHash: Option[ByteStr],
       finalizationVoting: Option[FinalizationVoting]
   ): Either[ValidationError, MicroBlock] =
@@ -45,7 +45,7 @@ object MicroBlock {
       PublicKey(generator.publicKey),
       transactionData,
       reference,
-      totalResBlockSig,
+      wholeBlockSignature,
       ByteStr.empty,
       stateHash,
       finalizationVoting

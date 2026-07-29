@@ -59,10 +59,12 @@ class ChainIdSpecification extends PropSpec {
   }
 
   property("LeaseTransaction validation") {
-    forAll(txParams) { case (sender, amount, fee, ts) =>
+    // An address does not carry the network it belongs to any more, so the sender's own address is its own address on
+    // every chain id - and leasing to it is a self-lease. Lease to somebody else instead.
+    forAll(txParams, accountGen) { case ((sender, amount, fee, ts), recipient) =>
       validateFromOtherNetwork(
         LeaseTransaction
-          .create(otherChainId, PublicKey(sender.publicKey), sender.toAddress, amount.value, fee.value, ts, Proofs.empty)
+          .create(otherChainId, PublicKey(sender.publicKey), recipient.toAddress, amount.value, fee.value, ts, Proofs.empty)
           .explicitGet()
           .signWith(sender)
       )

@@ -4,7 +4,7 @@ import com.wavesplatform.block.{Block, FinalizationVoting}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.Domain
-import com.wavesplatform.mining.BlockChallengerImpl
+import com.wavesplatform.mining.{BlockChallengerImpl, GeneratorKeys}
 import com.wavesplatform.network.{EndorseBlock, MessageCodec, PeerDatabase}
 import com.wavesplatform.state.*
 import com.wavesplatform.state.appender.BlockAppender
@@ -26,7 +26,10 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
   private val sender = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
 
   private val defaultSettings = DomainPresets.DeterministicFinality
-
+    .copy(minerSettings =
+      // This node's own generators, wallet accounts 0 and 1: the endorser signs with the keys the settings name
+      DomainPresets.DeterministicFinality.minerSettings.copy(accounts = Seq(Domain.walletMiningAccount(0), Domain.walletMiningAccount(1)))
+    )
     .configure(
       _.copy(
         generationPeriodLength = 3,
@@ -42,7 +45,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         val blockChallenger = new BlockChallengerImpl(
           d.blockchain,
           new DefaultChannelGroup(GlobalEventExecutor.INSTANCE),
-          Seq.empty,
+          GeneratorKeys.Empty,
           d.settings,
           testTime,
           d.posSelector,
@@ -121,7 +124,8 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         defaultSettings
           .copy(synchronizationSettings = defaultSettings.synchronizationSettings)
           .configure(_.copy(generationPeriodLength = 3)),
-        AddrWithBalance.enoughBalances(generator1, otherGenerator)
+        AddrWithBalance.enoughBalances(generator1, otherGenerator),
+        generators = Seq(generator1, otherGenerator)
       ) { d =>
         d.wallet.generateNewAccounts(1)
         val genesisBlockId = d.lastBlockId
@@ -184,7 +188,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
 
   "should broadcast a block endorsement if validator" in withManager { manager =>
     val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
-    withDomain(defaultSettings, AddrWithBalance.enoughBalances(generator1, otherGenerator)) { d =>
+    withDomain(defaultSettings, AddrWithBalance.enoughBalances(generator1, otherGenerator), generators = Seq(generator1, otherGenerator)) { d =>
       d.wallet.generateNewAccounts(1)
 
       val channels = manager(new DefaultChannelGroup(GlobalEventExecutor.INSTANCE))
@@ -233,7 +237,8 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
       val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
       withDomain(
         defaultSettings.copy(synchronizationSettings = defaultSettings.synchronizationSettings.copy(maxRollback = 2)),
-        AddrWithBalance.enoughBalances(generator1, otherGenerator)
+        AddrWithBalance.enoughBalances(generator1, otherGenerator),
+        generators = Seq(generator1, otherGenerator)
       ) { d =>
         d.wallet.generateNewAccounts(1)
 
@@ -291,7 +296,8 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
       val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
       withDomain(
         defaultSettings.copy(synchronizationSettings = defaultSettings.synchronizationSettings),
-        AddrWithBalance.enoughBalances(generator1, otherGenerator)
+        AddrWithBalance.enoughBalances(generator1, otherGenerator),
+        generators = Seq(generator1, otherGenerator)
       ) { d =>
         d.wallet.generateNewAccounts(1)
         val genesisBlockId = d.lastBlockId
@@ -353,7 +359,8 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
         defaultSettings
           .copy(synchronizationSettings = defaultSettings.synchronizationSettings)
           .configure(_.copy(generationPeriodLength = 3)),
-        AddrWithBalance.enoughBalances(generator1, otherGenerator)
+        AddrWithBalance.enoughBalances(generator1, otherGenerator),
+        generators = Seq(generator1, otherGenerator)
       ) { d =>
         d.wallet.generateNewAccounts(1)
         val genesisBlockId = d.lastBlockId
@@ -418,15 +425,24 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
 
   private def testWithGenerator(f: Domain => Any): Any = {
     val generators = Seq(generator1, generator2)
-    withDomain(defaultSettings, AddrWithBalance.enoughBalances(generators*)) { d =>
-      d.wallet.generateNewAccounts(3)
+    withDomain(defaultSettings, AddrWithBalance.enoughBalances(generators*), generators = generators) { d =>
 
       val txs                   = generators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(4), x))
       val block2WithCommitments = d.createBlock(txs, generator = generator1, strictTime = true)
       d.appender.appendBlock(block2WithCommitments)
-      (3 to 5).foreach { _ =>
+      (3 to 4).foreach { _ =>
         d.appender.appendBlock(d.createBlock(generator = generator1, strictTime = true))
       }
+
+      // A commitment names the very next period from where the chain stands, so this one - for the period the
+      // caller's three more blocks (heights 6-8) cross into - can only be made now that height 4 has been reached.
+      d.appender.appendBlock(
+        d.createBlock(
+          generators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(7), x)),
+          generator = generator1,
+          strictTime = true
+        )
+      )
 
       f(d)
     }

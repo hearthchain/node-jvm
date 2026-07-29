@@ -46,11 +46,6 @@ class MassTransferTransactionSpecification extends PropSpec {
     proofs     <- proofs
   } yield (chainId, version, asset, recipient, fee, transfers, attachment, proofs)
 
-  private val massTransfersTable = Table(
-    ("chainId", "version", "asset", "recipient", "fee", "transfers", "attachment", "proofs"),
-    massTransfers*
-  )
-
   property("property validation") {
     import MassTransferTransaction.create
 
@@ -84,54 +79,40 @@ class MassTransferTransactionSpecification extends PropSpec {
 
     val negativeFeeEi = create(PublicKey(sender.publicKey), assetId, feeOverflow, -100, timestamp, attachment, proofs)
     negativeFeeEi shouldBe Left(TxValidationError.InsufficientFee)
-
-    val differentChainIds = Seq(
-      ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(100)),
-      ParsedTransfer(PublicKey(sender.publicKey).toAddress, TxNonNegativeAmount.unsafeFrom(100))
-    )
-    val invalidChainIdEi = create(PublicKey(sender.publicKey), assetId, differentChainIds, 100, timestamp, attachment, proofs)
-    invalidChainIdEi should produce("One of chain ids not match")
-
-    val otherChainIds = Seq(
-      ParsedTransfer(PublicKey(sender.publicKey).toAddress, TxNonNegativeAmount.unsafeFrom(100)),
-      ParsedTransfer(PublicKey(sender.publicKey).toAddress, TxNonNegativeAmount.unsafeFrom(100))
-    )
-    val invalidOtherChainIdEi = create(PublicKey(sender.publicKey), assetId, otherChainIds, 100, timestamp, attachment, proofs)
-    invalidOtherChainIdEi should produce("One of chain ids not match")
   }
 
   property("JSON format validation") {
     val js = Json.parse("""{
-                       "type": 11,
-                       "id": "H36CTJc7ztGRZPCrvpNYeagCN1HV1gXqUthsXKdBT3UD",
-                       "sender": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
-                       "fee": 200000,
-                       "feeAssetId": null,
-                       "timestamp": 1518091313964,
-                       "proofs": [
-                       "FXMNu3ecy5zBjn9b69VtpuYRwxjCbxdkZ3xZpLzB8ZeFDvcgTkmEDrD29wtGYRPtyLS3LPYrL2d5UM6TpFBMUGQ"],
-                       "version": 1,
-                       "assetId": null,
-                       "attachment": "59QuUcqP6p",
-                       "transferCount": 2,
-                       "totalAmount": 300000000,
-                       "transfers": [
-                       {
-                       "recipient": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                       "amount": 100000000
-                       },
-                       {
-                       "recipient": "3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh",
-                       "amount": 200000000
-                       }
-                       ]
-                       }
-  """)
+      "type": 6,
+      "id": "wsBzuWz6FsJMrKEVGsdi74swqe13X2acFzFJ2P74mq1",
+      "fee": 200000,
+      "feeAssetId": null,
+      "timestamp": 1518091313964,
+      "chainId": 84,
+      "sender": "thrth1ryd2f987gg464uf4q5jte5rcmc2xgq6kr3qe39",
+      "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+      "proofs": [
+        "FXMNu3ecy5zBjn9b69VtpuYRwxjCbxdkZ3xZpLzB8ZeFDvcgTkmEDrD29wtGYRPtyLS3LPYrL2d5UM6TpFBMUGQ"
+      ],
+      "assetId": null,
+      "attachment": "59QuUcqP6p",
+      "transferCount": 2,
+      "totalAmount": 300000000,
+      "transfers": [
+        {
+          "recipient": "thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6",
+          "amount": 100000000
+        },
+        {
+          "recipient": "thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6",
+          "amount": 200000000
+        }
+      ]
+    }""")
 
     val transfers = MassTransferTransaction
       .parseTransfersList(
-        List(Transfer("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", 100000000L), Transfer("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", 200000000L))
+        List(Transfer("thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6", 100000000L), Transfer("thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6", 200000000L))
       )
       .explicitGet()
 

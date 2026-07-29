@@ -201,6 +201,9 @@ object Block {
       snapshot <- GenesisSnapshot.build(genesisSettings)
       baseTarget = genesisSettings.initialBaseTarget
       timestamp  = genesisSettings.blockTimestamp
+      stateHash  = TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)
+      // The configured snapshot is what a misconfiguration silently changes, so check it before anything derived from it
+      _ <- checkPredefined("state hash", genesisSettings.stateHash, stateHash)
       // The state hash goes into the header before signing: the block is protobuf-serialized, so its body bytes cover it
       block = create(
         timestamp,
@@ -210,7 +213,7 @@ object Block {
         PublicKey(GenesisGenerator.publicKey),
         featureVotes = Seq(),
         transactionData = Seq.empty,
-        stateHash = Some(TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)),
+        stateHash = Some(stateHash),
         challengedHeader = None,
         finalizationVoting = None
       )
@@ -219,7 +222,18 @@ object Block {
         case Some(predefined) => block.copy(signature = predefined)
       }
       validBlock <- signedBlock.validateGenesis
+      _          <- checkPredefined("block id", genesisSettings.blockId, validBlock.id())
     } yield validBlock
+
+  /** A predefined value in the genesis settings is a commitment: if it disagrees with what the rest of the settings
+    * produce, the settings are wrong and the node must not run on them.
+    */
+  private def checkPredefined(what: String, predefined: Option[ByteStr], computed: ByteStr): Either[ValidationError, Unit] =
+    predefined match {
+      case Some(expected) if expected != computed =>
+        Left(GenericError(s"Genesis $what mismatch: settings declare $expected, but the configured genesis block has $computed"))
+      case _ => Right(())
+    }
 
   type BlockId                = ByteStr
   type TransactionsMerkleTree = Seq[Seq[Array[Byte]]]
@@ -233,7 +247,7 @@ object Block {
   val BaseTargetLength: Int                = 8
   // A hearth Ecvrf proof is Gamma(32) || c(16) || s(32); Waves' was 96
   val GenerationVRFSignatureLength: Int = 80
-  val BlockIdLength: Int                = SignatureLength
+  val BlockIdLength: Int                = DigestLength
   val TransactionSizeLength             = 4
   val HitSourceLength                   = 32
 

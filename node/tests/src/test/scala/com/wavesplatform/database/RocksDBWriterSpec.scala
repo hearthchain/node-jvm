@@ -5,10 +5,12 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database.RocksDBWriter.{merge3, slice}
 import com.wavesplatform.db.WithDomain
+import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.Domain
-import com.wavesplatform.settings.{GenesisBalanceSettings, WavesSettings}
+import com.wavesplatform.settings.GenesisAssetSettings
 import com.wavesplatform.state.Height as H
 import com.wavesplatform.test.*
+import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.TxHelpers
 import org.rocksdb.{ReadOptions, RocksIterator}
 
@@ -57,30 +59,238 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
     }
   }
 
-  private val settingsWithGenesis: WavesSettings = DomainPresets.NG
-  private val genesisBalance: Long               = 10 * 100.waves
+  // The genesis balances have to go through withDomain rather than into the settings: it builds the snapshot from its
+  // own `balances` argument, replacing whatever the settings carried. It also funds defaultSigner - which it commits as
+  // the generator - unless the test names it, so name it and keep the total under the test's control.
+  private val minerBalance = 500.waves
+  private val genesisBalances =
+    AddrWithBalance(TxHelpers.defaultAddress, minerBalance) +: (1 to 10).map(i => AddrWithBalance(TxHelpers.address(1000 + i), 100.waves))
+  private val genesisBalance: Long = minerBalance + 10 * 100.waves
 
-  "wavesAmount includes the genesis snapshot" in withDomain(
-    settingsWithGenesis.copy(blockchainSettings =
-      settingsWithGenesis.blockchainSettings.copy(
-        genesisSettings = settingsWithGenesis.blockchainSettings.genesisSettings.copy(
-          signature = None,
-          balances = (1 to 10).map(i => GenesisBalanceSettings(TxHelpers.address(1000 + i).toBech32, 100.waves))
-        )
-      )
-    )
-  ) { d =>
+  "wavesAmount includes the genesis snapshot" in withDomain(DomainPresets.NG, genesisBalances) { d =>
     d.blockchain.wavesAmount(1) shouldBe genesisBalance
   }
 
+  "cleanup" - {
+    val settings = {
+      val s = DomainPresets.RideV6
+      s.copy(dbSettings = s.dbSettings.copy(maxRollbackDepth = 4, cleanupInterval = Some(4)))
+    }
+
+    val alice = TxHelpers.signer(1)
+    val aliceAddress = alice.toAddress
+
+    val bob = TxHelpers.signer(2)
+    val bobAddress = bob.toAddress
+
+    val carl = TxHelpers.signer(3)
+    val carlAddress = carl.toAddress
+
+    val userAddresses = Seq(aliceAddress, bobAddress, carlAddress)
+    val minerAddresses = Seq(TxHelpers.defaultAddress)
+    val allAddresses = userAddresses ++ minerAddresses
+
+    def transferWavesTx = TxHelpers.massTransfer(
+      to = Seq(
+        aliceAddress -> 100.waves,
+        bobAddress -> 100.waves
+      ),
+      fee = 1.waves
+    )
+
+    // There is no issue transaction any more, so the asset alice holds has to come from the genesis snapshot -
+    // held there by a throwaway account instead of alice herself, so alice's own history still starts clean, only
+    // once she receives it below (mirroring what issuing it herself used to do).
+    val issuer = TxHelpers.signer(900)
+    val issuedAsset = IssuedAsset(ByteStr.fill(32)(7))
+    val assetSettings = GenesisAssetSettings(
+      id = issuedAsset.id,
+      issuer = ByteStr(issuer.publicKey()).toString,
+      name = "Genesis",
+      decimals = 0,
+      quantity = 100
+    )
+
+    def issueAssetTx = TxHelpers.transfer(from = issuer, to = aliceAddress, asset = issuedAsset, amount = 100)
+
+    def transferAssetTx = TxHelpers.transfer(from = alice, to = carlAddress, asset = issuedAsset, amount = 1)
+
+    val cleanupBalances = Seq(
+      AddrWithBalance(TxHelpers.defaultSigner.toAddress),
+      AddrWithBalance(issuer.toAddress, 10.waves, assets = Map(issuedAsset -> 100))
+    )
+
+    "doesn't delete if disabled" in withDomain(
+      settings.copy(dbSettings = settings.dbSettings.copy(cleanupInterval = None)),
+      cleanupBalances,
+      assets = Seq(assetSettings)
+    ) { d =>
+      d.appendBlock(transferWavesTx, issueAssetTx, transferAssetTx)
+      (3 to 10).foreach(_ => d.appendBlock())
+      d.blockchain.height shouldBe 10
+
+      d.rdb.db.get(Keys.lastCleanupHeight) shouldBe H(0)
+      withClue("All data exists: ") {
+        checkHistoricalDataOnlySinceHeight(d, allAddresses, 1)
+      }
+    }
+
+    "doesn't delete sole data" in withDomain(settings, cleanupBalances, assets = Seq(assetSettings)) { d =>
+      d.appendBlock(transferWavesTx, issueAssetTx, transferAssetTx) // Last user data
+      d.blockchain.height shouldBe 2
+
+      (3 to 11).foreach(_ => d.appendBlock())
+      d.blockchain.height shouldBe 11
+
+      d.rdb.db.get(Keys.lastCleanupHeight) shouldBe H(4)
+      withClue("No data before: ") {
+        checkHistoricalDataOnlySinceHeight(d, userAddresses, 2)
+        checkHistoricalDataOnlySinceHeight(d, minerAddresses, 4) // Updated on each height
+      }
+    }
+
+    "deletes old data and doesn't delete recent data" in withDomain(settings, cleanupBalances, assets = Seq(assetSettings)) { d =>
+      d.appendBlock(transferWavesTx, issueAssetTx, transferAssetTx)
+
+      d.appendBlock()
+
+      d.appendBlock(
+        transferWavesTx,
+        transferAssetTx
+      ) // Last user data
+      d.blockchain.height shouldBe 4
+
+      (5 to 11).foreach(_ => d.appendBlock())
+      d.blockchain.height shouldBe 11
+
+      d.rdb.db.get(Keys.lastCleanupHeight) shouldBe H(4)
+      withClue("No data before: ") {
+        checkHistoricalDataOnlySinceHeight(d, allAddresses, 4)
+      }
+    }
+
+    "deletes old data from previous intervals" in withDomain(settings, cleanupBalances, assets = Seq(assetSettings)) { d =>
+      (2 to 3).foreach(_ => d.appendBlock())
+
+      d.appendBlock(
+        transferWavesTx,
+        issueAssetTx,
+        transferAssetTx
+      )
+      d.blockchain.height shouldBe 4
+
+      d.appendBlock()
+
+      d.appendBlock(
+        transferWavesTx,
+        transferAssetTx
+      ) // Last user data
+      d.blockchain.height shouldBe 6
+
+      (7 to 15).foreach(_ => d.appendBlock())
+      d.blockchain.height shouldBe 15
+
+      d.rdb.db.get(Keys.lastCleanupHeight) shouldBe H(8)
+      withClue("No data before: ") {
+        checkHistoricalDataOnlySinceHeight(d, userAddresses, 6)
+        checkHistoricalDataOnlySinceHeight(d, minerAddresses, 8) // Updated on each height
+      }
+    }
+
+    "doesn't affect other sequences" in {
+      def appendBlocks(d: Domain): Unit = {
+        (2 to 3).foreach(_ => d.appendBlock())
+        d.appendBlock(transferWavesTx, issueAssetTx, transferAssetTx)
+
+        d.appendBlock()
+        d.appendBlock(transferWavesTx, transferAssetTx)
+
+        (7 to 14).foreach(_ => d.appendBlock())
+      }
+
+      var nonHistoricalKeysWithoutCleanup: CollectedKeys = Vector.empty
+      withDomain(
+        settings.copy(dbSettings = settings.dbSettings.copy(cleanupInterval = None)),
+        cleanupBalances,
+        assets = Seq(assetSettings)
+      ) { d =>
+        appendBlocks(d)
+        nonHistoricalKeysWithoutCleanup = collectNonHistoricalKeys(d)
+      }
+
+      withDomain(settings, cleanupBalances, assets = Seq(assetSettings)) { d =>
+        appendBlocks(d)
+        val nonHistoricalKeys = collectNonHistoricalKeys(d)
+        nonHistoricalKeys should contain theSameElementsInOrderAs nonHistoricalKeysWithoutCleanup
+      }
+    }
+
+    "balanceAtHeight returns correct values" in {
+      val richAccount = TxHelpers.signer(1001)
+      val account1 = TxHelpers.signer(1002)
+      val account2 = TxHelpers.signer(1003)
+
+      // There is no issue transaction any more, so the asset richAccount holds has to come from the genesis
+      // snapshot instead - a plain empty block takes its place to keep the height numbering below unchanged.
+      val issuedAsset = IssuedAsset(ByteStr.fill(32)(9))
+      val assetSettings = GenesisAssetSettings(
+        id = issuedAsset.id,
+        issuer = ByteStr(richAccount.publicKey()).toString,
+        name = "IA01",
+        decimals = 2,
+        quantity = 10000
+      )
+
+      withDomain(
+        DomainPresets.TransactionStateSnapshot,
+        Seq(AddrWithBalance(richAccount.toAddress, 10_000.waves, assets = Map(issuedAsset -> 10000))),
+        assets = Seq(assetSettings)
+      ) { d =>
+        d.appendBlock()
+        (1 to 3).foreach(_ => d.appendBlock())
+        d.blockchain.height shouldBe 5
+
+        d.appendBlock(TxHelpers.transfer(richAccount, account1.toAddress, 10.waves))
+        d.appendBlock(TxHelpers.transfer(richAccount, account1.toAddress, 100, asset = issuedAsset))
+        d.appendBlock()
+        d.appendBlock(TxHelpers.transfer(richAccount, account1.toAddress, 1.waves))
+        d.appendBlock(TxHelpers.transfer(richAccount, account1.toAddress, 500, asset = issuedAsset))
+        d.blockchain.height shouldBe 10
+
+        d.blockchain.balanceAtHeight(account1.toAddress, 10) shouldBe Some(9 -> 11.waves)
+        d.blockchain.balanceAtHeight(account1.toAddress, 9) shouldBe Some(9 -> 11.waves)
+        d.blockchain.balanceAtHeight(account1.toAddress, 8) shouldBe Some(6 -> 10.waves)
+        d.blockchain.balanceAtHeight(account1.toAddress, 6) shouldBe Some(6 -> 10.waves)
+        d.blockchain.balanceAtHeight(account1.toAddress, 5) shouldBe None
+
+        d.blockchain.balanceAtHeight(account1.toAddress, 10, issuedAsset) shouldBe Some(10 -> 600)
+        d.blockchain.balanceAtHeight(account1.toAddress, 9, issuedAsset) shouldBe Some(7 -> 100)
+        d.blockchain.balanceAtHeight(account1.toAddress, 8, issuedAsset) shouldBe Some(7 -> 100)
+        d.blockchain.balanceAtHeight(account1.toAddress, 6, issuedAsset) shouldBe None
+
+        d.appendBlock(TxHelpers.transfer(richAccount, account2.toAddress, 20.waves))
+        d.appendBlock(TxHelpers.transfer(richAccount, account2.toAddress, 700, issuedAsset))
+
+        d.blockchain.balanceAtHeight(account2.toAddress, 12) shouldBe Some(11 -> 20.waves)
+        d.blockchain.balanceAtHeight(account2.toAddress, 11) shouldBe Some(11 -> 20.waves)
+        d.blockchain.balanceAtHeight(account2.toAddress, 10) shouldBe None
+
+        d.blockchain.balanceAtHeight(account2.toAddress, 12, issuedAsset) shouldBe Some(12 -> 700)
+        d.blockchain.balanceAtHeight(account2.toAddress, 11, issuedAsset) shouldBe None
+      }
+    }
+  }
+
+  // There is no data transaction any more, so KeyTag.ChangedDataKeys/DataHistory are never written and are left out
+  // here - nothing would ever be found under them. KeyTag.ChangedAddresses is left out too: it used to be cleaned up
+  // as a side effect of the account-data cleanup that went with data transactions, but the balance cleanup that
+  // remains (batchCleanupWavesBalances/batchCleanupAssetBalances) never touches it, so it is kept forever now - an
+  // address active since height 1, like the miner, would always have an entry there below any sinceHeight.
   private val HistoricalKeyTags = Seq(
     KeyTag.ChangedAssetBalances,
     KeyTag.ChangedWavesBalances,
     KeyTag.WavesBalanceHistory,
-    KeyTag.AssetBalanceHistory,
-    KeyTag.ChangedDataKeys,
-    KeyTag.DataHistory,
-    KeyTag.ChangedAddresses
+    KeyTag.AssetBalanceHistory
   )
 
   private type CollectedKeys = Vector[(ByteStr, String)]
@@ -121,22 +331,16 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
 
   private def getHeightAndAddressIds(tag: KeyTag, bytes: DBEntry): (Int, Seq[AddressId]) = {
     val (heightBytes, addresses) = tag match {
-      case KeyTag.ChangedAddresses | KeyTag.ChangedAssetBalances | KeyTag.ChangedWavesBalances =>
+      case KeyTag.ChangedAssetBalances | KeyTag.ChangedWavesBalances =>
         (
           bytes.getKey.drop(Shorts.BYTES),
           readAddressIds(bytes.getValue)
         )
 
-      case KeyTag.WavesBalanceHistory | KeyTag.AssetBalanceHistory | KeyTag.ChangedDataKeys =>
+      case KeyTag.WavesBalanceHistory | KeyTag.AssetBalanceHistory =>
         (
           bytes.getKey.takeRight(Ints.BYTES),
           Seq(AddressId.fromByteArray(bytes.getKey.dropRight(Ints.BYTES).takeRight(Longs.BYTES)))
-        )
-
-      case KeyTag.DataHistory =>
-        (
-          bytes.getKey.takeRight(Ints.BYTES),
-          Seq(AddressId.fromByteArray(bytes.getKey.drop(Shorts.BYTES)))
         )
 
       case _ => throw new IllegalArgumentException(s"$tag")

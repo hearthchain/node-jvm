@@ -81,7 +81,7 @@ object DomainPresets {
           functionalitySettings = ws.blockchainSettings.functionalitySettings
             .copy(preActivatedFeatures = Map.empty)
         ),
-        featuresSettings = ws.featuresSettings.copy(supported = Nil)
+        minerSettings = ws.minerSettings.copy(supportedFeatures = Nil)
       )
     }
   }

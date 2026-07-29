@@ -5,13 +5,12 @@ import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.Domain
-import com.wavesplatform.settings.{WalletSettings, WavesSettings}
+import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.{BlockEndorser, Blockchain, EndorsementStorage, NG, appender}
-import com.wavesplatform.transaction.BlockchainUpdater
+import com.wavesplatform.transaction.{BlockchainUpdater, TxHelpers}
 import com.wavesplatform.utils.Time
 import com.wavesplatform.utx.UtxPoolImpl
-import com.wavesplatform.wallet.Wallet
 import io.netty.channel.group.DefaultChannelGroup
 import io.netty.util.concurrent.GlobalEventExecutor
 import monix.execution.Scheduler
@@ -26,7 +25,6 @@ trait WithMiner extends WithDomain { suite: Suite =>
       blockchain: Blockchain & BlockchainUpdater & NG,
       time: Time,
       settings: WavesSettings,
-      miningAccounts: Seq[MiningAccount] = Seq.empty,
       verify: Boolean = true,
       timeDrift: Long = appender.MaxTimeDrift
   )(
@@ -34,19 +32,17 @@ trait WithMiner extends WithDomain { suite: Suite =>
   ): Unit = {
     val pos               = PoSSelector(blockchain, settings.synchronizationSettings.maxBaseTarget)
     val channels          = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
-    val wallet            = Wallet(WalletSettings(None, Some("123"), None))
     val utxPool           = new UtxPoolImpl(time, blockchain, settings.utxSettings, settings.maxTxErrorLogSize, settings.minerSettings.enable)
     val minerScheduler    = Scheduler.singleThread("miner")
     val appenderScheduler = Scheduler.singleThread("appender")
     val miner = new MinerImpl(
       channels,
       blockchain,
-      settings,
+      settings.minerSettings,
       time,
       utxPool,
       BlockEndorser.Disabled,
       EndorsementStorage.Disabled,
-      miningAccounts,
       pos,
       minerScheduler,
       appenderScheduler,
@@ -64,17 +60,29 @@ trait WithMiner extends WithDomain { suite: Suite =>
     utxPool.close()
   }
 
+  /** @param minerAccounts
+    *   Indices into `TxHelpers.signer`, not keys. `MinerImpl` builds its mining accounts from `MinerSettings.accounts`,
+    *   which carries hex-encoded *seeds* - and a seed cannot be recovered from a `SigningKey` - so an account is named
+    *   here the same way `TxHelpers` derives it. Passing keys instead left `MinerImpl.accounts` empty, and the miner
+    *   then reported `No delay` for every address.
+    */
   def withDomainAndMiner(
       settings: WavesSettings,
       balances: Seq[AddrWithBalance] = Seq(),
-      miningAccounts: Seq[MiningAccount] = Seq.empty,
+      minerAccounts: Seq[Int] = Seq.empty,
       verify: Boolean = true,
       timeDrift: Long = appender.MaxTimeDrift
   )(
       assert: (Domain, MinerImpl, Appender) => Unit
-  ): Unit =
+  ): Unit = {
+    // The VRF seed is the one TxHelpers.vrfKeyOf derives, so the miner uses the very key the genesis snapshot commits
+    // for this generator - a block signed with any other VRF key fails with `Invalid VRF proof`.
+    val configuredAccounts = minerAccounts.map(TxHelpers.miningAccountSettings)
+    val settingsWithMiners = settings.copy(minerSettings = settings.minerSettings.copy(accounts = configuredAccounts))
+
     // The mining accounts have to be committed generators for their blocks to be valid
-    withDomain(settings, balances, generators = miningAccounts.map(_.signingKey)) { d =>
-      withMiner(d.blockchain, d.testTime, d.settings, miningAccounts, verify, timeDrift)(assert(d, _, _))
+    withDomain(settingsWithMiners, balances, generators = minerAccounts.map(TxHelpers.signer)) { d =>
+      withMiner(d.blockchain, d.testTime, d.settings, verify, timeDrift)(assert(d, _, _))
     }
+  }
 }

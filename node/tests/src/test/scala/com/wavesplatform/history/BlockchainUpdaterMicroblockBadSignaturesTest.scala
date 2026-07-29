@@ -17,7 +17,7 @@ class BlockchainUpdaterMicroblockBadSignaturesTest extends PropSpec, WithDomain 
     withDomain(balances = Seq(s -> 100.waves)) { d =>
       d.appendBlockE(TxHelpers.transfer(s)) should beRight
       val mb = d.createMicroBlock()(TxHelpers.transfer(s))
-      d.appendMicroBlockE(mb.copy(totalResBlockSig = randomSig)) should produce("InvalidSignature")
+      d.appendMicroBlockE(mb.copy(wholeBlockSignature = randomSig)) should produce("InvalidSignature")
     }
   }
 

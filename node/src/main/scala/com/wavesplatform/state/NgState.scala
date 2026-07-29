@@ -116,7 +116,7 @@ case class NgState(
         val block = Block.create(
           base,
           transactions,
-          lastMb.totalResBlockSig,
+          lastMb.wholeBlockSignature,
           lastMb.stateHash,
           finalizationState.accFinalizationVoting
         )
@@ -191,7 +191,7 @@ case class NgState(
 
     val fullBlock = base.copy(
       transactionData = newTransactions,
-      signature = lastMicroBlock.totalResBlockSig,
+      signature = lastMicroBlock.wholeBlockSignature,
       header = base.header.copy(
         transactionsRoot = createTransactionsRoot(lastMicroBlock),
         stateHash = lastMicroBlock.stateHash,
@@ -226,7 +226,7 @@ case class NgState(
               (txs, voting, (found.sig, found.stateHash, found.discarded.appended(mb.microBlock -> discDiff)).some)
 
             case ((txs, _, None), (totalBlockId, mb)) if totalBlockId == blockId => // Found now
-              val found = (mb.microBlock.totalResBlockSig, mb.microBlock.stateHash, Seq.empty[(MicroBlock, StateSnapshot)]).some
+              val found = (mb.microBlock.wholeBlockSignature, mb.microBlock.stateHash, Seq.empty[(MicroBlock, StateSnapshot)]).some
               (txs ++ mb.microBlock.transactionData, mb.data.finalizationVoting, found) // finalizationVoting already combined
 
             case ((txs, _, None), (_, mb)) => // Not yet found

@@ -17,7 +17,7 @@ case class LiquidState(
 object LiquidState {
   def solidify(keyBlock: BlockAppended, microBlocks: Seq[MicroBlockAppended]): BlockAppended = {
     val toId             = microBlocks.lastOption.fold(keyBlock.id)(_.id)
-    val signature        = microBlocks.lastOption.fold(keyBlock.block.signature)(_.microBlock.totalResBlockSig)
+    val signature        = microBlocks.lastOption.fold(keyBlock.block.signature)(_.microBlock.wholeBlockSignature)
     val transactionsRoot = microBlocks.lastOption.fold(keyBlock.block.header.transactionsRoot)(_.totalTransactionsRoot)
 
     val transactionData         = microBlocks.foldLeft(keyBlock.block.transactionData)((txs, mb) => txs ++ mb.microBlock.transactionData)

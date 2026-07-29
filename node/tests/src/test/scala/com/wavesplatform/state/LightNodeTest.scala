@@ -196,9 +196,14 @@ class LightNodeTest extends PropSpec with WithDomain {
       )
 
       val sr = BlockSnapshotResponse(challengingBlock.id(), txSnapshots.map { case (s, m) => PBSnapshots.toProtobuf(s, m) })
-      appender(challengingBlock, Some(sr)).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")) shouldBe Right(
-        Applied(Seq.empty, d.blockchain.score, Seq.empty)
-      )
+      // Applied cleanly: nothing discarded, at the expected score. The generator set it also carries is not what this
+      // property is about, and pinning it to empty is simply wrong - an applied block always reports one.
+      appender(challengingBlock, Some(sr))
+        .runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
+        .map {
+          case Applied(discarded, score, _) => (discarded, score) shouldBe (Seq.empty, d.blockchain.score)
+          case other                        => fail(s"Block not applied: $other")
+        }
       d.lastBlock shouldBe challengingBlock
     }
   }

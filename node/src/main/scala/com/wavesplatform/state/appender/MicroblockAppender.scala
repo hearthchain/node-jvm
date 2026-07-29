@@ -55,7 +55,7 @@ object MicroblockAppender extends ScorexLogging {
       scheduler: Scheduler
   )(ch: Channel, md: MicroblockData, snapshot: Option[(Channel, MicroBlockSnapshotResponse)]): Task[Unit] = {
     import md.microBlock
-    val microblockTotalResBlockSig = microBlock.totalResBlockSig
+    val microblockTotalResBlockSig = microBlock.wholeBlockSignature
     (for {
       _ <- EitherT(Task.now(microBlock.signaturesValid()))
       microBlockSnapshot = snapshot

@@ -6,7 +6,7 @@ import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.crypto.SignatureLength
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals}
-import com.wavesplatform.transaction.{Asset, Proofs, TxExchangeAmount, TxMatcherFee, TxOrderPrice, TxVersion}
+import com.wavesplatform.transaction.{Asset, Proofs, TxExchangeAmount, TxMatcherFee, TxOrderPrice}
 import com.wavesplatform.utils.byteStrFormat
 import play.api.libs.json.*
 
@@ -93,7 +93,7 @@ object OrderJson {
       matcherFee: TxMatcherFee,
       signature: Option[Array[Byte]],
       proofs: Option[Array[Array[Byte]]],
-      version: TxVersion,
+      version: Byte,
       matcherFeeAssetId: Asset,
       priceMode: OrderPriceMode,
       attachment: Option[ByteStr]

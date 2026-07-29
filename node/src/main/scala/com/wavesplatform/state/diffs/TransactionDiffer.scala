@@ -85,6 +85,9 @@ object TransactionDiffer {
       stats.commonValidation
         .measureForType(tx.tpe) {
           for {
+            // Authenticity first: it is the cheaper rejection - ParSignatureChecker has usually computed it already -
+            // and there is no point doing blockchain lookups for a transaction that is not genuine.
+            _ <- CommonValidation.disallowInvalidProofs(tx)
             _ <- CommonValidation.disallowFromAnotherNetwork(tx, AddressScheme.current.chainId)
             _ <- CommonValidation.disallowTxFromFuture(blockchain.settings.functionalitySettings, currentBlockTs, tx)
             _ <- CommonValidation.disallowTxFromPast(blockchain.settings.functionalitySettings, prevBlockTs, tx)

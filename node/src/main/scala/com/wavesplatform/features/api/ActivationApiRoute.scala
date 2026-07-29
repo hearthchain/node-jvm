@@ -2,12 +2,12 @@ package com.wavesplatform.features.api
 
 import com.wavesplatform.api.http.ApiRoute
 import com.wavesplatform.features.{BlockchainFeatureStatus, BlockchainFeatures}
-import com.wavesplatform.settings.{FeaturesSettings, RestAPISettings}
+import com.wavesplatform.settings.RestAPISettings
 import com.wavesplatform.state.{Blockchain, Height}
 import org.apache.pekko.http.scaladsl.server.Route
 import play.api.libs.json.Json
 
-case class ActivationApiRoute(settings: RestAPISettings, featuresSettings: FeaturesSettings, blockchain: Blockchain) extends ApiRoute {
+case class ActivationApiRoute(settings: RestAPISettings, supportedFeatures: Seq[Short], blockchain: Blockchain) extends ApiRoute {
 
   override lazy val route: Route = pathPrefix("activation") {
     status
@@ -29,7 +29,7 @@ case class ActivationApiRoute(settings: RestAPISettings, featuresSettings: Featu
           Height(blockchain.settings.functionalitySettings.activationWindow(height.toInt).last),
           featureIds.map { id =>
             val status = blockchain.featureStatus(id, height.toInt)
-            val voted = featuresSettings.supported.contains(id) && !blockchain.activatedFeatures
+            val voted = supportedFeatures.contains(id) && !blockchain.activatedFeatures
               .get(id)
               .exists(_ <= height) && !blockchain.settings.functionalitySettings.preActivatedFeatures.contains(id)
 

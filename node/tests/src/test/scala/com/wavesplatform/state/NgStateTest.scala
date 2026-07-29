@@ -42,13 +42,13 @@ class NgStateTest extends PropSpec {
     var ng = mkNgState(block)
     microBlocks.foreach(m => ng = ng.append(m, StateSnapshot.empty, BlockFee.empty, BlockFee.empty, 0L, ByteStr.empty, None, Seq.empty))
 
-    ng.liquidBlockOf(microBlocks.last.totalResBlockSig)
+    ng.liquidBlockOf(microBlocks.last.wholeBlockSignature)
     microBlocks.foreach { m =>
-      val r = ng.liquidBlockOf(m.totalResBlockSig).get
+      val r = ng.liquidBlockOf(m.totalBlockId).get
       r.block.signatureValid() shouldBe true
     }
     Seq(microBlocks(4)).foreach { x =>
-      ng.liquidBlockOf(x.totalResBlockSig) shouldBe defined
+      ng.liquidBlockOf(x.totalBlockId) shouldBe defined
     }
   }
 
@@ -59,7 +59,7 @@ class NgStateTest extends PropSpec {
     var ng = mkNgState(block)
     microBlocks.foreach(m => ng = ng.append(m, StateSnapshot.empty, BlockFee.empty, BlockFee.empty, 0L, ByteStr.empty, None, Seq.empty))
 
-    ng.bestLiquidBlock.id() shouldBe microBlocks.last.totalResBlockSig
+    ng.bestLiquidBlock.id() shouldBe microBlocks.last.totalBlockId
     mkNgState(block).bestLiquidBlock.id() shouldBe block.id()
   }
 
@@ -75,9 +75,9 @@ class NgStateTest extends PropSpec {
     }
 
     ng.bestLastBlockInfo(0).blockId shouldBe block.id()
-    ng.bestLastBlockInfo(1001).blockId shouldBe microBlocks.head.totalResBlockSig
-    ng.bestLastBlockInfo(1051).blockId shouldBe microBlocks.tail.head.totalResBlockSig
-    ng.bestLastBlockInfo(2000).blockId shouldBe microBlocks.last.totalResBlockSig
+    ng.bestLastBlockInfo(1001).blockId shouldBe microBlocks.head.totalBlockId
+    ng.bestLastBlockInfo(1051).blockId shouldBe microBlocks.tail.head.totalBlockId
+    ng.bestLastBlockInfo(2000).blockId shouldBe microBlocks.last.totalBlockId
 
     mkNgState(block).bestLiquidBlock.id() shouldBe block.id()
   }
@@ -91,7 +91,7 @@ class NgStateTest extends PropSpec {
 
     ng.liquidBlockOf(block.id()).map(_.data.carryFee) shouldBe Some(BlockFee.empty)
     microBlocks.zipWithIndex.foreach { case (m, i) =>
-      val u = ng.liquidBlockOf(m.totalResBlockSig).map(_.data.carryFee)
+      val u = ng.liquidBlockOf(m.totalBlockId).map(_.data.carryFee)
       u shouldBe Some(wavesFee(i + 1L))
     }
     ng.carryFee shouldBe wavesFee(microBlocks.size.toLong)

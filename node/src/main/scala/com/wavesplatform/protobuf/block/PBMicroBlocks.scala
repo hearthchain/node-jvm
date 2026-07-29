@@ -39,7 +39,7 @@ object PBMicroBlocks {
 
   def protobufUnsigned(microBlock: VanillaMicroBlock): PBMicroBlock = PBMicroBlock(
     reference = microBlock.reference.toByteString,
-    updatedBlockSignature = microBlock.totalResBlockSig.toByteString,
+    updatedBlockSignature = microBlock.wholeBlockSignature.toByteString,
     senderPublicKey = microBlock.sender.toByteString,
     transactions = microBlock.transactionData.map(PBTransactions.protobuf),
     stateHash = microBlock.stateHash.getOrElse(ByteStr.empty).toByteString,

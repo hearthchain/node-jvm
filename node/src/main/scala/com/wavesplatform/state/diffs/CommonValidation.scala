@@ -79,12 +79,25 @@ object CommonValidation {
       Either.cond(!blockchain.containsTransaction(tx), tx, AlreadyInTheState(id, blockchain.transactionMeta(id).get.height))
   }
 
+  /** Rejects a transaction whose proof was not made by its sender.
+    *
+    * This is the only place the check is enforced: `Proven.firstProofIsValidSignatureAfterV6` computes it, but its
+    * other callers deliberately discard the result - `ParSignatureChecker` only warms the lazy val on a parallel pool.
+    * Since every admission path (block application, UTX, state hash) goes through `TransactionDiffer.validateCommon`,
+    * putting it here covers all of them at once.
+    */
+  def disallowInvalidProofs[T <: Transaction](tx: T): Either[ValidationError, T] =
+    tx match {
+      case p: ProvenTransaction => p.firstProofIsValidSignatureAfterV6.map(_ => tx)
+      case _                    => Right(tx)
+    }
+
   def disallowFromAnotherNetwork[T <: Transaction](tx: T, currentChainId: Byte): Either[ValidationError, T] =
     Either.cond(
       tx.chainId == currentChainId,
       tx,
       GenericError(
-        s"Address belongs to another network: expected: ${AddressScheme.current.chainId}(${AddressScheme.current.chainId.toChar}), actual: ${tx.chainId}(${tx.chainId.toChar})"
+        s"Transaction from another network, expected: ${AddressScheme.current.chainId}(${AddressScheme.current.chainId.toChar}), actual: ${tx.chainId}(${tx.chainId.toChar})"
       )
     )
 

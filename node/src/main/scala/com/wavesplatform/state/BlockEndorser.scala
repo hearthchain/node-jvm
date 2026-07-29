@@ -2,9 +2,8 @@ package com.wavesplatform.state
 
 import com.typesafe.scalalogging.StrictLogging
 import com.wavesplatform.block.BlockEndorsement
-import com.wavesplatform.crypto.bls.BlsKeyPair
+import com.wavesplatform.mining.GeneratorKeys
 import com.wavesplatform.network.{ChannelGroupExt, EndorseBlock}
-import com.wavesplatform.wallet.Wallet
 import io.netty.channel.group.ChannelGroup
 
 trait BlockEndorser {
@@ -22,10 +21,15 @@ object BlockEndorser {
     override def vote(generatorSet: GeneratorSet): Unit = {}
   }
 
+  /** @param generatorKeys
+    *   The accounts this node generates with. An endorsement is signed by the BLS key an account committed, and those
+    *   keys are configured in `waves.miner.accounts` - the wallet holds no BLS key and knows nothing about the accounts
+    *   the miner was configured with, so asking it which committed generators are ours answers for the wrong set.
+    */
   class InMemory(
       maxSyncRollbackLength: Int,
       blockchain: Blockchain,
-      wallet: Wallet,
+      generatorKeys: GeneratorKeys,
       endorsementStorage: EndorsementStorage,
       allChannels: ChannelGroup
   ) extends BlockEndorser,
@@ -66,7 +70,7 @@ object BlockEndorser {
           EndorsementFilter(
             blockchain.settings.functionalitySettings.maxValidEndorsers,
             GeneratorIndex(minerIndex),
-            isMiner = wallet.signingKey(votingBlockMiner).isRight,
+            isMiner = generatorKeys.contains(votingBlockMiner),
             finalizedId,
             finalizedHeight,
             endorsedId,
@@ -76,19 +80,22 @@ object BlockEndorser {
         }
         if endorsementStorage.startVoting(filter)
 
-        (account, idx) <- for {
+        (endorserAddress, idx) <- for {
           (cg, idx) <- committed.zipWithIndex
           if idx != filter.miner.toInt // A miner doesn’t need to endorse its own blocks - a mining is already an endorsement
-          pk <- wallet.signingKey(cg.address).toSeq
+          if generatorKeys.contains(cg.address)
           if balances.contains(cg.address)
-        } yield (pk, GeneratorIndex(idx))
+        } yield (cg.address, GeneratorIndex(idx))
 
-        endorsement = BlockEndorsement.signed(BlsKeyPair(???), idx, finalizedId, finalizedHeight, endorsedId)
+        signature <- generatorKeys
+          .signWithEndorserKey(endorserAddress, BlockEndorsement.mkMessage(finalizedId, finalizedHeight, endorsedId))
+          .toSeq
+        endorsement = BlockEndorsement(idx, finalizedId, finalizedHeight, endorsedId, signature)
         networkMsg  = EndorseBlock.from(endorsement)
         broadcast <- endorsementStorage.tryAdd(networkMsg) match {
           case Right(r) => Some(r)
           case Left(err) =>
-            logger.warn(s"Can't add endorsement from #$idx ${account.toAddress}: $err")
+            logger.warn(s"Can't add endorsement from #$idx $endorserAddress: $err")
             None
         }
         if broadcast

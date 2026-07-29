@@ -8,7 +8,6 @@ import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.{ERC20Address, Transaction}
-import com.wavesplatform.utils.*
 import tech.hearth.crypto.Address
 
 case class CurrentBalance(balance: Long, height: Height, prevHeight: Height)
@@ -40,16 +39,6 @@ object CurrentLeaseBalance {
 case class LeaseBalanceNode(in: Long, out: Long, prevHeight: Height)
 object LeaseBalanceNode {
   val Empty: LeaseBalanceNode = LeaseBalanceNode(0, 0, Height(0))
-}
-
-case class CurrentData(entry: DataEntry[?], height: Height, prevHeight: Height)
-object CurrentData {
-  def empty(key: String): CurrentData = CurrentData(EmptyDataEntry(key), Height(0), Height(0))
-}
-
-case class DataNode(entry: DataEntry[?], prevHeight: Height)
-object DataNode {
-  def empty(key: String): DataNode = DataNode(EmptyDataEntry(key), Height(0))
 }
 
 object Keys {
@@ -116,12 +105,6 @@ object Keys {
 
   val approvedFeatures: Key[Map[Short, Height]]  = Key(ApprovedFeatures, Array.emptyByteArray, readFeatureMap, writeFeatureMap)
   val activatedFeatures: Key[Map[Short, Height]] = Key(ActivatedFeatures, Array.emptyByteArray, readFeatureMap, writeFeatureMap)
-
-  def data(addressId: AddressId, key: String): Key[CurrentData] =
-    Key(Data, addressId.toByteArray ++ key.utf8Bytes, readCurrentData(key), writeCurrentData)
-
-  def dataAt(addressId: AddressId, key: String)(height: Height): Key[DataNode] =
-    Key(DataHistory, hBytes(addressId.toByteArray ++ key.utf8Bytes, height), readDataNode(key), writeDataNode)
 
   val safeRollbackHeight: Key[Height] = heightKey(SafeRollbackHeight)
   val lastCleanupHeight: Key[Height]  = heightKey(LastCleanupHeight)

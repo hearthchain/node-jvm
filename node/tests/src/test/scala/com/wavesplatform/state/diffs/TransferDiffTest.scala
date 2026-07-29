@@ -1,6 +1,5 @@
 package com.wavesplatform.state.diffs
 
-import com.wavesplatform.account.Address
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.test.*
@@ -24,10 +23,10 @@ class TransferDiffTest extends PropSpec with WithDomain {
       withDomain(ScriptsAndSponsorship, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, master)) { d =>
         d.appendBlock(transfer)
 
-        val carryFee = -transfer.fee.value * 3 / 5
+        val carryFee = -transfer.fee.value * 3 / 5 + 6.waves
         assertBalanceInvariant(d.liquidSnapshot, d.rocksDBWriter, carryFee)
 
-        val recipient = transfer.recipient.asInstanceOf[Address]
+        val recipient = transfer.recipient
         if (transfer.sender.toAddress != recipient) {
           d.balance(recipient) shouldBe transfer.amount.value
         }

@@ -5,7 +5,6 @@ import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.lagonaki.mocks.TestBlock.create as block
 import com.wavesplatform.settings.TestFunctionalitySettings.Enabled
-import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.diffs.*
 import com.wavesplatform.state.{BalanceSnapshot, Height, LeaseBalance}
 import com.wavesplatform.test.*
@@ -36,10 +35,10 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
       val master = TxHelpers.signer(1)
       val leaser = TxHelpers.signer(2)
 
-      val xfer1   = TxHelpers.transfer(master, leaser.toAddress, ENOUGH_AMT / 3)
-      val lease1  = TxHelpers.lease(leaser, master.toAddress, xfer1.amount.value - Fee, fee = Fee)
-      val xfer2   = TxHelpers.transfer(master, leaser.toAddress, ENOUGH_AMT / 3)
-      val lease2  = TxHelpers.lease(leaser, master.toAddress, xfer2.amount.value - Fee, fee = Fee)
+      val xfer1  = TxHelpers.transfer(master, leaser.toAddress, ENOUGH_AMT / 3)
+      val lease1 = TxHelpers.lease(leaser, master.toAddress, xfer1.amount.value - Fee, fee = Fee)
+      val xfer2  = TxHelpers.transfer(master, leaser.toAddress, ENOUGH_AMT / 3)
+      val lease2 = TxHelpers.lease(leaser, master.toAddress, xfer2.amount.value - Fee, fee = Fee)
 
       (master, leaser, xfer1, lease1, xfer2, lease2)
     }
@@ -61,107 +60,128 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
   }
 
   property("correct balance snapshots at height = 2") {
-    def assert(settings: WavesSettings, fixed: Boolean) =
-      withDomain(settings) { d =>
-        d.appendBlock()
-        d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
-          bs(Height(1), regularBalance = 600000000)
-        )
+    withDomain(RideV6) { d =>
+      d.appendBlock()
+      d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
+        bs(Height(2), regularBalance = 100004.waves, deposits = 1),
+        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+      )
 
-        d.appendMicroBlock(transfer(amount = 1))
-        d.appendKeyBlock()
-        d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe (
-          if (fixed)
-            List(
-              bs(Height(2), regularBalance = 1199999999),
-              bs(Height(1), regularBalance = 599399999)
-            )
-          else
-            List(bs(Height(2), regularBalance = 1199999999))
-        )
-        d.blockchain.balanceSnapshots(defaultAddress, 2, None) shouldBe List(
-          bs(Height(2), regularBalance = 1199999999)
-        )
+      // Each round below appends a micro block carrying a 1-wavelet transfer and then a key block. The transfer and
+      // 60% of its fee - the carry the next block collects - land on the liquid block the micro block extends, so the
+      // height that was liquid loses `1 + fee * 3 / 5` when the next key block makes it solid.
+      //
+      // `from` reaches the inner blockchain only from `liquid height - 2` down: asking from the height just below the
+      // liquid one gives the liquid snapshot alone. Height 2 is the exception - see `SnapshotBlockchain`.
+      val transfer1 = transfer(amount = 1)
+      d.appendMicroBlock(transfer1)
+      d.appendKeyBlock()
+      val bAt2 = 100004.waves - 1 - transfer1.fee.value * 3 / 5
+      d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
+        bs(Height(3), regularBalance = 100008.waves - 1, deposits = 1),
+        bs(Height(2), regularBalance = bAt2, deposits = 1),
+        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+      )
+      d.blockchain.balanceSnapshots(defaultAddress, 2, None) shouldBe List(
+        bs(Height(3), regularBalance = 100008.waves - 1, deposits = 1)
+      )
+      d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
+        bs(Height(3), regularBalance = 100008.waves - 1, deposits = 1)
+      )
 
-        d.appendMicroBlock(transfer(amount = 1))
-        d.appendKeyBlock()
-        d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
-          bs(Height(3), regularBalance = 1799999998),
-          bs(Height(2), regularBalance = 1199399998),
-          bs(Height(1), regularBalance = 599399999)
-        )
-        d.blockchain.balanceSnapshots(defaultAddress, 2, None) shouldBe List(
-          bs(Height(3), regularBalance = 1799999998)
-        )
-        d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
-          bs(Height(3), regularBalance = 1799999998)
-        )
+      val transfer2 = transfer(amount = 1)
+      d.appendMicroBlock(transfer2)
+      d.appendKeyBlock()
+      val bAt3 = 100008.waves - 2 - transfer2.fee.value * 3 / 5
+      d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
+        bs(Height(4), regularBalance = 100012.waves - 2, deposits = 1),
+        bs(Height(3), regularBalance = bAt3, deposits = 1),
+        bs(Height(2), regularBalance = bAt2, deposits = 1),
+        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+      )
+      d.blockchain.balanceSnapshots(defaultAddress, 2, None) shouldBe List(
+        bs(Height(4), regularBalance = 100012.waves - 2, deposits = 1),
+        bs(Height(3), regularBalance = bAt3, deposits = 1),
+        bs(Height(2), regularBalance = bAt2, deposits = 1)
+      )
+      d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
+        bs(Height(4), regularBalance = 100012.waves - 2, deposits = 1)
+      )
 
-        d.appendMicroBlock(transfer(amount = 1))
-        d.appendKeyBlock()
-        d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
-          bs(Height(4), regularBalance = 2399999997L),
-          bs(Height(3), regularBalance = 1799399997),
-          bs(Height(2), regularBalance = 1199399998),
-          bs(Height(1), regularBalance = 599399999)
-        )
-        d.blockchain.balanceSnapshots(defaultAddress, 2, None) shouldBe List(
-          bs(Height(4), regularBalance = 2399999997L),
-          bs(Height(3), regularBalance = 1799399997),
-          bs(Height(2), regularBalance = 1199399998)
-        )
-        d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
-          bs(Height(4), regularBalance = 2399999997L)
-        )
-      }
-
-    assert(RideV5, fixed = false)
-    assert(RideV6, fixed = true)
+      val transfer3 = transfer(amount = 1)
+      d.appendMicroBlock(transfer3)
+      d.appendKeyBlock()
+      val bAt4 = 100012.waves - 3 - transfer3.fee.value * 3 / 5
+      d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
+        bs(Height(5), regularBalance = 100016.waves - 3, deposits = 1),
+        bs(Height(4), regularBalance = bAt4, deposits = 1),
+        bs(Height(3), regularBalance = bAt3, deposits = 1),
+        bs(Height(2), regularBalance = bAt2, deposits = 1),
+        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+      )
+      d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
+        bs(Height(5), regularBalance = 100016.waves - 3, deposits = 1),
+        bs(Height(4), regularBalance = bAt4, deposits = 1),
+        bs(Height(3), regularBalance = bAt3, deposits = 1)
+      )
+      d.blockchain.balanceSnapshots(defaultAddress, 4, None) shouldBe List(
+        bs(Height(5), regularBalance = 100016.waves - 3, deposits = 1)
+      )
+    }
   }
 
   property("correct balance snapshots") {
     val transferTx   = transfer(to = signer(1).toAddress, amount = 3.waves, fee = 0.1.waves)
     val leaseTx      = lease(recipient = signer(1).toAddress, amount = 2.waves, fee = 0.1.waves)
     val startBalance = 7.waves
+    // defaultSigner generates the blocks below, so it is a committed generator: its deposit is locked on top of what
+    // it spends, and shows up in the snapshots as `deposits` rather than as a deduction from the regular balance.
+    val genesisBalance = startBalance + CommitToGenerationTransaction.DepositInWavelets
 
-    // 2 txs in 1 a non-genesis block
-    val feeReward = (transferTx.fee.value + leaseTx.fee.value) * 2 / 5
+    // 2 txs in 1 a non-genesis block. The miner keeps 4 of the 6 waves a block pays - the DAO share is deducted.
+    val minerReward = 4.waves
+    val feeReward   = (transferTx.fee.value + leaseTx.fee.value) * 2 / 5
     val feeCost   = transferTx.fee.value + leaseTx.fee.value
 
-    withDomain(RideV6, Seq(AddrWithBalance(defaultAddress, startBalance))) { d =>
+    withDomain(RideV6, Seq(AddrWithBalance(defaultAddress, genesisBalance))) { d =>
       d.appendBlock(transferTx, leaseTx)
       d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe Seq(
         bs(
           height = Height(2),
-          regularBalance = startBalance + 6.waves + feeReward - feeCost - transferTx.amount.value,
-          leaseOut = leaseTx.amount.value
+          regularBalance = genesisBalance + minerReward + feeReward - feeCost - transferTx.amount.value,
+          leaseOut = leaseTx.amount.value,
+          deposits = 1
         ),
         bs(
           height = Height(1),
-          regularBalance = startBalance
+          regularBalance = genesisBalance,
+          deposits = 1
         )
       )
     }
 
     // 1 tx in each of 2 non-genesis blocks, from = 0..1
     (0 to 1).foreach { from =>
-      withDomain(RideV6, Seq(AddrWithBalance(defaultAddress, 7.waves))) { d =>
+      withDomain(RideV6, Seq(AddrWithBalance(defaultAddress, genesisBalance))) { d =>
         d.appendBlock(transferTx)
         d.appendBlock(leaseTx)
         d.blockchain.balanceSnapshots(defaultAddress, from, None) shouldBe Seq(
           bs(
             height = Height(3),
-            regularBalance = startBalance + 12.waves + leaseTx.fee.value * 2 / 5 - leaseTx.fee.value - transferTx.amount.value,
+            regularBalance = genesisBalance + 2 * minerReward + leaseTx.fee.value * 2 / 5 - leaseTx.fee.value - transferTx.amount.value,
             // leaseIn = 0, transfer fee is fully compensated by reward ↑
-            leaseOut = leaseTx.amount.value
+            leaseOut = leaseTx.amount.value,
+            deposits = 1
           ),
           bs(
             height = Height(2),
-            regularBalance = startBalance + 6.waves + transferTx.fee.value * 2 / 5 - transferTx.fee.value - transferTx.amount.value
+            regularBalance = genesisBalance + minerReward + transferTx.fee.value * 2 / 5 - transferTx.fee.value - transferTx.amount.value,
+            deposits = 1
           ),
           bs(
             height = Height(1),
-            regularBalance = startBalance
+            regularBalance = genesisBalance,
+            deposits = 1
           )
         )
       }
