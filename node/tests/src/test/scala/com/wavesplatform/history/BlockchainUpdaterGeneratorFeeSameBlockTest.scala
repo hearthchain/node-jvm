@@ -16,10 +16,10 @@ class BlockchainUpdaterGeneratorFeeSameBlockTest extends PropSpec with DomainSce
 
   // The sender is credited by the genesis snapshot, which the domain applies as its own block at height 1
   val preconditionsAndPayments: Gen[Setup] = for {
-    sender    <- accountGen
-    recipient <- accountGen
-    fee       <- smallFeeGen
-    ts        <- positiveIntGen
+    sender                       <- accountGen
+    recipient                    <- accountGen
+    fee                          <- smallFeeGen
+    ts                           <- positiveIntGen
     payment: TransferTransaction <- wavesTransferGeneratorP(ts, sender, recipient.toAddress)
     generatorPaymentOnFee: TransferTransaction = createWavesTransfer(defaultSigner, recipient.toAddress, payment.fee.value, fee, ts + 1).explicitGet()
   } yield (sender, payment, generatorPaymentOnFee)
@@ -44,25 +44,23 @@ class BlockchainUpdaterGeneratorFeeSameBlockTest extends PropSpec with DomainSce
    * the fee of a transaction that comes after its own - which is what is left to assert.
    */
   property("block generator can't spend the fee of a later transaction in the same block") {
-    scenario(preconditionsAndPayments, withoutReward, fundGeneratorForItsOwnFeeOnly) {
-      case (domain, (_, somePayment, generatorPaymentOnFee)) =>
-        domain.appendBlockAtE(generatorPaymentOnFee.timestamp)(generatorPaymentOnFee, somePayment) should produce("trying to spend a deposit")
+    scenario(preconditionsAndPayments, withoutReward, fundGeneratorForItsOwnFeeOnly) { case (domain, (_, somePayment, generatorPaymentOnFee)) =>
+      domain.appendBlockAtE(generatorPaymentOnFee.timestamp)(generatorPaymentOnFee, somePayment) should produce("trying to spend a deposit")
     }
   }
 
   property("block generator can spend the fee of an earlier transaction in the same block") {
-    scenario(preconditionsAndPayments, withoutReward, fundGeneratorForItsOwnFeeOnly) {
-      case (domain, (_, somePayment, generatorPaymentOnFee)) =>
-        // 40% of the earlier transaction's fee is credited before this one is applied, and that is what it spends
-        val affordable = createWavesTransfer(
-          defaultSigner,
-          generatorPaymentOnFee.recipient,
-          BlockDiffer.CurrentBlockFeePart(somePayment.fee.value),
-          generatorPaymentOnFee.fee.value,
-          generatorPaymentOnFee.timestamp
-        ).explicitGet()
+    scenario(preconditionsAndPayments, withoutReward, fundGeneratorForItsOwnFeeOnly) { case (domain, (_, somePayment, generatorPaymentOnFee)) =>
+      // 40% of the earlier transaction's fee is credited before this one is applied, and that is what it spends
+      val affordable = createWavesTransfer(
+        defaultSigner,
+        generatorPaymentOnFee.recipient,
+        BlockDiffer.CurrentBlockFeePart(somePayment.fee.value),
+        generatorPaymentOnFee.fee.value,
+        generatorPaymentOnFee.timestamp
+      ).explicitGet()
 
-        domain.appendBlockAtE(somePayment.timestamp)(somePayment, affordable) should beRight
+      domain.appendBlockAtE(somePayment.timestamp)(somePayment, affordable) should beRight
     }
   }
 }

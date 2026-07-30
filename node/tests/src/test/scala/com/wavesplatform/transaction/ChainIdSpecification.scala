@@ -19,10 +19,10 @@ class ChainIdSpecification extends PropSpec {
 
   private def txParams: Gen[(SigningKey, TxPositiveAmount, TxPositiveAmount, TxTimestamp)] =
     for {
-      sender  <- accountGen
-      amount  <- Gen.choose(1L, 10000000L)
-      fee     <- Gen.choose(1000000L, 10000000L)
-      ts      <- Gen.choose(1L, 1000000L)
+      sender <- accountGen
+      amount <- Gen.choose(1L, 10000000L)
+      fee    <- Gen.choose(1000000L, 10000000L)
+      ts     <- Gen.choose(1L, 1000000L)
     } yield (sender, TxPositiveAmount.unsafeFrom(amount), TxPositiveAmount.unsafeFrom(fee), ts)
 
   private def validateFromOtherNetwork(tx: Transaction): Unit = {
@@ -110,7 +110,6 @@ class ChainIdSpecification extends PropSpec {
     forAll(txParams) { case (sender, amount, fee, ts) =>
       validateFromOtherNetwork(
         MassTransferTransaction(
-          
           PublicKey(sender.publicKey),
           Waves,
           Seq(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(amount.value))),
@@ -132,7 +131,7 @@ class ChainIdSpecification extends PropSpec {
           sender = sender,
           timestamp = ts,
           fee = fee.value,
-          chainId = otherChainId,
+          chainId = otherChainId
         )
       )
     }

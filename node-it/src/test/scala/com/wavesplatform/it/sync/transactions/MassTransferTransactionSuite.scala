@@ -1,23 +1,24 @@
 package com.wavesplatform.it.sync.transactions
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.account.{Address, AddressScheme, Alias}
+import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.api.http.requests.MassTransferRequest
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto
+import com.wavesplatform.it.NodeConfigs.GenesisAssets
 import com.wavesplatform.it.api.MassTransferTransactionInfo
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.*
 import com.wavesplatform.it.transactions.BaseTransactionSuite
 import com.wavesplatform.it.util.TxHelpers
-import com.wavesplatform.protobuf.transaction.{MassTransferTransactionData, PBRecipients, Recipient}
+import com.wavesplatform.protobuf.transaction.{MassTransferTransactionData, PBRecipients}
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.transfer.*
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.{MaxTransferCount, Transfer}
 import com.wavesplatform.transaction.transfer.TransferTransaction.MaxAttachmentSize
-import com.wavesplatform.transaction.{Proofs, TxVersion}
+import com.wavesplatform.transaction.Proofs
 import play.api.libs.json.*
 
 import scala.concurrent.duration.*
@@ -38,9 +39,11 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
       val (balance1, eff1) = miner.accountBalances(firstAddress)
       val (balance2, eff2) = miner.accountBalances(secondAddress)
 
+      val assetId                  = GenesisAssets.TestAsset.id.toString
+      val firstAssetBalanceBefore  = sender.assetBalance(firstAddress, assetId).balance
+      val secondAssetBalanceBefore = sender.assetBalance(secondAddress, assetId).balance
+
       val transfers = List(Transfer(secondAddress, 1000))
-      val assetId   = sender.issue(firstKeyPair, "name", "description", issueAmount, 8, reissuable = false, issueFee).id
-      nodes.waitForHeightAriseAndTxPresent(assetId)
 
       val massTransferTransactionFee = calcMassTransferFee(transfers.size)
       val massTransferTx             = sender.massTransfer(firstKeyPair, transfers, massTransferTransactionFee, assetId = Some(assetId), version = v)
@@ -50,10 +53,10 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
         sender.transactionInfo[MassTransferTransactionInfo](massTransferTx.id).chainId shouldBe Some(AddressScheme.current.chainId)
       }
 
-      miner.assertBalances(firstAddress, balance1 - massTransferTransactionFee - issueFee, eff1 - massTransferTransactionFee - issueFee)
-      miner.assertAssetBalance(firstAddress, assetId, issueAmount - 1000)
+      miner.assertBalances(firstAddress, balance1 - massTransferTransactionFee, eff1 - massTransferTransactionFee)
+      sender.assetBalance(firstAddress, assetId).balance shouldBe firstAssetBalanceBefore - 1000
       miner.assertBalances(secondAddress, balance2, eff2)
-      miner.assertAssetBalance(secondAddress, assetId, 1000)
+      sender.assetBalance(secondAddress, assetId).balance shouldBe secondAssetBalanceBefore + 1000
     }
   }
 
@@ -133,8 +136,6 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
   }
 
   test("invalid transfer should not be in UTX or blockchain") {
-    import com.wavesplatform.transaction.transfer.*
-
     for (_ <- massTransferTxSupportedVersions) {
       def request(
           transfers: List[Transfer] = List(Transfer(secondAddress, transferAmount)),
@@ -146,8 +147,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
           parsedTransfers <- MassTransferTransaction.parseTransfersList(transfers)
           tx <- MassTransferTransaction
             .create(
-              1.toByte,
-              sender.keyPair.publicKey,
+              PublicKey(sender.keyPair.publicKey()),
               Waves,
               parsedTransfers,
               fee,
@@ -155,13 +155,12 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
               ByteStr(attachment),
               Proofs.empty
             )
-            .map(_.signWith(sender.keyPair.privateKey))
+            .map(_.signWith(sender.keyPair))
         } yield tx
 
         val (signature, idOpt) = txEi.fold(_ => (Proofs(List(fakeSignature)), None), tx => (tx.proofs, Some(tx.id())))
 
         val req = MassTransferRequest(
-          Some(TxVersion.V1),
           sender.publicKey.toString,
           None,
           transfers,
@@ -181,20 +180,18 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
         val attachment = ByteStr(Array.emptyByteArray)
         val fee        = calcMassTransferFee(1)
         val timestamp  = System.currentTimeMillis()
-        val version    = TxVersion.V1
         val mttdTransfers = transfers.map { t =>
           MassTransferTransactionData.Transfer(
-            Some(Recipient.of(Recipient.Recipient.PublicKeyHash(PBRecipients.create(Address.fromPublicKey(recipient.publicKey)).getPublicKeyHash))),
+            Some(PBRecipients.create(Address.fromPublicKey(PublicKey(recipient.publicKey())))),
             t.amount
           )
         }
 
         val bodyBytes =
-          TxHelpers.massTransferBodyBytes(sender.keyPair, None, mttdTransfers, ByteString.copyFrom(attachment.arr), fee, timestamp, version)
+          TxHelpers.massTransferBodyBytes(sender.keyPair, None, mttdTransfers, ByteString.copyFrom(attachment.arr), fee, timestamp)
 
         (
           MassTransferRequest(
-            Some(version),
             sender.publicKey.toString,
             None,
             transfers,
@@ -282,38 +279,8 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
     }
   }
 
-  test("try to make mass transfer if use alias for address") {
-    for (v <- massTransferTxSupportedVersions) {
-      val (balance1, eff1) = miner.accountBalances(firstAddress)
-      val (balance2, eff2) = miner.accountBalances(secondAddress)
-
-      val alias = s"masstest_alias$v"
-
-      val aliasFee = if (!sender.aliasByAddress(secondAddress).exists(_.endsWith(alias))) {
-        val aliasId = sender.createAlias(secondKeyPair, alias, minFee).id
-        nodes.waitForHeightAriseAndTxPresent(aliasId)
-        minFee
-      } else 0
-
-      val aliasFull = sender.aliasByAddress(secondAddress).find(_.endsWith(alias)).get
-
-      val transfers = List(Transfer(firstAddress, 0), Transfer(aliasFull, 1000))
-
-      val massTransferTransactionFee = calcMassTransferFee(transfers.size)
-      val transferId                 = sender.massTransfer(firstKeyPair, transfers, massTransferTransactionFee, version = v).id
-      nodes.waitForHeightAriseAndTxPresent(transferId)
-
-      miner.assertBalances(firstAddress, balance1 - massTransferTransactionFee - 1000, eff1 - massTransferTransactionFee - 1000)
-      miner.assertBalances(secondAddress, balance2 + 1000 - aliasFee, eff2 + 1000 - aliasFee)
-    }
-  }
-
   private def extractTransactionByType(json: JsValue, t: Int): Seq[JsValue] = {
     json.validate[Seq[JsObject]].getOrElse(Seq.empty[JsValue]).filter(_("type").as[Int] == t)
-  }
-
-  private def extractTransactionById(json: JsValue, id: String): Option[JsValue] = {
-    json.validate[Seq[JsObject]].getOrElse(Seq.empty[JsValue]).find(_("id").as[String] == id)
   }
 
   test("reporting MassTransfer transactions") {
@@ -356,30 +323,6 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
       assert((txRecipient \ "totalAmount").as[Long] == 10.waves)
       val transferToSecond = txRecipient.as[MassTransferRequest].transfers.head
       assert(transfers contains transferToSecond)
-    }
-  }
-
-  test("reporting MassTransfer transactions to aliases") {
-    for (v <- massTransferTxSupportedVersions) {
-      val aliases        = List(s"alias1v$v", s"alias2v$v")
-      val createAliasTxs = aliases.map(sender.createAlias(secondKeyPair, _, 100000).id)
-      createAliasTxs.foreach(sender.waitForTransaction(_))
-
-      val transfers = aliases.map { alias =>
-        Transfer(Alias.create(alias).explicitGet().toString, 2.waves)
-      }
-      val txId = sender.massTransfer(firstKeyPair, transfers, 300000, version = v).id
-      nodes.waitForHeightAriseAndTxPresent(txId)
-
-      val rawTxs = sender
-        .get(s"/transactions/address/$secondAddress/limit/10")
-        .getResponseBody
-
-      val recipientTx =
-        extractTransactionById(Json.parse(rawTxs).as[JsArray].head.getOrElse(fail("The returned array is empty")), txId)
-          .getOrElse(fail(s"Can't find a mass transfer transaction $txId"))
-
-      assert((recipientTx \ "transfers").as[Seq[Transfer]].size == 2)
     }
   }
 }

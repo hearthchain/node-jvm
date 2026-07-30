@@ -13,10 +13,9 @@ import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 // Enough to check appending both blocks and microblocks, because they share the validation code
 class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
   private val defaultSettings = DomainPresets.DeterministicFinality
-
     .configure(
       _.copy(
-        generationPeriodLength = 2,
+        generationPeriodLength = 2
       )
     )
 
@@ -271,14 +270,14 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
     // notCommittedGenerator stays "not committed" for the period under test, which is the one from height 3 on.
     def run(): Unit =
       withDomain(settings, AddrWithBalance.enoughBalances(allGenerators*), generators = Seq(notCommittedGenerator, committedGenerator1)) { d =>
-      log.debug(s"Append block 2 with commitments")
-      val txs                   = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
-      val block2WithCommitments = d.createBlock(txs, generator = notCommittedGenerator, strictTime = true)
-      d.appender.appendBlock(block2WithCommitments)
+        log.debug(s"Append block 2 with commitments")
+        val txs                   = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
+        val block2WithCommitments = d.createBlock(txs, generator = notCommittedGenerator, strictTime = true)
+        d.appender.appendBlock(block2WithCommitments)
 
-      log.debug(s"Append block 3")
-      continue(d)
-    }
+        log.debug(s"Append block 3")
+        continue(d)
+      }
 
     extension (d: Domain) {
       def genesisBlockId: BlockId = d.blockchain.blockHeader(GenesisBlockHeight.toInt).value.id()

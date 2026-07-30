@@ -20,7 +20,7 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
       val secondBalance = sender.wavesBalance(secondAddress)
 
       val leaseTx   = sender.broadcastLease(firstAcc, PBRecipients.create(secondAcc.toAddress), leasingAmount, minFee, version = v, waitForTx = true)
-      val vanillaTx = PBTransactions.vanilla(leaseTx, unsafe = false).explicitGet()
+      val vanillaTx = PBTransactions.vanilla(leaseTx).explicitGet()
       val leaseTxId = vanillaTx.id().toString
       val height    = sender.getStatus(leaseTxId).height
 
@@ -40,7 +40,7 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
   test("cannot lease non-own waves") {
     for (v <- leaseTxSupportedVersions) {
       val leaseTx   = sender.broadcastLease(firstAcc, PBRecipients.create(secondAcc.toAddress), leasingAmount, minFee, version = v, waitForTx = true)
-      val vanillaTx = PBTransactions.vanilla(leaseTx, unsafe = false).explicitGet()
+      val vanillaTx = PBTransactions.vanilla(leaseTx).explicitGet()
       val leaseTxId = vanillaTx.id().toString
       val height    = sender.getStatus(leaseTxId).height
 
@@ -69,7 +69,7 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
       val firstBalance  = sender.wavesBalance(firstAddress)
       val secondBalance = sender.wavesBalance(secondAddress)
 
-      //secondAddress effective balance more than general balance
+      // secondAddress effective balance more than general balance
       assertGrpcError(
         sender.broadcastLease(secondAcc, Recipient().withPublicKeyHash(firstAddress), secondBalance.regular + 1.waves, minFee, version = v),
         errorMessage,
@@ -101,7 +101,7 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
       val secondBalance = sender.wavesBalance(secondAddress)
 
       val leaseTx   = sender.broadcastLease(firstAcc, PBRecipients.create(secondAcc.toAddress), leasingAmount, minFee, version = v, waitForTx = true)
-      val leaseTxId = PBTransactions.vanilla(leaseTx, unsafe = false).explicitGet().id().toString
+      val leaseTxId = PBTransactions.vanilla(leaseTx).explicitGet().id().toString
 
       sender.broadcastLeaseCancel(firstAcc, leaseTxId, minFee, waitForTx = true)
 
@@ -120,7 +120,7 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
       val secondBalance = sender.wavesBalance(secondAddress)
 
       val leaseTx   = sender.broadcastLease(firstAcc, PBRecipients.create(secondAcc.toAddress), leasingAmount, minFee, version = v, waitForTx = true)
-      val leaseTxId = PBTransactions.vanilla(leaseTx, unsafe = false).explicitGet().id().toString
+      val leaseTxId = PBTransactions.vanilla(leaseTx).explicitGet().id().toString
 
       sender.broadcastLeaseCancel(firstAcc, leaseTxId, minFee, waitForTx = true)
 
@@ -145,7 +145,7 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
       val secondBalance = sender.wavesBalance(secondAddress)
 
       val leaseTx   = sender.broadcastLease(firstAcc, PBRecipients.create(secondAcc.toAddress), leasingAmount, minFee, version = v, waitForTx = true)
-      val vanillaTx = PBTransactions.vanilla(leaseTx, unsafe = false).explicitGet()
+      val vanillaTx = PBTransactions.vanilla(leaseTx).explicitGet()
       val leaseTxId = vanillaTx.id().toString
       val height    = sender.getStatus(leaseTxId).height
 
@@ -187,7 +187,7 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
     LeaseResponse(
       leaseId = leaseTxId,
       originTransactionId = leaseTxId,
-      sender = ByteString.copyFrom(leaseTx.sender.toAddress.bytes),
+      sender = ByteString.copyFrom(leaseTx.sender.toAddress.toBytes()),
       recipient = Some(PBRecipients.create(leaseTx.recipient)),
       amount = leaseTx.amount.value,
       height = height.toInt

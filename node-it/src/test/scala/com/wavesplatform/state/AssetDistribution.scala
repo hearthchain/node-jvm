@@ -13,7 +13,7 @@ object AssetDistribution {
     override def combine(x: AssetDistribution, y: AssetDistribution): AssetDistribution = x ++ y
   }
 
-  given Writes[AssetDistribution] = Writes { dst =>
+  given writes: Writes[AssetDistribution] = Writes { dst =>
     Json
       .toJson(dst.map { case (addr, balance) =>
         addr.toString -> balance
@@ -29,7 +29,7 @@ object AssetDistributionPage {
     Json.obj(
       "hasNext"  -> JsBoolean(page.hasNext),
       "lastItem" -> Json.toJson(page.lastItem.map(_.toString)),
-      "items"    -> Json.toJson(page.items)
+      "items"    -> Json.toJson(page.items)(AssetDistribution.writes)
     )
   }
 }

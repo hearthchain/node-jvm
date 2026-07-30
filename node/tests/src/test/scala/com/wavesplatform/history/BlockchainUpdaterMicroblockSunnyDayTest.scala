@@ -26,8 +26,8 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
     // More than the fee, or the transfers below would be for a negative amount: Alice has to afford exactly one of them
     amount <- Gen.choose(fee + 2, ENOUGH_AMT / 100)
     masterToAlice: TransferTransaction = createWavesTransfer(master, alice.toAddress, amount, fee, ts).explicitGet()
-    aliceToBob  = createWavesTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts).explicitGet()
-    aliceToBob2 = createWavesTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts + 1).explicitGet()
+    aliceToBob                         = createWavesTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts).explicitGet()
+    aliceToBob2                        = createWavesTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts + 1).explicitGet()
   } yield (master, masterToAlice, aliceToBob, aliceToBob2)
 
   private def fundMaster(s: Setup): Seq[AddrWithBalance] = Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
@@ -48,15 +48,14 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
   }
 
   property("all txs in different blocks: B0 <- B1 <- B2 <- B3!") {
-    scenario(preconditionsAndPayments, DefaultWavesSettings, fundMaster) {
-      case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
-        domain.appendBlockAt(masterToAlice.timestamp)(masterToAlice)
-        domain.appendBlockAt(aliceToBob.timestamp)(aliceToBob)
-        domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative waves balance")
+    scenario(preconditionsAndPayments, DefaultWavesSettings, fundMaster) { case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
+      domain.appendBlockAt(masterToAlice.timestamp)(masterToAlice)
+      domain.appendBlockAt(aliceToBob.timestamp)(aliceToBob)
+      domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative waves balance")
 
-        effBalance(master.toAddress, domain) > 0 shouldBe true
-        effBalance(masterToAlice.recipient, domain) shouldBe 0L
-        effBalance(aliceToBob.recipient, domain) shouldBe 0L
+      effBalance(master.toAddress, domain) > 0 shouldBe true
+      effBalance(masterToAlice.recipient, domain) shouldBe 0L
+      effBalance(aliceToBob.recipient, domain) shouldBe 0L
     }
   }
 

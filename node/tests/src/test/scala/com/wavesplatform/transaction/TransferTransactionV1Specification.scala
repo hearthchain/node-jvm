@@ -49,7 +49,9 @@ class TransferTransactionV1Specification extends PropSpec {
   property("negative") {
     for {
       (_, sender, recipient, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
-    } yield TransferTransaction.create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty).map(_.signWith(sender)) should produce(
+    } yield TransferTransaction
+      .create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty)
+      .map(_.signWith(sender)) should produce(
       "insufficient fee"
     )
   }

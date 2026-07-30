@@ -64,11 +64,10 @@ class MinerImpl(
     with MinerDebugInfo
     with ScorexLogging {
 
-  private val scheduledAttempts = SerialCancelable()
-  private val microBlockAttempt = SerialCancelable()
-  val generatorKeys: GeneratorKeys = GeneratorKeys.fromSettings(settings)
+  private val scheduledAttempts            = SerialCancelable()
+  private val microBlockAttempt            = SerialCancelable()
+  val generatorKeys: GeneratorKeys         = GeneratorKeys.fromSettings(settings)
   private def accounts: Seq[MiningAccount] = generatorKeys.accounts
-
 
   @volatile
   private var debugStateRef: MinerDebugInfo.State = MinerDebugInfo.Disabled

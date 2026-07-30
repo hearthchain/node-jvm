@@ -103,7 +103,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
           buyMatcherFee: Long = buyMatcherFee,
           sellMatcherFee: Long = 1,
           fee: Long = 1,
-          timestamp: Long = expirationTimestamp - Order.MaxLiveTime,
+          timestamp: Long = expirationTimestamp - Order.MaxLiveTime
       ): Either[ValidationError, ExchangeTransaction] = {
         ExchangeTransaction
           .create(
@@ -114,7 +114,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
             buyMatcherFee = buyMatcherFee,
             sellMatcherFee = sellMatcherFee,
             fee = fee,
-            timestamp = timestamp,
+            timestamp = timestamp
           )
       }
 
@@ -169,19 +169,19 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       buyMatcherFee = (BigInt(matcherFee) * amount / buy.amount.value).toLong,
       sellMatcherFee = (BigInt(matcherFee) * amount / sell.amount.value).toLong,
       fee = matcherFee,
-      timestamp = ntpTime.correctedTime(),
+      timestamp = ntpTime.correctedTime()
     )
   }
 
   property("Test transaction with small amount and expired order") {
 
     forAll(preconditions) { case (sender1, sender2, matcher, pair, buyerMatcherFeeAssetId, sellerMatcherFeeAssetId, versions) =>
-      val time                     = ntpTime.correctedTime()
-      val expirationTimestamp      = time + Order.MaxLiveTime / 2
-      val buyPrice                 = 1 * Order.PriceConstant
-      val sellPrice                = (0.50 * Order.PriceConstant).toLong
-      val matcherFee               = 300000L
-      val (sellV, buyV, _) = versions
+      val time                = ntpTime.correctedTime()
+      val expirationTimestamp = time + Order.MaxLiveTime / 2
+      val buyPrice            = 1 * Order.PriceConstant
+      val sellPrice           = (0.50 * Order.PriceConstant).toLong
+      val matcherFee          = 300000L
+      val (sellV, buyV, _)    = versions
 
       val sell =
         TxHelpers
@@ -218,7 +218,9 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
       val sell1 =
         if (sellV == 3) {
-          TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee, sellerMatcherFeeAssetId).explicitGet()
+          TxHelpers
+            .sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee, sellerMatcherFeeAssetId)
+            .explicitGet()
         } else TxHelpers.sell(sellV, sender2, PublicKey(matcher.publicKey), pair, 1, buyPrice, time, time - 1, matcherFee).explicitGet()
 
       createExTx(buy, sell1, buyPrice) shouldBe Left(OrderValidationError(sell1, "expiration should be > currentTime"))

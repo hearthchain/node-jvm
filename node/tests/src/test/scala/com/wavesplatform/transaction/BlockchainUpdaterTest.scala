@@ -12,7 +12,6 @@ import com.wavesplatform.test.{FreeSpec, HasFatalStopProbe}
 import com.wavesplatform.utils.UnsupportedFeature
 import org.scalactic.source.Position
 
-
 class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain with HasFatalStopProbe {
 
   private val ApprovalPeriod      = 100
@@ -34,13 +33,12 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
 
   private val WavesSettingsWithDoubling = WavesSettings.copy(
     blockchainSettings = WavesSettings.blockchainSettings.copy(
-      functionalitySettings =
-        WavesSettings.blockchainSettings.functionalitySettings.copy(preActivatedFeatures = Map.empty)
+      functionalitySettings = WavesSettings.blockchainSettings.functionalitySettings.copy(preActivatedFeatures = Map.empty)
     )
   )
 
-  private def fm(elems: (Int, Int)*): Map[Short, Height] = elems.map { case (id, h) => id.toShort -> Height(h)}.toMap
-  
+  private def fm(elems: (Int, Int)*): Map[Short, Height] = elems.map { case (id, h) => id.toShort -> Height(h) }.toMap
+
   def appendBlock(block: Block, blockchainUpdater: BlockchainUpdater & Blockchain): Unit = {
     blockchainUpdater.processBlock(block)
   }

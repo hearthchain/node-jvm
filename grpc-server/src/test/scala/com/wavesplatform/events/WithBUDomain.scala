@@ -8,7 +8,7 @@ import com.wavesplatform.events.api.grpc.protobuf.{GetBlockUpdateResponse, GetBl
 import com.wavesplatform.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
 import com.wavesplatform.events.repo.LiquidState
 import com.wavesplatform.history.Domain
-import com.wavesplatform.settings.{Constants, WavesSettings}
+import com.wavesplatform.settings.{Constants, GenesisAssetSettings, WavesSettings}
 import com.wavesplatform.state.Height
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.Schedulers
@@ -21,8 +21,13 @@ import org.scalatest.concurrent.ScalaFutures.convertScalaFuture
 
 trait WithBUDomain extends WithDomain { suite: Suite =>
   private given scheduler: Scheduler = Schedulers.singleThread("bu-domain", executionModel = SynchronousExecution)
-  def withDomainAndRepo(settings: WavesSettings)(f: (Domain, Repo) => Unit, wrapDB: RocksDB => RocksDB = identity): Unit = {
-    withDomain(settings) { d =>
+  def withDomainAndRepo(
+      settings: WavesSettings,
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave)),
+      assets: Seq[GenesisAssetSettings] = Seq.empty,
+      generators: Seq[tech.hearth.crypto.SigningKey] = Nil
+  )(f: (Domain, Repo) => Unit, wrapDB: RocksDB => RocksDB = identity): Unit = {
+    withDomain(settings, balances = balances, assets = assets, generators = generators) { d =>
       tempDb { rdb =>
         val repo = new Repo(wrapDB(rdb.db), d.blocksApi)
         d.triggers = Seq(repo)
@@ -33,7 +38,7 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   }
 
   def withManualHandle(settings: WavesSettings, setSendUpdate: (() => Unit) => Unit)(f: (Domain, Repo) => Unit): Unit =
-    withDomain(settings) { d =>
+    withDomain(settings, balances = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave))) { d =>
       tempDb { rdb =>
         val repo = new Repo(rdb.db, d.blocksApi) {
           override def newHandler(
@@ -56,11 +61,10 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   def withGenerateSubscription(
       request: SubscribeRequest = SubscribeRequest.of(1, Int.MaxValue),
       settings: WavesSettings,
-      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave))
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave)),
+      assets: Seq[GenesisAssetSettings] = Seq.empty
   )(generateBlocks: Domain => Unit)(f: Seq[PBBlockchainUpdated] => Unit): Unit = {
-    withDomainAndRepo(settings) { (d, repo) =>
-      d.appendBlock(balances.map(awb => TxHelpers.genesis(awb.address, awb.balance))*)
-
+    withDomainAndRepo(settings, balances, assets) { (d, repo) =>
       val subscription = repo.createFakeObserver(request)
       generateBlocks(d)
 
@@ -72,10 +76,10 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   def withGenerateGetBlockUpdate(
       height: Int = 1,
       settings: WavesSettings,
-      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave))
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave)),
+      assets: Seq[GenesisAssetSettings] = Seq.empty
   )(generateBlocks: Domain => Unit)(f: GetBlockUpdateResponse => Unit): Unit = {
-    withDomainAndRepo(settings) { (d, repo) =>
-      d.appendBlock(balances.map(awb => TxHelpers.genesis(awb.address, awb.balance))*)
+    withDomainAndRepo(settings, balances, assets) { (d, repo) =>
       generateBlocks(d)
       val getBlockUpdate = repo.getBlockUpdate(Height(height))
       f(getBlockUpdate)
@@ -85,10 +89,10 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   def withGenerateGetBlockUpdateRange(
       request: GetBlockUpdatesRangeRequest,
       settings: WavesSettings,
-      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave))
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalWaves * Constants.UnitsInWave)),
+      assets: Seq[GenesisAssetSettings] = Seq.empty
   )(generateBlocks: Domain => Unit)(f: Seq[PBBlockchainUpdated] => Unit): Unit = {
-    withDomainAndRepo(settings) { (d, repo) =>
-      d.appendBlock(balances.map(awb => TxHelpers.genesis(awb.address, awb.balance))*)
+    withDomainAndRepo(settings, balances, assets) { (d, repo) =>
       generateBlocks(d)
       val getBlockUpdateRange = repo.getBlockUpdatesRange(request).futureValue.updates
       f(getBlockUpdateRange)

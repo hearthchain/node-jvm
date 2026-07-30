@@ -164,7 +164,6 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
         utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        
         pos,
         scheduler,
         scheduler,

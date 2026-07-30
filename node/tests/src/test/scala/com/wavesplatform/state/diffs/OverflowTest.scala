@@ -19,8 +19,8 @@ class OverflowTest extends PropSpec with WithDomain {
       (Long.MaxValue / 2 + 1, Long.MaxValue / 2 + 1)
     )
 
-  private val sender      = TxHelpers.signer(1)
-  private val recipient   = TxHelpers.signer(2).toAddress
+  private val sender    = TxHelpers.signer(1)
+  private val recipient = TxHelpers.signer(2).toAddress
 
   // These two can no longer be set up: overflowing the recipient's balance needs the sender to hold the counterpart,
   // so the genesis total necessarily exceeds Long.MaxValue - which GenesisSnapshot rejects, since a chain's total

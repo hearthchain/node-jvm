@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @BenchmarkMode(Array(Mode.AverageTime))
 @Threads(1)
-@Fork(value = 1/*, jvmArgsAppend = Array("-Djava.security.debug=all")*/)
+@Fork(value = 1 /*, jvmArgsAppend = Array("-Djava.security.debug=all")*/ )
 @Warmup(iterations = 30, time = 1)
 @Measurement(iterations = 30, time = 1)
 class P256VerifyBenchmark {
@@ -31,6 +31,6 @@ object P256VerifyBenchmark {
   val crls      = Seq(res("IntelSGXRootCA.der"), res("pckcrl"))
   val ts        = 1769499118300L
   val publicKey = P256Curve.validateCertChain(certChain, crls, ts).explicitGet()
-  val hash = Sha256.hash(message)
+  val hash      = Sha256.hash(message)
 
 }

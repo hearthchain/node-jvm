@@ -64,7 +64,7 @@ class BasicMessagesRepoSpec extends FreeSpec {
           Byte.MaxValue,
           ByteString.copyFrom(bytes32gen.sample.get),
           Some(PBAmounts.fromAssetAndAmount(IssuedAsset(ByteStr(bytes32gen.sample.get)), Long.MaxValue)),
-          Long.MaxValue,
+          Long.MaxValue
         )
       ),
       Seq.fill(Proofs.MaxProofs)(ByteString.copyFrom(byteArrayGen(Proofs.MaxProofSize).sample.get))

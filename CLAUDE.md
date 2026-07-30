@@ -52,6 +52,10 @@ from one seed by `KeyTree` at an account nonce:
   `crypto_scalarmult_ed25519_base_noclamp failed`).
 - A BLS key (`KeyTree.blsSecretKey` → `BlsKeyPair`, `crypto/bls/`) — signs block endorsements for finality.
 
+`crypto.signVRF` is gone entirely; only `crypto.verifyVRF` remains. A test can no longer hand-forge a VRF proof for a
+block or microblock outside the committed-generator flow (see "Building blocks in tests" below) — there is no way to
+sign a hit source with an arbitrary key any more.
+
 `Address` is `tech.hearth.crypto.Address` — bech32, `thrth1…` on testnet — so base58 address literals from before the
 migration no longer parse (`InvalidAddress`).
 
@@ -109,6 +113,83 @@ Wrap it: `PublicKey(signer.publicKey())`.
 `utils.byteArrayFromString` — which reads every `ByteStr` field of every request — no longer accepts a `base64:`
 prefix, and no longer measures the string itself: an over-long one fails with `Can't parse '…' as base58 encoded byte
 array` rather than naming the limit.
+
+Aliases are gone entirely: `AddressOrAlias`, `Alias`, `CreateAliasTransaction` and the alias HTTP endpoints
+(`aliasByAddress`, `addressByAlias`, alias-typed `/transactions/sign` requests) don't exist any more. `Address` is the
+only recipient a transaction can name, and the `Recipient` protobuf message is now just `{ public_key_hash: bytes }`
+with no oneof — `Recipient.of(bytes)` replaces the old `Recipient.of(Recipient.Recipient.PublicKeyHash(bytes))`.
+
+`Order` still carries its own version (`Order.V1`..`Order.V4`, `TxHelpers.order(..., version = ...)`), independent of
+the (removed) transaction version — don't conflate the two when adapting exchange tests: a version-per-order ×
+version-per-order × version-per-tx combinatorial test collapses to version-per-order × version-per-order once the tx
+side of it is dropped.
+
+A transaction's REST JSON (`BaseTxJson.toJson`) always includes `proofs`; there is no `signature` field to fall back on
+and no `version` to gate on any more, so `/transactions/sign`/`/transactions/broadcast` test helpers that branched on
+"v1 uses signature, v2+ uses proofs" collapse to a single unconditional proofs check.
+
+## Protobuf package migration
+
+Generated protobuf code moved from `com.wavesplatform.*` packages to `tech.hearth.*` ones (external dependency
+`tech.hearth % protobuf-schemas`). Hand-written Scala that assumed same-package visibility (`grpc-server`'s
+`api/grpc`, `events/protobuf`, `events/api/grpc/protobuf`) needs a `package object` re-export shim — `type X =
+tech.hearth.foo.X` plus `val X = tech.hearth.foo.X` for the companion — rather than a blanket import, since callers
+reference these types unqualified from within `com.wavesplatform.*`.
+
+The `Transaction` wire message dropped `version` entirely: `chain_id`, `sender_public_key`, `fee`, `timestamp`, then a
+`data` oneof of only the six surviving transaction kinds (transfer, exchange, lease, lease-cancel, mass-transfer,
+commit-to-generation). Constructing one directly no longer takes a version argument. `SignedTransaction` simplified to
+`{ wavesTransaction: Option[Transaction], proofs: Seq[ByteString] }`, with no `EthereumTransaction` oneof variant.
+`StateUpdate`/`TransactionMetadata` lost their data-entry, script and alias fields and oneof branches along with the
+features that produced them.
+
+## node-it fixtures
+
+`node-it/src/test/resources/template.conf`'s genesis section still uses the pre-migration schema
+(`genesis.transactions`/`initial-balance`, base58 addresses), while `Docker.scala` parses genesis through the current
+`GenesisSettings` (`balances`/`generators`, bech32 addresses, optional `assets`). This predates any single change and
+is unrelated to whatever test is failing: the module compiles, but a Docker node won't actually boot off this fixture
+until the schema is migrated. `genesis.assets` entries exist for tests that need a pre-issued asset
+(`NodeConfigs.GenesisAssets`), but nothing distributes them into a `balances` entry yet, so trading them still fails at
+runtime even though the test compiles.
+
+## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
+
+`WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with the full configured
+supply (`Constants.TotalWaves * Constants.UnitsInWave`), matching `withGenerateSubscription`'s existing convention.
+A test whose miner must start at a *specific* small balance (not the full supply) needs an explicit `balances` entry
+naming that account — the auto-fund only backs off when the caller already named the address, same dedup-keep-first
+rule as `node/testkit`'s `withDomain`. A committed generator can never be funded with a literal 0 either way: genesis
+validation requires each committed generator's starting balance to cover `CommitToGenerationTransaction
+.DepositInWavelets`, so a test wanting a small, exact miner balance funds it at genesis with that deposit (or the
+test's own intended total) rather than via a later transfer.
+
+Genesis (height 1) never produces a `BlockchainUpdated` event of its own — the update stream starts at height 2, the
+first real block after it. Tests written before this held (subscribing/ranging from height 1 and expecting height 1
+in the result) need their expectations shifted by one; this bit most of the pre-existing `BlockchainUpdatesSpec`
+suite, which predates the genesis-occupies-height-1 convention.
+
+A committed generator's *generating* balance is the minimum effective balance over a lookback window, not its
+current balance: crediting one via a transfer in the same test run doesn't make it eligible to mine immediately,
+because the window hasn't accumulated enough history yet. Fund a generator that needs to mine right away at genesis,
+not through a same-run transfer — this is why the `(1 to 999).foreach(_ => d.appendBlock())` wait-out pattern
+appears throughout `node/tests`, and why `grpc-server` tests that skip it need genesis-level funding instead.
+
+Every order is now AssetDecimals-normalized unless it's V4 with `priceMode = Default` (see `ExchangeTransactionDiff
+.getPortfolios`): the exchange transaction's own `price` field must be `>= sellOrder.price` in *normalized* terms
+(`rawPrice / 10^(priceDecimals - amountDecimals)`), not the order's raw price. `TxHelpers.exchangeFromOrders`'s
+default price is the raw `order1.price.value`, so a V1-V3 order pair traded against assets with different decimals
+needs that normalized price passed explicitly, or validation rejects the tx with `exchange.price = X should be >=
+sellOrder.price = Y (assetDecimals price = X)`.
+
+`grpc-server`'s `Repo`/`Loader.scala` (untouched by the transaction-type-removal migration, confirmed via `git log`)
+mis-numbers replayed history when a subscriber attaches (or a range/GetBlockUpdate is requested) starting from
+height 1 after real blocks already exist: `Loader.loadBatch` computes each replayed row's height arithmetically from
+the requested `fromHeight`, assuming dense storage starting exactly there, but genesis is never persisted by `Repo`,
+so the first replayed row is mislabeled and duplicated against the next one. Pre-existing, not something this pass
+fixed — six `BlockchainUpdatesSpec` tests that subscribe/query from height 1 against non-empty history are `ignore`d
+for this reason (mirroring the six `ignore`d suites in `node/tests` for the empty-generator-set rule), with a shared
+comment at the first one.
 
 ## Balance snapshots
 

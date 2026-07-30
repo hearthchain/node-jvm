@@ -128,9 +128,17 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
        |  "currentReward" : ${d.blockchain.settings.rewardsSettings.initial},
        |  "minIncrement" : ${d.blockchain.settings.rewardsSettings.minIncrement},
        |  "term" : ${d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature},
-       |  "nextCheck" : ${d.blockchain.settings.rewardsSettings.nearestTermEnd(Height(blockRewardActivationHeight), Height(d.blockchain.height), modifyTerm = true)},
+       |  "nextCheck" : ${d.blockchain.settings.rewardsSettings.nearestTermEnd(
+        Height(blockRewardActivationHeight),
+        Height(d.blockchain.height),
+        modifyTerm = true
+      )},
        |  "votingIntervalStart" : ${d.blockchain.settings.rewardsSettings
-      .nearestTermEnd(Height(blockRewardActivationHeight), Height(d.blockchain.height), modifyTerm = true) - d.blockchain.settings.rewardsSettings.votingInterval + 1},
+        .nearestTermEnd(
+          Height(blockRewardActivationHeight),
+          Height(d.blockchain.height),
+          modifyTerm = true
+        ) - d.blockchain.settings.rewardsSettings.votingInterval + 1},
        |  "votingInterval" : ${d.blockchain.settings.rewardsSettings.votingInterval},
        |  "votingThreshold" : ${d.blockchain.settings.rewardsSettings.votingInterval / 2 + 1},
        |  "votes" : {
@@ -163,8 +171,8 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
     withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves)), generators = Seq(miner)) { d =>
       val route = new RewardApiRoute(d.blockchain).route
 
-      def checkRewardAndShares(height: Int, expectedReward: Long)(
-          implicit pos: Position
+      def checkRewardAndShares(height: Int, expectedReward: Long)(implicit
+          pos: Position
       ): Unit = {
 
         val path = routePath(s"/rewards/$height")

@@ -98,7 +98,7 @@ class TransactionsRouteSpec
         "senderPublicKey" -> PublicKey(TestValues.keyPair.publicKey),
         // Not TestValues.address: that is this very sender's, and a transfer to yourself is rejected before any fee
         // is calculated
-        "recipient"       -> TxHelpers.secondAddress
+        "recipient" -> TxHelpers.secondAddress
       )
 
       Post(routePath("/calculateFee"), transferTx) ~> route ~> check {
@@ -607,7 +607,7 @@ class TransactionsRouteSpec
     val exchange =
       TxHelpers.exchangeFromOrders(
         TxHelpers.order(OrderType.BUY, Waves, issuedAsset, version = Order.V4, attachment = Some(attachment)),
-        TxHelpers.order(OrderType.SELL, Waves, issuedAsset, version = Order.V4, sender = issuer),
+        TxHelpers.order(OrderType.SELL, Waves, issuedAsset, version = Order.V4, sender = issuer)
       )
 
     domain.appendBlock(

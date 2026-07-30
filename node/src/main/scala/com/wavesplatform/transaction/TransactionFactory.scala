@@ -45,9 +45,9 @@ object TransactionFactory {
   ): Either[ValidationError, Transaction] =
     for {
       address <- signer.fold((request \ "sender").asOpt[String].toRight(GenericError("invalid.sender")))(Right(_)) match {
-        case Right(addr: String)      => Address.fromString(addr)
-        case Right(key: SigningKey)   => Right(key.toAddress)
-        case Left(err)                => Left(err)
+        case Right(addr: String)    => Address.fromString(addr)
+        case Right(key: SigningKey) => Right(key.toAddress)
+        case Left(err)              => Left(err)
       }
       signingKey <- generatorKeys
         .signingKey(address)

@@ -7,7 +7,7 @@ import com.wavesplatform.it.api.AsyncNetworkApi.*
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.*
 import com.wavesplatform.it.transactions.BaseTransactionSuite
-import com.wavesplatform.network.{RawBytes, TransactionSpec}
+import com.wavesplatform.network.{PBTransactionSpec, RawBytes}
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxHelpers
 
@@ -47,7 +47,7 @@ class SimpleTransactionsSuite extends BaseTransactionSuite {
 
   test("should blacklist senders of non-parsable transactions") {
     val blacklistBefore = node.blacklistedPeers
-    node.sendByNetwork(RawBytes(TransactionSpec.messageCode, "foobar".getBytes(StandardCharsets.UTF_8)))
+    node.sendByNetwork(RawBytes(PBTransactionSpec.messageCode, "foobar".getBytes(StandardCharsets.UTF_8)))
     node.waitForBlackList(blacklistBefore.size)
   }
 }

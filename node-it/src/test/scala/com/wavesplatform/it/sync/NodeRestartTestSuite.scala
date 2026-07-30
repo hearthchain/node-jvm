@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync
 
 import com.typesafe.config.{Config, ConfigFactory}
-import com.wavesplatform.account.AddressOrAlias
+import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncHttpApi.*
@@ -34,7 +34,17 @@ class NodeRestartTestSuite extends BaseFreeSpec {
   }
 
   "after restarting all the nodes, the duplicate transaction cannot be put into the blockchain" in {
-    val txJson = TxHelpers.transfer(from = nodeB.keyPair, to = AddressOrAlias.fromString(nodeA.address).explicitGet(), amount = 1.waves, asset = Waves, fee = minFee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = System.currentTimeMillis())
+    val txJson = TxHelpers
+      .transfer(
+        from = nodeB.keyPair,
+        to = Address.fromString(nodeA.address).explicitGet(),
+        amount = 1.waves,
+        asset = Waves,
+        fee = minFee,
+        feeAsset = Waves,
+        attachment = ByteStr.empty,
+        timestamp = System.currentTimeMillis()
+      )
       .json()
 
     val tx = nodeB.signedBroadcast(txJson, waitForTx = true)
@@ -60,31 +70,31 @@ class NodeRestartTestSuite extends BaseFreeSpec {
 object NodeRestartTestSuite {
   import com.wavesplatform.it.NodeConfigs.*
   private val FirstNode = ConfigFactory.parseString(s"""
-                                                         |waves {
-                                                         |  synchronization.synchronization-timeout = 10s
-                                                         |  blockchain.custom.functionality {
-                                                         |    pre-activated-features.1 = 0
-                                                         |  }
-                                                         |  miner.quorum = 0
-                                                         |  wallet {
-                                                         |     file = "/tmp/wallet.dat"
-                                                         |     password = "bla"
-                                                         |  }
-                                                         |
-                                                         |}""".stripMargin)
+                                                       |waves {
+                                                       |  synchronization.synchronization-timeout = 10s
+                                                       |  blockchain.custom.functionality {
+                                                       |    pre-activated-features.1 = 0
+                                                       |  }
+                                                       |  miner.quorum = 0
+                                                       |  wallet {
+                                                       |     file = "/tmp/wallet.dat"
+                                                       |     password = "bla"
+                                                       |  }
+                                                       |
+                                                       |}""".stripMargin)
 
   private val SecondNode = ConfigFactory.parseString(s"""
-                                                            |waves {
-                                                            |  synchronization.synchronization-timeout = 10s
-                                                            |  blockchain.custom.functionality {
-                                                            |    pre-activated-features.1 = 0
-                                                            |  }
-                                                            |  miner.enable = no
-                                                            |  wallet {
-                                                            |     file = "/tmp/wallet.dat"
-                                                            |     password = "bla"
-                                                            |  }
-                                                            |}""".stripMargin)
+                                                        |waves {
+                                                        |  synchronization.synchronization-timeout = 10s
+                                                        |  blockchain.custom.functionality {
+                                                        |    pre-activated-features.1 = 0
+                                                        |  }
+                                                        |  miner.enable = no
+                                                        |  wallet {
+                                                        |     file = "/tmp/wallet.dat"
+                                                        |     password = "bla"
+                                                        |  }
+                                                        |}""".stripMargin)
 
   val Configs: Seq[Config] = Seq(
     FirstNode.withFallback(Default.head),

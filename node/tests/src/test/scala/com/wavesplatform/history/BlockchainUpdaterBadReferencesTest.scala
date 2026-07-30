@@ -48,8 +48,8 @@ class BlockchainUpdaterBadReferencesTest extends PropSpec, WithDomain {
 
   property("microBlock: referenced (micro)block doesn't exist") {
     withDomain(balances = balances) { d =>
-      d.appendBlock(payment)          // liquid base block
-      d.appendMicroBlock(payment)     // good micro
+      d.appendBlock(payment)      // liquid base block
+      d.appendMicroBlock(payment) // good micro
       val badMicroRef = d.createMicroBlock()(payment).copy(reference = randomSig)
       d.appendMicroBlockE(badMicroRef) should produce("doesn't reference last known microBlock")
     }

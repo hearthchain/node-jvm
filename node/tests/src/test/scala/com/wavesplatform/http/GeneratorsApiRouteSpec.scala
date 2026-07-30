@@ -98,7 +98,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
 
     "on start height of period1" in test { d =>
       d.appendBlock()
-      val txIds                   = d.commit(generators*)
+      val txIds                = d.commit(generators*)
       val minerBalanceAtCommit = d.effBalance(miner.toAddress)
 
       d.appendUpTo(period1.end - 1)
@@ -150,7 +150,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
 
     "one generator is conflicting" in test { d =>
       d.appendBlock()
-      val txIds                   = d.commit(generators*)
+      val txIds                = d.commit(generators*)
       val minerBalanceAtCommit = d.effBalance(miner.toAddress)
 
       d.appendUpTo(period1.end - 1)
@@ -250,7 +250,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
 
     "on the period 2" in test { d =>
       d.appendBlock()
-      val txIds1                  = d.commit(generators*)
+      val txIds1               = d.commit(generators*)
       val minerBalanceAtCommit = d.effBalance(miner.toAddress)
 
       d.appendUpTo(period1.end - 1)

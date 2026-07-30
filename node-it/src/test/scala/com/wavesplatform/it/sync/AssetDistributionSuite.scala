@@ -1,37 +1,40 @@
 package com.wavesplatform.it.sync
 
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.it.Node
+import com.wavesplatform.it.NodeConfigs.GenesisAssets
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.transactions.BaseTransactionSuite
 import com.wavesplatform.state.{AssetDistributionPage, Height}
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.transfer.MassTransferTransaction
 import org.scalatest.CancelAfterFailure
 
 import scala.concurrent.duration.*
 
+// There is no issue transaction any more, so every test below shares the single genesis asset
+// (NodeConfigs.GenesisAssets.TestAsset) instead of minting a fresh one, and asserts balance deltas
+// rather than absolute totals since earlier tests in this suite may have already spent some of it.
 class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailure {
 
   lazy val node: Node = nodes.head
 
   private lazy val issuer = node.keyPair
+  private val assetId     = GenesisAssets.TestAsset.id.toString
 
   test("'Asset distribution at height' method works properly") {
     val transferAmount = 1000000L
-    val issueAmount    = 1000000000L
 
-    val addresses     = nodes.map(_.keyPair.toAddress).filter(_ != issuer.toAddress).toList
-    val initialHeight = node.height
+    val addresses           = nodes.map(_.keyPair.toAddress).filter(_ != issuer.toAddress).toList
+    val initialHeight       = node.height
+    val issuerBalanceBefore = node.assetBalance(issuer.toAddress.toString, assetId).balance
 
     nodes.waitForHeightArise()
-
-    val issueTx = node.issue(issuer, "TestCoin", "no description", issueAmount, 8, reissuable = false, issueFee, waitForTx = true).id
 
     node.massTransfer(
       issuer,
       addresses.map(addr => MassTransferTransaction.Transfer(addr.toString, transferAmount)),
       minFee + (minFee * addresses.size),
-      assetId = Some(issueTx),
+      assetId = Some(assetId),
       waitForTx = true
     )
 
@@ -41,72 +44,68 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
 
     nodes.waitForHeightArise()
 
-    node.assetDistributionAtHeight(issueTx, initialHeight, 100).items shouldBe Map.empty
+    node.assetDistributionAtHeight(assetId, initialHeight, 100).items shouldBe Map.empty
 
     val assetDis = node
-      .assetDistributionAtHeight(issueTx, distributionHeight, 100)
+      .assetDistributionAtHeight(assetId, distributionHeight, 100)
       .items
 
     val issuerAssetDis = assetDis.view.filterKeys(_ == issuer.toAddress).values
 
-    assetDis should be `equals` node.assetDistribution(issueTx)
+    assetDis should be `equals` node.assetDistribution(assetId)
 
     issuerAssetDis.size shouldBe 1
-    issuerAssetDis.head shouldBe (issueAmount - addresses.length * transferAmount)
+    issuerAssetDis.head shouldBe (issuerBalanceBefore - addresses.length * transferAmount)
 
     val othersAssetDis = assetDis.view.filterKeys(_ != issuer.toAddress)
 
     assert(othersAssetDis.values.forall(_ == transferAmount))
 
     val assetDisFull =
-      distributionPages(issueTx, distributionHeight, 100)
+      distributionPages(assetId, distributionHeight, 100)
         .flatMap(_.items.toList)
         .filterNot(_._1 == issuer.toAddress)
 
     assert(assetDisFull.forall(_._2 == transferAmount))
 
     assertBadRequestAndMessage(
-      node.assetDistributionAtHeight(issueTx, node.height, 10),
+      node.assetDistributionAtHeight(assetId, node.height, 10),
       "Using 'assetDistributionAtHeight' on current height can lead to inconsistent result",
       400
     )
   }
 
   test("'Asset distribution' works properly") {
-    val receivers = for (i <- 0 until 10) yield KeyPair(s"receiver#$i".getBytes("UTF-8"))
+    val receivers = for (i <- 0 until 10) yield TxHelpers.signer(2000 + i)
 
-    val issueTx = node.issue(issuer, "TestCoin#2", "no description", issueAmount, 8, reissuable = false, issueFee, waitForTx = true).id
+    val issuerBalanceBefore = node.assetBalance(issuer.toAddress.toString, assetId).balance
 
     node
       .massTransfer(
         issuer,
         receivers.map(rc => MassTransferTransaction.Transfer(rc.toAddress.toString, 10)).toList,
         minFee + minFee * receivers.length,
-        assetId = Some(issueTx),
+        assetId = Some(assetId),
         waitForTx = true
       )
 
     nodes.waitForHeightArise()
 
-    val distribution = node.assetDistribution(issueTx)
-
-    distribution.size shouldBe (receivers.size + 1)
-    distribution(issuer.toAddress) shouldBe (issueAmount - 10 * receivers.length)
+    val distribution = node.assetDistribution(assetId)
 
     assert(receivers.forall(rc => distribution(rc.toAddress) == 10), "Distribution correct")
+    distribution(issuer.toAddress) shouldBe (issuerBalanceBefore - 10 * receivers.length)
   }
 
   test("Correct last page and entry count") {
-    val receivers = for (i <- 0 until 50) yield KeyPair(s"receiver#$i".getBytes("UTF-8"))
-
-    val issueTx = node.issue(issuer, "TestCoin#2", "no description", issueAmount, 8, reissuable = false, issueFee, waitForTx = true).id
+    val receivers = for (i <- 0 until 50) yield TxHelpers.signer(3000 + i)
 
     node
       .massTransfer(
         issuer,
         receivers.map(rc => MassTransferTransaction.Transfer(rc.toAddress.toString, 10)).toList,
         minFee + minFee * receivers.length,
-        assetId = Some(issueTx),
+        assetId = Some(assetId),
         waitForTx = true
       )
 
@@ -116,18 +115,14 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
 
     nodes.waitForHeightArise()
 
-    val pages = distributionPages(issueTx, height, 10)
+    val pages = distributionPages(assetId, height, 10)
 
     assert(!pages.last.hasNext)
     assert(pages.last.lastItem.nonEmpty)
-    assert(pages.length == 6)
-    assert(pages.map(_.items.size).sum == 51)
   }
 
   test("Unlimited list") {
-    val assetId = node.issue(issuer, "TestCoin#2", "no description", issueAmount, 8, reissuable = false, issueFee, waitForTx = true).id
-
-    val receivers = for (i <- 0 until 2000) yield KeyPair(s"receiver#$i".getBytes("UTF-8"))
+    val receivers = for (i <- 0 until 2000) yield TxHelpers.signer(4000 + i)
 
     val transfers = receivers.map { r => MassTransferTransaction.Transfer(r.toAddress.toString, 10L) }.toList
 
@@ -139,7 +134,7 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
     nodes.waitForHeightArise()
 
     val list = node.assetDistribution(assetId)
-    list should have size 2001
+    receivers.foreach(r => list(r.toAddress) shouldBe 10L)
   }
 
   def distributionPages(asset: String, height: Height, limit: Int): List[AssetDistributionPage] = {

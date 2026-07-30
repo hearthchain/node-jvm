@@ -1,47 +1,38 @@
 package com.wavesplatform.it.api
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.account.{AddressOrAlias, AddressScheme, KeyPair, SeedKeyPair}
+import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.api.http.DebugMessage.*
 import com.wavesplatform.api.http.RewardApiRoute.{RewardStatus, RewardVotes}
-import com.wavesplatform.api.http.requests.{IssueRequest, TransferRequest}
+import com.wavesplatform.api.http.requests.TransferRequest
 import com.wavesplatform.api.http.{ConnectReq, DebugMessage, RollbackParams, `X-Api-Key`}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.common.utils.{Base58, Base64}
+import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.features.api.{ActivationStatus, FinalityStatus, activationStatusFormat}
-import com.wavesplatform.it.Node
-import com.wavesplatform.it.sync.invokeExpressionFee
+import com.wavesplatform.it.{Node, keyPairFromSeed}
 import com.wavesplatform.it.util.*
 import com.wavesplatform.it.util.GlobalTimer.instance as timer
-import com.wavesplatform.lang.script.ScriptReader
-import com.wavesplatform.lang.script.v1.ExprScript
-import com.wavesplatform.lang.v1.FunctionHeader
-import com.wavesplatform.lang.v1.compiler.Terms
-import com.wavesplatform.lang.v1.compiler.Terms.FUNCTION_CALL
-import com.wavesplatform.state.DataEntry.Format
-import com.wavesplatform.state.{AssetDistribution, AssetDistributionPage, DataEntry, EmptyDataEntry, Height, LeaseBalance, Portfolio}
+import com.wavesplatform.state.{AssetDistribution, AssetDistributionPage, Height, LeaseBalance, Portfolio}
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.assets.*
 import com.wavesplatform.transaction.assets.exchange.{Order, ExchangeTransaction as ExchangeTx}
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import com.wavesplatform.transaction.smart.{InvokeExpressionTransaction, InvokeScriptTransaction, SetScriptTransaction}
 import com.wavesplatform.transaction.transfer.*
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.{ParsedTransfer, Transfer}
 import com.wavesplatform.transaction.{
   Asset,
-  DataTransaction,
   Proofs,
+  TransactionType,
   TransactionValidationOps,
-  TxDecimals,
   TxExchangeAmount,
   TxExchangePrice,
+  TxMatcherFee,
   TxNonNegativeAmount,
-  TxPositiveAmount,
-  TxVersion
+  TxPositiveAmount
 }
 import monix.execution.atomic.AtomicInt
+import tech.hearth.crypto.SigningKey
 import org.asynchttpclient.*
 import org.asynchttpclient.Dsl.{delete as _delete, get as _get, post as _post, put as _put}
 import org.asynchttpclient.util.HttpConstants.ResponseStatusCodes.OK_200
@@ -231,7 +222,7 @@ object AsyncHttpApi extends Assertions {
       as  <- activationStatus
       jsv <- get("/blockchain/finality").as[JsValue]
     } yield jsv.as[FinalityStatus](using
-      FinalityStatus.parse(Some(1))
+      FinalityStatus.parse(Some(Height(1)))
     )
 
     def blockAt(height: Height, amountsAsStrings: Boolean = false): Future[Block] =
@@ -312,9 +303,6 @@ object AsyncHttpApi extends Assertions {
 
     def getAddresses: Future[Seq[String]] = get(s"/addresses").as[Seq[String]]
 
-    def scriptInfo(address: String): Future[AddressScriptInfo] =
-      get(s"/addresses/scriptInfo/$address").as[AddressScriptInfo]
-
     def findTransactionInfo(txId: String): Future[Option[TransactionInfo]] = transactionInfo[TransactionInfo](txId).transform {
       case Success(tx)                                          => Success(Some(tx))
       case Failure(UnexpectedStatusCodeException(_, _, 404, _)) => Success(None)
@@ -381,20 +369,19 @@ object AsyncHttpApi extends Assertions {
     }
 
     def transfer(
-        sender: KeyPair,
+        sender: SigningKey,
         recipient: String,
         amount: Long,
         fee: Long,
         assetId: Option[String] = None,
         feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V2,
+        version: Byte = 2,
         attachment: Option[String] = None
     ): Future[Transaction] =
       signedBroadcast(
         TransferTransaction(
-          version,
-          sender.publicKey,
-          AddressOrAlias.fromString(recipient).explicitGet(),
+          PublicKey(sender.publicKey()),
+          Address.fromString(recipient).explicitGet(),
           Asset.fromString(assetId),
           TxPositiveAmount.unsafeFrom(amount),
           Asset.fromString(feeAssetId),
@@ -403,237 +390,40 @@ object AsyncHttpApi extends Assertions {
           System.currentTimeMillis(),
           Proofs.empty,
           AddressScheme.current.chainId
-        ).signWith(sender.privateKey)
+        ).signWith(sender)
           .json()
       )
 
     def payment(sourceAddress: String, recipient: String, amount: Long, fee: Long): Future[Transaction] =
       postJson("/waves/payment", PaymentRequest(amount, fee, sourceAddress, recipient)).as[Transaction]
 
-    def lease(sender: KeyPair, recipient: String, amount: Long, fee: Long, version: TxVersion = TxVersion.V2): Future[Transaction] =
+    def lease(sender: SigningKey, recipient: String, amount: Long, fee: Long, version: Byte = 2): Future[Transaction] =
       signedBroadcast(
         LeaseTransaction(
-          version,
-          sender.publicKey,
-          AddressOrAlias.fromString(recipient).explicitGet(),
+          PublicKey(sender.publicKey()),
+          Address.fromString(recipient).explicitGet(),
           TxPositiveAmount.unsafeFrom(amount),
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
           Proofs.empty,
           AddressScheme.current.chainId
-        ).signWith(sender.privateKey)
+        ).signWith(sender)
           .json()
       )
 
-    def cancelLease(sender: KeyPair, leaseId: String, fee: Long, version: TxVersion): Future[Transaction] =
+    def cancelLease(sender: SigningKey, leaseId: String, fee: Long, version: Byte): Future[Transaction] =
       signedBroadcast(
         LeaseCancelTransaction(
-          version,
-          sender.publicKey,
+          PublicKey(sender.publicKey()),
           ByteStr.decodeBase58(leaseId).get,
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
           Proofs.empty,
           AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json()
+        ).signWith(sender).json()
       )
 
     def activeLeases(sourceAddress: String): Future[Seq[LeaseInfo]] = get(s"/leasing/active/$sourceAddress").as[Seq[LeaseInfo]]
-
-    def issue(
-        sender: KeyPair,
-        name: String,
-        description: String,
-        quantity: Long,
-        decimals: Byte,
-        reissuable: Boolean,
-        fee: Long,
-        version: TxVersion = TxVersion.V2,
-        script: Option[String] = None
-    ): Future[Transaction] =
-      signedBroadcast(
-        IssueTransaction(
-          version,
-          sender.publicKey,
-          ByteString.copyFromUtf8(name),
-          ByteString.copyFromUtf8(description),
-          TxPositiveAmount.unsafeFrom(quantity),
-          TxDecimals.unsafeFrom(decimals),
-          reissuable,
-          script.map(s => ScriptReader.fromBytes(Base64.decode(s)).explicitGet()),
-          TxPositiveAmount.unsafeFrom(fee),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json()
-      )
-
-    def setScript(sender: KeyPair, script: Option[String] = None, fee: Long = 1000000, version: TxVersion = TxVersion.V1): Future[Transaction] =
-      signedBroadcast(
-        SetScriptTransaction(
-          version,
-          sender.publicKey,
-          script.map(s => ScriptReader.fromBytes(Base64.decode(s)).explicitGet()),
-          TxPositiveAmount.unsafeFrom(fee),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json()
-      )
-
-    def setAssetScript(
-        assetId: String,
-        sender: KeyPair,
-        fee: Long,
-        script: Option[String] = None,
-        version: TxVersion = TxVersion.V1
-    ): Future[Transaction] =
-      signedBroadcast(
-        SetAssetScriptTransaction(
-          version,
-          sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
-          script.map(s => ScriptReader.fromBytes(Base64.decode(s)).explicitGet()),
-          TxPositiveAmount.unsafeFrom(fee),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json()
-      )
-
-    def invokeScript(
-        caller: KeyPair,
-        dappAddress: String,
-        func: Option[String],
-        args: List[Terms.EXPR] = List.empty,
-        payment: Seq[InvokeScriptTransaction.Payment] = Seq.empty,
-        fee: Long = 500000,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1
-    ): Future[(Transaction, JsValue)] =
-      signedTraceBroadcast(
-        InvokeScriptTransaction(
-          version,
-          caller.publicKey,
-          AddressOrAlias.fromString(dappAddress).explicitGet(),
-          func.map(fn => FUNCTION_CALL(FunctionHeader.User(fn), args)),
-          payment,
-          TxPositiveAmount.unsafeFrom(fee),
-          feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase58(aid).get)).getOrElse(Asset.Waves),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(caller.privateKey).json()
-      )
-
-    def invokeExpression(
-        caller: KeyPair,
-        expression: ExprScript,
-        fee: Long = invokeExpressionFee,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1
-    ): Future[(Transaction, JsValue)] =
-      signedTraceBroadcast(
-        InvokeExpressionTransaction(
-          version,
-          caller.publicKey,
-          expression,
-          TxPositiveAmount.unsafeFrom(fee),
-          feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase58(aid).get)).getOrElse(Asset.Waves),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(caller.privateKey).json()
-      )
-
-    def validateInvokeScript(
-        caller: KeyPair,
-        dappAddress: String,
-        func: Option[String],
-        args: List[Terms.EXPR] = List.empty,
-        payment: Seq[InvokeScriptTransaction.Payment] = Seq.empty,
-        fee: Long = 500000,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1
-    ): Future[(JsValue, JsValue)] = {
-      val jsObject = InvokeScriptTransaction(
-        version,
-        caller.publicKey,
-        AddressOrAlias.fromString(dappAddress).explicitGet(),
-        func.map(fn => FUNCTION_CALL(FunctionHeader.User(fn), args)),
-        payment,
-        TxPositiveAmount.unsafeFrom(fee),
-        feeAssetId.map(aid => IssuedAsset(ByteStr.decodeBase58(aid).get)).getOrElse(Asset.Waves),
-        System.currentTimeMillis(),
-        Proofs.empty,
-        AddressScheme.current.chainId
-      ).signWith(caller.privateKey)
-        .json()
-      signedValidate(jsObject).map(jsObject -> _)
-    }
-
-    def updateAssetInfo(
-        sender: KeyPair,
-        assetId: String,
-        name: String,
-        description: String,
-        fee: Long,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1,
-        timestamp: Option[Long] = None
-    ): Future[(Transaction, JsValue)] = {
-      val tx = UpdateAssetInfoTransaction(
-        version,
-        sender.publicKey,
-        IssuedAsset(ByteStr(Base58.decode(assetId))),
-        name,
-        description,
-        timestamp.getOrElse(System.currentTimeMillis()),
-        TxPositiveAmount.unsafeFrom(fee),
-        if (feeAssetId.isDefined) IssuedAsset(ByteStr(Base58.decode(feeAssetId.get))) else Waves,
-        Proofs.empty,
-        AddressScheme.current.chainId
-      ).signWith(sender.privateKey)
-      signedTraceBroadcast(tx.json())
-    }
-
-    def scriptCompile(code: String): Future[CompiledScript] = post("/utils/script/compileCode", code).as[CompiledScript]
-
-    def scriptDecompile(script: String): Future[DecompiledScript] = post("/utils/script/decompile", script).as[DecompiledScript]
-
-    def scriptEstimate(script: String): Future[EstimatedScript] = post("/utils/script/estimate", script).as[EstimatedScript]
-
-    def reissue(sender: KeyPair, assetId: String, quantity: Long, reissuable: Boolean, fee: Long, version: Byte = 1): Future[Transaction] =
-      signedBroadcast(
-        ReissueTransaction(
-          version,
-          sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
-          TxPositiveAmount.unsafeFrom(quantity),
-          reissuable,
-          TxPositiveAmount.unsafeFrom(fee),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json()
-      )
-
-    def burn(sender: KeyPair, assetId: String, quantity: Long, fee: Long, version: TxVersion = TxVersion.V2): Future[Transaction] =
-      signedBroadcast(
-        BurnTransaction(
-          version,
-          sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
-          TxNonNegativeAmount.unsafeFrom(quantity),
-          TxPositiveAmount.unsafeFrom(fee),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json()
-      )
-
-    def stateChanges(invokeScriptTransactionId: String, amountsAsStrings: Boolean): Future[StateChanges] =
-      transactionInfo[StateChanges](invokeScriptTransactionId, amountsAsStrings)
 
     def assetBalance(address: String, asset: String, amountsAsStrings: Boolean = false): Future[AssetBalance] =
       get(s"/assets/balance/$address/$asset", amountsAsStrings).as[AssetBalance](amountsAsStrings)
@@ -650,96 +440,29 @@ object AsyncHttpApi extends Assertions {
       get(s"/assets/details/$assetId?full=$fullInfo", amountsAsStrings).as[AssetInfo](amountsAsStrings)
     }
 
-    def sponsorAsset(
-        sender: KeyPair,
-        assetId: String,
-        minSponsoredAssetFee: Option[Long],
-        fee: Long,
-        version: Byte = 1,
-        amountsAsStrings: Boolean = false
-    ): Future[Transaction] =
-      signedBroadcast(
-        SponsorFeeTransaction(
-          version,
-          sender.publicKey,
-          IssuedAsset(ByteStr.decodeBase58(assetId).get),
-          minSponsoredAssetFee.map(TxPositiveAmount.unsafeFrom),
-          TxPositiveAmount.unsafeFrom(fee),
-          System.currentTimeMillis(),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(sender.privateKey)
-          .json(),
-        amountsAsStrings
-      )
-
-    def cancelSponsorship(sender: KeyPair, assetId: String, fee: Long, version: Byte = 1): Future[Transaction] =
-      sponsorAsset(sender, assetId, None, fee, version)
-
     def massTransfer(
-        sender: KeyPair,
+        sender: SigningKey,
         transfers: Seq[Transfer],
         fee: Long,
-        version: TxVersion = TxVersion.V2,
+        version: Byte = 2,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
         amountsAsStrings: Boolean = false
     ): Future[Transaction] = {
       signedBroadcast(
         MassTransferTransaction(
-          version,
-          sender.publicKey,
+          PublicKey(sender.publicKey()),
           Asset.fromString(assetId),
-          transfers.map(t => ParsedTransfer(AddressOrAlias.fromString(t.recipient).explicitGet(), TxNonNegativeAmount.unsafeFrom(t.amount))),
+          transfers.map(t => ParsedTransfer(Address.fromString(t.recipient).explicitGet(), TxNonNegativeAmount.unsafeFrom(t.amount))),
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
           attachment.fold(ByteStr.empty)(s => ByteStr(s.getBytes())),
           Proofs.empty,
           AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json(),
+        ).signWith(sender).json(),
         amountsAsStrings
       )
     }
-
-    def broadcastData(
-        sender: KeyPair,
-        data: Seq[DataEntry[?]],
-        fee: Long,
-        version: TxVersion = TxVersion.V2,
-        timestamp: Option[Long] = None,
-        amountsAsStrings: Boolean = false
-    ): Future[Transaction] =
-      signedBroadcast(
-        DataTransaction(
-          version,
-          sender.publicKey,
-          data,
-          TxPositiveAmount.unsafeFrom(fee),
-          timestamp.getOrElse(System.currentTimeMillis()),
-          Proofs.empty,
-          AddressScheme.current.chainId
-        ).signWith(sender.privateKey).json(),
-        amountsAsStrings
-      )
-
-    def removeData(sender: KeyPair, data: Seq[String], fee: Long, version: Byte = 2): Future[Transaction] =
-      broadcastData(sender, data.map[DataEntry[?]](EmptyDataEntry.apply), fee, version)
-
-    def getData(address: String, amountsAsStrings: Boolean = false): Future[List[DataEntry[?]]] =
-      get(s"/addresses/data/$address", amountsAsStrings).as[List[DataEntry[?]]](amountsAsStrings)
-
-    def getData(address: String, regexp: String): Future[List[DataEntry[?]]] = get(s"/addresses/data/$address?matches=$regexp").as[List[DataEntry[?]]]
-
-    def getDataByKey(address: String, key: String): Future[DataEntry[?]] = get(s"/addresses/data/$address/$key").as[DataEntry[?]]
-
-    def getDataListJson(address: String, keys: String*): Future[Seq[DataEntry[?]]] =
-      postJson(s"/addresses/data/$address", Json.obj("keys" -> keys)).as[Seq[DataEntry[?]]]
-
-    def getDataListPost(address: String, keys: String*): Future[Seq[DataEntry[?]]] =
-      postForm(s"/addresses/data/$address", keys.map("key" -> URLEncoder.encode(_, "UTF-8"))*).as[Seq[DataEntry[?]]]
-
-    def getDataList(address: String, keys: String*): Future[Seq[DataEntry[?]]] =
-      get(s"/addresses/data/$address?${keys.map("key=" + URLEncoder.encode(_, "UTF-8")).mkString("&")}").as[Seq[DataEntry[?]]]
 
     def getMerkleProof(ids: String*): Future[Seq[MerkleProofResponse]] =
       get(s"/transactions/merkleProof?${ids.map("id=" + URLEncoder.encode(_, "UTF-8")).mkString("&")}").as[Seq[MerkleProofResponse]]
@@ -779,22 +502,12 @@ object AsyncHttpApi extends Assertions {
 
     def signedValidate(json: JsValue): Future[JsValue] = post("/debug/validate", stringify(json)).as[JsValue]
 
-    def signedIssue(issue: IssueRequest): Future[Transaction] =
-      signedBroadcast(issue.toTx.explicitGet().json())
-
     def batchSignedTransfer(transfers: Seq[TransferRequest]): Future[Seq[Transaction]] = {
-      Future.sequence(transfers.map(v => signedBroadcast(toJson(v).as[JsObject] ++ Json.obj("type" -> TransferTransaction.typeId.toInt))))
+      Future.sequence(transfers.map(v => signedBroadcast(toJson(v).as[JsObject] ++ Json.obj("type" -> TransactionType.Transfer.id))))
     }
 
-    def createAlias(target: KeyPair, alias: String, fee: Long, version: TxVersion = TxVersion.V2): Future[Transaction] =
-      signedBroadcast(
-        com.wavesplatform.transaction.TxHelpers
-          .createAlias(alias, target, fee, version)
-          .json()
-      )
-
     def broadcastExchange(
-        matcher: KeyPair,
+        matcher: SigningKey,
         order1: Order,
         order2: Order,
         amount: TxExchangeAmount,
@@ -807,28 +520,21 @@ object AsyncHttpApi extends Assertions {
         validate: Boolean = true
     ): Future[Transaction] = {
       val tx = ExchangeTx(
-        version = version,
         order1 = order1,
         order2 = order2,
         amount = amount,
         price = price,
-        buyMatcherFee = buyMatcherFee,
-        sellMatcherFee = sellMatcherFee,
+        buyMatcherFee = TxMatcherFee.unsafeFrom(buyMatcherFee),
+        sellMatcherFee = TxMatcherFee.unsafeFrom(sellMatcherFee),
         fee = TxPositiveAmount.unsafeFrom(fee),
         proofs = Proofs.empty,
         timestamp = System.currentTimeMillis(),
         chainId = AddressScheme.current.chainId
-      ).signWith(matcher.privateKey)
+      ).signWith(matcher)
 
       val json = if (validate) tx.validatedEither.explicitGet().json() else tx.json()
       signedBroadcast(json, amountsAsStrings)
     }
-
-    def aliasByAddress(targetAddress: String): Future[Seq[String]] =
-      get(s"/alias/by-address/$targetAddress").as[Seq[String]]
-
-    def addressByAlias(targetAlias: String): Future[Address] =
-      get(s"/alias/by-alias/$targetAlias").as[Address]
 
     def rollback(to: Height, returnToUTX: Boolean = true): Future[Unit] =
       postJson("/debug/rollback", RollbackParams(to.toInt, returnToUTX)).map(_ => ())
@@ -855,13 +561,13 @@ object AsyncHttpApi extends Assertions {
         })
     }
 
-    def createKeyPair(): Future[SeedKeyPair] = Future.successful(n.generateKeyPair())
+    def createKeyPair(): Future[SigningKey] = Future.successful(n.generateKeyPair())
 
-    def createKeyPairServerSide(): Future[KeyPair] =
+    def createKeyPairServerSide(): Future[SigningKey] =
       for {
         address <- post(s"${n.nodeApiEndpoint}/addresses").as[JsValue].map(v => (v \ "address").as[String])
         seed    <- seed(address)
-      } yield KeyPair.fromSeed(seed).explicitGet()
+      } yield keyPairFromSeed(seed).explicitGet()
 
     def waitForNextBlock: Future[BlockHeader] =
       for {

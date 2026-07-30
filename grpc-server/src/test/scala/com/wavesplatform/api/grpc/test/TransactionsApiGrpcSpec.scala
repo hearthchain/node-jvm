@@ -1,7 +1,6 @@
 package com.wavesplatform.api.grpc.test
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.api.grpc.{
   ApplicationStatus,
   TransactionResponse,
@@ -11,33 +10,36 @@ import com.wavesplatform.api.grpc.{
   TransactionsRequest
 }
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.history.Domain
-import com.wavesplatform.protobuf.transaction.{PBTransactions, Recipient}
+import com.wavesplatform.protobuf.transaction.{PBRecipients, PBTransactions}
 import com.wavesplatform.protobuf.{PBSnapshots, toByteString}
+import com.wavesplatform.settings.GenesisAssetSettings
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.state.{Height, StateSnapshot, TxMeta}
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*
-import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxHelpers.*
 import com.wavesplatform.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}
-import com.wavesplatform.transaction.{TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import com.wavesplatform.utils.{DiffMatchers, Schedulers}
 import monix.execution.ExecutionModel.SynchronousExecution
 import monix.execution.Scheduler
 import org.scalatest.{Assertion, BeforeAndAfterAll}
+import tech.hearth.crypto.SigningKey
 
 import scala.collection.immutable.VectorMap
 
 class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatchers with WithDomain with GrpcApiHelpers {
   private given scheduler: Scheduler = Schedulers.singleThread("grpc", executionModel = SynchronousExecution)
 
-  val sender: KeyPair    = TxHelpers.signer(1)
-  val recipient: KeyPair = TxHelpers.signer(2)
+  val sender: SigningKey    = TxHelpers.signer(1)
+  val recipient: SigningKey = TxHelpers.signer(2)
 
   "GetTransactions should work" in withDomain(DomainPresets.RideV6, AddrWithBalance.enoughBalances(sender)) { d =>
     val grpcApi = getGrpcApi(d)
@@ -51,13 +53,13 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
     }
 
     val expectedTxs = txsWithHeight.reverse.map { case (tx, h) =>
-      TransactionResponse.of(ByteString.copyFrom(tx.id().arr), h, Some(PBTransactions.protobuf(tx)), ApplicationStatus.SUCCEEDED, None)
+      TransactionResponse.of(ByteString.copyFrom(tx.id().arr), h, Some(PBTransactions.protobuf(tx)), ApplicationStatus.SUCCEEDED)
     }
 
     d.liquidAndSolidAssert { () =>
       val (observer1, result1) = createObserver[TransactionResponse]
       grpcApi.getTransactions(
-        TransactionsRequest.of(ByteString.copyFrom(sender.toAddress.bytes), None, Seq.empty),
+        TransactionsRequest.of(ByteString.copyFrom(sender.toAddress.toBytes()), None, Seq.empty),
         observer1
       )
       result1.runSyncUnsafe() shouldBe expectedTxs
@@ -66,7 +68,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
       grpcApi.getTransactions(
         TransactionsRequest.of(
           ByteString.EMPTY,
-          Some(Recipient.of(Recipient.Recipient.PublicKeyHash(ByteString.copyFrom(recipient.toAddress.publicKeyHash)))),
+          Some(PBRecipients.create(recipient.toAddress)),
           Seq.empty
         ),
         observer2
@@ -82,71 +84,82 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
     }
   }
 
-  "GetTransactionSnapshots" in withDomain(TransactionStateSnapshot, AddrWithBalance.enoughBalances(secondSigner)) { d =>
-    val recipient = signer(2).toAddress
-    val txs       = Seq.fill(5)(transfer(amount = 1, fee = 100_000, from = secondSigner, to = recipient))
+  "GetTransactionSnapshots" in {
+    // an explicit balance wins over withDomain's auto-fund-the-committed-generator default (ENOUGH_AMT), so
+    // defaultSigner's balance below stays exactly (this deposit-sized baseline) + reward + fee, not ENOUGH_AMT + that
+    val defaultSignerBalance = 1200.waves
+    withDomain(
+      TransactionStateSnapshot,
+      AddrWithBalance.enoughBalances(secondSigner) :+ AddrWithBalance(defaultAddress, defaultSignerBalance)
+    ) { d =>
+      val recipient = signer(2).toAddress
+      val txs       = Seq.fill(5)(transfer(amount = 1, fee = 100_000, from = secondSigner, to = recipient))
 
-    val firstThreeSnapshots = Seq(
-      StateSnapshot(balances =
-        VectorMap(
-          (secondAddress, Waves)  -> (ENOUGH_AMT - 100_001),
-          (recipient, Waves)      -> 1,
-          (defaultAddress, Waves) -> 200_040_000 // reward and 40% fee
-        )
-      ),
-      StateSnapshot(balances =
-        VectorMap(
-          (secondAddress, Waves)  -> (ENOUGH_AMT - 200_002),
-          (recipient, Waves)      -> 2,
-          (defaultAddress, Waves) -> 200_080_000
-        )
-      ),
-      StateSnapshot(balances =
-        VectorMap(
-          (secondAddress, Waves)  -> (ENOUGH_AMT - 300_003),
-          (recipient, Waves)      -> 3,
-          (defaultAddress, Waves) -> 200_120_000
+      val firstThreeSnapshots = Seq(
+        StateSnapshot(balances =
+          VectorMap(
+            (secondAddress, Waves)  -> (ENOUGH_AMT - 100_001),
+            (recipient, Waves)      -> 1,
+            (defaultAddress, Waves) -> (defaultSignerBalance + 400_040_000) // reward (4 waves) and 40% fee
+          )
+        ),
+        StateSnapshot(balances =
+          VectorMap(
+            (secondAddress, Waves)  -> (ENOUGH_AMT - 200_002),
+            (recipient, Waves)      -> 2,
+            (defaultAddress, Waves) -> (defaultSignerBalance + 400_080_000)
+          )
+        ),
+        StateSnapshot(balances =
+          VectorMap(
+            (secondAddress, Waves)  -> (ENOUGH_AMT - 300_003),
+            (recipient, Waves)      -> 3,
+            (defaultAddress, Waves) -> (defaultSignerBalance + 400_120_000)
+          )
         )
       )
-    )
 
-    def getSnapshots() = {
-      val request              = TransactionSnapshotsRequest.of(txs.map(_.id().toByteString))
-      val (observer, response) = createObserver[TransactionSnapshotResponse]
-      getGrpcApi(d).getTransactionSnapshots(request, observer)
-      response.runSyncUnsafe().flatMap(_.snapshot).map(PBSnapshots.fromProtobuf(_, ByteStr.empty, Height(0))._1)
+      def getSnapshots() = {
+        val request              = TransactionSnapshotsRequest.of(txs.map(_.id().toByteString))
+        val (observer, response) = createObserver[TransactionSnapshotResponse]
+        getGrpcApi(d).getTransactionSnapshots(request, observer)
+        response.runSyncUnsafe().flatMap(_.snapshot).map(PBSnapshots.fromProtobuf(_, ByteStr.empty, Height(0))._1)
+      }
+
+      d.appendBlock(txs(0), txs(1))
+      d.appendMicroBlock(txs(2))
+
+      // both liquid and solid state
+      getSnapshots() shouldBe firstThreeSnapshots
+
+      // hardened state
+      d.appendBlock(txs(3), txs(4))
+      getSnapshots() shouldBe firstThreeSnapshots ++ Seq(
+        StateSnapshot(balances =
+          VectorMap(
+            (secondAddress, Waves) -> (ENOUGH_AMT - 400_004),
+            (recipient, Waves)     -> 4,
+            (
+              defaultAddress,
+              Waves
+            ) -> (defaultSignerBalance + 800_340_000) // 2 blocks reward (4 waves each), 100% fee from previous block and 40% fee from current
+          )
+        ),
+        StateSnapshot(balances =
+          VectorMap(
+            (secondAddress, Waves)  -> (ENOUGH_AMT - 500_005),
+            (recipient, Waves)      -> 5,
+            (defaultAddress, Waves) -> (defaultSignerBalance + 800_380_000)
+          )
+        )
+      )
     }
-
-    d.appendBlock(txs(0), txs(1))
-    d.appendMicroBlock(txs(2))
-
-    // both liquid and solid state
-    getSnapshots() shouldBe firstThreeSnapshots
-
-    // hardened state
-    d.appendBlock(txs(3), txs(4))
-    getSnapshots() shouldBe firstThreeSnapshots ++ Seq(
-      StateSnapshot(balances =
-        VectorMap(
-          (secondAddress, Waves)  -> (ENOUGH_AMT - 400_004),
-          (recipient, Waves)      -> 4,
-          (defaultAddress, Waves) -> 400_340_000 // 2 blocks reward, 100% fee from previous block and 40% fee from current
-        )
-      ),
-      StateSnapshot(balances =
-        VectorMap(
-          (secondAddress, Waves)  -> (ENOUGH_AMT - 500_005),
-          (recipient, Waves)      -> 5,
-          (defaultAddress, Waves) -> 400_380_000
-        )
-      )
-    )
   }
 
   "NODE-973. GetTransactions should return correct data for orders with attachment" in {
     def checkOrderAttachment(txResponse: TransactionResponse, expectedAttachment: ByteStr): Assertion = {
       PBTransactions
-        .vanilla(txResponse.getTransaction, unsafe = true)
+        .vanilla(txResponse.getTransaction)
         .explicitGet()
         .asInstanceOf[ExchangeTransaction]
         .order1
@@ -156,35 +169,37 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
     val matcher = TxHelpers.signer(1)
     val issuer  = TxHelpers.signer(2)
     val buyer   = TxHelpers.signer(3)
-    withDomain(DomainPresets.TransactionStateSnapshot, balances = AddrWithBalance.enoughBalances(matcher, issuer, buyer)) { d =>
+    val asset   = IssuedAsset(ByteStr.fill(32)(1))
+    withDomain(
+      DomainPresets.TransactionStateSnapshot,
+      balances = AddrWithBalance.enoughBalances(matcher, buyer) :+ AddrWithBalance(issuer.toAddress, assets = Map(asset -> 2L)),
+      assets = Seq(GenesisAssetSettings(asset.id, Base58.encode(issuer.publicKey()), "asset", 0, 2L))
+    ) { d =>
       val grpcApi = getGrpcApi(d)
 
       val attachment = ByteStr.fill(32)(1)
-      val issue      = TxHelpers.issue(issuer)
       val exchange =
         TxHelpers.exchangeFromOrders(
           TxHelpers.order(
             OrderType.BUY,
             Waves,
-            issue.asset,
+            asset,
             amount = 2,
             version = Order.V4,
             sender = buyer,
             matcher = matcher,
             attachment = Some(attachment)
           ),
-          TxHelpers.order(OrderType.SELL, Waves, issue.asset, amount = 2, version = Order.V4, sender = issuer, matcher = matcher),
-          matcher = matcher,
-          version = TxVersion.V3
+          TxHelpers.order(OrderType.SELL, Waves, asset, amount = 2, version = Order.V4, sender = issuer, matcher = matcher),
+          matcher = matcher
         )
 
-      d.appendBlock(issue)
       d.appendBlock(exchange)
 
       d.liquidAndSolidAssert { () =>
         val (observer1, result1) = createObserver[TransactionResponse]
         grpcApi.getTransactions(
-          TransactionsRequest.of(ByteString.copyFrom(exchange.sender.toAddress.bytes), None, Seq.empty),
+          TransactionsRequest.of(ByteString.copyFrom(exchange.sender.toAddress.toBytes()), None, Seq.empty),
           observer1
         )
 
@@ -194,7 +209,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
         grpcApi.getTransactions(
           TransactionsRequest.of(
             ByteString.EMPTY,
-            Some(Recipient.of(Recipient.Recipient.PublicKeyHash(ByteString.copyFrom(buyer.toAddress.publicKeyHash)))),
+            Some(PBRecipients.create(buyer.toAddress)),
             Seq.empty
           ),
           observer2
@@ -213,34 +228,49 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
   }
 
   "NODE-922. GetTransactions should return elided transactions" in {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
-    val resender        = TxHelpers.signer(3)
-    val recipient       = TxHelpers.signer(4)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
+    val resender         = TxHelpers.signer(3)
+    val recipient        = TxHelpers.signer(4)
+    val challengingMiner = TxHelpers.signer(5)
+    val deposit          = CommitToGenerationTransaction.DepositInWavelets
+    // enough for a committed generator to still clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2
+    // (1000 waves) net of its deposit; matches the convention in node/tests' BlockChallengeTest
+    val challengerBalance = 1000.waves + deposit
     withDomain(
       TransactionStateSnapshot,
-      balances = AddrWithBalance.enoughBalances(sender)
-    ) { d =>
-      val grpcApi          = getGrpcApi(d)
-      val challengingMiner = d.wallet.generateNewAccount().get
-
-      d.appendBlock(
-        TxHelpers.transfer(sender, challengingMiner.toAddress, 1000.waves),
-        TxHelpers.transfer(sender, challengedMiner.toAddress, 1000.waves)
+      generators = Seq(TxHelpers.defaultSigner, challengedMiner, challengingMiner),
+      balances = AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(challengingMiner.toAddress, challengerBalance) :+ AddrWithBalance(
+        challengedMiner.toAddress,
+        challengerBalance
       )
+    ) { d =>
+      val grpcApi = getGrpcApi(d)
 
-      (1 to 999).foreach(_ => d.appendBlock())
+      (1 to 1000).foreach(_ => d.appendBlock())
 
       val invalidStateHash = ByteStr.fill(DigestLength)(1)
       val resenderTxs = Seq(TxHelpers.transfer(resender, recipient.toAddress, 1.waves), TxHelpers.transfer(resender, recipient.toAddress, 2.waves))
+      // affordable when challengedMiner mines it for real (block reward covers the gap) but not once the challenge
+      // redirects that reward to challengingMiner instead - which is what makes it (and the resenderTxs relying on
+      // its proceeds) become elided rather than making the challenging block unappendable. See BlockChallengeTest's
+      // "NODE-899" for the same recipe: build+append a validly-hashed version first, roll back, then challenge it.
       val challengedBlockTx = TxHelpers.transfer(challengedMiner, resender.toAddress, 1001.waves)
-      val originalBlock = d.createBlock(
+      val validOriginalBlock = d.createBlock(
+        challengedBlockTx +: resenderTxs,
+        strictTime = true,
+        generator = challengedMiner
+      )
+      val invalidOriginalBlock = d.createBlock(
         challengedBlockTx +: resenderTxs,
         strictTime = true,
         generator = challengedMiner,
         stateHash = Some(Some(invalidStateHash))
       )
-      val challengingBlock = d.createChallengingBlock(challengingMiner, originalBlock)
+      val challengingBlock = d.createChallengingBlock(challengingMiner, invalidOriginalBlock)
+
+      d.appendBlockE(validOriginalBlock) should beRight
+      d.rollbackTo(validOriginalBlock.header.reference)
 
       d.appendBlockE(challengingBlock) should beRight
       resenderTxs.foreach { tx =>
@@ -248,13 +278,13 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
       }
 
       val expectedTxs = resenderTxs.reverse.map { tx =>
-        TransactionResponse.of(ByteString.copyFrom(tx.id().arr), 1002, Some(PBTransactions.protobuf(tx)), ApplicationStatus.ELIDED, None)
+        TransactionResponse.of(ByteString.copyFrom(tx.id().arr), 1002, Some(PBTransactions.protobuf(tx)), ApplicationStatus.ELIDED)
       }
 
       d.liquidAndSolidAssert { () =>
         val (observer1, result1) = createObserver[TransactionResponse]
         grpcApi.getTransactions(
-          TransactionsRequest.of(ByteString.copyFrom(resender.toAddress.bytes), None, Seq.empty),
+          TransactionsRequest.of(ByteString.copyFrom(resender.toAddress.toBytes()), None, Seq.empty),
           observer1
         )
         result1.runSyncUnsafe() shouldBe expectedTxs
@@ -263,7 +293,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
         grpcApi.getTransactions(
           TransactionsRequest.of(
             ByteString.EMPTY,
-            Some(Recipient.of(Recipient.Recipient.PublicKeyHash(ByteString.copyFrom(recipient.toAddress.publicKeyHash)))),
+            Some(PBRecipients.create(recipient.toAddress)),
             Seq.empty
           ),
           observer2

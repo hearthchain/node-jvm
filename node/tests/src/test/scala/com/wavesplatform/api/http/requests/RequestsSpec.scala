@@ -34,12 +34,11 @@ class RequestsSpec extends FreeSpec with OptionValues {
   "TransferRequest" - {
     "accepts proofs for version >= 2" in {
       Seq(2, 3).foreach { version =>
-        forAll(transferRequestGen(version)) {
-          case (_, json) =>
-            val request = json.as[TransferRequest]
-            val tx      = request.toTx.explicitGet()
+        forAll(transferRequestGen(version)) { case (_, json) =>
+          val request = json.as[TransferRequest]
+          val tx      = request.toTx.explicitGet()
 
-            request.proofs.value should be(tx.proofs)
+          request.proofs.value should be(tx.proofs)
         }
       }
 

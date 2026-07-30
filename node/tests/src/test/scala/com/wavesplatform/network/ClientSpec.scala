@@ -33,8 +33,8 @@ class ClientSpec extends FreeSpec {
   }
 
   "should add a server's channel to all channels after the handshake only" in {
-    val allChannels     = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
-    val channel = createEmbeddedChannel(allChannels)
+    val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
+    val channel     = createEmbeddedChannel(allChannels)
 
     // skip the client's handshake
     channel.readOutbound[ByteBuf]()

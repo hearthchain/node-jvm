@@ -449,7 +449,7 @@ class BlocksApiRouteSpec
       val exchange =
         TxHelpers.exchangeFromOrders(
           TxHelpers.order(OrderType.BUY, Waves, priceAsset, version = Order.V4, attachment = Some(attachment)),
-          TxHelpers.order(OrderType.SELL, Waves, priceAsset, version = Order.V4, sender = issuer),
+          TxHelpers.order(OrderType.SELL, Waves, priceAsset, version = Order.V4, sender = issuer)
         )
 
       val exchangeBlock = d.appendBlock(exchange)
@@ -594,8 +594,8 @@ class BlocksApiRouteSpec
     withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves)), generators = Seq(miner)) { d =>
       val route = new BlocksApiRoute(d.settings.restAPISettings, d.blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler)).route
 
-      def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(
-          implicit pos: Position
+      def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(implicit
+          pos: Position
       ): Unit = {
         Seq("/headers/at/", "/at/").foreach { prefix =>
           val path = routePath(s"$prefix$height")

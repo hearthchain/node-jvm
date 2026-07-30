@@ -1,6 +1,5 @@
 package com.wavesplatform.it
 
-import com.wavesplatform.state.DataEntry
 import io.netty.util.Timer
 
 import scala.concurrent.duration.FiniteDuration
@@ -23,8 +22,5 @@ package object util {
 
     def retryUntil[A](f: => Future[A], cond: A => Boolean, retryInterval: FiniteDuration)(implicit ec: ExecutionContext): Future[A] =
       f.flatMap(v => if (cond(v)) Future.successful(v) else schedule(retryUntil(f, cond, retryInterval), retryInterval))
-  }
-  implicit class TypedDataEntry(entry: DataEntry[?]) {
-    def as[T]: T = entry.asInstanceOf[T]
   }
 }

@@ -58,7 +58,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
     "microblock" in withDomain(
       defaultSettings,
-      AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
+      AddrWithBalance.enoughBalances(allNodes*),
+      generators = allNodes
     ) { d =>
       val genesisBlockId = d.blockchain.lastBlockId.value
       d.appendBlock()
@@ -95,7 +96,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "finalized if replaced by better block with votes" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*),
+    generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
     d.appendBlock()
@@ -132,7 +134,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "not finalized if replaced by better block without votes" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*),
+    generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
     d.appendBlock()
@@ -170,7 +173,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "not finalized if not voted" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*),
+    generators = allNodes
   ) { d =>
     d.appendBlock()
 
@@ -194,7 +198,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "finalized if surpass maxRollback blocks even no votes" in withDomain(
     defaultSettings.copy(synchronizationSettings = defaultSettings.synchronizationSettings.copy(maxRollback = 2)),
-    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*),
+    generators = allNodes
   ) { d =>
     d.appendBlock()
 
@@ -264,7 +269,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "spending after voting doesn't affect finalization" in withDomain(
     defaultSettings,
-    AddrWithBalance.enoughBalances(allNodes*), generators = allNodes
+    AddrWithBalance.enoughBalances(allNodes*),
+    generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
     d.appendBlock()

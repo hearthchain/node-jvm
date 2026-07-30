@@ -16,7 +16,7 @@ import tech.hearth.crypto.Crypto
 
 class EndorsementStorageSpec extends FreeSpec with EitherValues {
   private type TestGenerator = (addr: Address, blsKp: BlsKeyPair, balance: Long)
-  
+
   private def mkBlsKeyPairFromSignerId(index: Int) = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(index)))
 
   private val committedGenerator = mkBlsKeyPairFromSignerId(0) // GeneratorIndex(0)

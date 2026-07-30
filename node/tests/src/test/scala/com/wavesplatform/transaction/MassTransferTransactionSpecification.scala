@@ -112,7 +112,10 @@ class MassTransferTransactionSpecification extends PropSpec {
 
     val transfers = MassTransferTransaction
       .parseTransfersList(
-        List(Transfer("thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6", 100000000L), Transfer("thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6", 200000000L))
+        List(
+          Transfer("thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6", 100000000L),
+          Transfer("thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6", 200000000L)
+        )
       )
       .explicitGet()
 

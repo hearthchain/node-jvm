@@ -3,7 +3,7 @@ package com.wavesplatform.it.api
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.it.api.FinalizationVoting.ConflictEndorsement
-import com.wavesplatform.state.{DataEntry, Height}
+import com.wavesplatform.state.Height
 import com.wavesplatform.transaction.assets.exchange.AssetPair
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
 import io.grpc.{Metadata, Status as GrpcStatus}
@@ -135,7 +135,6 @@ class Transaction(
     val buyMatcherFee: Option[Long],
     val sellOrderMatcherFee: Option[Long],
     val buyOrderMatcherFee: Option[Long],
-    val data: Option[Seq[DataEntry[?]]],
     val minSponsoredAssetFee: Option[Long],
     val transfers: Option[Seq[Transfer]],
     val totalAmount: Option[Long],
@@ -177,7 +176,6 @@ object Transaction {
       buyMatcherFee: Option[Long],
       sellOrderMatcherFee: Option[Long],
       buyOrderMatcherFee: Option[Long],
-      data: Option[Seq[DataEntry[?]]],
       minSponsoredAssetFee: Option[Long],
       transfers: Option[Seq[Transfer]],
       totalAmount: Option[Long],
@@ -207,7 +205,6 @@ object Transaction {
     buyMatcherFee,
     sellOrderMatcherFee,
     buyOrderMatcherFee,
-    data,
     minSponsoredAssetFee,
     transfers,
     totalAmount,
@@ -244,7 +241,6 @@ object Transaction {
         buyMatcherFee         <- (jsv \ "buyMatcherFee").validateOpt[Long]
         sellOrderMatcherFee   <- (jsv \ "order2" \ "matcherFee").validateOpt[Long]
         buyOrderMatcherFee    <- (jsv \ "order1" \ "matcherFee").validateOpt[Long]
-        data                  <- (jsv \ "data").validateOpt[Seq[DataEntry[?]]]
         minSponsoredAssetFee  <- (jsv \ "minSponsoredAssetFee").validateOpt[Long]
         transfers             <- (jsv \ "transfers").validateOpt[Seq[Transfer]]
         totalAmount           <- (jsv \ "totalAmount").validateOpt[Long]
@@ -274,7 +270,6 @@ object Transaction {
         buyMatcherFee,
         sellOrderMatcherFee,
         buyOrderMatcherFee,
-        data,
         minSponsoredAssetFee,
         transfers,
         totalAmount,
@@ -307,7 +302,6 @@ object Transaction {
         "buyMatcherFee"         -> t.buyMatcherFee,
         "sellOrderFee"          -> t.sellOrderMatcherFee,
         "buyOrderFee"           -> t.buyOrderMatcherFee,
-        "data"                  -> t.data,
         "minSponsoredAssetFee"  -> t.minSponsoredAssetFee,
         "transfers"             -> t.transfers,
         "totalAmount"           -> t.totalAmount,
@@ -354,7 +348,6 @@ case class TransactionInfo(
     recipient: Option[String],
     script: Option[String],
     version: Option[Byte],
-    data: Option[Seq[DataEntry[?]]],
     transfers: Option[Seq[Transfer]],
     totalAmount: Option[Long],
     expression: Option[String],
@@ -384,7 +377,6 @@ object TransactionInfo {
         buyMatcherFee        <- (jsv \ "buyMatcherFee").validateOpt[Long]
         sellOrderMatcherFee  <- (jsv \ "order2" \ "matcherFee").validateOpt[Long]
         buyOrderMatcherFee   <- (jsv \ "order1" \ "matcherFee").validateOpt[Long]
-        data                 <- (jsv \ "data").validateOpt[Seq[DataEntry[?]]]
         transfers            <- (jsv \ "transfers").validateOpt[Seq[Transfer]]
         totalAmount          <- (jsv \ "totalAmount").validateOpt[Long]
         expression           <- (jsv \ "expression").validateOpt[String]
@@ -410,7 +402,6 @@ object TransactionInfo {
         recipient,
         script,
         version,
-        data,
         transfers,
         totalAmount,
         expression,

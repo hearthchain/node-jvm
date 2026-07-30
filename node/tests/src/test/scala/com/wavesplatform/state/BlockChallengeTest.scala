@@ -74,15 +74,15 @@ class BlockChallengeTest
     super.afterAll()
     appenderScheduler.shutdown()
   }
-  
+
   /** Only a committed generator may produce a block, and a challenger is no exception - it has to be drawn from the
     * committed generator set. A key derived from the clock could never be committed in the genesis snapshot, so these
     * accounts come from a fixed pool that every domain below commits (see `generators = allGenerators`).
     */
   // At most two distinct challengers are used within a single test, and the counter wraps, so the pool stays small:
   // every account here is committed in each domain below, and a larger set would needlessly bloat the generator set
-  private val challengerPool: Seq[SigningKey]     = (900 to 903).map(TxHelpers.signer)
-  private val challengerCounter: AtomicInteger    = AtomicInteger(0)
+  private val challengerPool: Seq[SigningKey]  = (900 to 903).map(TxHelpers.signer)
+  private val challengerCounter: AtomicInteger = AtomicInteger(0)
   // The pool is safe to commit everywhere: these accounts exist only to mine. Accounts a test names itself are
   // declared per test below, since whether such an account mines (and so must be committed and funded) is a
   // per-test fact - funding one that is merely a transaction sender would corrupt the test's own setup.
@@ -144,7 +144,11 @@ class BlockChallengeTest
     val sender           = TxHelpers.signer(1)
     val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = TxHelpers.signer(3)
-    withDomain(settings, generators = allGenerators ++ Seq(challengedMiner, challengingMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender)) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengedMiner, challengingMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender)
+    ) { d =>
       d.appendBlock()
       val txs                         = Seq(TxHelpers.transfer(sender, amount = 1), TxHelpers.transfer(sender, amount = 2))
       val invalidChallengedBlock      = d.createBlock(txs, generator = challengedMiner, stateHash = Some(Some(invalidStateHash)))
@@ -209,7 +213,12 @@ class BlockChallengeTest
 
   property("NODE-885. Consensus data for challenging block should be recalculated") {
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances =
+        poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)
+    ) { d =>
       appendAndCheck(
         d.createBlock(strictTime = true, stateHash = Some(Some(invalidStateHash)), timestamp = Some(Long.MaxValue)),
         d,
@@ -231,9 +240,16 @@ class BlockChallengeTest
   }
 
   property("NODE-886. Consensus data for challenging block should be calculated for each mining account from wallet") {
-    val challengedMiner = TxHelpers.signer(1)
+    val challengedMiner   = TxHelpers.signer(1)
     val challengingMiner1 = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner1.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, challengedMiner) :+ AddrWithBalance(challengingMiner1.address, challengerBalance)) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner1.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, challengedMiner) :+ AddrWithBalance(
+        challengingMiner1.address,
+        challengerBalance
+      )
+    ) { d =>
       val challengingMiner2 = generateMiningAccount
 
       def check(block: Block): Unit = {
@@ -293,7 +309,8 @@ class BlockChallengeTest
       generators = allGenerators ++ Seq(challengedMiner),
       // The challenger commits a second time below, so it pays a second deposit, and it only produces a better
       // timestamp than the miner it challenges if it out-weighs it - neither fits the pool's standard balance.
-      balances = AddrWithBalance(challengerNode.address, ENOUGH_AMT) +: (poolBalances ++ AddrWithBalance.enoughBalances(challengedMiner, challengingMiner))
+      balances =
+        AddrWithBalance(challengerNode.address, ENOUGH_AMT) +: (poolBalances ++ AddrWithBalance.enoughBalances(challengedMiner, challengingMiner))
     ) { d =>
       d.wallet.generateNewAccounts(2)
 
@@ -334,7 +351,7 @@ class BlockChallengeTest
     // entry would win the dedup and leave it short.
     val challengedMinerKey = TxHelpers.signer(940)
     val challengedMiner    = MiningAccount(challengedMinerKey, TxHelpers.vrfKeyOf(challengedMinerKey), TxHelpers.blsKeyOf(challengedMinerKey))
-    val challengingMiner = Wallet.generateNewAccount(Domain.DefaultWalletSeed, 0)
+    val challengingMiner   = Wallet.generateNewAccount(Domain.DefaultWalletSeed, 0)
 
     val testSettings = settings
       .configure(_.copy(generationPeriodLength = 700))
@@ -396,7 +413,12 @@ class BlockChallengeTest
 
   property("NODE-890. Challenging block should contain all transactions from original block") {
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances =
+        poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)
+    ) { d =>
       val originalBlock = d.createBlock(
         strictTime = true,
         stateHash = Some(Some(invalidStateHash)),
@@ -410,7 +432,12 @@ class BlockChallengeTest
 
   property("NODE-891. Challenging block should contain only transactions from original block") {
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances =
+        poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)
+    ) { d =>
       val originalBlock = d.createBlock(strictTime = true, stateHash = Some(Some(invalidStateHash)))
       val invalidChallengingBlock = d.createChallengingBlock(
         challengingMiner.signingKey,
@@ -433,7 +460,12 @@ class BlockChallengeTest
 
   property("NODE-892. Challenging block should reference the same block as original") {
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances =
+        poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)
+    ) { d =>
       val originalBlock = d.createBlock(strictTime = true, stateHash = Some(Some(invalidStateHash)), timestamp = Some(Long.MaxValue))
       appendAndCheck(originalBlock, d, Seq(challengingMiner)) { block =>
         block.header.reference shouldBe originalBlock.header.reference
@@ -443,7 +475,12 @@ class BlockChallengeTest
 
   property("NODE-893. Challenging block can't reference blocks before previous") {
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances =
+        poolBalances ++ AddrWithBalance.enoughBalances(TxHelpers.defaultSigner) :+ AddrWithBalance(challengingMiner.address, challengerBalance)
+    ) { d =>
       d.appendBlock()
       d.appendBlock()
 
@@ -578,10 +615,13 @@ class BlockChallengeTest
   }
 
   property("NODE-898. Block reward and fees should be distributed to challenging miner") {
-    val sender = TxHelpers.signer(1)
+    val sender           = TxHelpers.signer(1)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(challengingMiner.address, challengerBalance)) { d =>
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(challengingMiner.address, challengerBalance)
+    ) { d =>
 
       val prevBlockTx = TxHelpers.transfer(sender)
 
@@ -605,17 +645,19 @@ class BlockChallengeTest
   }
 
   property("NODE-899. Transactions that become invalid in challenging block should have elided status") {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
-    val recipient       = TxHelpers.signer(3)
-    val recipient2      = TxHelpers.signer(4)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
+    val recipient        = TxHelpers.signer(3)
+    val recipient2       = TxHelpers.signer(4)
     val challengingMiner = generateMiningAccount
     withDomain(
       TransactionStateSnapshot,
-      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
     ) { d =>
-
-
 
       val lease             = TxHelpers.lease(recipient)
       val challengedBlockTx = TxHelpers.transfer(challengedMiner, recipient.toAddress, 1001.waves)
@@ -669,12 +711,17 @@ class BlockChallengeTest
   }
 
   property("NODE-901. Elided transaction sender should not pay fee") {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
-
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
 
       val challengedBlockTx = TxHelpers.transfer(challengedMiner, amount = 1001.waves)
       val originalBlock = d.createBlock(
@@ -695,8 +742,8 @@ class BlockChallengeTest
   }
 
   property("NODE-902. Elided transaction should have unique ID") {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
     withDomain(
       settings,
@@ -728,12 +775,17 @@ class BlockChallengeTest
   }
 
   property("NODE-904. /transactions/merkleProof should return proofs for elided transactions") {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
-
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
 
       val challengedBlockTx = TxHelpers.transfer(challengedMiner, amount = 1001.waves)
       val originalBlock = d.createBlock(
@@ -779,11 +831,14 @@ class BlockChallengeTest
   }
 
   property("NODE-909. Empty key block can be challenged") {
-    val sender = TxHelpers.signer(1)
+    val sender           = TxHelpers.signer(1)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender, defaultSigner) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance))) { d =>
-
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances =
+        poolBalances ++ AddrWithBalance.enoughBalances(sender, defaultSigner) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance))
+    ) { d =>
 
       val originalBlock = d.createBlock(strictTime = true, stateHash = Some(Some(invalidStateHash)), timestamp = Some(Long.MaxValue))
 
@@ -804,9 +859,9 @@ class BlockChallengeTest
 
   property(s"NODE-910. Block at LightNode activation height can be challenged") {
     withDomain(
-      DomainPresets.BlockRewardDistribution
-        ,
-      generators = allGenerators, balances = poolBalances ++ AddrWithBalance.enoughBalances(defaultSigner)
+      DomainPresets.BlockRewardDistribution,
+      generators = allGenerators,
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(defaultSigner)
     ) { d =>
       val challengingMiner = generateMiningAccount
 
@@ -833,8 +888,8 @@ class BlockChallengeTest
   }
 
   property(s"NODE-911. Rollback should work correctly with challenging blocks") {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
     withDomain(
       settings,
@@ -868,14 +923,12 @@ class BlockChallengeTest
     }
 
     withDomain(
-      DomainPresets.BlockRewardDistribution
-        ,
+      DomainPresets.BlockRewardDistribution,
       generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
       balances = poolBalances ++ AddrWithBalance.enoughBalances(sender, challengedMiner) ++ Seq(
         AddrWithBalance(challengingMiner.address, challengerBalance)
       )
     ) { d =>
-
 
       val rollbackTarget = d.blockchain.lastBlockId.get
 
@@ -892,9 +945,11 @@ class BlockChallengeTest
 
   property("NODE-912. ExtensionAppender should append challenging block correctly") {
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey), balances = poolBalances ++ AddrWithBalance.enoughBalances(defaultSigner) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance))) { d =>
-
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(defaultSigner) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance))
+    ) { d =>
 
       val originalBlock    = d.createBlock(strictTime = true, stateHash = Some(Some(invalidStateHash)))
       val challengingBlock = d.createChallengingBlock(challengingMiner.signingKey, originalBlock, strictTime = true)
@@ -923,7 +978,7 @@ class BlockChallengeTest
   }
 
   property("NODE-913. Challenging of block with correct state hash is impossible") {
-    val sender = TxHelpers.signer(1)
+    val sender           = TxHelpers.signer(1)
     val challengingMiner = generateMiningAccount
     withDomain(
       settings,
@@ -932,8 +987,6 @@ class BlockChallengeTest
       // the challenger has to out-weigh the miner it challenges to get as far as the check under test.
       balances = AddrWithBalance(challengingMiner.address, ENOUGH_AMT) +: (poolBalances ++ AddrWithBalance.enoughBalances(sender, defaultSigner))
     ) { d =>
-
-
 
       val originalBlock = d.createBlock(
         Seq(TxHelpers.transfer(sender, challengingMiner.address, 1.waves)),
@@ -1019,12 +1072,17 @@ class BlockChallengeTest
   }
 
   property("NODE-915. /transactions/address should return elided transactions") {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
-
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
 
       val challengedBlockTx = TxHelpers.transfer(challengedMiner, amount = 1001.waves)
       val originalBlock = d.createBlock(
@@ -1062,12 +1120,17 @@ class BlockChallengeTest
   }
 
   property("NODE-916. /transactions/info should return correct data for elided transactions") {
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
-
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
 
       val challengedBlockTx = TxHelpers.transfer(challengedMiner, amount = 1001.waves)
       val originalBlock = d.createBlock(
@@ -1144,12 +1207,17 @@ class BlockChallengeTest
       }
     }
 
-    val sender          = TxHelpers.signer(1)
-    val challengedMiner = TxHelpers.signer(2)
+    val sender           = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
-
-
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
 
       val challengedBlockTx = TxHelpers.transfer(challengedMiner, amount = 1001.waves)
       val originalBlock = d.createBlock(
@@ -1339,16 +1407,20 @@ class BlockChallengeTest
       }
     }
 
-    val challengedMiner = TxHelpers.signer(1)
+    val challengedMiner  = TxHelpers.signer(1)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(defaultSigner) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(defaultSigner) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
       val channels      = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
       val promise       = Promise[Unit]()
       val lockChallenge = new ReentrantLock()
       lockChallenge.lock()
-
-
-
 
       val txs = Seq(TxHelpers.transfer(amount = 1.waves), TxHelpers.transfer(amount = 2.waves))
       val invalidBlock =
@@ -1445,7 +1517,8 @@ class BlockChallengeTest
         _.copy(generationSignature = ByteStr.fill(validChallengedHeader.generationSignature.size)(1))
       ).signatureValid() shouldBe false
       createInvalidChallengingBlock(validChallengingBlock, _.copy(featureVotes = Seq(1))).signatureValid() shouldBe false
-      createInvalidChallengingBlock(validChallengingBlock, _.copy(generator = PublicKey(TxHelpers.signer(100).publicKey()))).signatureValid() shouldBe false
+      createInvalidChallengingBlock(validChallengingBlock, _.copy(generator = PublicKey(TxHelpers.signer(100).publicKey())))
+        .signatureValid() shouldBe false
       createInvalidChallengingBlock(validChallengingBlock, _.copy(stateHash = Some(ByteStr.fill(DigestLength)(2)))).signatureValid() shouldBe false
       createInvalidChallengingBlock(validChallengingBlock, _.copy(headerSignature = ByteStr.fill(validChallengedHeader.headerSignature.size)(1)))
         .signatureValid() shouldBe false
@@ -1453,13 +1526,22 @@ class BlockChallengeTest
   }
 
   property("NODE-934. Block with better timestamp should replace current liquid block regardless it is challenging or not") {
-    val challengedMiner    = TxHelpers.signer(1)
-    val sender             = TxHelpers.signer(2)
-    val currentBlockSender = TxHelpers.signer(3)
-    val bestBlockSender    = TxHelpers.signer(4)
+    val challengedMiner        = TxHelpers.signer(1)
+    val sender                 = TxHelpers.signer(2)
+    val currentBlockSender     = TxHelpers.signer(3)
+    val bestBlockSender        = TxHelpers.signer(4)
     val challengingMiner       = generateMiningAccount
     val betterChallengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, betterChallengingMiner.signingKey, challengedMiner, currentBlockSender, bestBlockSender), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender, currentBlockSender, bestBlockSender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(betterChallengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
+    withDomain(
+      settings,
+      generators =
+        allGenerators ++ Seq(challengingMiner.signingKey, betterChallengingMiner.signingKey, challengedMiner, currentBlockSender, bestBlockSender),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender, currentBlockSender, bestBlockSender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(betterChallengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
 
       val txs       = Seq(TxHelpers.transfer(sender, TxHelpers.defaultAddress, amount = 1.waves))
       val bestBlock = d.createBlock(txs, generator = bestBlockSender)
@@ -1517,10 +1599,17 @@ class BlockChallengeTest
   }
 
   property("NODE-1173. Txs from applied challenging block should be removed from UTX") {
-    val challengedMiner = TxHelpers.signer(1)
-    val sender          = TxHelpers.signer(2)
+    val challengedMiner  = TxHelpers.signer(1)
+    val sender           = TxHelpers.signer(2)
     val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
       val txs = Seq(TxHelpers.transfer(sender, amount = 1), TxHelpers.transfer(sender, amount = 2))
       val originalBlock =
         d.createBlock(
@@ -1551,8 +1640,8 @@ class BlockChallengeTest
       appender(block).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
     }
 
-    val challengedMiner = TxHelpers.signer(1)
-    val sender          = TxHelpers.signer(2)
+    val challengedMiner        = TxHelpers.signer(1)
+    val sender                 = TxHelpers.signer(2)
     val challengedMinerBalance = 2000.waves
     withDomain(
       settings,
@@ -1592,8 +1681,15 @@ class BlockChallengeTest
     val sender             = TxHelpers.signer(2)
     val currentBlockSender = TxHelpers.signer(3)
     val betterBlockSender  = TxHelpers.signer(4)
-    val challengingMiner = generateMiningAccount
-    withDomain(settings, generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner, betterBlockSender), balances = poolBalances ++ AddrWithBalance.enoughBalances(sender, currentBlockSender, betterBlockSender) ++ Seq(AddrWithBalance(challengingMiner.address, challengerBalance), AddrWithBalance(challengedMiner.toAddress, challengerBalance))) { d =>
+    val challengingMiner   = generateMiningAccount
+    withDomain(
+      settings,
+      generators = allGenerators ++ Seq(challengingMiner.signingKey, challengedMiner, betterBlockSender),
+      balances = poolBalances ++ AddrWithBalance.enoughBalances(sender, currentBlockSender, betterBlockSender) ++ Seq(
+        AddrWithBalance(challengingMiner.address, challengerBalance),
+        AddrWithBalance(challengedMiner.toAddress, challengerBalance)
+      )
+    ) { d =>
 
       val txs = Seq(
         TxHelpers.transfer(sender, TxHelpers.defaultAddress, amount = 1.waves),
@@ -1757,6 +1853,6 @@ class BlockChallengeTest
       .rewardSharesAt(
         Height(d.blockchain.height),
         d.blockchain.settings.rewardsSettings.initial,
-        d.blockchain.settings.functionalitySettings.daoAddressParsed.toOption.flatten,
+        d.blockchain.settings.functionalitySettings.daoAddressParsed.toOption.flatten
       )
 }

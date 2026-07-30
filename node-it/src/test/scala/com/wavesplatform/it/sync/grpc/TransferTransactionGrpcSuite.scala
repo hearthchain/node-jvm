@@ -1,28 +1,21 @@
 package com.wavesplatform.it.sync.grpc
 
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.NTPTime
+import com.wavesplatform.it.NodeConfigs.GenesisAssets
 import com.wavesplatform.it.api.SyncGrpcApi.*
 import com.wavesplatform.it.sync.*
-import com.wavesplatform.protobuf.transaction.{PBTransactions, Recipient}
+import com.wavesplatform.protobuf.transaction.Recipient
 import io.grpc.Status.Code
 
 import scala.concurrent.duration.*
 
 class TransferTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime {
 
-  var issuedAssetId: String = scala.compiletime.uninitialized
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
-    val issuedAsset = sender.broadcastIssue(firstAcc, "name", someAssetAmount, 8, true, issueFee, waitForTx = true)
-    issuedAssetId = PBTransactions.vanilla(issuedAsset, unsafe = false).explicitGet().id().toString
-  }
+  val issuedAssetId: String = GenesisAssets.TestAsset.id.toString
 
   test("asset transfer changes sender's and recipient's asset balance by transfer amount and waves by fee") {
     for (v <- transferTxSupportedVersions) {
-      val issuedAsset      = sender.broadcastIssue(firstAcc, "name", someAssetAmount, 8, true, issueFee, waitForTx = true)
-      val issuedAssetId    = PBTransactions.vanilla(issuedAsset, unsafe = false).explicitGet().id().toString
+      val issuedAssetId    = GenesisAssets.TestAsset.id.toString
       val firstBalance     = sender.wavesBalance(firstAddress).available
       val firstEffBalance  = sender.wavesBalance(firstAddress).effective
       val secondBalance    = sender.wavesBalance(secondAddress).available

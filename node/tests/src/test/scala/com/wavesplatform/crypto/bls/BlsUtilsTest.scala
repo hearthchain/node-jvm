@@ -212,5 +212,5 @@ class BlsUtilsTest extends FreeSpec with EitherValues {
 
   private def aggSig2(sig1: Array[Byte], sig2: Array[Byte]): Array[Byte] = BlsUtils.aggSig(Seq(sig1, sig2)).value
 
-  private def mkRandomSecretKey(): SecretKey  = mkSecretKey(Array.fill(32)(Random.nextInt().toByte))
+  private def mkRandomSecretKey(): SecretKey = mkSecretKey(Array.fill(32)(Random.nextInt().toByte))
 }

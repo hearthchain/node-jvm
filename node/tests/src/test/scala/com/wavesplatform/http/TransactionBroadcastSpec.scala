@@ -9,11 +9,7 @@ import com.wavesplatform.test.TestTime
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.assets.exchange.*
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
-import com.wavesplatform.transaction.{
-  AssetIdLength,
-  Transaction,
-  TxHelpers,
-}
+import com.wavesplatform.transaction.{AssetIdLength, Transaction, TxHelpers}
 import com.wavesplatform.utils.{EmptyBlockchain, SharedSchedulerMixin}
 import io.netty.channel.Channel
 import play.api.libs.json.JsObject
@@ -22,17 +18,12 @@ import scala.concurrent.Future
 import scala.concurrent.duration.*
 import scala.util.Random
 
-class TransactionBroadcastSpec
-    extends RouteSpec("/transactions")
-    with RestAPISettingsHelper
-    with WithDomain
-    with SharedSchedulerMixin {
+class TransactionBroadcastSpec extends RouteSpec("/transactions") with RestAPISettingsHelper with WithDomain with SharedSchedulerMixin {
   private val seed = new Array[Byte](32)
   Random.nextBytes(seed)
 
-  private val transactionPublisher: TransactionPublisher = (_: Transaction, _: Option[Channel]) =>
-    Future.successful(TracedResult(Right(true)))
-  private val testTime = new TestTime
+  private val transactionPublisher: TransactionPublisher = (_: Transaction, _: Option[Channel]) => Future.successful(TracedResult(Right(true)))
+  private val testTime                                   = new TestTime
 
   private val transactionsApiRoute = new TransactionsApiRoute(
     restAPISettings,
@@ -48,7 +39,6 @@ class TransactionBroadcastSpec
   )
 
   private val route = seal(transactionsApiRoute.route)
-
 
   "transactions with asset id field" - {
     "return error when asset id with wrong size is passed" in {

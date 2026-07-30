@@ -17,16 +17,16 @@ class SignedRequestsTest extends FunSuite {
   test("AssetTransfer json parsing works") {
     val json =
       s"""
-        |{
-        |   "recipient":"$firstRecipient",
-        |   "timestamp":1479462208828,
-        |   "assetId":"GAXAj8T4pSjunDqpz6Q3bit4fJJN9PD4t8AK8JZVSa5u",
-        |   "amount":100000,
-        |   "fee":100000,
-        |   "senderPublicKey":"D6HmGZqpXCyAqpz8mCAfWijYDWsPKncKe5v3jq1nTpf5",
-        |   "signature":"4dPRTW6XyRQUTQwwpuZDCNy1UDHYG9WGsEQnn5v49Lj5uyh4XGDdwtEq3t6ZottweAXHieK32UokHwiTxGFtz9bQ",
-        |   "attachment":"A"
-        |}
+         |{
+         |   "recipient":"$firstRecipient",
+         |   "timestamp":1479462208828,
+         |   "assetId":"GAXAj8T4pSjunDqpz6Q3bit4fJJN9PD4t8AK8JZVSa5u",
+         |   "amount":100000,
+         |   "fee":100000,
+         |   "senderPublicKey":"D6HmGZqpXCyAqpz8mCAfWijYDWsPKncKe5v3jq1nTpf5",
+         |   "signature":"4dPRTW6XyRQUTQwwpuZDCNy1UDHYG9WGsEQnn5v49Lj5uyh4XGDdwtEq3t6ZottweAXHieK32UokHwiTxGFtz9bQ",
+         |   "attachment":"A"
+         |}
       """.stripMargin
     val req = Json.parse(json).validate[SignedTransferV1Request].get
     req.recipient shouldBe firstRecipient
@@ -51,17 +51,17 @@ class SignedRequestsTest extends FunSuite {
   test("AssetTransfer with a fee in an asset json parsing works") {
     val json =
       s"""
-        |{
-        |   "senderPublicKey":"FJuErRxhV9JaFUwcYLabFK5ENvDRfyJbRz8FeVfYpBLn",
-        |   "recipient":"$secondRecipient",
-        |   "timestamp":1489054107569,
-        |   "assetId":"6MPKrD5B7GrfbciHECg1MwdvRUhRETApgNZspreBJ8JL",
-        |   "amount":1000,
-        |   "fee":100,
-        |   "feeAssetId":"6MPKrD5B7GrfbciHECg1MwdvRUhRETApgNZspreBJ8JL",
-        |   "signature":"UAhYXYdkFAFBuwAuUFP3yw7E8aRTyx56ZL4UPbT4ufomBzVLMRpdW2dCtJmfpCuPPMhGTvdzhXwb7o4ER6HAUpJ",
-        |   "attachment":"2Kk7Zsr1e9jsqSBM5hpF"
-        |}
+         |{
+         |   "senderPublicKey":"FJuErRxhV9JaFUwcYLabFK5ENvDRfyJbRz8FeVfYpBLn",
+         |   "recipient":"$secondRecipient",
+         |   "timestamp":1489054107569,
+         |   "assetId":"6MPKrD5B7GrfbciHECg1MwdvRUhRETApgNZspreBJ8JL",
+         |   "amount":1000,
+         |   "fee":100,
+         |   "feeAssetId":"6MPKrD5B7GrfbciHECg1MwdvRUhRETApgNZspreBJ8JL",
+         |   "signature":"UAhYXYdkFAFBuwAuUFP3yw7E8aRTyx56ZL4UPbT4ufomBzVLMRpdW2dCtJmfpCuPPMhGTvdzhXwb7o4ER6HAUpJ",
+         |   "attachment":"2Kk7Zsr1e9jsqSBM5hpF"
+         |}
       """.stripMargin
     val req = Json.parse(json).validate[SignedTransferV1Request].get
     req.recipient shouldBe secondRecipient

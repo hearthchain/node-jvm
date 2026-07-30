@@ -11,33 +11,32 @@ import play.api.libs.json.Json
 class TransferTransactionV2Specification extends PropSpec {
 
   property("VersionedTransferTransactionSpecification id doesn't depend on proof") {
-    forAll(accountGen, accountGen, proofsGen, proofsGen, attachmentGen) {
-      case (_, acc2, proofs1, proofs2, attachment) =>
-        val tx1 = TransferTransaction(
-          PublicKey(acc2.publicKey),
-          acc2.toAddress,
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          attachment,
-          1,
-          proofs1,
-          AddressScheme.current.chainId
-        )
-        val tx2 = TransferTransaction(
-          PublicKey(acc2.publicKey),
-          acc2.toAddress,
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          Waves,
-          TxPositiveAmount.unsafeFrom(1),
-          attachment,
-          1,
-          proofs2,
-          AddressScheme.current.chainId
-        )
-        tx1.id() shouldBe tx2.id()
+    forAll(accountGen, accountGen, proofsGen, proofsGen, attachmentGen) { case (_, acc2, proofs1, proofs2, attachment) =>
+      val tx1 = TransferTransaction(
+        PublicKey(acc2.publicKey),
+        acc2.toAddress,
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        attachment,
+        1,
+        proofs1,
+        AddressScheme.current.chainId
+      )
+      val tx2 = TransferTransaction(
+        PublicKey(acc2.publicKey),
+        acc2.toAddress,
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        Waves,
+        TxPositiveAmount.unsafeFrom(1),
+        attachment,
+        1,
+        proofs2,
+        AddressScheme.current.chainId
+      )
+      tx1.id() shouldBe tx2.id()
     }
   }
 

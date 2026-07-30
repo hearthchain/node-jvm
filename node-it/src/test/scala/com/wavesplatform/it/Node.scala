@@ -4,7 +4,7 @@ import java.net.{InetSocketAddress, URL}
 import scala.concurrent.duration.FiniteDuration
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.Logger
-import com.wavesplatform.account.{KeyPair, PublicKey, SeedKeyPair}
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.util.GlobalTimer
 import com.wavesplatform.settings.WavesSettings
@@ -15,6 +15,7 @@ import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 import org.asynchttpclient.*
 import org.asynchttpclient.Dsl.{config as clientConfig, *}
 import org.slf4j.LoggerFactory
+import tech.hearth.crypto.SigningKey
 
 abstract class Node(val config: Config) extends AutoCloseable {
   lazy val log: Logger = Logger(LoggerFactory.getLogger(this.name))
@@ -34,11 +35,11 @@ abstract class Node(val config: Config) extends AutoCloseable {
   private val wallet = Wallet(settings.walletSettings.copy(file = None))
   wallet.generateNewAccounts(1)
 
-  def generateKeyPair(): SeedKeyPair = wallet.synchronized {
+  def generateKeyPair(): SigningKey = wallet.synchronized {
     wallet.generateNewAccount().get
   }
 
-  val keyPair: KeyPair     = KeyPair.fromSeed(config.getString("account-seed")).explicitGet()
+  val keyPair: SigningKey  = keyPairFromSeed(config.getString("account-seed")).explicitGet()
   val publicKey: PublicKey = PublicKey.fromBase58String(config.getString("public-key")).explicitGet()
   val address: String      = config.getString("address")
 
@@ -50,7 +51,7 @@ abstract class Node(val config: Config) extends AutoCloseable {
     * inaccessible from the host.
     */
   def networkAddress: InetSocketAddress
-  
+
   def networkAddressAccessibleFromHost: InetSocketAddress
 
   override def close(): Unit = client.close()

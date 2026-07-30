@@ -75,7 +75,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
         bcu.processBlock(
           Block
             .genesis(
-              genesisSettings,
+              genesisSettings
             )
             .explicitGet()
         ) should beRight
@@ -89,7 +89,15 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
       amount    <- chooseNum(1L, (maxAmount * 0.9).toLong)
       recipient <- accountGen
       fee       <- chooseNum(extraFee, (maxAmount * 0.1).toLong)
-    } yield TxHelpers.transfer(from = sender, to = recipient.toAddress, amount = amount, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty))
+    } yield TxHelpers.transfer(
+      from = sender,
+      to = recipient.toAddress,
+      amount = amount,
+      asset = Waves,
+      fee = fee,
+      feeAsset = Waves,
+      attachment = ByteStr.empty
+    ))
       .label("transferTransaction")
 
   private def withState[A](test: (SigningKey, Long, BlockchainUpdaterImpl) => A): A = {
@@ -250,10 +258,26 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
     }
 
   private def transfer(sender: SigningKey) =
-    TxHelpers.transfer(from = sender, to = TxHelpers.address(2), amount = 1, asset = Waves, fee = extraFee, feeAsset = Waves, attachment = ByteStr.empty)
+    TxHelpers.transfer(
+      from = sender,
+      to = TxHelpers.address(2),
+      amount = 1,
+      asset = Waves,
+      fee = extraFee,
+      feeAsset = Waves,
+      attachment = ByteStr.empty
+    )
 
   private def transferWithRecipient(sender: SigningKey, recipient: PublicKey) =
-    TxHelpers.transfer(from = sender, to = recipient.toAddress, amount = 1, asset = Waves, fee = extraFee, feeAsset = Waves, attachment = ByteStr.empty)
+    TxHelpers.transfer(
+      from = sender,
+      to = recipient.toAddress,
+      amount = 1,
+      asset = Waves,
+      fee = extraFee,
+      feeAsset = Waves,
+      attachment = ByteStr.empty
+    )
 
   private def massTransferWithRecipients(sender: SigningKey, recipients: Seq[PublicKey], maxAmount: Long) = {
     val amount    = maxAmount / (recipients.size + 1)
@@ -479,8 +503,26 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
           secondAcc <- accountGen
           ts = System.currentTimeMillis()
           fee <- smallFeeGen
-          validTransfer = TxHelpers.transfer(from = richAcc, to = secondAcc.toAddress, amount = 1L, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
-          invalidTransfer = TxHelpers.transfer(from = secondAcc, to = richAcc.toAddress, amount = 2L, asset = Waves, fee = fee, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
+          validTransfer = TxHelpers.transfer(
+            from = richAcc,
+            to = secondAcc.toAddress,
+            amount = 1L,
+            asset = Waves,
+            fee = fee,
+            feeAsset = Waves,
+            attachment = ByteStr.empty,
+            timestamp = ts
+          )
+          invalidTransfer = TxHelpers.transfer(
+            from = secondAcc,
+            to = richAcc.toAddress,
+            amount = 2L,
+            asset = Waves,
+            fee = fee,
+            feeAsset = Waves,
+            attachment = ByteStr.empty,
+            timestamp = ts
+          )
         } yield (richAcc, validTransfer, invalidTransfer)
 
         forAll(preconditions) { case (richAcc, validTransfer, invalidTransfer) =>

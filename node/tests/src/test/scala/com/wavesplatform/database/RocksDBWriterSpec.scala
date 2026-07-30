@@ -77,23 +77,23 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
       s.copy(dbSettings = s.dbSettings.copy(maxRollbackDepth = 4, cleanupInterval = Some(4)))
     }
 
-    val alice = TxHelpers.signer(1)
+    val alice        = TxHelpers.signer(1)
     val aliceAddress = alice.toAddress
 
-    val bob = TxHelpers.signer(2)
+    val bob        = TxHelpers.signer(2)
     val bobAddress = bob.toAddress
 
-    val carl = TxHelpers.signer(3)
+    val carl        = TxHelpers.signer(3)
     val carlAddress = carl.toAddress
 
-    val userAddresses = Seq(aliceAddress, bobAddress, carlAddress)
+    val userAddresses  = Seq(aliceAddress, bobAddress, carlAddress)
     val minerAddresses = Seq(TxHelpers.defaultAddress)
-    val allAddresses = userAddresses ++ minerAddresses
+    val allAddresses   = userAddresses ++ minerAddresses
 
     def transferWavesTx = TxHelpers.massTransfer(
       to = Seq(
         aliceAddress -> 100.waves,
-        bobAddress -> 100.waves
+        bobAddress   -> 100.waves
       ),
       fee = 1.waves
     )
@@ -101,7 +101,7 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
     // There is no issue transaction any more, so the asset alice holds has to come from the genesis snapshot -
     // held there by a throwaway account instead of alice herself, so alice's own history still starts clean, only
     // once she receives it below (mirroring what issuing it herself used to do).
-    val issuer = TxHelpers.signer(900)
+    val issuer      = TxHelpers.signer(900)
     val issuedAsset = IssuedAsset(ByteStr.fill(32)(7))
     val assetSettings = GenesisAssetSettings(
       id = issuedAsset.id,
@@ -227,8 +227,8 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
 
     "balanceAtHeight returns correct values" in {
       val richAccount = TxHelpers.signer(1001)
-      val account1 = TxHelpers.signer(1002)
-      val account2 = TxHelpers.signer(1003)
+      val account1    = TxHelpers.signer(1002)
+      val account2    = TxHelpers.signer(1003)
 
       // There is no issue transaction any more, so the asset richAccount holds has to come from the genesis
       // snapshot instead - a plain empty block takes its place to keep the height numbering below unchanged.

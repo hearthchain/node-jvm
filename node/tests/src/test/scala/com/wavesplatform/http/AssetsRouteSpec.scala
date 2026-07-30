@@ -155,7 +155,8 @@ class AssetsRouteSpec
     val assets = (1 to 10).map(genesisAsset(_))
     routeTest(
       RideV6,
-      AddrWithBalance.enoughBalances(defaultSigner) :+ AddrWithBalance(assetIssuer.toAddress, 10.waves, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap),
+      AddrWithBalance
+        .enoughBalances(defaultSigner) :+ AddrWithBalance(assetIssuer.toAddress, 10.waves, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap),
       assets
     ) { (d, route) =>
       assets.zipWithIndex.foreach { case (asset, idx) =>
@@ -225,46 +226,46 @@ class AssetsRouteSpec
       balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.waves, Map(IssuedAsset(asset.id) -> asset.quantity))),
       assets = Seq(asset)
     ) { (_, route) =>
-    val inputLimitErrMsg = TooBigArrayAllocation(restAPISettings.assetDetailsLimit).message
-    val emptyInputErrMsg = AssetIdNotSpecified.message
+      val inputLimitErrMsg = TooBigArrayAllocation(restAPISettings.assetDetailsLimit).message
+      val emptyInputErrMsg = AssetIdNotSpecified.message
 
-    def checkErrorResponse(errMsg: String): Unit = {
-      response.status shouldBe StatusCodes.BadRequest
-      (responseAs[JsObject] \ "message").as[String] shouldBe errMsg
-    }
+      def checkErrorResponse(errMsg: String): Unit = {
+        response.status shouldBe StatusCodes.BadRequest
+        (responseAs[JsObject] \ "message").as[String] shouldBe errMsg
+      }
 
-    def checkAllAreThisAsset(idsCount: Int): Unit = {
-      response.status shouldBe StatusCodes.OK
+      def checkAllAreThisAsset(idsCount: Int): Unit = {
+        response.status shouldBe StatusCodes.OK
 
-      val result = responseAs[JsArray].value
-      result.size shouldBe idsCount
-      // The same id repeated, so every entry describes that one asset
-      result.foreach(json => checkResponse(descriptionOf(asset, sequenceInBlock = 1), asset.id.toString, json.as[JsObject]))
-    }
+        val result = responseAs[JsArray].value
+        result.size shouldBe idsCount
+        // The same id repeated, so every entry describes that one asset
+        result.foreach(json => checkResponse(descriptionOf(asset, sequenceInBlock = 1), asset.id.toString, json.as[JsObject]))
+      }
 
-    val maxLimitIds      = Seq.fill(restAPISettings.assetDetailsLimit)(asset.id.toString)
-    val moreThanLimitIds = asset.id.toString +: maxLimitIds
+      val maxLimitIds      = Seq.fill(restAPISettings.assetDetailsLimit)(asset.id.toString)
+      val moreThanLimitIds = asset.id.toString +: maxLimitIds
 
-    Get(routePath(s"/details?${maxLimitIds.map("id=" + _).mkString("&")}")) ~> route ~> check(checkAllAreThisAsset(maxLimitIds.size))
-    Get(routePath(s"/details?${moreThanLimitIds.map("id=" + _).mkString("&")}")) ~> route ~> check(checkErrorResponse(inputLimitErrMsg))
-    Get(routePath("/details")) ~> route ~> check(checkErrorResponse(emptyInputErrMsg))
+      Get(routePath(s"/details?${maxLimitIds.map("id=" + _).mkString("&")}")) ~> route ~> check(checkAllAreThisAsset(maxLimitIds.size))
+      Get(routePath(s"/details?${moreThanLimitIds.map("id=" + _).mkString("&")}")) ~> route ~> check(checkErrorResponse(inputLimitErrMsg))
+      Get(routePath("/details")) ~> route ~> check(checkErrorResponse(emptyInputErrMsg))
 
-    Post(routePath("/details"), FormData(maxLimitIds.map("id" -> _)*)) ~> route ~> check(checkAllAreThisAsset(maxLimitIds.size))
-    Post(routePath("/details"), FormData(moreThanLimitIds.map("id" -> _)*)) ~> route ~> check(checkErrorResponse(inputLimitErrMsg))
-    Post(routePath("/details"), FormData()) ~> route ~> check(checkErrorResponse(emptyInputErrMsg))
+      Post(routePath("/details"), FormData(maxLimitIds.map("id" -> _)*)) ~> route ~> check(checkAllAreThisAsset(maxLimitIds.size))
+      Post(routePath("/details"), FormData(moreThanLimitIds.map("id" -> _)*)) ~> route ~> check(checkErrorResponse(inputLimitErrMsg))
+      Post(routePath("/details"), FormData()) ~> route ~> check(checkErrorResponse(emptyInputErrMsg))
 
-    Post(
-      routePath("/details"),
-      HttpEntity(ContentTypes.`application/json`, Json.obj("ids" -> Json.arr(maxLimitIds.map(id => id: JsValueWrapper)*)).toString())
-    ) ~> route ~> check(checkAllAreThisAsset(maxLimitIds.size))
-    Post(
-      routePath("/details"),
-      HttpEntity(ContentTypes.`application/json`, Json.obj("ids" -> Json.arr(moreThanLimitIds.map(id => id: JsValueWrapper)*)).toString())
-    ) ~> route ~> check(checkErrorResponse(inputLimitErrMsg))
-    Post(
-      routePath("/details"),
-      HttpEntity(ContentTypes.`application/json`, Json.obj("ids" -> JsArray.empty).toString())
-    ) ~> route ~> check(checkErrorResponse(emptyInputErrMsg))
+      Post(
+        routePath("/details"),
+        HttpEntity(ContentTypes.`application/json`, Json.obj("ids" -> Json.arr(maxLimitIds.map(id => id: JsValueWrapper)*)).toString())
+      ) ~> route ~> check(checkAllAreThisAsset(maxLimitIds.size))
+      Post(
+        routePath("/details"),
+        HttpEntity(ContentTypes.`application/json`, Json.obj("ids" -> Json.arr(moreThanLimitIds.map(id => id: JsValueWrapper)*)).toString())
+      ) ~> route ~> check(checkErrorResponse(inputLimitErrMsg))
+      Post(
+        routePath("/details"),
+        HttpEntity(ContentTypes.`application/json`, Json.obj("ids" -> JsArray.empty).toString())
+      ) ~> route ~> check(checkErrorResponse(emptyInputErrMsg))
     }
   }
 

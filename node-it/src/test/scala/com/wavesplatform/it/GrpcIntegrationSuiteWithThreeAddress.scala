@@ -1,26 +1,27 @@
 package com.wavesplatform.it
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.account.{Address, KeyPair}
+import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.api.SyncGrpcApi.*
 import com.wavesplatform.protobuf.transaction.{PBRecipients, PBTransactions, Recipient}
 import com.wavesplatform.test.NumericExt
-import com.wavesplatform.transaction.transfer.TransferTransaction
+import com.wavesplatform.transaction.TransactionType
 import com.wavesplatform.utils.ScorexLogging
 import org.scalatest.*
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
+import tech.hearth.crypto.SigningKey
 
 trait GrpcIntegrationSuiteWithThreeAddress extends BaseSuite with ScalaFutures with IntegrationPatience with RecoverMethods with ScorexLogging {
   this: TestSuite & Nodes =>
 
-  protected lazy val firstAcc: KeyPair  = KeyPair("first_acc".getBytes("UTF-8"))
-  protected lazy val secondAcc: KeyPair = KeyPair("second_acc".getBytes("UTF-8"))
-  protected lazy val thirdAcc: KeyPair  = KeyPair("third_acc".getBytes("UTF-8"))
+  protected lazy val firstAcc: SigningKey  = keyPairFromSeed("first_acc".getBytes("UTF-8"))
+  protected lazy val secondAcc: SigningKey = keyPairFromSeed("second_acc".getBytes("UTF-8"))
+  protected lazy val thirdAcc: SigningKey  = keyPairFromSeed("third_acc".getBytes("UTF-8"))
 
-  protected lazy val firstAddress: ByteString  = PBRecipients.create(Address.fromPublicKey(firstAcc.publicKey)).getPublicKeyHash
-  protected lazy val secondAddress: ByteString = PBRecipients.create(Address.fromPublicKey(secondAcc.publicKey)).getPublicKeyHash
-  protected lazy val thirdAddress: ByteString  = PBRecipients.create(Address.fromPublicKey(thirdAcc.publicKey)).getPublicKeyHash
+  protected lazy val firstAddress: ByteString  = PBRecipients.create(Address.fromPublicKey(PublicKey(firstAcc.publicKey()))).publicKeyHash
+  protected lazy val secondAddress: ByteString = PBRecipients.create(Address.fromPublicKey(PublicKey(secondAcc.publicKey()))).publicKeyHash
+  protected lazy val thirdAddress: ByteString  = PBRecipients.create(Address.fromPublicKey(PublicKey(thirdAcc.publicKey()))).publicKeyHash
 
   abstract protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -49,8 +50,7 @@ trait GrpcIntegrationSuiteWithThreeAddress extends BaseSuite with ScalaFutures w
     def makeTransfers(accounts: Seq[ByteString]): Seq[String] = accounts.map { acc =>
       PBTransactions
         .vanilla(
-          sender.broadcastTransfer(sender.keyPair, Recipient().withPublicKeyHash(acc), defaultBalance, sender.fee(TransferTransaction.typeId)),
-          unsafe = false
+          sender.broadcastTransfer(sender.keyPair, Recipient().withPublicKeyHash(acc), defaultBalance, sender.fee(TransactionType.Transfer.id.toByte))
         )
         .explicitGet()
         .id()

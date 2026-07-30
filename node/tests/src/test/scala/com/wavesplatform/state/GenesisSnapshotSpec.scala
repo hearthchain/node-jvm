@@ -153,7 +153,7 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
     def genesisBlockAndResult(ws: WavesSettings): (Block, BlockDiffer.Result) = {
       val block = Block
         .genesis(
-          ws.blockchainSettings.genesisSettings,
+          ws.blockchainSettings.genesisSettings
         )
         .explicitGet()
       val blockchain = preGenesisBlockchain(ws)

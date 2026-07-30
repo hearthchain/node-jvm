@@ -1,14 +1,14 @@
 package com.wavesplatform.it.sync
 
 import com.typesafe.config.{Config, ConfigFactory}
-import com.wavesplatform.account.{KeyPair, PrivateKey}
-import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.it.BaseFunSuite
 import com.wavesplatform.it.NodeConfigs.Default
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.SeveralAccountMiningSuite.*
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
+import tech.hearth.crypto.{Crypto, Hex, SigningKey}
 
 import scala.concurrent.duration.*
 
@@ -36,8 +36,23 @@ class SeveralAccountMiningSuite extends BaseFunSuite {
 }
 
 object SeveralAccountMiningSuite {
-  val MinerPk1: KeyPair = getNodeKeyPair(2)
-  val MinerPk2: KeyPair = getNodeKeyPair(3)
+  // MinerSettings has no raw private-keys list any more: an account is either a mnemonic (with derivation
+  // nonces) or hex-encoded signingKey/vrfKey seeds, from which MinerImpl derives the runtime SigningKey/VrfKey.
+  private def signingSeed(idx: Int): Array[Byte] =
+    com.wavesplatform.crypto.secureHash(Base58.decode(Default(idx).getString("account-seed")))
+
+  private def vrfSeed(signingSeed: Array[Byte]): Array[Byte] =
+    Crypto.defaultBackend().sha256(SigningKey.fromSeed(signingSeed).publicKey())
+
+  private def getNodeKeyPair(idx: Int): SigningKey = SigningKey.fromSeed(signingSeed(idx))
+
+  val MinerPk1: SigningKey = getNodeKeyPair(2)
+  val MinerPk2: SigningKey = getNodeKeyPair(3)
+
+  private def accountConfig(idx: Int): String = {
+    val seed = signingSeed(idx)
+    s"""{ signing-key = "${Hex.encode(seed)}", vrf-key = "${Hex.encode(vrfSeed(seed))}" }"""
+  }
 
   private val minerConfig =
     ConfigFactory.parseString(s"""
@@ -51,7 +66,7 @@ object SeveralAccountMiningSuite {
                                  |  }
                                  |  miner {
                                  |    quorum = 0
-                                 |    private-keys = ["${MinerPk1.privateKey.toString}", "${MinerPk2.privateKey.toString}"]
+                                 |    accounts = [${accountConfig(2)}, ${accountConfig(3)}]
                                  |  }
                                  |}""".stripMargin)
 
@@ -74,7 +89,4 @@ object SeveralAccountMiningSuite {
     minerConfig.withFallback(Default.head),
     nonMinerConfig.withFallback(Default(1))
   )
-
-  private def getNodeKeyPair(idx: Int): KeyPair =
-    KeyPair(PrivateKey(ByteStr.decodeBase58(Default(idx).getString("private-key")).get))
 }

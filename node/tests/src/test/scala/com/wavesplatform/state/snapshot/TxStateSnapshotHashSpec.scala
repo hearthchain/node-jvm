@@ -32,7 +32,6 @@ class TxStateSnapshotHashSpec extends PropSpec {
   private val orderId1 = hashInt(0xee23ef22)
   private val orderId2 = hashInt(0xbb77ef29)
 
-
   private val wavesBalances = TSS(balances =
     Seq(
       TSS.Balance(bs(address1.toBytes), Some(Amount(amount = 10.waves))),

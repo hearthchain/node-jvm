@@ -1,14 +1,12 @@
 package com.wavesplatform.api.grpc
 
-import com.wavesplatform.account.AddressScheme
 import com.wavesplatform.api.common.{CommonTransactionsApi, TransactionMeta}
 import com.wavesplatform.api.grpc.TransactionsApiGrpcImpl.applicationStatusFromTxStatus
 import com.wavesplatform.protobuf.*
 import com.wavesplatform.protobuf.transaction.*
-import com.wavesplatform.protobuf.utils.PBImplicitConversions.PBRecipientImplicitConversionOps
-import com.wavesplatform.state.{Blockchain, TxMeta, InvokeScriptResult as VISR}
-import com.wavesplatform.transaction.TxValidationError.GenericError
-import com.wavesplatform.transaction.{Authorized, EthereumTransaction}
+import com.wavesplatform.protobuf.utils.PBImplicitConversions
+import com.wavesplatform.state.{Blockchain, TxMeta}
+import com.wavesplatform.transaction.Authorized
 import io.grpc.stub.StreamObserver
 import io.grpc.{Status, StatusRuntimeException}
 import monix.execution.Scheduler
@@ -25,16 +23,15 @@ class TransactionsApiGrpcImpl(blockchain: Blockchain, commonApi: CommonTransacti
       val stream: Observable[TransactionMeta] = request.recipient match {
         // By recipient
         case Some(subject) =>
-          val recipientAddrOrAlias = subject
-            .toAddressOrAlias(AddressScheme.current.chainId)
-            .flatMap(blockchain.resolveAlias(_))
+          val recipientAddress = PBImplicitConversions
+            .toAddress(subject)
             .fold(e => throw new IllegalArgumentException(e.toString), identity)
 
           val maybeSender = Option(request.sender)
-            .collect { case s if !s.isEmpty => s.toAddress() }
+            .collect { case s if !s.isEmpty => s.toAddress }
 
           commonApi.transactionsByAddress(
-            recipientAddrOrAlias,
+            recipientAddress,
             maybeSender,
             Set.empty,
             None
@@ -42,7 +39,7 @@ class TransactionsApiGrpcImpl(blockchain: Blockchain, commonApi: CommonTransacti
 
         // By sender
         case None if !request.sender.isEmpty =>
-          val senderAddress = request.sender.toAddress()
+          val senderAddress = request.sender.toAddress
           commonApi.transactionsByAddress(
             senderAddress,
             Some(senderAddress),
@@ -85,7 +82,7 @@ class TransactionsApiGrpcImpl(blockchain: Blockchain, commonApi: CommonTransacti
   override def getUnconfirmed(request: TransactionsRequest, responseObserver: StreamObserver[TransactionResponse]): Unit =
     responseObserver.interceptErrors {
       val unconfirmedTransactions = if (!request.sender.isEmpty) {
-        val senderAddress = request.sender.toAddress()
+        val senderAddress = request.sender.toAddress
         commonApi.unconfirmedTransactions.collect {
           case a: Authorized if a.sender.toAddress == senderAddress => a
         }
@@ -98,18 +95,11 @@ class TransactionsApiGrpcImpl(blockchain: Blockchain, commonApi: CommonTransacti
       )
     }
 
+  // Invoke script results no longer exist (no InvokeScript transaction type); this RPC is deprecated in the proto
+  // and kept only so the service still binds, always streaming nothing.
   override def getStateChanges(request: TransactionsRequest, responseObserver: StreamObserver[InvokeScriptResultResponse]): Unit =
     responseObserver.interceptErrors {
-      val result = Observable(request.transactionIds*)
-        .flatMap(txId => Observable.fromIterable(commonApi.transactionById(txId.toByteStr)))
-        .collect { case TransactionMeta.Invoke(_, transaction, _, _, invokeScriptResult) =>
-          InvokeScriptResultResponse.of(
-            Some(PBTransactions.protobuf(transaction)),
-            invokeScriptResult.map(VISR.toPB(_, addressForTransfer = true))
-          )
-        }
-
-      responseObserver.completeWith(result)
+      responseObserver.completeWith(Observable.empty)
     }
 
   override def getStatuses(request: TransactionsByIdRequest, responseObserver: StreamObserver[TransactionStatus]): Unit =
@@ -136,11 +126,10 @@ class TransactionsApiGrpcImpl(blockchain: Blockchain, commonApi: CommonTransacti
 
   override def broadcast(tx: PBSignedTransaction): Future[PBSignedTransaction] =
     (for {
-      vtxEither <- Future(tx.toVanilla) // Intercept runtime errors
+      vtxEither <- Future(tx.toVanilla)    // Intercept runtime errors
       vtx       <- vtxEither.toFuture
-      _      <- Either.cond(!vtx.isInstanceOf[EthereumTransaction], (), GenericError("ETH transactions should not be broadcasted over gRPC")).toFuture
-      result <- commonApi.broadcastTransaction(vtx)
-      _      <- result.resultE.toFuture // Check for success
+      result    <- commonApi.broadcastTransaction(vtx)
+      _         <- result.resultE.toFuture // Check for success
     } yield tx).wrapErrors
 }
 
@@ -148,12 +137,8 @@ private object TransactionsApiGrpcImpl {
   def toTransactionResponse(meta: TransactionMeta): TransactionResponse = {
     val transactionId = meta.transaction.id().toByteString
     val status        = applicationStatusFromTxStatus(meta.status)
-    val invokeScriptResult = meta match {
-      case TransactionMeta.Invoke(_, _, _, _, r) => r.map(VISR.toPB(_, addressForTransfer = true))
-      case _                                     => None
-    }
 
-    TransactionResponse(transactionId, meta.height.toInt, Some(meta.transaction.toPB), status, invokeScriptResult)
+    TransactionResponse(transactionId, meta.height.toInt, Some(meta.transaction.toPB), status)
   }
 
   def applicationStatusFromTxStatus(status: TxMeta.Status): ApplicationStatus.Recognized =

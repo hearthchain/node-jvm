@@ -62,9 +62,13 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
       val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Waves
 
       val buyOrder =
-        TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, matcherFee, matcherFeeAsset).explicitGet()
+        TxHelpers
+          .buy(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, matcherFee, matcherFeeAsset)
+          .explicitGet()
       val sellOrder =
-        TxHelpers.sell(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, matcherFee, matcherFeeAsset).explicitGet()
+        TxHelpers
+          .sell(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, matcherFee, matcherFeeAsset)
+          .explicitGet()
 
       buyOrder.isValid(30000000000L) shouldBe not(valid)
       buyOrder.isValid(expirationTime - Order.MaxLiveTime - 1) shouldBe not(valid)
@@ -89,7 +93,18 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
 
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, 0, price, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, -1, price, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
-      TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, Order.MaxAmount + 1, price, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
+      TxHelpers.buy(
+        version,
+        sender,
+        PublicKey(matcher.publicKey),
+        pair,
+        Order.MaxAmount + 1,
+        price,
+        time,
+        expirationTime,
+        matcherFee,
+        matcherFeeAsset
+      ) should beLeft
 
       TxHelpers.sell(version, sender, PublicKey(matcher.publicKey), pair, 0, price, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
       TxHelpers.sell(version, sender, PublicKey(matcher.publicKey), pair, -1, price, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
@@ -123,11 +138,33 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
 
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, 0, matcherFeeAsset) should beLeft
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, -1, matcherFeeAsset) should beLeft
-      TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, Order.MaxAmount + 1, matcherFeeAsset) should beLeft
+      TxHelpers.buy(
+        version,
+        sender,
+        PublicKey(matcher.publicKey),
+        pair,
+        amount,
+        price,
+        time,
+        expirationTime,
+        Order.MaxAmount + 1,
+        matcherFeeAsset
+      ) should beLeft
 
       TxHelpers.sell(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, 0, matcherFeeAsset) should beLeft
       TxHelpers.sell(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, -1, matcherFeeAsset) should beLeft
-      TxHelpers.sell(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, Order.MaxAmount + 1, matcherFeeAsset) should beLeft
+      TxHelpers.sell(
+        version,
+        sender,
+        PublicKey(matcher.publicKey),
+        pair,
+        amount,
+        price,
+        time,
+        expirationTime,
+        Order.MaxAmount + 1,
+        matcherFeeAsset
+      ) should beLeft
     }
   }
 
@@ -164,40 +201,33 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
       verifyOrderSignature(order.copy(matcherPublicKey = PublicKey(pka.publicKey))) should produce(err)
       val assetPair = order.assetPair
       verifyOrderSignature(
-        order.copy(assetPair = assetPair.copy(amountAsset = IssuedAsset(ByteStr(rndAsset)))),
-        
+        order.copy(assetPair = assetPair.copy(amountAsset = IssuedAsset(ByteStr(rndAsset))))
       ) should produce(err)
       verifyOrderSignature(
-        order.copy(assetPair = assetPair.copy(priceAsset = IssuedAsset(ByteStr(rndAsset)))),
-        
+        order.copy(assetPair = assetPair.copy(priceAsset = IssuedAsset(ByteStr(rndAsset))))
       ) should produce(err)
       verifyOrderSignature(order.copy(orderType = OrderType.reverse(order.orderType))) should produce(
         err
       )
       verifyOrderSignature(
-        order.copy(price = TxOrderPrice.unsafeFrom(order.price.value + 1)),
-        
+        order.copy(price = TxOrderPrice.unsafeFrom(order.price.value + 1))
       ) should produce(
         err
       )
       verifyOrderSignature(
-        order.copy(amount = TxExchangeAmount.unsafeFrom(order.amount.value + 1)),
-        
+        order.copy(amount = TxExchangeAmount.unsafeFrom(order.amount.value + 1))
       ) should produce(err)
       verifyOrderSignature(order.copy(expiration = order.expiration + 1)) should produce(err)
       verifyOrderSignature(
-        order.copy(matcherFee = TxMatcherFee.unsafeFrom(order.matcherFee.value + 1)),
-        
+        order.copy(matcherFee = TxMatcherFee.unsafeFrom(order.matcherFee.value + 1))
       ) should produce(err)
 
       val orderAuth = order.orderAuthentication.asInstanceOf[OrderProofs]
       verifyOrderSignature(
-        order.copy(orderAuthentication = orderAuth.copy(key = PublicKey(pka.publicKey))),
-        
+        order.copy(orderAuthentication = orderAuth.copy(key = PublicKey(pka.publicKey)))
       ) should produce(err)
       verifyOrderSignature(
-        order.copy(orderAuthentication = orderAuth.copy(proofs = Proofs(Seq(ByteStr(pka.publicKey ++ pka.publicKey))))),
-        
+        order.copy(orderAuthentication = orderAuth.copy(proofs = Proofs(Seq(ByteStr(pka.publicKey ++ pka.publicKey)))))
       ) should produce(err)
     }
   }

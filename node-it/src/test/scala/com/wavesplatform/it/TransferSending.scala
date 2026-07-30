@@ -13,6 +13,7 @@ import com.wavesplatform.it.api.AsyncHttpApi.*
 import com.wavesplatform.it.api.Transaction
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.transaction.TransactionType
 import com.wavesplatform.transaction.transfer.*
 import com.wavesplatform.utils.ScorexLogging
 import org.scalatest.Suite
@@ -58,7 +59,7 @@ trait TransferSending extends ScorexLogging {
     val srcDest = balances.toSeq
       .map { case (config, _) =>
         val accountSeed = config.getString("account-seed")
-        (config, KeyPair(Base58.decode(accountSeed)))
+        (config, keyPairFromSeed(Base58.decode(accountSeed)))
       }
 
     val sourceAndDest = (1 to n).map { _ =>
@@ -108,8 +109,8 @@ trait TransferSending extends ScorexLogging {
       .map { case (x, i) =>
         createSignedTransferRequest(
           TxHelpers.transfer(
-            KeyPair(Base58.decode(x.senderSeed)),
-            AddressOrAlias.fromString(x.targetAddress).explicitGet(),
+            keyPairFromSeed(Base58.decode(x.senderSeed)),
+            Address.fromString(x.targetAddress).explicitGet(),
             x.amount,
             Waves,
             x.fee,
@@ -126,7 +127,7 @@ trait TransferSending extends ScorexLogging {
       case (resultFuture, (transferRequest, node)) =>
         for {
           result <- resultFuture
-          tx     <- node.signedBroadcast(toJson(transferRequest).as[JsObject] ++ Json.obj("type" -> TransferTransaction.typeId.toInt))
+          tx     <- node.signedBroadcast(toJson(transferRequest).as[JsObject] ++ Json.obj("type" -> TransactionType.Transfer.id))
         } yield tx +: result
     }
   }
@@ -134,7 +135,6 @@ trait TransferSending extends ScorexLogging {
   protected def createSignedTransferRequest(tx: TransferTransaction): TransferRequest = {
     import tx.*
     TransferRequest(
-      2.toByte,
       tx.sender.toString,
       recipient.toString,
       Some(assetId),

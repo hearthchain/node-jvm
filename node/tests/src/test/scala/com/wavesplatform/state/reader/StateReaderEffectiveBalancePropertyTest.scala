@@ -141,7 +141,7 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
     // 2 txs in 1 a non-genesis block. The miner keeps 4 of the 6 waves a block pays - the DAO share is deducted.
     val minerReward = 4.waves
     val feeReward   = (transferTx.fee.value + leaseTx.fee.value) * 2 / 5
-    val feeCost   = transferTx.fee.value + leaseTx.fee.value
+    val feeCost     = transferTx.fee.value + leaseTx.fee.value
 
     withDomain(RideV6, Seq(AddrWithBalance(defaultAddress, genesisBalance))) { d =>
       d.appendBlock(transferTx, leaseTx)

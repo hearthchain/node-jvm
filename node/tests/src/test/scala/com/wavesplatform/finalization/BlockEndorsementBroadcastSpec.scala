@@ -32,7 +32,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
     )
     .configure(
       _.copy(
-        generationPeriodLength = 3,
+        generationPeriodLength = 3
       )
     )
 

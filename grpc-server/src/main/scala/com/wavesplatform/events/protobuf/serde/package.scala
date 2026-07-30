@@ -53,7 +53,7 @@ package object serde {
                     updatedWavesAmount = updatedWavesAmount,
                     activatedFeatures = activatedFeatures,
                     vrf = vrf.fold(ByteString.EMPTY)(_.toByteString),
-                    rewardShares = rewardShares.map { case (addr, reward) => RewardShare(ByteString.copyFrom(addr.bytes), reward) }
+                    rewardShares = rewardShares.map { case (addr, reward) => RewardShare(addr.toByteString, reward) }
                   )
                 )
               )
@@ -138,7 +138,7 @@ package object serde {
               ve.BlockAppended(
                 id = self.id.toByteStr,
                 height = self.height,
-                block = body.block.map(PBBlocks.vanilla(_, unsafe = true).get).orNull,
+                block = body.block.map(PBBlocks.vanilla(_).get).orNull,
                 updatedWavesAmount = body.updatedWavesAmount,
                 vrf = Option.unless(body.vrf.isEmpty)(body.vrf.toByteStr),
                 activatedFeatures = body.activatedFeatures,

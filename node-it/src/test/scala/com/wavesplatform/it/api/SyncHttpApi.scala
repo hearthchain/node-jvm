@@ -1,22 +1,19 @@
 package com.wavesplatform.it.api
 
-import com.wavesplatform.account.{AddressOrAlias, KeyPair, SeedKeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.http.RewardApiRoute.RewardStatus
-import com.wavesplatform.api.http.requests.IssueRequest
 import com.wavesplatform.api.http.{ApiError, DebugMessage}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.features.api.{ActivationStatus, FeatureActivationStatus, FinalityStatus}
 import com.wavesplatform.it.Node
 import com.wavesplatform.it.sync.*
-import com.wavesplatform.lang.script.v1.ExprScript
-import com.wavesplatform.lang.v1.compiler.Terms
-import com.wavesplatform.state.{AssetDistribution, AssetDistributionPage, DataEntry, GenerationPeriod, Height}
+import com.wavesplatform.state.{AssetDistribution, AssetDistributionPage, GenerationPeriod, Height}
 import com.wavesplatform.transaction.assets.exchange.Order
-import com.wavesplatform.transaction.smart.InvokeScriptTransaction
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
-import com.wavesplatform.transaction.{Asset, TransactionType, TxExchangeAmount, TxExchangePrice, TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{Asset, TransactionType, TxExchangeAmount, TxExchangePrice, TxHelpers}
 import io.grpc.Status.Code
+import tech.hearth.crypto.SigningKey
 import org.apache.pekko.http.scaladsl.model.StatusCodes.BadRequest
 import org.apache.pekko.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.asynchttpclient.Response
@@ -244,9 +241,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     def assetsDetails(assetId: String, fullInfo: Boolean = false, amountsAsStrings: Boolean = false): AssetInfo =
       sync(async(n).assetsDetails(assetId, fullInfo, amountsAsStrings))
 
-    def addressScriptInfo(address: String): AddressScriptInfo =
-      sync(async(n).scriptInfo(address))
-
     def assetsBalance(address: String, amountsAsStrings: Boolean = false): FullAssetsInfo =
       sync(async(n).assetsBalance(address, amountsAsStrings))
 
@@ -264,49 +258,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
 
     def assetDistribution(asset: String): AssetDistribution =
       sync(async(n).assetDistribution(asset))
-
-    def broadcastIssue(
-        source: KeyPair,
-        name: String,
-        description: String,
-        quantity: Long,
-        decimals: Byte,
-        reissuable: Boolean,
-        fee: Long = issueFee,
-        version: TxVersion = TxVersion.V2,
-        script: Option[String],
-        waitForTx: Boolean = false
-    ): Transaction =
-      maybeWaitForTransaction(sync(async(n).issue(source, name, description, quantity, decimals, reissuable, fee, version, script)), wait = waitForTx)
-
-    def issue(
-        source: KeyPair,
-        name: String = "Asset",
-        description: String = "",
-        quantity: Long = 1000000000,
-        decimals: Byte = 2,
-        reissuable: Boolean = true,
-        fee: Long = issueFee,
-        version: TxVersion = TxVersion.V2,
-        script: Option[String] = None,
-        waitForTx: Boolean = false
-    ): Transaction =
-      broadcastIssue(source, name, description, quantity, decimals, reissuable, fee, version, script, waitForTx)
-
-    def reissue(
-        sender: KeyPair,
-        assetId: String,
-        quantity: Long,
-        reissuable: Boolean,
-        fee: Long = reissueFee,
-        version: Byte = 1,
-        waitForTx: Boolean = false
-    ): Transaction =
-      maybeWaitForTransaction(sync(async(n).reissue(sender, assetId, quantity, reissuable, fee, version)), waitForTx)
-
-    def stateChanges(transactionId: String, amountsAsStrings: Boolean = false): StateChanges = {
-      sync(async(n).stateChanges(transactionId, amountsAsStrings))
-    }
 
     def payment(sourceAddress: String, recipient: String, amount: Long, fee: Long): Transaction =
       sync(async(n).payment(sourceAddress, recipient, amount, fee))
@@ -326,74 +277,27 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     def transactionsByAddress(address: String, limit: Int, after: String): Seq[TransactionInfo] =
       sync(async(n).transactionsByAddress(address, limit, after))
 
-    def scriptCompile(code: String): CompiledScript =
-      sync(async(n).scriptCompile(code))
-
-    def scriptDecompile(code: String): DecompiledScript =
-      sync(async(n).scriptDecompile(code))
-
-    def scriptEstimate(code: String): EstimatedScript =
-      sync(async(n).scriptEstimate(code))
-
     def getAddresses: Seq[String] = sync(async(n).getAddresses)
 
-    def burn(
-        sender: KeyPair,
-        assetId: String,
-        quantity: Long,
-        fee: Long = burnFee,
-        version: TxVersion = TxVersion.V1,
-        waitForTx: Boolean = false
-    ): Transaction =
-      maybeWaitForTransaction(sync(async(n).burn(sender, assetId, quantity, fee, version)), waitForTx)
-
-    def sponsorAsset(
-        sender: KeyPair,
-        assetId: String,
-        baseFee: Long,
-        fee: Long = sponsorReducedFee,
-        version: Byte = 1,
-        waitForTx: Boolean = false,
-        amountsAsStrings: Boolean = false
-    ): Transaction = {
-      maybeWaitForTransaction(sync(async(n).sponsorAsset(sender, assetId, Some(baseFee), fee, version, amountsAsStrings)), waitForTx)
-    }
-
-    def cancelSponsorship(sender: KeyPair, assetId: String, fee: Long = sponsorFee, version: Byte = 1): Transaction =
-      sync(async(n).cancelSponsorship(sender, assetId, fee, version))
-
-    def createAlias(
-        sender: KeyPair,
-        alias: String,
-        fee: Long = minFee,
-        version: TxVersion = TxVersion.V2,
-        waitForTx: Boolean = false
-    ): Transaction =
-      maybeWaitForTransaction(sync(async(n).createAlias(sender, alias, fee, version)), waitForTx)
-
-    def aliasByAddress(targetAddress: String): Seq[String] =
-      sync(async(n).aliasByAddress(targetAddress))
-
     def broadcastTransfer(
-        source: KeyPair,
+        source: SigningKey,
         recipient: String,
         amount: Long,
         fee: Long = minFee,
         assetId: Option[String] = None,
         feeAssetId: Option[String] = None,
         attachment: ByteStr = ByteStr.empty,
-        version: Byte = TxVersion.V2,
+        version: Byte = 2,
         waitForTx: Boolean = false
     ): Transaction = {
       val tx = TxHelpers.transfer(
         source,
-        AddressOrAlias.fromString(recipient).explicitGet(),
+        Address.fromString(recipient).explicitGet(),
         amount,
         Asset.fromString(assetId),
         fee,
         Asset.fromString(feeAssetId),
         attachment,
-        version = version,
         timestamp = System.currentTimeMillis()
       )
 
@@ -401,7 +305,7 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     }
 
     def broadcastExchange(
-        matcher: KeyPair,
+        matcher: SigningKey,
         order1: Order,
         order2: Order,
         amount: TxExchangeAmount,
@@ -435,13 +339,13 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     }
 
     def transfer(
-        sender: KeyPair,
+        sender: SigningKey,
         recipient: String,
         amount: Long,
         fee: Long = minFee,
         assetId: Option[String] = None,
         feeAssetId: Option[String] = None,
-        version: Byte = TxVersion.V2,
+        version: Byte = 2,
         attachment: Option[String] = None,
         waitForTx: Boolean = false
     ): Transaction = {
@@ -452,10 +356,10 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     }
 
     def massTransfer(
-        sender: KeyPair,
+        sender: SigningKey,
         transfers: List[Transfer],
         fee: Long,
-        version: TxVersion = TxVersion.V2,
+        version: Byte = 2,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
         waitForTx: Boolean = false,
@@ -468,7 +372,7 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     }
 
     def broadcastLease(
-        source: KeyPair,
+        source: SigningKey,
         recipient: String,
         leasingAmount: Long,
         leasingFee: Long = minFee,
@@ -477,7 +381,7 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
       val tx = TxHelpers
         .lease(
           source,
-          AddressOrAlias.fromString(recipient).explicitGet(),
+          Address.fromString(recipient).explicitGet(),
           leasingAmount,
           leasingFee,
           System.currentTimeMillis(),
@@ -488,55 +392,14 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     }
 
     def lease(
-        sender: KeyPair,
+        sender: SigningKey,
         recipient: String,
         leasingAmount: Long,
         leasingFee: Long = minFee,
-        version: TxVersion = TxVersion.V1,
+        version: Byte = 1,
         waitForTx: Boolean = false
     ): Transaction =
       maybeWaitForTransaction(sync(async(n).lease(sender, recipient, leasingAmount, leasingFee, version)), waitForTx)
-
-    def putData(
-        sender: KeyPair,
-        data: List[DataEntry[?]],
-        fee: Long,
-        waitForTx: Boolean = false,
-        version: TxVersion = 1.toByte,
-        amountsAsStrings: Boolean = false
-    ): Transaction =
-      maybeWaitForTransaction(sync(async(n).broadcastData(sender, data, fee, version = version, amountsAsStrings = amountsAsStrings)), waitForTx)
-
-    def broadcastData(
-        sender: KeyPair,
-        data: List[DataEntry[?]],
-        fee: Long,
-        version: TxVersion = TxVersion.V2,
-        timestamp: Option[Long] = None,
-        waitForTx: Boolean = false
-    ): Transaction =
-      maybeWaitForTransaction(sync(async(n).broadcastData(sender, data, fee, version, timestamp)), waitForTx)
-
-    def removeData(sender: KeyPair, data: Seq[String], fee: Long, version: Byte = 2): Transaction =
-      sync(async(n).removeData(sender, data, fee, version))
-
-    def getData(sourceAddress: String, amountsAsStrings: Boolean = false): List[DataEntry[?]] =
-      sync(async(n).getData(sourceAddress, amountsAsStrings))
-
-    def getData(sourceAddress: String, regexp: String): List[DataEntry[?]] =
-      sync(async(n).getData(sourceAddress, regexp))
-
-    def getDataByKey(sourceAddress: String, key: String): DataEntry[?] =
-      sync(async(n).getDataByKey(sourceAddress, key))
-
-    def getDataList(sourceAddress: String, keys: String*): Seq[DataEntry[?]] =
-      sync(async(n).getDataList(sourceAddress, keys*))
-
-    def getDataListJson(sourceAddress: String, keys: String*): Seq[DataEntry[?]] =
-      sync(async(n).getDataListJson(sourceAddress, keys*))
-
-    def getDataListPost(sourceAddress: String, keys: String*): Seq[DataEntry[?]] =
-      sync(async(n).getDataListPost(sourceAddress, keys*))
 
     def getMerkleProof(ids: String*): Seq[MerkleProofResponse] = sync(async(n).getMerkleProof(ids*))
 
@@ -556,24 +419,24 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     def activeLeases(sourceAddress: String): Seq[LeaseInfo] =
       sync(async(n).activeLeases(sourceAddress))
 
-    def broadcastCancelLease(source: KeyPair, leaseId: String, fee: Long = minFee, waitForTx: Boolean = false): Transaction = {
+    def broadcastCancelLease(source: SigningKey, leaseId: String, fee: Long = minFee, waitForTx: Boolean = false): Transaction = {
       val tx = TxHelpers
         .leaseCancel(
           ByteStr.decodeBase58(leaseId).get,
           source,
           fee,
           System.currentTimeMillis(),
-          TxVersion.V2
+          2.toByte
         )
 
       maybeWaitForTransaction(sync(async(n).broadcastRequest(tx.json())), wait = waitForTx)
     }
 
     def cancelLease(
-        sender: KeyPair,
+        sender: SigningKey,
         leaseId: String,
         fee: Long = minFee,
-        version: TxVersion = TxVersion.V1,
+        version: Byte = 1,
         waitForTx: Boolean = false
     ): Transaction =
       maybeWaitForTransaction(sync(async(n).cancelLease(sender, leaseId, fee, version)), waitForTx)
@@ -584,15 +447,12 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
       maybeWaitForTransaction(sync(async(n).signedBroadcast(tx)), waitForTx)
     }
 
-    def signedIssue(tx: IssueRequest): Transaction =
-      sync(async(n).signedIssue(tx))
-
     def ensureTxDoesntExist(txId: String): Unit =
       sync(async(n).ensureTxDoesntExist(txId))
 
-    def createKeyPair(): SeedKeyPair = sync(async(n).createKeyPair())
+    def createKeyPair(): SigningKey = sync(async(n).createKeyPair())
 
-    def createKeyPairServerSide(): KeyPair = sync(async(n).createKeyPairServerSide())
+    def createKeyPairServerSide(): SigningKey = sync(async(n).createKeyPairServerSide())
 
     def rawTransactionInfo(txId: String): JsValue =
       sync(async(n).rawTransactionInfo(txId))
@@ -680,84 +540,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
 
     def connect(address: InetSocketAddress): Unit =
       sync(async(n).connect(address))
-
-    def setScript(
-        sender: KeyPair,
-        script: Option[String] = None,
-        fee: Long = setScriptFee,
-        version: Byte = TxVersion.V1,
-        waitForTx: Boolean = false
-    ): Transaction = {
-      maybeWaitForTransaction(sync(async(n).setScript(sender, script, fee, version)), waitForTx)
-    }
-
-    def setAssetScript(
-        assetId: String,
-        sender: KeyPair,
-        fee: Long = issueFee,
-        script: Option[String] = None,
-        version: Byte = 1,
-        waitForTx: Boolean = false
-    ): Transaction = {
-      maybeWaitForTransaction(sync(async(n).setAssetScript(assetId, sender, fee, script, version)), waitForTx)
-    }
-
-    def invokeScript(
-        caller: KeyPair,
-        dappAddress: String,
-        func: Option[String] = None,
-        args: List[Terms.EXPR] = List.empty,
-        payment: Seq[InvokeScriptTransaction.Payment] = Seq.empty,
-        fee: Long = smartMinFee,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1,
-        waitForTx: Boolean = false
-    ): (Transaction, JsValue) = {
-      sync(async(n).invokeScript(caller, dappAddress, func, args, payment, fee, feeAssetId, version)) match {
-        case (tx, js) => maybeWaitForTransaction(tx, waitForTx) -> js
-      }
-    }
-
-    def invokeExpression(
-        caller: KeyPair,
-        expression: ExprScript,
-        fee: Long = invokeExpressionFee,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1,
-        waitForTx: Boolean = false
-    ): (Transaction, JsValue) =
-      sync(async(n).invokeExpression(caller, expression, fee, feeAssetId, version)) match {
-        case (tx, js) => maybeWaitForTransaction(tx, waitForTx) -> js
-      }
-
-    def validateInvokeScript(
-        caller: KeyPair,
-        dappAddress: String,
-        func: Option[String] = None,
-        args: List[Terms.EXPR] = List.empty,
-        payment: Seq[InvokeScriptTransaction.Payment] = Seq.empty,
-        fee: Long = smartMinFee,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1
-    ): (JsValue, JsValue) = {
-      sync(async(n).validateInvokeScript(caller, dappAddress, func, args, payment, fee, feeAssetId, version))
-    }
-
-    def updateAssetInfo(
-        caller: KeyPair,
-        assetId: String,
-        name: String,
-        description: String,
-        fee: Long = issueFee,
-        feeAssetId: Option[String] = None,
-        version: TxVersion = TxVersion.V1,
-        timestamp: Option[Long] = None,
-        waitForTx: Boolean = false
-    ): (Transaction, JsValue) = {
-      sync(async(n).updateAssetInfo(caller, assetId, name, description, fee, feeAssetId, version, timestamp)) match {
-        case (tx, js) => maybeWaitForTransaction(tx, waitForTx) -> js
-      }
-    }
 
     def waitForUtxIncreased(fromSize: Int): Int = sync(async(n).waitForUtxIncreased(fromSize))
 

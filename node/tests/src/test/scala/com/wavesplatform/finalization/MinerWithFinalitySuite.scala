@@ -393,8 +393,9 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
       d.wallet.generateNewAccounts(1)
 
       val endorsementStorage = EndorsementStorage.InMemory((blockId, h) => blockId == d.blockchain.blockId(h.toInt))
-      val blockEndorser = BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.generatorKeys, endorsementStorage, channels)
-      val utxEvents     = ConcurrentSubject.publish[Unit](using minerScheduler)
+      val blockEndorser =
+        BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.generatorKeys, endorsementStorage, channels)
+      val utxEvents = ConcurrentSubject.publish[Unit](using minerScheduler)
       val minerImpl = new MinerImpl(
         channels,
         d.blockchain,
@@ -477,7 +478,8 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
       d.wallet.generateNewAccounts(1)
 
       val endorsementStorage = EndorsementStorage.InMemory((blockId, h) => blockId == d.blockchain.blockId(h.toInt))
-      val blockEndorser = BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.generatorKeys, endorsementStorage, channels)
+      val blockEndorser =
+        BlockEndorser.InMemory(d.settings.synchronizationSettings.maxRollback, d.blockchain, d.generatorKeys, endorsementStorage, channels)
       val minerImpl = new MinerImpl(
         channels,
         d.blockchain,
@@ -531,7 +533,8 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           finalizedId = otherFinalizedBlockId,
           finalizedHeight = GenesisBlockHeight,
           endorsedId = block2WithCommitments.id(),
-          signature = BlockEndorsement.sign(TxHelpers.blsKeyOf(generator1), otherFinalizedBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
+          signature =
+            BlockEndorsement.sign(TxHelpers.blsKeyOf(generator1), otherFinalizedBlockId, GenesisBlockHeight, block2WithCommitments.id()).byteStr
         )
       ) should beRight
       d.utxPool.putIfNew(TxHelpers.transfer(generator1, generator2Addr))

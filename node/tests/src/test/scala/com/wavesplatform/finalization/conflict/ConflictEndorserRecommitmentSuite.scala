@@ -21,7 +21,7 @@ class ConflictEndorserRecommitmentSuite extends BaseFinalizationSpec {
   private val baseSettings = DomainPresets.DeterministicFinality
   private val defaultSettings = baseSettings.configure(
     _.copy(
-      generationPeriodLength = 2,
+      generationPeriodLength = 2
     )
   )
 

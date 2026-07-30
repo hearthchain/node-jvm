@@ -44,14 +44,13 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
    * reaches the generator: 40% of it in the block that carries the transaction, the 60% carry in the block after.
    */
   property("generator gets 40% of a fee in the block that carries the transaction, and can spend it in the next") {
-    scenario(preconditionsAndPayments, settings, fundGeneratorForItsOwnFeeOnly) {
-      case (domain, (_, somePayment, _, _)) =>
-        domain.appendBlockAt(somePayment.timestamp)(somePayment)
+    scenario(preconditionsAndPayments, settings, fundGeneratorForItsOwnFeeOnly) { case (domain, (_, somePayment, _, _)) =>
+      domain.appendBlockAt(somePayment.timestamp)(somePayment)
 
-        val earnedSoFar = BlockDiffer.CurrentBlockFeePart(somePayment.fee.value)
-        val affordable  = createWavesTransfer(defaultSigner, somePayment.recipient, earnedSoFar, 1, somePayment.timestamp + 2).explicitGet()
+      val earnedSoFar = BlockDiffer.CurrentBlockFeePart(somePayment.fee.value)
+      val affordable  = createWavesTransfer(defaultSigner, somePayment.recipient, earnedSoFar, 1, somePayment.timestamp + 2).explicitGet()
 
-        domain.appendBlockAtE(affordable.timestamp)(affordable) should beRight
+      domain.appendBlockAtE(affordable.timestamp)(affordable) should beRight
     }
   }
 
@@ -68,16 +67,15 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
   }
 
   property("generator gets the carry of the referenced block, in a block extended by micro blocks") {
-    scenario(preconditionsAndPayments, settings, fundGeneratorForItsOwnFeeOnly) {
-      case (domain, (_, somePayment, _, someOtherPayment)) =>
-        domain.appendBlockAt(somePayment.timestamp)()
-        domain.appendMicroBlock(somePayment)
+    scenario(preconditionsAndPayments, settings, fundGeneratorForItsOwnFeeOnly) { case (domain, (_, somePayment, _, someOtherPayment)) =>
+      domain.appendBlockAt(somePayment.timestamp)()
+      domain.appendMicroBlock(somePayment)
 
-        // The carry of the whole liquid block, micro blocks included, is credited when the next block references it
-        val affordable =
-          createWavesTransfer(defaultSigner, somePayment.recipient, somePayment.fee.value, 1, somePayment.timestamp + 2).explicitGet()
+      // The carry of the whole liquid block, micro blocks included, is credited when the next block references it
+      val affordable =
+        createWavesTransfer(defaultSigner, somePayment.recipient, somePayment.fee.value, 1, somePayment.timestamp + 2).explicitGet()
 
-        domain.appendBlockAtE(affordable.timestamp)(affordable, someOtherPayment) should beRight
+      domain.appendBlockAtE(affordable.timestamp)(affordable, someOtherPayment) should beRight
     }
   }
 }

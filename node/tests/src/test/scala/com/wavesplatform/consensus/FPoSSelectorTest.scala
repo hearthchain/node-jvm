@@ -228,29 +228,28 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
 
   "PoSSelector should verify generation signature for new blocks which reference non-last block correctly" in {
     Seq(1, 100).foreach { blockCount =>
-      withEnv(chainGen(List(ENOUGH_AMT, ENOUGH_AMT), blockCount), VRFActivated = true) {
-        case Env(pos, blockchain, miners, _) =>
-          val (currentMiner, cvrf) = miners.head
-          val (anotherMiner, avrf) = miners(1)
+      withEnv(chainGen(List(ENOUGH_AMT, ENOUGH_AMT), blockCount), VRFActivated = true) { case Env(pos, blockchain, miners, _) =>
+        val (currentMiner, cvrf) = miners.head
+        val (anotherMiner, avrf) = miners(1)
 
-          val blockToApply = forgeBlock(currentMiner, cvrf, blockchain, pos)()
-          val anotherBlock = forgeBlock(anotherMiner, avrf, blockchain, pos)()
+        val blockToApply = forgeBlock(currentMiner, cvrf, blockchain, pos)()
+        val anotherBlock = forgeBlock(anotherMiner, avrf, blockchain, pos)()
 
-          blockToApply.header.reference shouldBe anotherBlock.header.reference
+        blockToApply.header.reference shouldBe anotherBlock.header.reference
 
-          blockchain.processBlock(
-            blockToApply,
-            crypto
-              // The generation signature is verified against the miner's VRF key, not its signing key
-              .verifyVRF(blockToApply.header.generationSignature, blockchain.hitSource(blockCount + 1).get.arr, ByteStr(cvrf.publicKey()))
-              .explicitGet(),
-            snapshot = None,
-            generatorSet = Seq.empty
-          ) should beRight
+        blockchain.processBlock(
+          blockToApply,
+          crypto
+            // The generation signature is verified against the miner's VRF key, not its signing key
+            .verifyVRF(blockToApply.header.generationSignature, blockchain.hitSource(blockCount + 1).get.arr, ByteStr(cvrf.publicKey()))
+            .explicitGet(),
+          snapshot = None,
+          generatorSet = Seq.empty
+        ) should beRight
 
-          blockchain.lastBlockId shouldBe Some(blockToApply.id())
+        blockchain.lastBlockId shouldBe Some(blockToApply.id())
 
-          pos.validateGenerationSignature(anotherBlock) should beRight
+        pos.validateGenerationSignature(anotherBlock) should beRight
       }
     }
 
@@ -305,7 +304,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       )
     }
     val defaultWriter = TestStorageFactory(writerSettings, rdb, SystemTime, BlockchainUpdateTriggers.noop)._2
-    val settings0 = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    val settings0     = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
     // The updater builds the genesis snapshot from its own settings, so it has to see the same genesis as the writer -
     // otherwise it applies the packaged config's balances, whose base58 addresses no longer parse.
     val settings = settings0.copy(
@@ -360,7 +359,7 @@ object FPoSSelectorTest {
       miner: SigningKey,
       vrfKey: VrfKey,
       blockchain: Blockchain & BlockchainUpdater,
-      lastBlock: Block,
+      lastBlock: Block
   ): List[(Block, ByteStr)] = {
     val height = blockchain.height
 
@@ -415,7 +414,7 @@ object FPoSSelectorTest {
       miner: SigningKey,
       vrfKey: VrfKey,
       blockchain: Blockchain & BlockchainUpdater,
-      pos: PoSSelector,
+      pos: PoSSelector
   )(
       updateDelay: Long => Long = identity,
       updateBT: Long => Long = identity,
@@ -509,7 +508,7 @@ object FPoSSelectorTest {
             .create(
               lastTxTimestamp + 1 + d,
               blocks.head.id(),
-              Seq.empty,
+              Seq.empty
             )
             .block
           newBlock :: blocks

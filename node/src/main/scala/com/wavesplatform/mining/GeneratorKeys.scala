@@ -17,6 +17,7 @@ import tech.hearth.crypto.{Bip39, Hex, KeyTree, SigningKey, VrfKey}
   * entitled to make for itself.
   */
 trait GeneratorKeys {
+
   /** The accounts themselves, for the miner - it holds the keys it generates with by nature of what it does. */
   def accounts: Seq[MiningAccount]
 
@@ -41,6 +42,7 @@ trait GeneratorKeys {
 }
 
 object GeneratorKeys {
+
   /** The accounts as `waves.miner.accounts` describes them: either derived from a mnemonic at the given nonces, or
     * built from explicitly configured seeds. Parsed here rather than in the miner because the endorser and the REST
     * API need the same set, and a node that mines is not the only one that has it.
@@ -64,7 +66,9 @@ object GeneratorKeys {
             Hex.decode(ma.signingKey.getOrElse(throw new IllegalArgumentException("signing-key is required when mnemonic is not provided")))
           ),
           VrfKey.fromSeed(Hex.decode(ma.vrfKey.getOrElse(throw new IllegalArgumentException("vrf-key is required when mnemonic is not provided")))),
-          BlsKeyPair.fromSeed(Hex.decode(ma.blsKey.getOrElse(throw new IllegalArgumentException("bls-key is required when mnemonic is not provided"))))
+          BlsKeyPair.fromSeed(
+            Hex.decode(ma.blsKey.getOrElse(throw new IllegalArgumentException("bls-key is required when mnemonic is not provided")))
+          )
         )
     }
   })

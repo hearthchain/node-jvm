@@ -38,7 +38,9 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
       val assetPair = assetPairGen.sample.get
 
       val buyOrder =
-        TxHelpers.buy(Order.V3, buyer, PublicKey(Account.publicKey), assetPair, Order.MaxAmount / 2, 100, Now, Now + Order.MaxLiveTime / 2, MinFee * 3).explicitGet()
+        TxHelpers
+          .buy(Order.V3, buyer, PublicKey(Account.publicKey), assetPair, Order.MaxAmount / 2, 100, Now, Now + Order.MaxLiveTime / 2, MinFee * 3)
+          .explicitGet()
       val sellOrder =
         TxHelpers
           .sell(Order.V3, seller, PublicKey(Account.publicKey), assetPair, Order.MaxAmount / 2, 100, Now, Now + Order.MaxLiveTime / 2, MinFee * 3)

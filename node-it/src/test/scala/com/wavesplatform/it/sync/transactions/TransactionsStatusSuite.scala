@@ -83,8 +83,7 @@ class TransactionsStatusSuite extends BaseTransactionSuite with NTPTime {
         fee = minFee,
         feeAsset = Waves,
         attachment = ByteStr.empty,
-        timestamp = ntpTime.correctedTime(),
-        version = 2.toByte
+        timestamp = ntpTime.correctedTime()
       )
     }.toList
 

@@ -3,31 +3,18 @@ package com.wavesplatform.it.sync.transactions
 import com.typesafe.config.Config
 import com.wavesplatform.api.http.ApiError.{CustomValidationError, StateCheckFailed}
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.features.BlockchainFeatures
+import com.wavesplatform.it.NodeConfigs.GenesisAssets
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.*
-import com.wavesplatform.it.sync.smartcontract.exchangeTx
 import com.wavesplatform.it.transactions.BaseTransactionSuite
 import com.wavesplatform.it.{NTPTime, NodeConfigs}
 import com.wavesplatform.test.*
-import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.assets.IssueTransaction
+import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.assets.exchange.*
-import com.wavesplatform.transaction.{TxExchangeAmount, TxExchangePrice, TxHelpers, TxVersion}
-import play.api.libs.json.{JsNumber, JsObject, JsString, Json}
+import com.wavesplatform.transaction.{TxExchangeAmount, TxExchangePrice, TxHelpers}
+import play.api.libs.json.JsObject
 
 class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
-  private lazy val exchAsset: IssueTransaction = TxHelpers.issue(
-    issuer = sender.keyPair,
-    amount = someAssetAmount,
-    decimals = 2,
-    name = "myasset",
-    description = "my asset description",
-    fee = 1.waves,
-    script = None,
-    reissuable = true,
-    version = TxVersion.V1
-  )
 
   private def acc0 = firstKeyPair
   private def acc1 = secondKeyPair
@@ -43,10 +30,10 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
   private val versions = transactionV1versions +: transactionV2versions
 
   test("cannot exchange non-issued assets") {
+    // an asset id that was never declared in genesis, so it is genuinely "not issued"
+    val neverIssuedAssetId = "11111111111111111111111111111111111111111111111111"
+
     for ((buyVersion, sellVersion, exchangeVersion) <- versions) {
-
-      val assetId = exchAsset.id().toString
-
       val buyer   = acc0
       val seller  = acc1
       val matcher = acc2
@@ -60,14 +47,38 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       val sellAmount = 1
       val amount     = 1
 
-      val pair = AssetPair.createAssetPair("WAVES", assetId).get
-      val buy  = Order.buy(buyVersion, buyer, matcher.publicKey, pair, buyAmount, buyPrice, ts, expirationTimestamp, matcherFee).explicitGet()
-      val sell = Order.sell(sellVersion, seller, matcher.publicKey, pair, sellAmount, sellPrice, ts, expirationTimestamp, matcherFee).explicitGet()
+      val pair = AssetPair.createAssetPair("WAVES", neverIssuedAssetId).get
+      val buy = TxHelpers.order(
+        OrderType.BUY,
+        pair.amountAsset,
+        pair.priceAsset,
+        sender = buyer,
+        matcher = matcher,
+        amount = buyAmount,
+        price = buyPrice,
+        fee = matcherFee,
+        timestamp = ts,
+        expiration = expirationTimestamp,
+        version = buyVersion
+      )
+      val sell = TxHelpers.order(
+        OrderType.SELL,
+        pair.amountAsset,
+        pair.priceAsset,
+        sender = seller,
+        matcher = matcher,
+        amount = sellAmount,
+        price = sellPrice,
+        fee = matcherFee,
+        timestamp = ts,
+        expiration = expirationTimestamp,
+        version = sellVersion
+      )
 
       val buyFee  = (BigInt(matcherFee) * amount / buy.amount.value).toLong
       val sellFee = (BigInt(matcherFee) * amount / sell.amount.value).toLong
 
-      val protoVersion = exchangeVersion > TxVersion.V2
+      val protoVersion = exchangeVersion > 2
 
       assertApiError(
         sender.broadcastExchange(
@@ -135,57 +146,21 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
     }
   }
 
-  test("negative - check orders v2 and v3 with exchange tx v1") {
-    if (sender.findTransactionInfo(exchAsset.id().toString).isEmpty) sender.postJson("/transactions/broadcast", exchAsset.json())
-    val pair = AssetPair.createAssetPair("WAVES", exchAsset.id().toString).get
-
-    for (
-      (o1ver, o2ver) <- Seq(
-        (2: Byte, 1: Byte),
-        (2: Byte, 3: Byte)
-      )
-    ) {
-      val tx        = exchangeTx(pair, matcherFee, orderFee, ntpTime, o1ver, o2ver, acc1, acc0, acc2)
-      val sig       = (Json.parse(tx.toString()) \ "proofs").as[Seq[JsString]].head
-      val changedTx = tx + ("version" -> JsNumber(1)) + ("signature" -> sig)
-      assertBadRequestAndMessage(sender.signedBroadcast(changedTx), "can only contain orders of version 1", 400)
-    }
-  }
-
   test("exchange tx with orders v3") {
-    val buyer  = acc0
-    val seller = acc1
+    val buyer   = acc0
+    val seller  = acc1
+    val assetId = GenesisAssets.TestAsset.id
 
-    val assetDescription = "my asset description"
-
-    val IssueTx: IssueTransaction = TxHelpers.issue(
-      issuer = buyer,
-      amount = someAssetAmount,
-      decimals = 8,
-      name = "myasset",
-      description = assetDescription,
-      fee = 1.waves,
-      script = None,
-      reissuable = true,
-      version = TxVersion.V1
-    )
-
-    val assetId = IssueTx.id()
-
-    sender.postJson("/transactions/broadcast", IssueTx.json())
-
-    nodes.waitForHeightAriseAndTxPresent(assetId.toString)
-
-    sender.transfer(firstKeyPair, secondKeyPair.toAddress.toString, IssueTx.quantity.value / 2, assetId = Some(assetId.toString), waitForTx = true)
+    sender.transfer(firstKeyPair, secondKeyPair.toAddress.toString, someAssetAmount / 2, assetId = Some(assetId.toString), waitForTx = true)
 
     for (
       (o1ver, o2ver, matcherFeeOrder1, matcherFeeOrder2) <- Seq(
-        (1: Byte, 3: Byte, Waves, IssuedAsset(assetId)),
+        (1: Byte, 3: Byte, Waves, GenesisAssets.TestAsset),
         (1: Byte, 3: Byte, Waves, Waves),
-        (2: Byte, 3: Byte, Waves, IssuedAsset(assetId)),
-        (3: Byte, 1: Byte, IssuedAsset(assetId), Waves),
+        (2: Byte, 3: Byte, Waves, GenesisAssets.TestAsset),
+        (3: Byte, 1: Byte, GenesisAssets.TestAsset, Waves),
         (2: Byte, 3: Byte, Waves, Waves),
-        (3: Byte, 2: Byte, IssuedAsset(assetId), Waves)
+        (3: Byte, 2: Byte, GenesisAssets.TestAsset, Waves)
       )
     ) {
 
@@ -203,18 +178,38 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       val sellPrice  = 500000
       val buyAmount  = 40000000
       val sellAmount = 40000000
-      val assetPair  = AssetPair.createAssetPair("WAVES", assetId.toString).get
-      val buy = Order
-        .buy(o1ver, buyer, matcher.publicKey, assetPair, buyAmount, buyPrice, ts, expirationTimestamp, matcherFee, matcherFeeOrder1)
-        .explicitGet()
-      val sell = Order
-        .sell(o2ver, seller, matcher.publicKey, assetPair, sellAmount, sellPrice, ts, expirationTimestamp, matcherFee, matcherFeeOrder2)
-        .explicitGet()
+      val buy = TxHelpers.order(
+        OrderType.BUY,
+        Waves,
+        GenesisAssets.TestAsset,
+        matcherFeeOrder1,
+        buyAmount,
+        buyPrice,
+        sender = buyer,
+        matcher = matcher,
+        fee = matcherFee,
+        timestamp = ts,
+        expiration = expirationTimestamp,
+        version = o1ver
+      )
+      val sell = TxHelpers.order(
+        OrderType.SELL,
+        Waves,
+        GenesisAssets.TestAsset,
+        matcherFeeOrder2,
+        sellAmount,
+        sellPrice,
+        sender = seller,
+        matcher = matcher,
+        fee = matcherFee,
+        timestamp = ts,
+        expiration = expirationTimestamp,
+        version = o2ver
+      )
       val amount = 40000000
 
       val tx =
         TxHelpers.exchange(
-          version = 3.toByte,
           matcher = matcher,
           order1 = buy,
           order2 = sell,
@@ -237,7 +232,6 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
   }
 
   test("exchange tx with orders v4 can use price that is impossible for orders v3/v2/v1") {
-
     sender.transfer(sender.keyPair, firstAddress, 1000.waves, waitForTx = true)
 
     val seller        = acc1
@@ -245,109 +239,40 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
     val sellerKeyPair = secondKeyPair
     val buyerKeyPair  = firstKeyPair
 
-    val nftAsset = sender
-      .issue(
-        seller,
-        "myNft",
-        "myNftDescription",
-        quantity = 1L,
-        decimals = 0,
-        reissuable = false,
-        script = None,
-        fee = 0.001.waves,
-        waitForTx = true
-      )
-      .id
-
-    val dec6AssetId = sender
-      .issue(
-        seller,
-        "some",
-        "6 decimals asset",
-        quantity = 1000000L,
-        decimals = 6,
-        reissuable = false,
-        script = None,
-        fee = 1.waves,
-        waitForTx = true
-      )
-      .id
+    val nftAsset = GenesisAssets.TestNftAsset.id.toString
 
     val matcher             = thirdKeyPair
     val ts                  = ntpTime.correctedTime()
     val expirationTimestamp = ts + Order.MaxLiveTime / 2
     val amount              = 1
     val nftWavesPrice       = 1000 * math.pow(10, 8).toLong
-    val nftForAssetPrice    = 1 * math.pow(10, 8).toLong
 
-    val nftWavesPair      = AssetPair.createAssetPair(nftAsset, "WAVES").get
-    val nftOtherAssetPair = AssetPair.createAssetPair(nftAsset, dec6AssetId).get
-
-    val sellNftForWaves =
-      Order
-        .sell(
-          4.toByte,
-          seller,
-          matcher.publicKey,
-          nftWavesPair,
-          amount,
-          nftWavesPrice,
-          ts,
-          expirationTimestamp,
-          matcherFee,
-          Waves,
-          OrderPriceMode.Default
-        )
-        .explicitGet()
-    val buyNftForWaves =
-      Order
-        .buy(
-          4.toByte,
-          buyer,
-          matcher.publicKey,
-          nftWavesPair,
-          amount,
-          nftWavesPrice,
-          ts,
-          expirationTimestamp,
-          matcherFee,
-          Waves,
-          OrderPriceMode.Default
-        )
-        .explicitGet()
-
-    val sellNftForOtherAsset =
-      Order
-        .sell(
-          4.toByte,
-          buyer,
-          matcher.publicKey,
-          nftOtherAssetPair,
-          amount,
-          nftForAssetPrice,
-          ts,
-          expirationTimestamp,
-          matcherFee,
-          Waves,
-          OrderPriceMode.Default
-        )
-        .explicitGet()
-    val buyNftForOtherAsset =
-      Order
-        .buy(
-          4.toByte,
-          seller,
-          matcher.publicKey,
-          nftOtherAssetPair,
-          amount,
-          nftForAssetPrice,
-          ts,
-          expirationTimestamp,
-          matcherFee,
-          Waves,
-          OrderPriceMode.Default
-        )
-        .explicitGet()
+    val sellNftForWaves = TxHelpers.order(
+      OrderType.SELL,
+      GenesisAssets.TestNftAsset,
+      Waves,
+      sender = seller,
+      matcher = matcher,
+      amount = amount,
+      price = nftWavesPrice,
+      fee = matcherFee,
+      timestamp = ts,
+      expiration = expirationTimestamp,
+      version = 4.toByte
+    )
+    val buyNftForWaves = TxHelpers.order(
+      OrderType.BUY,
+      GenesisAssets.TestNftAsset,
+      Waves,
+      sender = buyer,
+      matcher = matcher,
+      amount = amount,
+      price = nftWavesPrice,
+      fee = matcherFee,
+      timestamp = ts,
+      expiration = expirationTimestamp,
+      version = 4.toByte
+    )
 
     val sellerAddress = sellerKeyPair.toAddress.toString
     val sellerBalance = sender.balanceDetails(sellerAddress).regular
@@ -356,7 +281,6 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
 
     val tx =
       TxHelpers.exchange(
-        version = 3.toByte,
         matcher = matcher,
         order1 = buyNftForWaves,
         order2 = sellNftForWaves,
@@ -371,38 +295,9 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
     sender.signedBroadcast(tx.json(), waitForTx = true)
     nodes.waitForHeightAriseAndTxPresent(tx.id().toString)
 
-    sender.nftList(sellerAddress, limit = 1) shouldBe empty
     sender.nftList(buyerAddress, 1).head.assetId shouldBe nftAsset
     sender.balanceDetails(sellerAddress).regular shouldBe sellerBalance + nftWavesPrice - matcherFee
     sender.balanceDetails(buyerAddress).regular shouldBe buyerBalance - nftWavesPrice - matcherFee
-
-    val sellerBalanceAfterFirstExchange = sender.balanceDetails(sellerAddress).regular
-    val buyerBalanceAfgerFirstExchange  = sender.balanceDetails(buyerAddress).regular
-
-    val tx2 =
-      TxHelpers.exchange(
-        version = 3.toByte,
-        matcher = matcher,
-        order1 = buyNftForOtherAsset,
-        order2 = sellNftForOtherAsset,
-        amount = amount,
-        price = nftForAssetPrice,
-        buyMatcherFee = (BigInt(matcherFee) * amount / buyNftForOtherAsset.amount.value).toLong,
-        sellMatcherFee = (BigInt(matcherFee) * amount / buyNftForOtherAsset.amount.value).toLong,
-        fee = matcherFee,
-        timestamp = ntpTime.correctedTime()
-      )
-
-    sender.signedBroadcast(tx2.json(), waitForTx = true)
-    nodes.waitForHeightAriseAndTxPresent(tx2.id().toString)
-
-    sender.nftList(buyerAddress, limit = 1) shouldBe empty
-    sender.nftList(sellerAddress, 1, None).head.assetId shouldBe nftAsset
-    sender.assetBalance(sellerAddress, dec6AssetId).balance shouldBe 0
-    sender.assetBalance(buyerAddress, dec6AssetId).balance shouldBe 1000000
-    sender.balanceDetails(sellerAddress).regular shouldBe sellerBalanceAfterFirstExchange - matcherFee
-    sender.balanceDetails(buyerAddress).regular shouldBe buyerBalanceAfgerFirstExchange - matcherFee
-
   }
 
   import NodeConfigs.*

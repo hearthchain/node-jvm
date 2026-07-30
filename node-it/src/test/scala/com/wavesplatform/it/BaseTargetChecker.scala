@@ -1,7 +1,6 @@
 package com.wavesplatform.it
 
 import com.typesafe.config.ConfigFactory.{defaultApplication, defaultReference}
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.consensus.PoSSelector
@@ -11,6 +10,7 @@ import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.StorageFactory
 import com.wavesplatform.settings.*
 import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.transaction.TxHelpers.vrfKeyOf
 import com.wavesplatform.utils.NTP
 import pureconfig.ConfigSource
 
@@ -33,18 +33,18 @@ object BaseTargetChecker {
       val genesisBlock =
         Block
           .genesis(
-            settings.blockchainSettings.genesisSettings,
+            settings.blockchainSettings.genesisSettings
           )
           .explicitGet()
       blockchainUpdater.processBlock(genesisBlock, genesisBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty)
 
       NodeConfigs.Default.map(_.withFallback(sharedConfig)).collect {
         case cfg if ConfigSource.fromConfig(cfg).at("waves.miner.enable").loadOrThrow[Boolean] =>
-          val account = KeyPair.fromSeed(cfg.getString("account-seed")).explicitGet()
+          val account = keyPairFromSeed(cfg.getString("account-seed")).explicitGet()
           val address = account.toAddress
           val balance = blockchainUpdater.balance(address, Waves)
           val timeDelay = poSSelector
-            .getValidBlockDelay(blockchainUpdater.height, account, genesisBlock.header.baseTarget, balance)
+            .getValidBlockDelay(blockchainUpdater.height, vrfKeyOf(account), genesisBlock.header.baseTarget, balance)
             .explicitGet()
 
           f"$address: ${timeDelay * 1e-3}%10.3f s"

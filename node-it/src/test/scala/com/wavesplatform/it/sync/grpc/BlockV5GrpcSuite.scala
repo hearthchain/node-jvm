@@ -2,6 +2,7 @@ package com.wavesplatform.it.sync.grpc
 
 import com.google.protobuf.ByteString
 import com.typesafe.config.Config
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.api.grpc.BlockRangeRequest
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
@@ -57,7 +58,7 @@ class BlockV5GrpcSuite extends freespec.AnyFreeSpec with ActivationStatusRequest
       val blockSeqOfBlocksV5ByAddress = sender.blockSeqByAddress(miner.address, currentHeight, currentHeight + 2)
 
       for (blockV5 <- blockSeqOfBlocksV5ByAddress) {
-        blockV5.header.generator shouldBe miner.keyPair.publicKey
+        blockV5.header.generator shouldBe PublicKey(miner.keyPair.publicKey())
         blockV5.header.generationSignature.arr.length shouldBe Block.GenerationVRFSignatureLength
         assert(blockV5.signatureValid(), "transactionsRoot is not valid")
       }
@@ -65,11 +66,11 @@ class BlockV5GrpcSuite extends freespec.AnyFreeSpec with ActivationStatusRequest
       val blockSeqOfBlocksV5ByPKGrpc = NodeExtGrpc(sender).blockSeq(
         currentHeight,
         currentHeight + 2,
-        BlockRangeRequest.Filter.GeneratorPublicKey(ByteString.copyFrom(miner.keyPair.publicKey.arr))
+        BlockRangeRequest.Filter.GeneratorPublicKey(ByteString.copyFrom(miner.keyPair.publicKey()))
       )
 
       for (blockV5 <- blockSeqOfBlocksV5ByPKGrpc) {
-        blockV5.header.generator shouldBe miner.keyPair.publicKey
+        blockV5.header.generator shouldBe PublicKey(miner.keyPair.publicKey())
         blockV5.header.generationSignature.arr.length shouldBe Block.GenerationVRFSignatureLength
         assert(blockV5.signatureValid(), "transactionsRoot is not valid")
       }

@@ -50,7 +50,6 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
           utxPoolStub,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-
           pos,
           scheduler,
           scheduler,
@@ -104,8 +103,8 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
       BlockchainUpdateTriggers.noop
     )._2
 
-    val settings0     = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
-    val minerSettings = settings0.minerSettings.copy(quorum = 0)
+    val settings0                = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    val minerSettings            = settings0.minerSettings.copy(quorum = 0)
     val synchronizationSettings0 = settings0.synchronizationSettings.copy(maxBaseTarget = Some(1L))
     val settings = settings0.copy(
       // The updater builds the genesis snapshot from its own settings, so it has to see the same genesis as the writer -

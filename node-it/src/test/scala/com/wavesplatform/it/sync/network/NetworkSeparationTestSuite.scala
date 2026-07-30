@@ -2,9 +2,10 @@ package com.wavesplatform.it.sync.network
 
 import com.typesafe.config.{Config, ConfigFactory}
 import com.wavesplatform.it.api.SyncHttpApi.*
-import com.wavesplatform.it.sync.{issueAmount, issueFee, minFee}
+import com.wavesplatform.it.sync.minFee
 import com.wavesplatform.it.{BaseFreeSpec, Node}
 import com.wavesplatform.state.Height
+import com.wavesplatform.test.*
 import com.wavesplatform.utils.ScorexLogging
 
 import scala.concurrent.duration.*
@@ -37,18 +38,13 @@ class NetworkSeparationTestSuite extends BaseFreeSpec, ScorexLogging {
   }
 
   "after fork node should apply correct subchain" in {
-    val issuedAssetId = nodeA.issue(nodeA.keyPair, "TestAsset", "description", issueAmount, 8, reissuable = true, issueFee).id
-    nodes.waitForHeightAriseAndTxPresent(issuedAssetId)
-
-    nodeA.assertAssetBalance(nodeA.address, issuedAssetId, issueAmount)
-
-    val txId = nodeA.transfer(nodeA.keyPair, nodeB.address, issueAmount / 2, minFee, Some(issuedAssetId)).id
+    val txId = nodeA.transfer(nodeA.keyPair, nodeB.address, 1.waves, minFee).id
     nodes.waitForHeightAriseAndTxPresent(txId)
 
     docker.disconnectFromNetwork(dockerNodes().head)
 
-    val burnNoOwnerTxTd = nodeB.burn(nodeB.keyPair, issuedAssetId, issueAmount / 2, minFee).id
-    nodeB.waitForTransaction(burnNoOwnerTxTd, 2.minute)
+    val divergingTxId = nodeB.transfer(nodeB.keyPair, nodeA.address, 1.waves, minFee).id
+    nodeB.waitForTransaction(divergingTxId, 2.minute)
     val heightAfter = nodeB.height
 
     Thread.sleep(60.seconds.toMillis)
@@ -71,16 +67,16 @@ class NetworkSeparationTestSuite extends BaseFreeSpec, ScorexLogging {
 object NetworkSeparationTestSuite {
   import com.wavesplatform.it.NodeConfigs.*
   private val woFeatureConfig = ConfigFactory.parseString(s"""
-                                                            |waves {
-                                                            |  synchronization.synchronization-timeout = 10s
-                                                            |  blockchain.custom.functionality {
-                                                            |    pre-activated-features = {
-                                                            |     1 = 0
-                                                            |     6 = 100
-                                                            |     }
-                                                            |  }
-                                                            |  miner.quorum = 0 
-                                                            |}""".stripMargin)
+                                                             |waves {
+                                                             |  synchronization.synchronization-timeout = 10s
+                                                             |  blockchain.custom.functionality {
+                                                             |    pre-activated-features = {
+                                                             |     1 = 0
+                                                             |     6 = 100
+                                                             |     }
+                                                             |  }
+                                                             |  miner.quorum = 0 
+                                                             |}""".stripMargin)
 
   private val withFeatureConfig = ConfigFactory.parseString(s"""
                                                                |waves {

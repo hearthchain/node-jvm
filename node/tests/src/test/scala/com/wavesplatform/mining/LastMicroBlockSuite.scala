@@ -64,7 +64,6 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
         d.utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -129,7 +128,6 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
         d.utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-
         d.posSelector,
         minerScheduler,
         appenderScheduler,
@@ -207,7 +205,6 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
         d.utxPool,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-
         d.posSelector,
         minerScheduler,
         appenderScheduler,

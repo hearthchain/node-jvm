@@ -19,10 +19,7 @@ class SpendingTableTest extends FreeSpec with WithState {
   "spending more than have" - {
     def test(hasLeasing: Boolean, hasDeposit: Boolean, spending: Spending, expectedError: String): Unit =
       s"hasLeasing=$hasLeasing, hasDeposit=$hasDeposit, spending=$spending" in {
-        val settings = DomainPresets.DeterministicFinality
-
-          .blockchainSettings
-          .functionalitySettings
+        val settings = DomainPresets.DeterministicFinality.blockchainSettings.functionalitySettings
           .copy(
             generationPeriodLength = 2
           )

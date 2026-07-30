@@ -3,14 +3,12 @@ package com.wavesplatform.api.grpc
 import com.google.protobuf.ByteString
 import com.google.protobuf.empty.Empty
 import com.wavesplatform.features.{BlockchainFeatureStatus, BlockchainFeatures}
-import com.wavesplatform.settings.FeaturesSettings
 import com.wavesplatform.state.{Blockchain, Height}
 import monix.execution.Scheduler
 
 import scala.concurrent.Future
 
-class BlockchainApiGrpcImpl(blockchain: Blockchain, featuresSettings: FeaturesSettings)(implicit sc: Scheduler)
-    extends BlockchainApiGrpc.BlockchainApi {
+class BlockchainApiGrpcImpl(blockchain: Blockchain, supportedFeatures: Seq[Short])(implicit sc: Scheduler) extends BlockchainApiGrpc.BlockchainApi {
 
   override def getActivationStatus(request: ActivationStatusRequest): Future[ActivationStatusResponse] = Future {
     val functionalitySettings = blockchain.settings.functionalitySettings
@@ -18,7 +16,7 @@ class BlockchainApiGrpcImpl(blockchain: Blockchain, featuresSettings: FeaturesSe
     ActivationStatusResponse(
       request.height,
       functionalitySettings.activationWindowSize(request.height),
-      functionalitySettings.blocksForFeatureActivation(request.height),
+      functionalitySettings.blocksForFeatureActivation,
       functionalitySettings.activationWindow(request.height).last,
       (blockchain.featureVotes(Height(request.height)).keySet ++
         blockchain.approvedFeatures.keySet ++
@@ -33,7 +31,7 @@ class BlockchainApiGrpcImpl(blockchain: Blockchain, featuresSettings: FeaturesSe
           id,
           BlockchainFeatures.feature(id).fold("Unknown feature")(_.description),
           status,
-          (BlockchainFeatures.implemented.contains(id), featuresSettings.supported.contains(id)) match {
+          (BlockchainFeatures.implemented.contains(id), supportedFeatures.contains(id)) match {
             case (false, _) => FeatureActivationStatus.NodeFeatureStatus.NOT_IMPLEMENTED
             case (_, true)  => FeatureActivationStatus.NodeFeatureStatus.VOTED
             case _          => FeatureActivationStatus.NodeFeatureStatus.IMPLEMENTED

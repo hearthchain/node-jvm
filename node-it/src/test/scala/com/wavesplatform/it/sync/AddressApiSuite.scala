@@ -2,11 +2,12 @@ package com.wavesplatform.it.sync
 
 import com.typesafe.config.Config
 import com.wavesplatform.api.http.ApiError.{CustomValidationError, TooBigArrayAllocation}
+import com.wavesplatform.it.NodeConfigs.GenesisAssets
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.transactions.BaseTransactionSuite
 import com.wavesplatform.it.{NTPTime, NodeConfigs}
-import com.wavesplatform.state.{Height, StringDataEntry}
-import com.wavesplatform.transaction.{TxHelpers, TxVersion}
+import com.wavesplatform.state.Height
+import com.wavesplatform.transaction.TxHelpers
 import play.api.libs.json.*
 
 import java.net.URLDecoder
@@ -27,47 +28,12 @@ class AddressApiSuite extends BaseTransactionSuite with NTPTime {
     balance shouldBe 2
   }
 
-  test("filter accounts data by regexp") {
-    val dataKeys = List("1aB1cD!@#$", "\"\\", "\u0000qweqwe", "\t\r\n", "reeeee", "rerere", "rerrre", "rre", "eeeee")
-    val regexps = List(
-      "1aB1cD!%40%23%24",
-      "%5Ba-zA-Z0-9!-%2F%3A-%40%5C%5C%5C%5C%5D%7B0%2C15%7D",
-      "%5Cs%7B0%2C%7D",
-      "re%2B",
-      "re*re",
-      "r%3Feeeee",
-      "%5B%5Ct%5Cr%5Cn%5D"
-    )
-    val invalidRegexps = List("%5Ba-z", "%5Ba-z%5D%7B0", "%5Ba-z%5D%7B%2C5%7D")
-    val data           = dataKeys.map(str => StringDataEntry(str, Random.nextString(16)))
-    val dataFee        = calcDataFee(data, TxVersion.V1)
-    val txId           = sender.putData(firstKeyPair, data, dataFee).id
-    nodes.waitForHeightAriseAndTxPresent(txId)
-
-    for (regexp <- regexps) {
-      val matchedDataKeys = sender.getData(firstAddress, regexp).sortBy(_.key)
-
-      val regexpPattern = URLDecoder.decode(regexp, "UTF-8").r.pattern
-      withClue(s"regexp: $regexp\n") {
-        data.filter(d => regexpPattern.matcher(d.key).matches).sortBy(_.key) shouldEqual matchedDataKeys
-      }
-    }
-
-    for (invalidRegexp <- invalidRegexps) {
-      assertBadRequestAndMessage(
-        sender.getData(firstAddress, invalidRegexp),
-        "Cannot compile regex"
-      )
-    }
-  }
-
   test("balances for waves should be correct") {
     assertBalances(None)
   }
 
   test("balances for issued asset should be correct") {
-    val asset = miner.issue(miner.keyPair, "Test", "Test", 10000, 0, waitForTx = true).id
-    assertBalances(Some(asset))
+    assertBalances(Some(GenesisAssets.TestAsset.id.toString))
   }
 
   test("limit violation requests should be handled correctly") {

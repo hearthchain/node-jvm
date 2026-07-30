@@ -72,14 +72,41 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     val bps: Seq[BlockProducer] = Seq((ts, reference, account) => {
       val recipient1 = createAccount.toAddress
       val recipient2 = createAccount.toAddress
-      val tx1 = TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
-      val tx2 = TxHelpers.transfer(from = account, to = recipient2, amount = 5 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
+      val tx1 = TxHelpers.transfer(
+        from = account,
+        to = recipient1,
+        amount = 10 * Constants.UnitsInWave,
+        asset = Waves,
+        fee = 400000,
+        feeAsset = Waves,
+        attachment = ByteStr.empty,
+        timestamp = ts
+      )
+      val tx2 = TxHelpers.transfer(
+        from = account,
+        to = recipient2,
+        amount = 5 * Constants.UnitsInWave,
+        asset = Waves,
+        fee = 400000,
+        feeAsset = Waves,
+        attachment = ByteStr.empty,
+        timestamp = ts
+      )
       TestBlock.create(time = ts, ref = reference, txs = Seq(tx1, tx2), signer = account).block
     })
 
     val txs: Seq[TransactionProducer] = Seq((ts, account) => {
       val recipient1 = createAccount.toAddress
-      TxHelpers.transfer(from = account, to = recipient1, amount = 10 * Constants.UnitsInWave, asset = Waves, fee = 400000, feeAsset = Waves, attachment = ByteStr.empty, timestamp = ts)
+      TxHelpers.transfer(
+        from = account,
+        to = recipient1,
+        amount = 10 * Constants.UnitsInWave,
+        asset = Waves,
+        fee = 400000,
+        feeAsset = Waves,
+        attachment = ByteStr.empty,
+        timestamp = ts
+      )
     })
 
     withEnv(bps, txs) { case Env(_, account, miner, blockchain) =>
@@ -115,7 +142,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     resources(settingsWithGenesis).use { case (blockchainUpdater, _) =>
       for {
         _ <- Task.unit
-        pos     = PoSSelector(blockchainUpdater, settingsWithGenesis.synchronizationSettings.maxBaseTarget)
+        pos = PoSSelector(blockchainUpdater, settingsWithGenesis.synchronizationSettings.maxBaseTarget)
         utxPool = new UtxPoolImpl(
           ntpTime,
           blockchainUpdater,
@@ -133,7 +160,6 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
           utxPool,
           BlockEndorser.Disabled,
           EndorsementStorage.Disabled,
-
           pos,
           scheduler,
           scheduler,
@@ -169,9 +195,11 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     }
   }
 
-  private def generateBlockTask(miner: MinerImpl)(account: SigningKey): Task[Unit] = miner.generateBlockTask(account, TxHelpers.vrfKeyOf(account), None)
+  private def generateBlockTask(miner: MinerImpl)(account: SigningKey): Task[Unit] =
+    miner.generateBlockTask(account, TxHelpers.vrfKeyOf(account), None)
 
-  private def forgeBlock(miner: MinerImpl)(account: SigningKey): Either[String, ForgeAttemptResult.Success] = miner.forgeBlock(account, TxHelpers.vrfKeyOf(account)).toEither
+  private def forgeBlock(miner: MinerImpl)(account: SigningKey): Either[String, ForgeAttemptResult.Success] =
+    miner.forgeBlock(account, TxHelpers.vrfKeyOf(account)).toEither
 
   private def resources(settings: WavesSettings): Resource[Task, (BlockchainUpdaterImpl, RDB)] =
     Resource

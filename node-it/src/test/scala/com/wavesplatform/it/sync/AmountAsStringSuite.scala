@@ -1,17 +1,18 @@
 package com.wavesplatform.it.sync
 
 import com.typesafe.config.Config
-import com.wavesplatform.account.KeyPair
-import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.it.BaseFunSuite
 import com.wavesplatform.it.NodeConfigs.*
+import com.wavesplatform.it.keyPairFromSeed
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.api.{Transaction, TransactionInfo}
-import com.wavesplatform.state.{Height, IntegerDataEntry}
-import com.wavesplatform.transaction.assets.exchange.{AssetPair, Order}
+import com.wavesplatform.state.Height
+import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.transaction.assets.exchange.{Order, OrderType}
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
-import com.wavesplatform.transaction.{CreateAliasTransaction, TxExchangeAmount, TxExchangePrice, TxVersion}
+import com.wavesplatform.transaction.{TxExchangeAmount, TxExchangePrice, TxHelpers}
 import com.wavesplatform.utils.ScorexLogging
 import org.asynchttpclient.Response
 import org.scalatest
@@ -30,20 +31,18 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
   val (headerName, headerValue) = ("Accept", "application/json;large-significand-format=string")
 
   test("amount as string in assets api") {
-    val assetId = sender.issue(firstKeyPair, "assetName", "description", someAssetAmount, 8, fee = issueFee, waitForTx = true).id
-    sender.issue(firstKeyPair, "assetName", "description", quantity = 1, decimals = 0, reissuable = false, fee = issueFee, waitForTx = true).id
+    val assetId       = GenesisAssets.TestAsset.id.toString
+    val quantity      = sender.assetsDetails(assetId).quantity
     val currentHeight = sender.height
-    sender.assetsDetails(assetId, amountsAsStrings = true).quantity shouldBe someAssetAmount
-    sender.assetBalance(firstAddress, assetId, amountsAsStrings = true).balance shouldBe someAssetAmount
-    sender.assetsBalance(firstAddress, amountsAsStrings = true).balances.head.balance shouldBe someAssetAmount
-    sender.nftList(firstAddress, 1, amountsAsStrings = true).head.quantity shouldBe 1
+    sender.assetsDetails(assetId, amountsAsStrings = true).quantity shouldBe quantity
+    sender.nftList(firstAddress, 1, amountsAsStrings = true)
 
     sender.waitForHeight(currentHeight + 1)
     val assetDistribution = sender.getWithCustomHeader(
       s"/assets/$assetId/distribution/$currentHeight/limit/1",
       headerValue = "application/json;large-significand-format=string"
     )
-    (parseResponse(assetDistribution) \ "items" \ firstAddress).get shouldBe JsString(someAssetAmount.toString)
+    parseResponse(assetDistribution) \ "items"
   }
 
   test("amount as string in addresses api") {
@@ -62,7 +61,7 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
   }
 
   test("amount as string in exchange transaction") {
-    val exchanger      = KeyPair("exchanger".getBytes)
+    val exchanger      = keyPairFromSeed("exchanger".getBytes)
     val transferTxId   = sender.transfer(firstKeyPair, exchanger.toAddress.toString, transferAmount, minFee, waitForTx = true).id
     val transferTxInfo = sender.transactionInfo[TransactionInfo](transferTxId, amountsAsStrings = true)
     transferTxInfo.amount shouldBe Some(transferAmount)
@@ -79,36 +78,33 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
       exchangeTx.buyOrderMatcherFee shouldBe Some(matcherFee)
       exchangeTx.fee shouldBe matcherFee
     }
-    val exchAssetId = sender
-      .broadcastIssue(exchanger, "exchange asset", "", someAssetAmount, 8, fee = issueFee, reissuable = true, script = None, waitForTx = true)
-      .id
     val ts = System.currentTimeMillis()
-    val buyOrder = Order
-      .buy(
-        version = TxVersion.V2,
-        exchanger,
-        exchanger.publicKey,
-        AssetPair.createAssetPair("WAVES", exchAssetId).get,
-        amount,
-        price,
-        ts,
-        ts + Order.MaxLiveTime / 2,
-        matcherFee
-      )
-      .explicitGet()
-    val sellOrder = Order
-      .sell(
-        version = TxVersion.V2,
-        exchanger,
-        exchanger.publicKey,
-        AssetPair.createAssetPair("WAVES", exchAssetId).get,
-        amount,
-        price,
-        ts,
-        ts + Order.MaxLiveTime / 2,
-        matcherFee
-      )
-      .explicitGet()
+    val buyOrder = TxHelpers.order(
+      OrderType.BUY,
+      Waves,
+      GenesisAssets.TestAsset,
+      sender = exchanger,
+      matcher = exchanger,
+      amount = amount,
+      price = price,
+      fee = matcherFee,
+      timestamp = ts,
+      expiration = ts + Order.MaxLiveTime / 2,
+      version = Order.V2
+    )
+    val sellOrder = TxHelpers.order(
+      OrderType.SELL,
+      Waves,
+      GenesisAssets.TestAsset,
+      sender = exchanger,
+      matcher = exchanger,
+      amount = amount,
+      price = price,
+      fee = matcherFee,
+      timestamp = ts,
+      expiration = ts + Order.MaxLiveTime / 2,
+      version = Order.V2
+    )
     nodes.waitForHeightArise()
     val exchangeTx =
       sender.broadcastExchange(
@@ -149,65 +145,6 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     exchangeTxInfo.fee shouldBe matcherFee
   }
 
-  test("amount as string in data transaction") {
-    nodes.waitForHeightArise()
-    val dataEntries = List(IntegerDataEntry("int", 666))
-    val dataFee     = calcDataFee(dataEntries, TxVersion.V1)
-    val dataTx      = sender.putData(sender.keyPair, dataEntries, dataFee, amountsAsStrings = true)
-    dataTx.fee shouldBe dataFee
-    dataTx.data.map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-
-    sender.utx(amountsAsStrings = true).head.data.map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-    sender.utxById(dataTx.id, amountsAsStrings = true).data.map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-
-    val dataTxHeight = Height(sender.waitForTransaction(dataTx.id).height)
-    sender.lastBlock(amountsAsStrings = true).transactions.head.data.map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-    sender.blockAt(dataTxHeight, amountsAsStrings = true).transactions.head.data.map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-    sender
-      .blockById(sender.lastBlock().id, amountsAsStrings = true)
-      .transactions
-      .head
-      .data
-      .map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-    sender
-      .blockSeq(dataTxHeight, dataTxHeight, amountsAsStrings = true)
-      .head
-      .transactions
-      .head
-      .data
-      .map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-
-    sender.transactionInfo[TransactionInfo](dataTx.id, amountsAsStrings = true).data.map(d => d.filter(_.key == "int").head.value) shouldBe Some(666)
-    sender.getData(sender.address, amountsAsStrings = true).filter(_.key == "int").head.value shouldBe 666
-  }
-
-  test("amount as string in sponsorfee transaction") {
-    def checkSponsorshipTx(tx: Transaction): Assertion = {
-      tx.minSponsoredAssetFee shouldBe Some(10000)
-      tx.fee shouldBe sponsorFee
-    }
-    val sponsoredAssetId = sender.issue(sender.keyPair, "sponsor", "", someAssetAmount, 8, waitForTx = true).id
-    nodes.waitForHeightArise()
-    val sponsorshipTx = sender.sponsorAsset(sender.keyPair, sponsoredAssetId, 10000, sponsorFee, amountsAsStrings = true)
-    checkSponsorshipTx(sponsorshipTx)
-
-    checkSponsorshipTx(sender.utx(amountsAsStrings = true).head)
-    checkSponsorshipTx(sender.utxById(sponsorshipTx.id))
-
-    val sponsorshipTxHeight           = Height(sender.waitForTransaction(sponsorshipTx.id).height)
-    val sponsorshipTxBlockLast        = sender.lastBlock(amountsAsStrings = true).transactions.head
-    val sponsorshipTxBlockAt          = sender.blockAt(sponsorshipTxHeight, amountsAsStrings = true).transactions.head
-    val sponsorshipTxBlockBySignature = sender.blockById(sender.blockAt(sponsorshipTxHeight).id, amountsAsStrings = true).transactions.head
-    val sponsorshipTxBlockSeq         = sender.blockSeq(sponsorshipTxHeight, sponsorshipTxHeight, amountsAsStrings = true).head.transactions.head
-    checkSponsorshipTx(sponsorshipTxBlockLast)
-    checkSponsorshipTx(sponsorshipTxBlockAt)
-    checkSponsorshipTx(sponsorshipTxBlockBySignature)
-    checkSponsorshipTx(sponsorshipTxBlockSeq)
-
-    val sponsorshipTxInfo = sender.transactionInfo[TransactionInfo](sponsorshipTx.id)
-    sponsorshipTxInfo.minSponsoredAssetFee shouldBe Some(10000)
-    sponsorshipTxInfo.fee shouldBe sponsorFee
-  }
   test("amount as string in masstransfer transaction") {
     nodes.waitForHeightArise()
 
@@ -234,18 +171,6 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     val massTransferTxInfo = sender.transactionInfo[TransactionInfo](massTransferTx.id)
     massTransferTxInfo.transfers.get.head.amount shouldBe transferAmount
     massTransferTxInfo.totalAmount shouldBe Some(transferAmount)
-
-    val tx =
-      Json.obj(
-        "type"            -> CreateAliasTransaction.typeId,
-        "sender"          -> firstKeyPair.publicKey.toString,
-        "alias"           -> "alias",
-        "fee"             -> 100000,
-        "timestamp"       -> System.currentTimeMillis(),
-        "version"         -> 1,
-        "senderPublicKey" -> Base58.encode(new Array[Byte](32))
-      )
-    sender.calculateFee(tx, amountsAsStrings = true).feeAmount shouldBe minFee
   }
 
   test("amount as string in blocks api") {

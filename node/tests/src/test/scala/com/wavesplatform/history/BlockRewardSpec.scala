@@ -126,6 +126,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
   }
 
   "The reward is shared with the dao address" - {
+
     /** The share the DAO address gets of a block reward, by `BlockRewardCalculator.rewardSharesAt`: nothing at all
       * below the guaranteed miner reward, half of what is above it below the full reward, and a flat maximum from
       * there. Measured as the change across one block, since the miner also holds what the genesis gave it.

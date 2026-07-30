@@ -1,37 +1,39 @@
 package com.wavesplatform.api.grpc.test
 
 import com.google.protobuf.ByteString
-import com.wavesplatform.account.{Address, KeyPair}
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.grpc.{BlockRangeRequest, BlockRequest, BlockWithHeight, BlocksApiGrpcImpl}
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.db.WithDomain
 import com.wavesplatform.db.WithState.AddrWithBalance
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.{Domain, defaultSigner}
 import com.wavesplatform.protobuf.*
 import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.protobuf.transaction.PBTransactions
+import com.wavesplatform.settings.GenesisAssetSettings
 import com.wavesplatform.state.{BlockRewardCalculator, Blockchain}
 import com.wavesplatform.test.*
 import com.wavesplatform.test.DomainPresets.*
-import com.wavesplatform.transaction.Asset.Waves
+import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}
-import com.wavesplatform.transaction.{TxHelpers, TxVersion}
+import com.wavesplatform.transaction.{CommitToGenerationTransaction, TxHelpers}
 import com.wavesplatform.utils.{DiffMatchers, Schedulers, byteStrOrdering}
 import monix.execution.ExecutionModel.SynchronousExecution
 import monix.execution.Scheduler
 import org.scalatest.{Assertion, BeforeAndAfterAll}
+import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.Await
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatchers with WithDomain with GrpcApiHelpers {
   private given scheduler: Scheduler = Schedulers.singleThread("grpc", executionModel = SynchronousExecution)
-  val sender: KeyPair                = TxHelpers.signer(1)
-  val recipient: KeyPair             = TxHelpers.signer(2)
+  val sender: SigningKey             = TxHelpers.signer(1)
+  val recipient: SigningKey          = TxHelpers.signer(2)
   val timeout: FiniteDuration        = 1.minute
 
   "GetBlock should work" in withDomain(DomainPresets.RideV6, AddrWithBalance.enoughBalances(sender)) { d =>
@@ -46,7 +48,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
         Some(PBBlocks.protobuf(block)),
         2,
         vrf,
-        Seq(RewardShare(ByteString.copyFrom(block.sender.toAddress.bytes), d.blockchain.settings.rewardsSettings.initial))
+        getExpectedRewardShares(2, block.sender.toAddress, d.blockchain)
       )
 
       val resultById = Await.result(
@@ -85,7 +87,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
           Some(PBBlocks.protobuf(block)),
           idx + 2,
           vrf,
-          Seq(RewardShare(ByteString.copyFrom(block.sender.toAddress.bytes), d.blockchain.settings.rewardsSettings.initial))
+          getExpectedRewardShares(idx + 2, block.sender.toAddress, d.blockchain)
         )
       }
     }
@@ -94,7 +96,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
   "NODE-972. GetBlock and GetBlockRange should return correct data for orders with attachment" in {
     def checkOrderAttachment(block: BlockWithHeight, expectedAttachment: ByteStr): Assertion = {
       PBTransactions
-        .vanilla(block.block.get.transactions.head, unsafe = true)
+        .vanilla(block.block.get.transactions.head)
         .explicitGet()
         .asInstanceOf[ExchangeTransaction]
         .order1
@@ -103,19 +105,21 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
 
     val sender = TxHelpers.signer(1)
     val issuer = TxHelpers.signer(2)
-    withDomain(DomainPresets.TransactionStateSnapshot, balances = AddrWithBalance.enoughBalances(sender, issuer)) { d =>
+    val asset  = IssuedAsset(ByteStr.fill(32)(1))
+    withDomain(
+      DomainPresets.TransactionStateSnapshot,
+      balances = AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(issuer.toAddress, assets = Map(asset -> 1L)),
+      assets = Seq(GenesisAssetSettings(asset.id, Base58.encode(issuer.publicKey()), "asset", 0, 1L))
+    ) { d =>
       val grpcApi = getGrpcApi(d)
 
       val attachment = ByteStr.fill(32)(1)
-      val issue      = TxHelpers.issue(issuer)
       val exchange =
         TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, Waves, issue.asset, version = Order.V4, attachment = Some(attachment)),
-          TxHelpers.order(OrderType.SELL, Waves, issue.asset, version = Order.V4, sender = issuer),
-          version = TxVersion.V3
+          TxHelpers.order(OrderType.BUY, Waves, asset, version = Order.V4, attachment = Some(attachment)),
+          TxHelpers.order(OrderType.SELL, Waves, asset, version = Order.V4, sender = issuer)
         )
 
-      d.appendBlock(issue)
       val exchangeBlock = d.appendBlock(exchange)
 
       d.liquidAndSolidAssert { () =>
@@ -127,7 +131,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
         checkOrderAttachment(resultById, attachment)
 
         val resultByHeight = Await.result(
-          grpcApi.getBlock(BlockRequest.of(BlockRequest.Request.Height(3), includeTransactions = true)),
+          grpcApi.getBlock(BlockRequest.of(BlockRequest.Request.Height(2), includeTransactions = true)),
           1.minute
         )
 
@@ -135,7 +139,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
 
         val (observer, resultRange) = createObserver[BlockWithHeight]
         grpcApi.getBlockRange(
-          BlockRangeRequest.of(3, 3, BlockRangeRequest.Filter.Empty, includeTransactions = true),
+          BlockRangeRequest.of(2, 2, BlockRangeRequest.Filter.Empty, includeTransactions = true),
           observer
         )
 
@@ -145,124 +149,59 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
   }
 
   "NODE-844. GetBlock should return correct rewardShares" in {
-    blockRewardSharesTestCase { case (daoAddress, xtnBuybackAddress, d, grpcApi) =>
-      val miner                       = d.appendBlock().sender.toAddress
-      val blockBeforeBlockRewardDistr = d.appendBlock()
-      val heightToBlock = (3 to 5).map { h =>
-        h -> d.appendBlock().id()
-      }.toMap
-      d.appendBlock()
+    blockRewardSharesTestCase { case (daoAddress, d, grpcApi) =>
+      val block = d.appendBlock()
 
-      // reward distribution features not activated
+      val minerReward = d.blockchain.settings.rewardsSettings.initial - BlockRewardCalculator.MaxAddressReward
+
       checkBlockRewards(
-        blockBeforeBlockRewardDistr.id(),
+        block.id(),
         2,
-        Seq(RewardShare(ByteString.copyFrom(miner.bytes), d.blockchain.settings.rewardsSettings.initial))
-      )(grpcApi)
-
-      // BlockRewardDistribution activated
-      val configAddrReward3 = d.blockchain.settings.rewardsSettings.initial / 3
-      val minerReward3      = d.blockchain.settings.rewardsSettings.initial - 2 * configAddrReward3
-
-      checkBlockRewards(
-        heightToBlock(3),
-        3,
         Seq(
-          RewardShare(ByteString.copyFrom(miner.bytes), minerReward3),
-          RewardShare(ByteString.copyFrom(daoAddress.bytes), configAddrReward3),
-          RewardShare(ByteString.copyFrom(xtnBuybackAddress.bytes), configAddrReward3)
-        ).sortBy(_.address.toByteStr)
-      )(grpcApi)
-
-      // CappedReward activated
-      val configAddrReward4 = BlockRewardCalculator.MaxAddressReward
-      val minerReward4      = d.blockchain.settings.rewardsSettings.initial - 2 * configAddrReward4
-
-      checkBlockRewards(
-        heightToBlock(4),
-        4,
-        Seq(
-          RewardShare(ByteString.copyFrom(miner.bytes), minerReward4),
-          RewardShare(ByteString.copyFrom(daoAddress.bytes), configAddrReward4),
-          RewardShare(ByteString.copyFrom(xtnBuybackAddress.bytes), configAddrReward4)
-        ).sortBy(_.address.toByteStr)
-      )(grpcApi)
-
-      // CeaseXTNBuyback activated with expired XTN buyback reward period
-      val configAddrReward5 = BlockRewardCalculator.MaxAddressReward
-      val minerReward5      = d.blockchain.settings.rewardsSettings.initial - configAddrReward5
-
-      checkBlockRewards(
-        heightToBlock(5),
-        5,
-        Seq(
-          RewardShare(ByteString.copyFrom(miner.bytes), minerReward5),
-          RewardShare(ByteString.copyFrom(daoAddress.bytes), configAddrReward5)
+          RewardShare(ByteString.copyFrom(block.sender.toAddress.toBytes()), minerReward),
+          RewardShare(ByteString.copyFrom(daoAddress.toBytes()), BlockRewardCalculator.MaxAddressReward)
         ).sortBy(_.address.toByteStr)
       )(grpcApi)
     }
   }
 
   "NODE-845. GetBlockRange should return correct rewardShares" in {
-    blockRewardSharesTestCase { case (daoAddress, xtnBuybackAddress, d, grpcApi) =>
-      val miner = d.appendBlock().sender.toAddress
-      d.appendBlock()
-
-      (3 to 5).foreach(_ => d.appendBlock())
-      d.appendBlock()
+    blockRewardSharesTestCase { case (daoAddress, d, grpcApi) =>
+      val block = d.appendBlock()
 
       val (observer, result) = createObserver[BlockWithHeight]
       grpcApi.getBlockRange(
-        BlockRangeRequest.of(2, 5, BlockRangeRequest.Filter.Empty, includeTransactions = true),
+        BlockRangeRequest.of(2, 2, BlockRangeRequest.Filter.Empty, includeTransactions = true),
         observer
       )
       val blocks = result.runSyncUnsafe()
 
-      // reward distribution features not activated
-      blocks.head.rewardShares shouldBe Seq(RewardShare(ByteString.copyFrom(miner.bytes), d.blockchain.settings.rewardsSettings.initial))
+      val minerReward = d.blockchain.settings.rewardsSettings.initial - BlockRewardCalculator.MaxAddressReward
 
-      // BlockRewardDistribution activated
-      val configAddrReward3 = d.blockchain.settings.rewardsSettings.initial / 3
-      val minerReward3      = d.blockchain.settings.rewardsSettings.initial - 2 * configAddrReward3
-
-      blocks(1).rewardShares shouldBe Seq(
-        RewardShare(ByteString.copyFrom(miner.bytes), minerReward3),
-        RewardShare(ByteString.copyFrom(daoAddress.bytes), configAddrReward3),
-        RewardShare(ByteString.copyFrom(xtnBuybackAddress.bytes), configAddrReward3)
-      ).sortBy(_.address.toByteStr)
-
-      // CappedReward activated
-      val configAddrReward4 = BlockRewardCalculator.MaxAddressReward
-      val minerReward4      = d.blockchain.settings.rewardsSettings.initial - 2 * configAddrReward4
-
-      blocks(2).rewardShares shouldBe Seq(
-        RewardShare(ByteString.copyFrom(miner.bytes), minerReward4),
-        RewardShare(ByteString.copyFrom(daoAddress.bytes), configAddrReward4),
-        RewardShare(ByteString.copyFrom(xtnBuybackAddress.bytes), configAddrReward4)
-      ).sortBy(_.address.toByteStr)
-
-      // CeaseXTNBuyback activated with expired XTN buyback reward period
-      val configAddrReward5 = BlockRewardCalculator.MaxAddressReward
-      val minerReward5      = d.blockchain.settings.rewardsSettings.initial - configAddrReward5
-
-      blocks(3).rewardShares shouldBe Seq(
-        RewardShare(ByteString.copyFrom(miner.bytes), minerReward5),
-        RewardShare(ByteString.copyFrom(daoAddress.bytes), configAddrReward5)
+      blocks.head.rewardShares shouldBe Seq(
+        RewardShare(ByteString.copyFrom(block.sender.toAddress.toBytes()), minerReward),
+        RewardShare(ByteString.copyFrom(daoAddress.toBytes()), BlockRewardCalculator.MaxAddressReward)
       ).sortBy(_.address.toByteStr)
     }
   }
 
   "NODE-922. GetBlock should return correct data for challenging block" in {
     val sender = TxHelpers.signer(1)
+    // a challenged miner's balance is banned once challenged (see CLAUDE.md), so it must not be defaultSigner:
+    // makeStateSolid()/liquidAndSolidAssert would otherwise fail appending its own empty block with defaultSigner
+    val challengedMiner  = TxHelpers.signer(5)
+    val challengingMiner = TxHelpers.signer(4)
+    val deposit          = CommitToGenerationTransaction.DepositInWavelets
     withDomain(
       TransactionStateSnapshot,
-      balances = AddrWithBalance.enoughBalances(sender, defaultSigner)
+      generators = Seq(defaultSigner, challengedMiner, challengingMiner),
+      balances = AddrWithBalance.enoughBalances(sender, defaultSigner) :+ AddrWithBalance(challengingMiner.toAddress, deposit)
     ) { d =>
-      val grpcApi          = getGrpcApi(d)
-      val challengingMiner = d.wallet.generateNewAccount().get
+      val grpcApi = getGrpcApi(d)
 
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 waves)
       d.appendBlock(
-        TxHelpers.transfer(sender, challengingMiner.toAddress, 1000.waves)
+        TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.waves - deposit)
       )
 
       (1 to 999).foreach(_ => d.appendBlock())
@@ -271,6 +210,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
       val originalBlock = d.createBlock(
         Seq(TxHelpers.transfer(sender)),
         strictTime = true,
+        generator = challengedMiner,
         stateHash = Some(Some(invalidStateHash))
       )
       val challengingBlock = d.createChallengingBlock(challengingMiner, originalBlock)
@@ -307,15 +247,21 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
 
   "NODE-922. GetBlockRange should return correct data for challenging block" in {
     val sender = TxHelpers.signer(1)
+    // a challenged miner's balance is banned once challenged (see CLAUDE.md), so it must not be defaultSigner:
+    // makeStateSolid()/liquidAndSolidAssert would otherwise fail appending its own empty block with defaultSigner
+    val challengedMiner  = TxHelpers.signer(5)
+    val challengingMiner = TxHelpers.signer(4)
+    val deposit          = CommitToGenerationTransaction.DepositInWavelets
     withDomain(
       TransactionStateSnapshot,
-      balances = AddrWithBalance.enoughBalances(sender, defaultSigner)
+      generators = Seq(defaultSigner, challengedMiner, challengingMiner),
+      balances = AddrWithBalance.enoughBalances(sender, defaultSigner) :+ AddrWithBalance(challengingMiner.toAddress, deposit)
     ) { d =>
-      val grpcApi          = getGrpcApi(d)
-      val challengingMiner = d.wallet.generateNewAccount().get
+      val grpcApi = getGrpcApi(d)
 
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 waves)
       d.appendBlock(
-        TxHelpers.transfer(sender, challengingMiner.toAddress, 1000.waves)
+        TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.waves - deposit)
       )
 
       (1 to 999).foreach(_ => d.appendBlock())
@@ -324,6 +270,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
       val originalBlock = d.createBlock(
         Seq(TxHelpers.transfer(sender)),
         strictTime = true,
+        generator = challengedMiner,
         stateHash = Some(Some(invalidStateHash))
       )
       val challengingBlock = d.createChallengingBlock(challengingMiner, originalBlock)
@@ -375,16 +322,14 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
       .rewardShares shouldBe expected
   }
 
-  private def blockRewardSharesTestCase(checks: (Address, Address, Domain, BlocksApiGrpcImpl) => Unit): Unit = {
-    val daoAddress        = TxHelpers.address(3)
-    val xtnBuybackAddress = TxHelpers.address(4)
+  private def blockRewardSharesTestCase(checks: (Address, Domain, BlocksApiGrpcImpl) => Unit): Unit = {
+    val daoAddress = TxHelpers.address(3)
 
     val settings = DomainPresets.ConsensusImprovements
     val settingsWithFeatures = settings
       .copy(blockchainSettings =
         settings.blockchainSettings.copy(
-          functionalitySettings = settings.blockchainSettings.functionalitySettings
-            .copy(daoAddress = Some(daoAddress.toString), xtnBuybackAddress = Some(xtnBuybackAddress.toString), xtnBuybackRewardPeriod = 1),
+          functionalitySettings = settings.blockchainSettings.functionalitySettings.copy(daoAddress = Some(daoAddress.toString)),
           rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
         )
       )
@@ -392,14 +337,14 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     withDomain(settingsWithFeatures) { d =>
       val grpcApi = getGrpcApi(d)
 
-      checks(daoAddress, xtnBuybackAddress, d, grpcApi)
+      checks(daoAddress, d, grpcApi)
     }
   }
 
   private def getExpectedRewardShares(height: Int, miner: Address, blockchain: Blockchain): Seq[RewardShare] = {
     val expectedRewardShares = BlockRewardCalculator.getSortedBlockRewardShares(height, miner, blockchain)
     expectedRewardShares.map { case (addr, reward) =>
-      RewardShare(ByteString.copyFrom(addr.bytes), reward)
+      RewardShare(ByteString.copyFrom(addr.toBytes()), reward)
     }
   }
 }

@@ -35,8 +35,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
               recipient -> amount
             ),
             fee = 10000,
-            timestamp = nextTs,
-            
+            timestamp = nextTs
           )
         )
       case _ =>
@@ -251,9 +250,9 @@ class RollbackSpec extends FreeSpec with WithDomain {
         def leases(address: Address) = d.accountsApi.activeLeases(address).toListL.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
 
         val leaseTxs = Seq.fill(5)(lease(defaultSigner, secondAddress)) ++ Seq.fill(5)(lease(secondSigner, defaultAddress))
-        val info = leaseTxs.map {tx =>
-            LeaseInfo(tx.id(), TransactionId(tx.id()), tx.sender.toAddress, tx.recipient.asInstanceOf[Address], tx.amount.value, Height(2), Active)
-          }
+        val info = leaseTxs.map { tx =>
+          LeaseInfo(tx.id(), TransactionId(tx.id()), tx.sender.toAddress, tx.recipient.asInstanceOf[Address], tx.amount.value, Height(2), Active)
+        }
 
         val b1 = d.appendBlock(leaseTxs*)
         leases(defaultAddress) should contain theSameElementsAs info

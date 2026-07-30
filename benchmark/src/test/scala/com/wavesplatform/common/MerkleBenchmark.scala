@@ -31,15 +31,15 @@ object MerkleBenchmark {
   @State(Scope.Benchmark)
   class MerkleTreeData {
     @Param(Array("2", "4", "8", "16"))
-    var depth = 0
-    var expr: EXPR = uninitialized
+    var depth         = 0
+    var expr: EXPR    = uninitialized
     var root: ByteStr = uninitialized
 
     @Setup def setup(): Unit = {
       val leaves = (1 to BigInt(2).pow(depth).toInt).map(i => Ints.toByteArray(i))
       val levels = mkLevels(leaves)
       val proofs = mkProofs(leaves.size - 1, levels)
-      val item = fastHash(Ints.toByteArray(leaves.size))
+      val item   = fastHash(Ints.toByteArray(leaves.size))
       root = ByteStr(levels.head.head)
       expr = FUNCTION_CALL(
         Native(FunctionIds.CREATE_MERKLE_ROOT),

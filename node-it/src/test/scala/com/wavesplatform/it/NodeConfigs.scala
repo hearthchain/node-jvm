@@ -1,13 +1,23 @@
 package com.wavesplatform.it
 
 import com.typesafe.config.{Config, ConfigFactory}
+import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.features.BlockchainFeature
+import com.wavesplatform.transaction.Asset.IssuedAsset
 
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
 import com.wavesplatform.state.Height
 
 object NodeConfigs {
+
+  /** Assets declared in template.conf's `genesis.assets` - there is no issue transaction any more, so a test that
+    * needs an existing non-WAVES asset has to reference one of these instead of minting one at runtime.
+    */
+  object GenesisAssets {
+    val TestAsset: IssuedAsset    = IssuedAsset(ByteStr.decodeBase58("9PgUiAftSxvtUGiefVGm2wyVDt5XRqxmHNoaNwEMGDJK").get)
+    val TestNftAsset: IssuedAsset = IssuedAsset(ByteStr.decodeBase58("AVNrpFeW7pzgthvuingmJE7SpWBXaGpHkHYEQzco87ij").get)
+  }
 
   private val NonConflictingNodes = Set(1, 4, 6, 7)
 

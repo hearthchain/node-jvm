@@ -124,19 +124,18 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
       })
   }
 
-  "should blacklist if some blocks didn't arrive in due time" in withExtensionLoader(Seq.tabulate(100)(ref), 1.second) {
-    (_, blocks, sigs, ccsw, _) =>
-      val ch = new EmbeddedChannel()
+  "should blacklist if some blocks didn't arrive in due time" in withExtensionLoader(Seq.tabulate(100)(ref), 1.second) { (_, blocks, sigs, ccsw, _) =>
+    val ch = new EmbeddedChannel()
 
-      test(for {
-        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
-        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
-        _ <- send(sigs)((ch, BlockIds(Range(97, 102).map(ref))))
-        _ = ch.readOutbound[GetBlock].id shouldBe ref(100)
-        _ = ch.readOutbound[GetBlock].id shouldBe ref(101)
-        _ <- send(blocks)((ch, block(100)))
-        _ <- ch.closeF()
-      } yield ())
+    test(for {
+      _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+      _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+      _ <- send(sigs)((ch, BlockIds(Range(97, 102).map(ref))))
+      _ = ch.readOutbound[GetBlock].id shouldBe ref(100)
+      _ = ch.readOutbound[GetBlock].id shouldBe ref(101)
+      _ <- send(blocks)((ch, block(100)))
+      _ <- ch.closeF()
+    } yield ())
   }
 
   "should process received extension" in {

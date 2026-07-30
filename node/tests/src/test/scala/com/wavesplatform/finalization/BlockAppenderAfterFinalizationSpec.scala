@@ -20,10 +20,9 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
   protected val notCommittedGeneratorAddr = notCommittedGenerator.toAddress
 
   private val defaultSettings = DomainPresets.DeterministicFinality
-
     .configure(
       _.copy(
-        generationPeriodLength = 2,
+        generationPeriodLength = 2
       )
     )
 
@@ -187,7 +186,7 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
         // starting right after that, so that has to be the period length too.
         defaultSettings.configure(
           _.copy(
-            generationPeriodLength = 1001,
+            generationPeriodLength = 1001
           )
         ),
         AddrWithBalance.enoughBalances(committedGenerator1) :+ AddrWithBalance(

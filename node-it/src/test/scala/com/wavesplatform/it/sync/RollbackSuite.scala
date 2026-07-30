@@ -4,8 +4,7 @@ import com.typesafe.config.Config
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.*
 import com.wavesplatform.it.api.SyncHttpApi.*
-import com.wavesplatform.state.{BooleanDataEntry, Height, IntegerDataEntry}
-import com.wavesplatform.transaction.TxVersion
+import com.wavesplatform.state.Height
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.Await
@@ -21,8 +20,6 @@ class RollbackSuite extends BaseFunSuite with TransferSending with TableDrivenPr
   )
 
   private lazy val nodeAddresses = nodeConfigs.map(_.getString("address")).toSet
-
-  private def notMinerAddress: String = notMiner.address
 
   test("Apply the same transfer transactions twice with return to UTX") {
 
@@ -70,90 +67,6 @@ class RollbackSuite extends BaseFunSuite with TransferSending with TableDrivenPr
 
     stateAfterApply should contain theSameElementsAs stateBeforeApply
 
-  }
-
-  test("Alias transaction rollback should work fine") {
-    val alias = "test_alias4"
-
-    val aliasTxId = sender.createAlias(notMiner.keyPair, alias, transferAmount).id
-    nodes.waitForHeightAriseAndTxPresent(aliasTxId)
-
-    val txsBefore = sender.transactionsByAddress(notMinerAddress, 10)
-
-    val txHeight = Height(sender.waitForTransaction(aliasTxId).height)
-
-    nodes.rollback(txHeight - 1, returnToUTX = false)
-    nodes.waitForHeight(txHeight + 1)
-
-    val secondAliasTxId = sender.createAlias(notMiner.keyPair, alias, transferAmount).id
-    nodes.waitForHeightAriseAndTxPresent(secondAliasTxId)
-    sender.transactionsByAddress(notMinerAddress, 10) shouldNot contain theSameElementsAs txsBefore
-
-  }
-
-  test("Data transaction rollback") {
-    val node       = nodes.head
-    val entry1     = IntegerDataEntry("1", 0)
-    val entry2     = BooleanDataEntry("2", value = true)
-    val entry3     = IntegerDataEntry("1", 1)
-    val txsBefore0 = sender.transactionsByAddress(notMinerAddress, 10)
-
-    val tx1 = sender.putData(notMiner.keyPair, List(entry1), calcDataFee(List(entry1), TxVersion.V1)).id
-    nodes.waitForHeightAriseAndTxPresent(tx1)
-    val txsBefore1 = sender.transactionsByAddress(notMinerAddress, 10)
-
-    val tx1height = Height(sender.waitForTransaction(tx1).height)
-
-    val tx2 = sender.putData(notMiner.keyPair, List(entry2, entry3), calcDataFee(List(entry2, entry3), TxVersion.V1)).id
-    nodes.waitForHeightAriseAndTxPresent(tx2)
-
-    val data2 = sender.getData(notMinerAddress)
-    assert(data2 == List(entry3, entry2))
-
-    nodes.rollback(tx1height, returnToUTX = false)
-    nodes.waitForSameBlockHeadersAt(tx1height)
-
-    val data1 = node.getData(notMinerAddress)
-    assert(data1 == List(entry1))
-    sender.transactionsByAddress(notMinerAddress, 10) should contain theSameElementsAs txsBefore1
-
-    nodes.rollback(tx1height - 1, returnToUTX = false)
-    nodes.waitForSameBlockHeadersAt(tx1height - 1)
-
-    val data0 = node.getData(notMinerAddress)
-    assert(data0 == List.empty)
-    sender.transactionsByAddress(notMinerAddress, 10) should contain theSameElementsAs txsBefore0
-  }
-
-  test("Sponsorship transaction rollback") {
-    val sponsorAssetTotal = 100 * 100L
-
-    val sponsorAssetId =
-      sender
-        .issue(notMiner.keyPair, "SponsoredAsset", "For test usage", sponsorAssetTotal, reissuable = false, fee = issueFee)
-        .id
-    nodes.waitForHeightAriseAndTxPresent(sponsorAssetId)
-
-    val sponsorId = sender.sponsorAsset(notMiner.keyPair, sponsorAssetId, baseFee = 100L, fee = issueFee).id
-    nodes.waitForHeightAriseAndTxPresent(sponsorId)
-
-    val height     = sender.waitForTransaction(sponsorId).height
-    val txsBefore1 = sender.transactionsByAddress(notMinerAddress, 10)
-
-    val assetDetailsBefore = sender.assetsDetails(sponsorAssetId)
-
-    nodes.waitForHeightArise()
-    val sponsorSecondId = sender.sponsorAsset(notMiner.keyPair, sponsorAssetId, baseFee = 2 * 100L, fee = issueFee).id
-    nodes.waitForHeightAriseAndTxPresent(sponsorSecondId)
-
-    nodes.rollback(Height(height), returnToUTX = false)
-
-    nodes.waitForHeightArise()
-
-    val assetDetailsAfter = sender.assetsDetails(sponsorAssetId)
-
-    assert(assetDetailsAfter.minSponsoredAssetFee == assetDetailsBefore.minSponsoredAssetFee)
-    sender.transactionsByAddress(notMinerAddress, 10) should contain theSameElementsAs txsBefore1
   }
 
   forAll(

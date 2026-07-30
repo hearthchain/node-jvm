@@ -36,7 +36,7 @@ class BlocksApiGrpcImpl(commonApi: CommonBlocksApi)(implicit sc: Scheduler) exte
 
     responseObserver.completeWith(request.filter match {
       case Filter.GeneratorPublicKey(publicKey) => stream.filter(_.getBlock.getHeader.generator.toPublicKey == publicKey.toPublicKey)
-      case Filter.GeneratorAddress(address)     => stream.filter(_.getBlock.getHeader.generator.toAddress() == address.toAddress())
+      case Filter.GeneratorAddress(address)     => stream.filter(_.getBlock.getHeader.generator.toAddress == address.toAddress)
       case Filter.Empty                         => stream
     })
   }
@@ -72,7 +72,7 @@ object BlocksApiGrpcImpl {
       Some(PBBlock(Some(blockMeta.header.toPBHeader), blockMeta.signature.toByteString, txs.map(_._2.toPB))),
       blockMeta.height,
       blockMeta.vrf.fold(ByteString.EMPTY)(_.toByteString),
-      blockMeta.rewardShares.map { case (addr, reward) => RewardShare(ByteString.copyFrom(addr.bytes), reward) }
+      blockMeta.rewardShares.map { case (addr, reward) => RewardShare(addr.toByteString, reward) }
     )
   }
 
@@ -81,6 +81,6 @@ object BlocksApiGrpcImpl {
       Some(PBBlock(Some(m.header.toPBHeader), m.signature.toByteString)),
       m.height,
       m.vrf.fold(ByteString.EMPTY)(_.toByteString),
-      m.rewardShares.map { case (addr, reward) => RewardShare(ByteString.copyFrom(addr.bytes), reward) }
+      m.rewardShares.map { case (addr, reward) => RewardShare(addr.toByteString, reward) }
     )
 }

@@ -149,8 +149,6 @@ object EnvironmentFunctionsBenchmark {
 
   val bytes8Kb: Array[Byte] = ("FEDCBA9876543210" * (8 * 1024 / 16)).getBytes(StandardCharsets.UTF_8)
 
-  
-
   def randomAddress: ByteStr = ByteStr(Common.addressFromPublicKey(ChainId, randomBytes(Curve25519.KeyLength)))
 
   def hashTest[T](f: Array[Byte] => T): T           = f(randomBytes(DataBytesLength))

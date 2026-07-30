@@ -16,7 +16,7 @@ import java.util.concurrent.Semaphore
 trait HasFatalStopProbe {
 
   protected class FatalStopProbe(expected: ApplicationStopReason) {
-    private val signal                        = new Semaphore(0)
+    private val signal                                          = new Semaphore(0)
     @volatile private var reason: Option[ApplicationStopReason] = None
 
     /** Pass as the component's `onFatalStop`. */

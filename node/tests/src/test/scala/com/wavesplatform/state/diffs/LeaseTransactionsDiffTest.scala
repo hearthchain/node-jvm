@@ -29,9 +29,9 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
   def total(l: LeaseBalance): Long = l.in - l.out
 
   property("can lease/cancel lease preserving waves invariant") {
-    val sender    = TxHelpers.signer(2)
-    val recipient = TxHelpers.signer(3)
-    val miner     = TestBlock.defaultSigner.toAddress
+    val sender        = TxHelpers.signer(2)
+    val recipient     = TxHelpers.signer(3)
+    val miner         = TestBlock.defaultSigner.toAddress
     val senderBalance = Seq(AddrWithBalance(sender.toAddress))
     for {
       lease       <- Seq(TxHelpers.lease(sender, recipient.toAddress), TxHelpers.lease(sender, recipient.toAddress))

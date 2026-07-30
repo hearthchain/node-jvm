@@ -44,7 +44,8 @@ class LightNodeBlockFieldsTest extends PropSpec with WithMiner {
         miner.appenderScheduler,
         Observable.empty
       )
-      def appendBlock(ref: Option[ByteStr]) = append(miner.forgeBlock(signer, TxHelpers.vrfKeyOf(signer), ref).toEither.explicitGet().newBlock).explicitGet()
+      def appendBlock(ref: Option[ByteStr]) =
+        append(miner.forgeBlock(signer, TxHelpers.vrfKeyOf(signer), ref).toEither.explicitGet().newBlock).explicitGet()
       def appendMicro() = {
         d.utxPool.putIfNew(transfer(from = signer)).resultE.explicitGet()
         microBlockMiner.generateOneMicroBlockTask(signer, d.lastBlock, Unlimited, 0).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))

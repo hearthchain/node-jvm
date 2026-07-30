@@ -55,7 +55,7 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
         )
         import Scheduler.Implicits.global
         val startTime = System.nanoTime()
-        val tx = transfer()
+        val tx        = transfer()
         utxPool.putIfNew(tx).resultE.explicitGet()
         val result = task.runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
         result match {
@@ -114,8 +114,8 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
           // so nothing was ever appended and the test waited for a micro block that could not exist
           val (txs, constraint, stateHash) = inner.packUnconfirmed(rest, prevStateHash, strategy, cancelled)
           val waitingConstraint = new MiningConstraint {
-            def isFull: Boolean = { eventHasBeenSent.await(60, TimeUnit.SECONDS); constraint.isFull }
-            def isOverfilled: Boolean                                                   = constraint.isOverfilled
+            def isFull: Boolean       = { eventHasBeenSent.await(60, TimeUnit.SECONDS); constraint.isFull }
+            def isOverfilled: Boolean = constraint.isOverfilled
             def put(b: Blockchain, tx: Transaction, s: StateSnapshot): MiningConstraint = constraint.put(b, tx, s)
           }
           (txs, waitingConstraint, stateHash)

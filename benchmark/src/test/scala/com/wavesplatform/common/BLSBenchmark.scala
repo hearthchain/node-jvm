@@ -23,8 +23,8 @@ class BLSBenchmark {
 @State(Scope.Benchmark)
 class EndorsementSt {
   @Param(Array("32", "64", "128"))
-  var generatorCount                   = 0
-  var publicKeys                       = Seq.empty[BlsPublicKey]
+  var generatorCount                    = 0
+  var publicKeys                        = Seq.empty[BlsPublicKey]
   var aggregatedSignature: BlsSignature = uninitialized
   val message: Array[Byte] = {
     val bs = new Array[Byte](64)
