@@ -1,0 +1,97 @@
+package tech.hearth.finalization
+
+import tech.hearth.block.Block.BlockId
+import tech.hearth.block.{BlockEndorsement, FinalizationVoting}
+import tech.hearth.crypto.bls.BlsSignature
+import tech.hearth.db.WithDomain
+import tech.hearth.history.Domain
+import tech.hearth.state.{BalanceSnapshot, ConflictGenerators, GeneratorIndex, GenesisBlockHeight, Height}
+import tech.hearth.test.{FreeSpec, WithResourceManager}
+import tech.hearth.transaction.{CommitToGenerationTransaction, TxHelpers}
+import org.scalactic.source.Position
+import org.scalatest.EitherValues
+import tech.hearth.crypto.SigningKey
+
+trait BaseFinalizationSpec extends FreeSpec, WithDomain, WithResourceManager, EitherValues {
+  protected def mkConflictGenerators(h: Int, idxs: Int*): ConflictGenerators =
+    ConflictGenerators.empty.appendAll(Height(h), GeneratorIndex.seq(idxs)*)
+
+  protected def mkFinalizationVoting(
+      valid: Seq[GeneratorIndex] = Nil,
+      finalizedHeight: Height = GenesisBlockHeight,
+      conflict: Seq[BlockEndorsement] = Nil
+  ): FinalizationVoting = FinalizationVoting(valid, finalizedHeight, aggregatedEndorsement = None, conflict)
+
+  protected def mkConflictEndorsement(
+      wavesAcc: SigningKey,
+      idx: GeneratorIndex,
+      endorsedId: BlockId,
+      finalizedHeight: Height = GenesisBlockHeight,
+      finalizedId: BlockId = TxHelpers.randomBlockId
+  ): BlockEndorsement = BlockEndorsement.signed(
+    TxHelpers.blsKeyOf(wavesAcc),
+    idx,
+    finalizedId,
+    finalizedHeight = finalizedHeight,
+    endorsedId = endorsedId
+  )
+
+  protected def bs(height: Int, regularBalance: Long, deposits: Int = 0): BalanceSnapshot =
+    BalanceSnapshot(Height(height), regularBalance, 0L, 0L, CommitToGenerationTransaction.DepositInWavelets * deposits)
+
+  extension (self: FinalizationVoting) {
+    def withConflict(
+        wavesAcc: SigningKey,
+        idx: GeneratorIndex,
+        endorsedId: BlockId,
+        finalizedHeight: Height = GenesisBlockHeight,
+        finalizedId: BlockId = TxHelpers.randomBlockId
+    ): FinalizationVoting = self.copy(conflict = self.conflict :+ mkConflictEndorsement(wavesAcc, idx, endorsedId, finalizedHeight, finalizedId))
+
+    def signed(endorsedId: BlockId, finalizedId: BlockId, validEndorsers: SigningKey*): FinalizationVoting = {
+      val aggSig = validEndorsers
+        .map { kp =>
+          BlockEndorsement.sign(
+            TxHelpers.blsKeyOf(kp),
+            finalizedId = finalizedId,
+            finalizedHeight = GenesisBlockHeight,
+            endorsedId = endorsedId
+          )
+        }
+        .foldLeft(Option.empty[BlsSignature]) {
+          case (None, s)    => Some(s)
+          case (Some(r), s) => Some(BlsSignature.agg(Seq(r, s)).value)
+        }
+
+      self.copy(aggregatedEndorsement = aggSig)
+    }
+  }
+
+  extension (d: Domain)(using Position) {
+    def finalizedHeightIsEmpty(): Domain = withClue("finalizedHeightIsEmpty: ") {
+      d.blockchain.finalizedHeight shouldBe empty
+      d
+    }
+
+    def finalizedHeightIs(h: Int): Domain = withClue("finalizedHeightIs: ") {
+      d.blockchain.finalizedHeight.value.toInt shouldBe h
+      d
+    }
+
+    def finalizedHeightAtPrevIsEmpty(): Domain = withClue("finalizedHeightAtIsEmpty: ") {
+      val prevHeight = Height(d.blockchain.height - 1)
+      if (prevHeight >= GenesisBlockHeight) d.blockchain.finalizedHeightAt(prevHeight) shouldBe empty
+      d
+    }
+
+    def finalizedHeightAtPrevIs(h: Int): Domain = withClue("finalizedHeightAtIs: ") {
+      val prevHeight = Height(d.blockchain.height - 1)
+      d.blockchain.finalizedHeightAt(prevHeight).value.toInt shouldBe h
+      d
+    }
+
+    def allFinalizedHeightIs(h: Int): Domain = d
+      .finalizedHeightIs(h)
+      .finalizedHeightAtPrevIs(h)
+  }
+}

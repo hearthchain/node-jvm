@@ -167,7 +167,7 @@ object Tasks {
 
     val sourceStr =
       s"""
-         | package com.wavesplatform
+         | package tech.hearth
          |
          | object DocSource {
          |   private val regex = "\\\\[(.+?)\\\\]\\\\(.+?\\\\)".r
@@ -181,7 +181,7 @@ object Tasks {
          | }
       """.stripMargin
 
-    val rawDocFile = (Compile / sourceManaged).value / "com" / "wavesplatform" / "DocSource.scala"
+    val rawDocFile = (Compile / sourceManaged).value / "tech" / "hearth" / "DocSource.scala"
 
     IO.write(rawDocFile, sourceStr)
     Seq(rawDocFile)

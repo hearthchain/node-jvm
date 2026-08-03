@@ -5,8 +5,8 @@ name := "waves-grpc-server"
 libraryDependencies ++= Dependencies.grpc
 
 extensionClasses ++= Seq(
-  "com.wavesplatform.api.grpc.GRPCServerExtension",
-  "com.wavesplatform.events.BlockchainUpdates"
+  "tech.hearth.api.grpc.GRPCServerExtension",
+  "tech.hearth.events.BlockchainUpdates"
 )
 
 inConfig(Compile)(

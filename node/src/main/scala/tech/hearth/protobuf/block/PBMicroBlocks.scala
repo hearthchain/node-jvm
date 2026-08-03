@@ -1,0 +1,55 @@
+package tech.hearth.protobuf.block
+
+import tech.hearth.account.PublicKey
+import tech.hearth.block.Block.BlockId
+import tech.hearth.common.state.ByteStr
+import tech.hearth.common.utils.EitherExt2.*
+import tech.hearth.network.MicroBlockResponse
+import tech.hearth.protobuf.*
+import tech.hearth.protobuf.transaction.PBTransactions
+
+import scala.util.{Failure, Success, Try}
+
+object PBMicroBlocks {
+  def vanilla(signedMicro: PBSignedMicroBlock): Try[MicroBlockResponse] = Try {
+    require(signedMicro.microBlock.isDefined, "microblock is missing")
+    val microBlock   = signedMicro.getMicroBlock
+    val transactions = microBlock.transactions.map(PBTransactions.vanilla(_).explicitGet())
+
+    val finalizationVoting = microBlock.finalizationVoting.map { x =>
+      PBFinalizationVotings.vanilla(x) match {
+        case Failure(e) => throw new RuntimeException(s"Can't decode $x as a vanilla finalization voting: ${e.getMessage}", e)
+        case Success(x) => x
+      }
+    }
+
+    MicroBlockResponse(
+      VanillaMicroBlock(
+        PublicKey(microBlock.senderPublicKey.toByteArray),
+        transactions,
+        microBlock.reference.toByteStr,
+        microBlock.updatedBlockSignature.toByteStr,
+        signedMicro.signature.toByteStr,
+        Option.unless(microBlock.stateHash.isEmpty)(microBlock.stateHash.toByteStr),
+        finalizationVoting
+      ),
+      signedMicro.totalBlockId.toByteStr
+    )
+  }
+
+  def protobufUnsigned(microBlock: VanillaMicroBlock): PBMicroBlock = PBMicroBlock(
+    reference = microBlock.reference.toByteString,
+    updatedBlockSignature = microBlock.wholeBlockSignature.toByteString,
+    senderPublicKey = microBlock.sender.toByteString,
+    transactions = microBlock.transactionData.map(PBTransactions.protobuf),
+    stateHash = microBlock.stateHash.getOrElse(ByteStr.empty).toByteString,
+    finalizationVoting = microBlock.finalizationVoting.map(PBFinalizationVotings.protobuf)
+  )
+
+  def protobuf(microBlock: VanillaMicroBlock, totalBlockId: BlockId): PBSignedMicroBlock =
+    new PBSignedMicroBlock(
+      microBlock = Some(protobufUnsigned(microBlock)),
+      signature = microBlock.signature.toByteString,
+      totalBlockId = totalBlockId.toByteString
+    )
+}

@@ -1,0 +1,627 @@
+package tech.hearth.http
+
+import tech.hearth.TestWallet
+import tech.hearth.account.PublicKey
+import tech.hearth.api.BlockMeta
+import tech.hearth.api.common.CommonBlocksApi
+import tech.hearth.api.http.ApiError.TooBigArrayAllocation
+import tech.hearth.api.http.{BlocksApiRoute, CustomJson, RouteTimeout}
+import tech.hearth.block.serialization.BlockHeaderSerializer
+import tech.hearth.block.{Block, BlockEndorsement, BlockHeader, FinalizationVoting}
+import tech.hearth.common.state.ByteStr
+import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.EitherExt2.explicitGet
+import tech.hearth.crypto.bls.BlsSignature
+import tech.hearth.db.WithDomain
+import tech.hearth.db.WithState.AddrWithBalance
+import tech.hearth.lagonaki.mocks.TestBlock
+import tech.hearth.state.{BlockRewardCalculator, Blockchain, GeneratorIndex, Height}
+import tech.hearth.test.*
+import tech.hearth.test.DomainPresets.*
+import tech.hearth.settings.GenesisAssetSettings
+import tech.hearth.state.diffs.ENOUGH_AMT
+import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.assets.exchange.{Order, OrderType}
+import tech.hearth.transaction.TxHelpers
+import tech.hearth.utils.{SharedSchedulerMixin, SystemTime}
+import monix.reactive.Observable
+import org.apache.pekko.http.scaladsl.model.StatusCodes
+import org.apache.pekko.http.scaladsl.model.headers.Accept
+import org.apache.pekko.http.scaladsl.server.Route
+import org.scalactic.source.Position
+import org.scalamock.scalatest.PathMockFactory
+import org.scalatest.Assertion
+import play.api.libs.json.*
+
+import scala.concurrent.duration.*
+import scala.util.Random
+
+class BlocksApiRouteSpec
+    extends RouteSpec("/blocks")
+    with PathMockFactory
+    with RestAPISettingsHelper
+    with TestWallet
+    with WithDomain
+    with SharedSchedulerMixin {
+  private val blocksApi = mock[CommonBlocksApi]
+  private val blocksApiRoute: BlocksApiRoute =
+    BlocksApiRoute(restAPISettings, blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler))
+  private val route = blocksApiRoute.route
+
+  private val testBlock1     = TestBlock.create(Nil).block
+  private val testBlock2     = TestBlock.create(Nil).block
+  private val finalizedBlock = TestBlock.create(Nil).block
+
+  private val testBlock1Json = testBlock1.json() ++ Json.obj("height" -> 1, "totalFee" -> 0L)
+  private val testBlock2Json = testBlock2.json() ++ Json.obj(
+    "height"       -> 2,
+    "totalFee"     -> 0L,
+    "reward"       -> 5,
+    "rewardShares" -> Json.obj(testBlock2.header.generator.toAddress.toString -> 5),
+    "VRF"          -> testBlock2.id().toString
+  )
+
+  private val testBlock1HeaderJson = BlockHeaderSerializer.toJson(testBlock1.header, testBlock1.bytes().length, 0, testBlock1.signature) ++ Json.obj(
+    "height"   -> 1,
+    "totalFee" -> 0L
+  )
+
+  private val testBlock2HeaderJson = BlockHeaderSerializer.toJson(testBlock2.header, testBlock2.bytes().length, 0, testBlock2.signature) ++ Json.obj(
+    "height"       -> 2,
+    "totalFee"     -> 0L,
+    "reward"       -> 5,
+    "rewardShares" -> Json.obj(testBlock2.header.generator.toAddress.toString -> 5),
+    "VRF"          -> testBlock2.id().toString
+  )
+
+  private val testBlsSignature1Str =
+    "x99KGXzbggNGNcwzLXLYDKUWsv8b5aU8S7ZqEyN6XNQygZQT1TSvQtxbHFYEg1YAyUpNtrMVnC3ZJpGbaD1exSfArs63KxRa1dZ5WQAHuGKo1HLDKcCwamAtK3QZpRc31u5"
+  private val testBlsSignature1 = BlsSignature(Base58.decode(testBlsSignature1Str)).explicitGet()
+
+  private val testBlsSignature2Str =
+    "zXSA7BYmQeMmA7xyxb7XuctvkAVa5bNytzmSMmvHXYwZwnf1JnFxDLugfeXAn7ywEnXJGk6y87y6XxRBN2yw3xqBSn39EajJNCjDVNBoCWm8DUr6T6TMxwv4Dd5y6MebeAs"
+  private val testBlsSignature2 = BlsSignature(Base58.decode(testBlsSignature2Str)).explicitGet()
+
+  private val finalizedBlockHeaderJson =
+    BlockHeaderSerializer.toJson(finalizedBlock.header, finalizedBlock.bytes().length, 0, finalizedBlock.signature) ++ Json.obj(
+      "height"       -> 3,
+      "totalFee"     -> 0L,
+      "reward"       -> 5,
+      "rewardShares" -> Json.obj(finalizedBlock.header.generator.toAddress.toString -> 5),
+      "VRF"          -> finalizedBlock.id().toString,
+      "finalizationVoting" -> Json.obj(
+        "endorserIndexes"                -> Seq(1, 0),
+        "finalizedHeight"                -> 1,
+        "aggregatedEndorsementSignature" -> testBlsSignature1Str,
+        "conflictEndorsements" -> Seq(
+          Json.obj(
+            "endorserIndex"    -> 0,
+            "finalizedBlockId" -> testBlock2.id(),
+            "finalizedHeight"  -> 1,
+            "signature"        -> testBlsSignature2Str
+          )
+        )
+      )
+    )
+
+  private val testBlock1Meta = BlockMeta.fromBlock(testBlock1, 1, 0L, None, None)
+  private val testBlock2Meta =
+    BlockMeta.fromBlock(testBlock2, 2, 0L, Some(5), Some(testBlock2.id())).copy(rewardShares = Seq(testBlock2.header.generator.toAddress -> 5))
+
+  private val finalizedBlockMeta = {
+    val orig = BlockMeta.fromBlock(finalizedBlock, 3, 0L, Some(5), Some(finalizedBlock.id()))
+    orig.copy(
+      rewardShares = Seq(finalizedBlock.header.generator.toAddress -> 5),
+      header = orig.header.copy(
+        finalizationVoting = Some(
+          FinalizationVoting(
+            valid = GeneratorIndex.unsafeSeq(Seq(1, 0)),
+            aggregatedEndorsement = Some(testBlsSignature1),
+            finalizedHeight = Height(1),
+            conflict = Vector(
+              BlockEndorsement(
+                endorserIndex = GeneratorIndex(0),
+                finalizedId = testBlock2.id(),
+                finalizedHeight = Height(1),
+                endorsedId = testBlock1.id(),
+                signature = testBlsSignature2
+              )
+            )
+          )
+        )
+      )
+    )
+  }
+
+  private val invalidBlockId = ByteStr(new Array[Byte](32))
+  (blocksApi.block).expects(invalidBlockId).returning(None).anyNumberOfTimes()
+  (blocksApi.meta).expects(invalidBlockId).returning(None).anyNumberOfTimes()
+
+  routePath("/last") in {
+    (() => blocksApi.currentHeight).expects().returning(Height(2)).once()
+    (blocksApi.blockAtHeight).expects(Height(2)).returning(Some(testBlock2Meta -> Seq.empty)).once()
+    Get(routePath("/last")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock2Json
+    }
+  }
+
+  routePath("/at/{height}") in {
+    (blocksApi.blockAtHeight).expects(Height(1)).returning(Some(testBlock1Meta -> Seq.empty)).once()
+    Get(routePath("/at/1")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock1Json
+    }
+
+    (blocksApi.blockAtHeight).expects(Height(2)).returning(Some(testBlock2Meta -> Seq.empty)).once()
+    Get(routePath("/at/2")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock2Json
+    }
+
+    (blocksApi.blockAtHeight).expects(Height(3)).returning(None).once()
+    Get(routePath("/at/3")) ~> route ~> check {
+      response.status shouldBe StatusCodes.NotFound
+      responseAs[String] should include("block does not exist")
+    }
+  }
+
+  routePath("/{id}") in {
+    (blocksApi.block).expects(testBlock1.id()).returning(Some(testBlock1Meta -> Seq.empty)).once()
+    (blocksApi.block).expects(testBlock2.id()).returning(Some(testBlock2Meta -> Seq.empty)).once()
+
+    Get(routePath(s"/${testBlock1.id()}")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock1Json
+    }
+
+    Get(routePath(s"/${testBlock2.id()}")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock2Json
+    }
+
+    Get(routePath(s"/$invalidBlockId")) ~> route ~> check {
+      response.status.isFailure() shouldBe true
+      responseAs[String] should include("block does not exist")
+    }
+  }
+
+  routePath("/seq/{from}/{to}") in {
+    (blocksApi
+      .blocksRange(_: Height, _: Height))
+      .expects(Height(1), Height(2))
+      .returning(
+        Observable.fromIterable(
+          Seq(
+            testBlock1Meta -> Seq.empty,
+            testBlock2Meta -> Seq.empty
+          )
+        )
+      )
+    Get(routePath("/seq/1/2")) ~> route ~> check {
+      val response = responseAs[Seq[JsObject]]
+      response shouldBe Seq(testBlock1Json, testBlock2Json)
+    }
+  }
+
+  routePath("/headers/last") in {
+    (() => blocksApi.currentHeight).expects().returning(Height(2)).once()
+    (blocksApi.metaAtHeight).expects(Height(2)).returning(Some(testBlock2Meta)).once()
+    Get(routePath("/headers/last")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock2HeaderJson
+    }
+  }
+
+  routePath("/headers/finalized") in {
+    (() => blocksApi.currentFinalizedHeight).expects().returning(Height(3)).once()
+    (blocksApi.metaAtHeight).expects(Height(3)).returning(Some(finalizedBlockMeta)).once()
+    Get(routePath("/headers/finalized")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe finalizedBlockHeaderJson
+    }
+  }
+
+  routePath("/finalized/at/{height}") in {
+    (blocksApi.finalizedHeightAt).expects(Height(4)).returning(Some(Height(3))).once()
+    Get(routePath("/finalized/at/4")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe Json.obj("height" -> 3)
+    }
+  }
+
+  routePath("/headers/{id}") in {
+    (blocksApi.meta).expects(testBlock1.id()).returning(Some(testBlock1Meta)).once()
+    (blocksApi.meta).expects(testBlock2.id()).returning(Some(testBlock2Meta)).once()
+
+    Get(routePath(s"/headers/${testBlock1.id()}")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock1HeaderJson
+      response
+    }
+
+    Get(routePath(s"/headers/${testBlock2.id()}")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock2HeaderJson
+    }
+
+    Get(routePath(s"/headers/$invalidBlockId")) ~> route ~> check {
+      response.status.isFailure() shouldBe true
+      responseAs[String] should include("block does not exist")
+    }
+  }
+
+  routePath("/headers/at/{height}") in {
+    (blocksApi.metaAtHeight).expects(Height(1)).returning(Some(testBlock1Meta)).once()
+    (blocksApi.metaAtHeight).expects(Height(2)).returning(Some(testBlock2Meta)).once()
+    (blocksApi.metaAtHeight).expects(Height(3)).returning(None).once()
+
+    Get(routePath("/headers/at/1")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock1HeaderJson
+    }
+
+    Get(routePath("/headers/at/2")) ~> route ~> check {
+      val response = responseAs[JsObject]
+      response shouldBe testBlock2HeaderJson
+    }
+
+    Get(routePath("/headers/at/3")) ~> route ~> check {
+      response.status shouldBe StatusCodes.NotFound
+      responseAs[String] should include("block does not exist")
+    }
+  }
+
+  routePath("/headers/seq/{from}/{to}") in {
+    (blocksApi.metaRange)
+      .expects(Height(1), Height(2))
+      .returning(
+        Observable.fromIterable(
+          Seq(
+            testBlock1Meta,
+            testBlock2Meta
+          )
+        )
+      )
+    Get(routePath("/headers/seq/1/2")) ~> route ~> check {
+      val response = responseAs[Seq[JsObject]]
+      response shouldBe Seq(testBlock1HeaderJson, testBlock2HeaderJson)
+    }
+  }
+
+  routePath("/delay/{blockId}/{number}") in {
+    val blocks = Vector(
+      Block(
+        BlockHeader(0, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, ByteStr.empty, None, None, None),
+        ByteStr(Random.nextBytes(64)),
+        Nil
+      ),
+      Block(
+        BlockHeader(1000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, ByteStr.empty, None, None, None),
+        ByteStr(Random.nextBytes(64)),
+        Nil
+      ),
+      Block(
+        BlockHeader(2000, ByteStr.empty, 0, ByteStr.empty, PublicKey(TxHelpers.defaultSigner.publicKey), Nil, ByteStr.empty, None, None, None),
+        ByteStr(Random.nextBytes(64)),
+        Nil
+      )
+    )
+
+    val blockchain = stub[Blockchain]
+    (blockchain.heightOf).when(blocks.last.id()).returning(Some(3))
+
+    def metaAt(height: Height): Option[BlockMeta] =
+      if (height >= Height(1) && height <= Height(3))
+        Some(BlockMeta(blocks(height.toInt - 1).header, ByteStr.empty, None, 1, 0, 0, 0, None, Seq.empty, None))
+      else None
+
+    val blocksApi = CommonBlocksApi(maxSyncRollbackLength = 100, blockchain, metaAt, _ => None)
+    val route     = blocksApiRoute.copy(commonApi = blocksApi).route
+    Get(routePath(s"/delay/${blocks.last.id()}/3")) ~> route ~> check {
+      val delay = (responseAs[JsObject] \ "delay").as[Int]
+      delay shouldBe 1000
+    }
+
+    Get(routePath(s"/delay/${blocks.last.id()}/1")) ~> route ~> check {
+      val delay = (responseAs[JsObject] \ "delay").as[Int]
+      delay shouldBe 1000
+    }
+
+    Get(routePath(s"/delay/${blocks.last.id()}/${BlocksApiRoute.MaxBlocksForDelay}")) ~> route ~> check {
+      response.status shouldBe StatusCodes.OK
+      val delay = (responseAs[JsObject] \ "delay").as[Int]
+      delay shouldBe 1000
+    }
+
+    Get(routePath(s"/delay/${blocks.last.id()}/${BlocksApiRoute.MaxBlocksForDelay + 1}")) ~> route ~> check {
+      response.status shouldBe StatusCodes.BadRequest
+      (responseAs[JsObject] \ "message").as[String] shouldBe TooBigArrayAllocation(BlocksApiRoute.MaxBlocksForDelay).message
+    }
+  }
+
+  routePath("/heightByTimestamp") - {
+    def emulateBlocks(blocks: IndexedSeq[Block]): CommonBlocksApi = {
+      require(blocks.nonEmpty)
+      val blocksApi = stub[CommonBlocksApi]
+      (() => blocksApi.currentHeight).when().returning(Height(blocks.length))
+      (blocksApi.metaAtHeight)
+        .when(*)
+        .onCall { (height: Int) =>
+          if (height < 1 || height > blocks.size) None
+          else {
+            val block = blocks(height - 1)
+            Some(BlockMeta(block.header, block.signature, None, height, 1, 0, 0L, None, Seq.empty, None))
+          }
+        }
+      blocksApi
+    }
+
+    "missing blocks" in {
+      (blocksApi.metaAtHeight).expects(Height(1)).returning(None).repeat(2)
+      (() => blocksApi.currentHeight).expects().returning(Height(5)).repeat(2)
+      Get(routePath(s"/heightByTimestamp/1")) ~> route ~> check {
+        responseAs[JsObject] shouldBe Json.parse("{\"error\":199,\"message\":\"State was altered\"}")
+      }
+    }
+
+    "ideal blocks" in {
+      val blocks = (1 to 10).map(i => TestBlock.create(i * 10, Nil).block)
+      val route  = blocksApiRoute.copy(commonApi = emulateBlocks(blocks)).route
+
+      Get(routePath(s"/heightByTimestamp/10")) ~> route ~> check {
+        val result = (responseAs[JsObject] \ "height").as[Int]
+        result shouldBe 1
+      }
+
+      Get(routePath(s"/heightByTimestamp/100")) ~> route ~> check {
+        val result = (responseAs[JsObject] \ "height").as[Int]
+        result shouldBe 10
+      }
+
+      Get(routePath(s"/heightByTimestamp/55")) ~> route ~> check {
+        val result = (responseAs[JsObject] \ "height").as[Int]
+        result shouldBe 5
+      }
+
+      Get(routePath(s"/heightByTimestamp/99")) ~> route ~> check {
+        val result = (responseAs[JsObject] \ "height").as[Int]
+        result shouldBe 9
+      }
+
+      Get(routePath(s"/heightByTimestamp/110")) ~> route ~> check {
+        val result = (responseAs[JsObject] \ "height").as[Int]
+        result shouldBe 10
+      }
+
+      Get(routePath(s"/heightByTimestamp/9")) ~> route ~> check {
+        responseAs[JsObject] shouldBe Json.parse("{\"error\":199,\"message\":\"Indicated timestamp is before the start of the blockchain\"}")
+      }
+
+      Get(routePath(s"/heightByTimestamp/${System.currentTimeMillis() + 10000}")) ~> route ~> check {
+        responseAs[JsObject] shouldBe Json.parse("{\"error\":199,\"message\":\"Indicated timestamp belongs to the future\"}")
+      }
+    }
+
+    "random blocks" in {
+      val (_, blocks) = (1 to 10).foldLeft((0L, Vector.empty[Block])) { case ((ts, blocks), _) =>
+        val newBlock = TestBlock.create(ts + 100 + Random.nextInt(10000), Nil).block
+        (newBlock.header.timestamp, blocks :+ newBlock)
+      }
+
+      val route = blocksApiRoute.copy(commonApi = emulateBlocks(blocks)).route
+
+      blocks.zipWithIndex.foreach { case (block, index) =>
+        Get(routePath(s"/heightByTimestamp/${block.header.timestamp}")) ~> route ~> check {
+          val result = (responseAs[JsObject] \ "height").as[Int]
+          result shouldBe (index + 1)
+        }
+      }
+    }
+  }
+
+  "NODE-968. Blocks API should return correct data for orders with attachment" in {
+    def checkOrderAttachment(blockInfo: JsObject, expectedAttachment: ByteStr): Assertion = {
+      implicit val byteStrFormat: Format[ByteStr] = tech.hearth.utils.byteStrFormat
+      ((blockInfo \ "transactions").as[JsArray].value.head.as[JsObject] \ "order1" \ "attachment").asOpt[ByteStr] shouldBe Some(expectedAttachment)
+    }
+
+    val sender = TxHelpers.signer(1)
+    val issuer = TxHelpers.signer(2)
+    // Nothing issues an asset any more, so the price asset of the pair comes from the genesis snapshot, held in full
+    // by the buyer - the side that pays with it
+    val priceAsset = IssuedAsset(ByteStr.fill(32)(7))
+    withDomain(
+      TransactionStateSnapshot,
+      balances = AddrWithBalance.enoughBalances(sender, issuer) :+
+        AddrWithBalance(TxHelpers.defaultAddress, ENOUGH_AMT, Map(priceAsset -> 1000L)),
+      assets = Seq(
+        GenesisAssetSettings(
+          id = priceAsset.id,
+          issuer = ByteStr(issuer.publicKey()).toString,
+          name = "Price",
+          decimals = 2,
+          quantity = 1000L
+        )
+      )
+    ) { d =>
+      val attachment = ByteStr.fill(32)(1)
+      val exchange =
+        TxHelpers.exchangeFromOrders(
+          TxHelpers.order(OrderType.BUY, Waves, priceAsset, version = Order.V4, attachment = Some(attachment)),
+          TxHelpers.order(OrderType.SELL, Waves, priceAsset, version = Order.V4, sender = issuer)
+        )
+
+      val exchangeBlock = d.appendBlock(exchange)
+      // The asset comes from the genesis snapshot rather than an issue transaction, so this block is one height lower
+      // than it used to be
+      val exchangeHeight = d.blockchain.height
+
+      val route = new BlocksApiRoute(
+        d.settings.restAPISettings,
+        d.blocksApi,
+        SystemTime,
+        new RouteTimeout(60.seconds)(using sharedScheduler)
+      ).route
+
+      Get("/blocks/last") ~> route ~> check {
+        checkOrderAttachment(responseAs[JsObject], attachment)
+      }
+
+      d.liquidAndSolidAssert { () =>
+        Get(s"/blocks/at/$exchangeHeight") ~> route ~> check {
+          checkOrderAttachment(responseAs[JsObject], attachment)
+        }
+
+        Get(s"/blocks/seq/$exchangeHeight/$exchangeHeight") ~> route ~> check {
+          checkOrderAttachment(responseAs[JsArray].value.head.as[JsObject], attachment)
+        }
+
+        Get(s"/blocks/address/${exchangeBlock.sender.toAddress}/$exchangeHeight/$exchangeHeight") ~> route ~> check {
+          checkOrderAttachment(responseAs[JsArray].value.head.as[JsObject], attachment)
+        }
+
+        Get(s"/blocks/${exchangeBlock.id()}") ~> route ~> check {
+          checkOrderAttachment(responseAs[JsObject], attachment)
+        }
+      }
+    }
+  }
+
+  "NODE-857. Block meta response should contain correct rewardShares field" in {
+    val daoAddress = TxHelpers.address(3)
+
+    val settings = DomainPresets.ConsensusImprovements
+    val settingsWithFeatures = settings
+      .copy(blockchainSettings =
+        settings.blockchainSettings.copy(
+          functionalitySettings = settings.blockchainSettings.functionalitySettings
+            .copy(daoAddress = Some(daoAddress.toString)),
+          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
+        )
+      )
+
+    withDomain(settingsWithFeatures) { d =>
+      val route = new BlocksApiRoute(d.settings.restAPISettings, d.blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler)).route
+
+      val miner = d.appendBlock().sender.toAddress
+
+      // Only the DAO takes a share of the reward: the XTN buy-back share was removed. The shares are the same at every
+      // height - `rewardSharesAt` pins both the distribution and the capped-reward activation heights at 1, so the
+      // regimes this used to walk through (whole reward to the miner, then a third to the DAO) cannot be reached.
+      val daoShare    = BlockRewardCalculator.MaxAddressReward
+      val minerShare  = d.blockchain.settings.rewardsSettings.initial - daoShare
+      val everyHeight = Map(miner.toString -> minerShare, daoAddress.toString -> daoShare)
+
+      val heightToResult = (2 to 5).map(_ -> everyHeight).toMap
+
+      val heightToBlock = (2 to 5).map { h =>
+        val block = d.appendBlock()
+
+        Seq(true, false).foreach { lsf =>
+          checkRewardSharesBlock(route, "/last", heightToResult(h), lsf)
+          checkRewardSharesBlock(route, "/headers/last", heightToResult(h), lsf)
+        }
+
+        h -> block
+      }.toMap
+      d.appendBlock()
+
+      Seq(true, false).foreach { lsf =>
+        heightToResult.foreach { case (h, expectedResult) =>
+          checkRewardSharesBlock(route, s"/at/$h", expectedResult, lsf)
+          checkRewardSharesBlock(route, s"/headers/at/$h", expectedResult, lsf)
+          checkRewardSharesBlock(route, s"/headers/${heightToBlock(h).id()}", expectedResult, lsf)
+          checkRewardSharesBlock(route, s"/${heightToBlock(h).id()}", expectedResult, lsf)
+        }
+        checkRewardSharesBlockSeq(route, "/seq", 2, 5, heightToResult, lsf)
+        checkRewardSharesBlockSeq(route, "/headers/seq", 2, 5, heightToResult, lsf)
+        checkRewardSharesBlockSeq(route, s"/address/${miner.toString}", 2, 5, heightToResult, lsf)
+      }
+    }
+  }
+
+  private def checkRewardSharesBlock(route: Route, path: String, expected: Map[String, Long], largeSignificandFormat: Boolean) = {
+    val maybeWithLsf =
+      if (largeSignificandFormat)
+        Get(routePath(path)) ~> Accept(CustomJson.jsonWithNumbersAsStrings)
+      else Get(routePath(path))
+
+    maybeWithLsf ~> route ~> check {
+      (responseAs[JsObject] \ "rewardShares")
+        .as[JsObject]
+        .value
+        .view
+        .mapValues { rewardJson => if (largeSignificandFormat) rewardJson.as[String].toLong else rewardJson.as[Long] }
+        .toMap shouldBe expected
+    }
+  }
+
+  private def checkRewardSharesBlockSeq(
+      route: Route,
+      prefix: String,
+      start: Int,
+      end: Int,
+      heightToResult: Map[Int, Map[String, Long]],
+      largeSignificandFormat: Boolean
+  ) = {
+    val maybeWithLsf =
+      if (largeSignificandFormat)
+        Get(routePath(s"$prefix/$start/$end")) ~> Accept(CustomJson.jsonWithNumbersAsStrings)
+      else Get(routePath(s"$prefix/$start/$end"))
+    maybeWithLsf ~> route ~> check {
+      responseAs[Seq[JsObject]]
+        .zip(start to end)
+        .map { case (obj, h) =>
+          h -> (obj \ "rewardShares")
+            .as[JsObject]
+            .value
+            .view
+            .mapValues { rewardJson => if (largeSignificandFormat) rewardJson.as[String].toLong else rewardJson.as[Long] }
+            .toMap
+        }
+        .toMap shouldBe heightToResult
+    }
+  }
+
+  "block reward is never boosted" in {
+    val miner      = TxHelpers.signer(3001)
+    val daoAddress = TxHelpers.address(3002)
+
+    val settings = DomainPresets.ConsensusImprovements
+      .configure(fs => fs.copy(blockRewardBoostPeriod = 10, daoAddress = Some(daoAddress.toString)))
+
+    withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves)), generators = Seq(miner)) { d =>
+      val route = new BlocksApiRoute(d.settings.restAPISettings, d.blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler)).route
+
+      def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(implicit
+          pos: Position
+      ): Unit = {
+        Seq("/headers/at/", "/at/").foreach { prefix =>
+          val path = routePath(s"$prefix$height")
+          withClue(path) {
+            Get(path) ~> route ~> check {
+              val jsonResp = responseAs[JsObject]
+              withClue(" reward:") {
+                (jsonResp \ "reward").as[Long] shouldBe expectedReward
+              }
+              val shares = (jsonResp \ "rewardShares").as[JsObject]
+              withClue(" miner share: ") {
+                (shares \ miner.toAddress.toString).as[Long] shouldBe expectedMinerShare
+              }
+              withClue(" dao share: ") {
+                (shares \ daoAddress.toString).as[Long] shouldBe expectedDaoShare
+              }
+            }
+          }
+        }
+      }
+
+      // The reward and its shares stay flat across the BoostBlockReward activation height: boosting was dropped,
+      // and only the DAO takes a share now that XTN buy-back is gone
+      (1 to 14).foreach(_ => d.appendKeyBlock(miner))
+      d.blockchain.height shouldBe 15
+      (2 to 15).foreach(h => checkRewardAndShares(h, 6.waves, 4.waves, 2.waves))
+    }
+  }
+}

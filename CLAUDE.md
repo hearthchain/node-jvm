@@ -80,6 +80,16 @@ sign a hit source with an arbitrary key any more.
 `Address` is `tech.hearth.crypto.Address` — bech32, `thrth1…` on testnet — so base58 address literals from before the
 migration no longer parse (`InvalidAddress`).
 
+`tech.hearth.crypto` (the external key/address library) and `tech.hearth.account` (this repo's own package, whose
+`Recipient.scala` defines `Address`/`PublicKey`-friendly companions) both now have a member named `Address`, which
+matters for import shadowing: a wildcard `import tech.hearth.crypto.*` inside code that lives in
+`package tech.hearth.account` silently wins over the same-package `Address` companion (imports outrank same-package
+members), so unqualified `Address.fromPublicKey(pk)` there resolves to the crypto library's `Array[Byte]`-taking
+overload instead of the account one — caught as a type mismatch (`Found: PublicKey, Required: Array[Byte]`), not a
+"not found" error. `account/PublicKey.scala`'s `toAddress` hit this; fixed by fully qualifying
+(`tech.hearth.account.Address.fromPublicKey(...)`) rather than dropping the wildcard import, since `KeyLength`/
+`EthereumKeyLength` from the same import are used unqualified elsewhere in the file.
+
 Two different types are called `MiningAccount`, which is worth keeping straight:
 
 - `mining.MiningAccount` — the runtime pair, holding a constructed `SigningKey` and `VrfKey`;
@@ -151,11 +161,46 @@ and no `version` to gate on any more, so `/transactions/sign`/`/transactions/bro
 
 ## Protobuf package migration
 
-Generated protobuf code moved from `com.wavesplatform.*` packages to `tech.hearth.*` ones (external dependency
-`tech.hearth % protobuf-schemas`). Hand-written Scala that assumed same-package visibility (`grpc-server`'s
-`api/grpc`, `events/protobuf`, `events/api/grpc/protobuf`) needs a `package object` re-export shim — `type X =
-tech.hearth.foo.X` plus `val X = tech.hearth.foo.X` for the companion — rather than a blanket import, since callers
-reference these types unqualified from within `com.wavesplatform.*`.
+Generated protobuf code moved from `com.wavesplatform.*` packages to `tech.hearth.*` ones. Most of it comes from the
+external `tech.hearth % protobuf-schemas` dependency, already on the new package name; but `node`'s own two local
+proto files (`node/src/main/protobuf/hearth/{api,database}.proto`, covering `BlockMeta`/`LeaseDetails`/
+`AssetDetails`/`TransactionsByIdRequest` and the rest of `database.proto`/`api.proto`) still carried a stale
+`option java_package = "com.wavesplatform...."` left over from before the migration, unlike every other `.proto`
+file (including the external ones), which already say `tech.hearth...`. That single leftover setting was the actual
+root cause of the bulk of "not found"/type-mismatch errors across `database/Keys.scala`, `RocksDBWriter.scala` and
+`database/package.scala` once the surrounding hand-written code moved to `tech.hearth.*` and started looking for
+these types there — the fix is to update `java_package` to match, not to chase each individual "not found" site.
+
+Hand-written Scala that assumed same-package visibility with the *not-yet-renamed* generated code (`grpc-server`'s
+`api/grpc`, `events/protobuf`, `events/api/grpc/protobuf`, and `node`'s `protobuf/transaction/transaction.scala`)
+used a `package object` re-export shim — `type X = tech.hearth.foo.X` plus `val X = tech.hearth.foo.X` for the
+companion — instead of a blanket import, so callers could keep naming these types unqualified. That shim only makes
+sense while the hand-written package and the generated package actually differ. Once the hand-written code itself
+finished moving from `com.wavesplatform.*` to `tech.hearth.*` — the same package the generated code already lived
+in — every one of these re-exports became a circular self-reference (`type X = tech.hearth.foo.X` written *inside*
+`package tech.hearth.foo`), which scalac rejects as `[E161] Naming Error: X is already defined as class/object X in
+.../target/src_managed/main/.../X.scala`. That specific error shape — a *Naming* error pointing at a generated file
+under `target/src_managed`, not a plain "not found" — is the signal that a shim has gone stale, not that a type is
+missing. Fix is to delete the redundant re-export lines; some files were 100% shim and got deleted outright
+(`events/protobuf/package.scala`, `events/api/grpc/protobuf/package.scala`), others had real converter logic
+alongside the shim and only needed the `type`/`val` alias lines stripped out (`api/grpc/package.scala`,
+`protobuf/transaction/transaction.scala`).
+
+Build-level references to renamed classes are easy to miss in a source-only grep, since they live as string literals
+in sbt files rather than as Scala imports, and most don't fail loudly: `mainClass`
+(`project/RunApplicationSettings.scala`), `extensionClasses` (`grpc-server/build.sbt`), `V.scalaPackage`
+(`node/build.sbt`, controls the package the generated `Version.scala` lands in), and the `-Wconf:...&origin=...`
+deprecation-suppression filters in `build.sbt` all embed a fully-qualified class name as a string. A stale
+`mainClass`/`extensionClasses` entry only breaks at runtime (`ClassNotFoundException`), and a stale `-Wconf` origin
+filter only breaks `-Werror` if and when the class it no longer matches happens to emit a fresh deprecation warning
+— neither shows up compiling the Scala sources themselves, so both need a deliberate check after any package rename.
+
+A few files were reduced to just a `package` line with no members at some earlier point in the migration and never
+finished being deleted (`consensus/nxt/api/http/NxtConsensusApiRoute.scala`, `network/HistoryReplierL1.scala`,
+`utils/CloseableIterator.scala`, three `api/http/requests/SignedXV2Request.scala` test files). Confirmed via
+`grep -rl` that nothing in the repo referenced them, then deleted them outright. They don't cause "not found" errors
+(nothing depends on them), only `-Wunused`/`-Werror` failures ("No class, trait or object is defined in the
+compilation unit").
 
 The `Transaction` wire message dropped `version` entirely: `chain_id`, `sender_public_key`, `fee`, `timestamp`, then a
 `data` oneof of only the six surviving transaction kinds (transfer, exchange, lease, lease-cancel, mass-transfer,

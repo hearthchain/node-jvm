@@ -1,6 +1,6 @@
 syntax = "proto3";
 package hearth.api;
-option java_package = "com.wavesplatform.database.protobuf";
+option java_package = "tech.hearth.database.protobuf";
 
 import "hearth/block.proto";
 import "hearth/transaction.proto";

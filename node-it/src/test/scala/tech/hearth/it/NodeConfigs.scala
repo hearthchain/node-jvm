@@ -1,0 +1,117 @@
+package tech.hearth.it
+
+import com.typesafe.config.{Config, ConfigFactory}
+import tech.hearth.common.state.ByteStr
+import tech.hearth.features.BlockchainFeature
+import tech.hearth.transaction.Asset.IssuedAsset
+
+import scala.jdk.CollectionConverters.*
+import scala.util.Random
+import tech.hearth.state.Height
+
+object NodeConfigs {
+
+  /** Assets declared in template.conf's `genesis.assets` - there is no issue transaction any more, so a test that
+    * needs an existing non-WAVES asset has to reference one of these instead of minting one at runtime.
+    */
+  object GenesisAssets {
+    val TestAsset: IssuedAsset    = IssuedAsset(ByteStr.decodeBase58("9PgUiAftSxvtUGiefVGm2wyVDt5XRqxmHNoaNwEMGDJK").get)
+    val TestNftAsset: IssuedAsset = IssuedAsset(ByteStr.decodeBase58("AVNrpFeW7pzgthvuingmJE7SpWBXaGpHkHYEQzco87ij").get)
+  }
+
+  private val NonConflictingNodes = Set(1, 4, 6, 7)
+
+  val Default: Seq[Config] = ConfigFactory.parseResources("nodes.conf").getConfigList("nodes").asScala.toSeq
+  val Miners: Seq[Config]  = Default.init
+  val NotMiner: Config     = Default.last
+  def randomMiner: Config  = Random.shuffle(Miners).head
+
+  val BiggestMiner: Config = Miners.last
+
+  case class PreactivatedFeature(feature: BlockchainFeature, activationHeight: Height)
+
+  implicit def preactivateFeature(f: BlockchainFeature): PreactivatedFeature             = preactivateFeatureAt(f -> Height(0))
+  implicit def preactivateFeatureAt(f: (BlockchainFeature, Height)): PreactivatedFeature = PreactivatedFeature(f._1, f._2)
+
+  extension (c: Config) {
+    def overrides(s: String): Config = ConfigFactory.parseString(s).withFallback(c)
+    def quorum(n: Int): Config       = overrides(s"waves.miner.quorum = $n")
+    def preactivatedFeatures(fs: PreactivatedFeature*): Config = overrides(
+      s"""waves.blockchain.custom.functionality.pre-activated-features {
+        ${fs.map(f => s"${f.feature.id} = ${f.activationHeight}").mkString("\n")}
+      }"""
+    )
+    def minAssetInfoUpdateInterval(blocks: Int): Config =
+      overrides(s"waves.blockchain.custom.functionality.min-asset-info-update-interval = $blocks")
+
+    def notMiner: Config = overrides("waves.miner.enable = no")
+  }
+
+  def newBuilder: Builder = Builder(Default, Default.size, Seq.empty)
+
+  case class Builder(baseConfigs: Seq[Config], defaultEntities: Int, specialsConfigs: Seq[Config]) {
+    def overrideBase(f: Templates.type => String): Builder = {
+      val priorityConfig = ConfigFactory.parseString(f(Templates))
+      copy(baseConfigs = this.baseConfigs.map(priorityConfig.withFallback))
+    }
+
+    def withDefault(entitiesNumber: Int): Builder = copy(defaultEntities = entitiesNumber)
+
+    def withSpecial(f: Templates.type => String): Builder = withSpecial(1, f)
+
+    def withSpecial(entitiesNumber: Int, f: Templates.type => String): Builder = {
+      val newSpecialConfig = ConfigFactory.parseString(f(Templates))
+      copy(specialsConfigs = this.specialsConfigs ++ (1 to entitiesNumber).map(_ => newSpecialConfig))
+    }
+
+    def build(shuffleNodes: Boolean = true): Seq[Config] = {
+      val totalEntities = defaultEntities + specialsConfigs.size
+      require(totalEntities < baseConfigs.size)
+
+      val baseConfigsShuffled = if (shuffleNodes) Random.shuffle(baseConfigs) else baseConfigs
+      val (defaultNodes: Seq[Config], specialNodes: Seq[Config]) = baseConfigsShuffled
+        .take(totalEntities)
+        .splitAt(defaultEntities)
+
+      specialNodes
+        .zip(specialsConfigs)
+        .foldLeft(defaultNodes) { case (r, (base, special)) => r :+ special.withFallback(base) }
+    }
+
+    // To eliminate a race of miners
+    def buildNonConflicting(): Seq[Config] = {
+      val totalEntities = defaultEntities + specialsConfigs.size
+      require(totalEntities <= NonConflictingNodes.size)
+
+      val bc =
+        if (totalEntities > 1) baseConfigs
+        else baseConfigs.map(ConfigFactory.parseString("waves.network.max-outbound-connections = 0").withFallback)
+
+      val (defaultNodes: Seq[Config], specialNodes: Seq[Config]) = bc.zipWithIndex
+        .collect { case (x, i) if NonConflictingNodes.contains(i + 1) => x }
+        .splitAt(defaultEntities)
+
+      specialNodes
+        .zip(specialsConfigs)
+        .foldLeft(defaultNodes) { case (r, (base, special)) => r :+ special.withFallback(base) }
+    }
+  }
+
+  object Templates {
+    def raw(x: String): String = x
+    def quorum(n: Int): String = s"waves.miner.quorum = $n"
+    def preactivatedFeatures(f: (Int, Height)*): String = {
+      s"""
+         |waves.blockchain.custom.functionality.pre-activated-features {
+         ${f.map { case (id, height) => s"|  $id = $height" }.mkString("\n")}
+         |}""".stripMargin
+    }
+    def minAssetInfoUpdateInterval(blocks: Int): String =
+      s"waves.blockchain.custom.functionality.min-asset-info-update-interval = $blocks"
+
+    val nonMiner: String = "waves.miner.enable = no"
+
+    val lightNode: String = "waves.enable-light-mode = true"
+  }
+
+}

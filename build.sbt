@@ -46,7 +46,7 @@ lazy val `node-generator` = project.dependsOn(node, `node-testkit`)
 
 lazy val benchmark = project.dependsOn(node, `node-testkit`)
 
-lazy val `waves-node` = (project in file("."))
+lazy val `hearth-node` = (project in file("."))
   .aggregate(
     node,
     `node-it`,
@@ -60,10 +60,10 @@ lazy val `waves-node` = (project in file("."))
 inScope(Global)(
   Seq(
     scalaVersion         := "3.8.4",
-    organization         := "com.wavesplatform",
-    organizationName     := "Waves Platform",
-    organizationHomepage := Some(url("https://wavesplatform.com")),
-    licenses             := Seq(("MIT", url("https://github.com/wavesplatform/Waves/blob/master/LICENSE"))),
+    organization         := "tech.hearth",
+    organizationName     := "Hearth Chain",
+    organizationHomepage := Some(url("https://hearth.tech")),
+    licenses             := Seq(("MIT", url("https://github.com/hearthchain/node-jvm/blob/main/LICENSE"))),
     publish / skip       := true,
     scalacOptions ++= Seq(
       "-feature",
@@ -72,13 +72,7 @@ inScope(Global)(
       "-language:higherKinds",
       "-language:implicitConversions",
       "-language:postfixOps",
-      "-Xmax-inlines",
-      "50", // Required for FunctionalitySettings compilation
       "-Wunused:all",
-      "-Wconf:cat=deprecation&origin=com.wavesplatform.api.grpc.*:s",                                // Ignore gRPC warnings
-      "-Wconf:cat=deprecation&origin=com.wavesplatform.protobuf.transaction.InvokeScriptResult.*:s", // Ignore deprecated argsBytes
-      "-Wconf:cat=deprecation&origin=com.wavesplatform.state.InvokeScriptResult.*:s",
-      "-Wconf:cat=deprecation&origin=com\\.wavesplatform\\.(lang\\..*|JsApiUtils)&origin=com\\.wavesplatform\\.lang\\.v1\\.compiler\\.Terms\\.LET_BLOCK:s",
       "-Wconf:src=src_managed/.*:s"
     ),
     crossPaths        := false,
@@ -183,7 +177,7 @@ commands += Command("buildReleaseArtifacts")(_ => Network.networkParser) { (stat
 }
 
 /** Command: generateGenesis <path-to-config>
-  * Runs: node / runMain com.wavesplatform.GenesisBlockGenerator <path>
+  * Runs: node / runMain tech.hearth.GenesisBlockGenerator <path>
   * Path is always resolved relative to build root, output without "[info]".
   */
 def generateGenesisCommand: Command =
@@ -205,7 +199,7 @@ def generateGenesisCommand: Command =
       state
     )
 
-    val input = s" com.wavesplatform.GenesisBlockGenerator ${absFile.getAbsolutePath}"
+    val input = s" tech.hearth.GenesisBlockGenerator ${absFile.getAbsolutePath}"
 
     Project
       .extract(stateWithSettings)

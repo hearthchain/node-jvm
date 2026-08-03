@@ -1,0 +1,249 @@
+package tech.hearth.database
+
+import com.google.common.primitives.{Ints, Longs}
+import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto.bls.BlsPublicKey
+import tech.hearth.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
+import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
+import tech.hearth.state.*
+import tech.hearth.transaction.Asset.IssuedAsset
+import tech.hearth.transaction.{ERC20Address, Transaction}
+import tech.hearth.crypto.Address
+
+case class CurrentBalance(balance: Long, height: Height, prevHeight: Height)
+object CurrentBalance {
+  val Unavailable: CurrentBalance = CurrentBalance(0L, Height(0), Height(0))
+}
+
+case class BalanceNode(balance: Long, prevHeight: Height)
+object BalanceNode {
+  val Empty: BalanceNode = BalanceNode(0, Height(0))
+  val SizeInBytes: Int   = 12
+}
+
+case class CurrentVolumeAndFee(volume: Long, fee: Long, height: Height, prevHeight: Height)
+object CurrentVolumeAndFee {
+  val Unavailable: CurrentVolumeAndFee = CurrentVolumeAndFee(0, 0, Height(0), Height(0))
+}
+
+case class VolumeAndFeeNode(volume: Long, fee: Long, prevHeight: Height)
+object VolumeAndFeeNode {
+  val Empty: VolumeAndFeeNode = VolumeAndFeeNode(0, 0, Height(0))
+}
+
+case class CurrentLeaseBalance(in: Long, out: Long, height: Height, prevHeight: Height)
+object CurrentLeaseBalance {
+  val Unavailable: CurrentLeaseBalance = CurrentLeaseBalance(0, 0, Height(0), Height(0))
+}
+
+case class LeaseBalanceNode(in: Long, out: Long, prevHeight: Height)
+object LeaseBalanceNode {
+  val Empty: LeaseBalanceNode = LeaseBalanceNode(0, 0, Height(0))
+}
+
+object Keys {
+  import KeyHelpers.*
+  import KeyTag.{AddressId as AddressIdTag, EthereumTransactionMeta as EthereumTransactionMetaTag, LeaseDetails as LeaseDetailsTag, *}
+
+  val version: Key[Int]   = intKey(Version, default = 1)
+  val height: Key[Height] = heightKey(Height)
+
+  def heightOf(blockId: ByteStr): Key[Option[Int]] = Key.opt[Int](HeightOf, blockId.arr, Ints.fromByteArray, Ints.toByteArray)
+
+  def wavesBalance(addressId: AddressId): Key[CurrentBalance] =
+    Key(WavesBalance, addressId.toByteArray, readCurrentBalance, writeCurrentBalance)
+
+  def wavesBalanceAt(addressId: AddressId, height: Height): Key[BalanceNode] =
+    Key(WavesBalanceHistory, hBytes(addressId.toByteArray, height), readBalanceNode, writeBalanceNode)
+
+  def assetBalance(addressId: AddressId, asset: IssuedAsset): Key[CurrentBalance] =
+    Key(AssetBalance, addressId.toByteArray ++ asset.id.arr, readCurrentBalance, writeCurrentBalance)
+
+  def assetBalanceAt(addressId: AddressId, asset: IssuedAsset, height: Height): Key[BalanceNode] =
+    Key(AssetBalanceHistory, hBytes(asset.id.arr ++ addressId.toByteArray, height), readBalanceNode, writeBalanceNode)
+
+  def assetDetailsHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(AssetDetailsHistory, asset.id.arr)
+  def assetDetails(asset: IssuedAsset)(height: Height): Key[(AssetInfo, AssetVolumeInfo)] =
+    Key(AssetDetails, hBytes(asset.id.arr, height), readAssetDetails, writeAssetDetails)
+
+  def issuedAssets(height: Height): Key[Seq[IssuedAsset]] =
+    Key(IssuedAssets, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
+  def updatedAssets(height: Height): Key[Seq[IssuedAsset]] =
+    Key(UpdatedAssets, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
+  def sponsorshipAssets(height: Height): Key[Seq[IssuedAsset]] =
+    Key(SponsoredAssets, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
+  def leaseBalanceAt(addressId: AddressId, height: Height): Key[LeaseBalanceNode] =
+    Key(LeaseBalanceHistory, hBytes(addressId.toByteArray, height), readLeaseBalanceNode, writeLeaseBalanceNode)
+
+  def leaseBalance(addressId: AddressId): Key[CurrentLeaseBalance] =
+    Key(LeaseBalance, addressId.toByteArray, readLeaseBalance, writeLeaseBalance)
+
+  def leaseDetailsHistory(leaseId: ByteStr): Key[Seq[Height]] = historyKey(LeaseDetailsHistory, leaseId.arr)
+  def leaseDetails(leaseId: ByteStr)(height: Height): Key[Option[LeaseDetails]] =
+    Key.opt(LeaseDetailsTag, height.toByteArray ++ leaseId.arr, readLeaseDetails, writeLeaseDetails)
+
+  def filledVolumeAndFeeAt(orderId: ByteStr, height: Height): Key[VolumeAndFeeNode] =
+    Key(FilledVolumeAndFeeHistory, hBytes(orderId.arr, height), readVolumeAndFeeNode, writeVolumeAndFeeNode)
+
+  def filledVolumeAndFee(orderId: ByteStr): Key[CurrentVolumeAndFee] =
+    Key(FilledVolumeAndFee, orderId.arr, readVolumeAndFee, writeVolumeAndFee)
+
+  def changedAddresses(height: Height): Key[Seq[AddressId]] = Key(ChangedAddresses, h(height), readAddressIds, writeAddressIds)
+
+  def changedWavesBalances(height: Height): Key[Seq[AddressId]] =
+    Key(ChangedWavesBalances, h(height), readAddressIds, writeAddressIds)
+
+  def changedBalances(height: Height, asset: IssuedAsset): Key[Seq[AddressId]] =
+    Key(ChangedAssetBalances, h(height) ++ asset.id.arr, readAddressIds, writeAddressIds)
+
+  def changedBalancesAtPrefix(height: Height): Array[Byte] = KeyTag.ChangedAssetBalances.prefixBytes ++ h(height)
+
+  val lastAddressId: Key[Option[Long]] = Key.opt(LastAddressId, Array.emptyByteArray, Longs.fromByteArray, _.toByteArray)
+
+  def addressId(address: Address): Key[Option[AddressId]] = Key.opt(AddressIdTag, address.toBytes, AddressId.fromByteArray, _.toByteArray)
+  def idToAddress(addressId: AddressId): Key[Address]     = Key(IdToAddress, addressId.toByteArray, Address.fromBytes(_).get(), _.toBytes)
+
+  val approvedFeatures: Key[Map[Short, Height]]  = Key(ApprovedFeatures, Array.emptyByteArray, readFeatureMap, writeFeatureMap)
+  val activatedFeatures: Key[Map[Short, Height]] = Key(ActivatedFeatures, Array.emptyByteArray, readFeatureMap, writeFeatureMap)
+
+  val safeRollbackHeight: Key[Height] = heightKey(SafeRollbackHeight)
+  val lastCleanupHeight: Key[Height]  = heightKey(LastCleanupHeight)
+
+  def changedDataKeys(height: Height, addressId: AddressId): Key[Seq[String]] =
+    Key(ChangedDataKeys, hBytes(addressId.toByteArray, height), readStrings, writeStrings)
+
+  def blockMetaAt(height: Height): Key[Option[PBBlockMeta]] =
+    Key.opt(BlockInfoAtHeight, h(height), readBlockMeta, writeBlockMeta)
+
+  def blockInfoBytesAt(height: Height): Key[Option[Array[Byte]]] =
+    Key.opt(
+      BlockInfoAtHeight,
+      h(height),
+      identity,
+      unsupported("Can not explicitly write block bytes")
+    )
+
+  def transactionAt(height: Height, n: TxNum, cfHandle: RDB.TxHandle): Key[Option[(TxMeta, Transaction)]] =
+    Key.opt[(TxMeta, Transaction)](
+      NthTransactionInfoAtHeight,
+      hNum(height, n),
+      readTransaction(height),
+      writeTransaction,
+      Some(cfHandle.handle)
+    )
+
+  def transactionStateSnapshotAt(height: Height, n: TxNum, cfHandle: RDB.TxSnapshotHandle): Key[Option[TransactionStateSnapshot]] =
+    Key.opt[TransactionStateSnapshot](
+      NthTransactionStateSnapshotAtHeight,
+      hNum(height, n),
+      TransactionStateSnapshot.parseFrom,
+      _.toByteArray,
+      Some(cfHandle.handle)
+    )
+
+  def addressTransactionSeqNr(addressId: AddressId, cfh: RDB.ApiHandle): Key[Int] =
+    bytesSeqNr(AddressTransactionSeqNr, addressId.toByteArray, cfh = Some(cfh.handle))
+
+  def addressTransactionHN(addressId: AddressId, seqNr: Int, cfh: RDB.ApiHandle): Key[Option[(Height, Seq[(Byte, TxNum, Int)])]] =
+    Key.opt(
+      AddressTransactionHeightTypeAndNums,
+      intBytes(addressId.toByteArray, seqNr),
+      readTransactionHNSeqAndType,
+      writeTransactionHNSeqAndType,
+      Some(cfh.handle)
+    )
+
+  def addressLeaseSeqNr(addressId: AddressId, cfh: RDB.ApiHandle): Key[Int] =
+    bytesSeqNr(AddressLeaseInfoSeqNr, addressId.toByteArray, cfh = Some(cfh.handle))
+
+  def addressLeaseSeq(addressId: AddressId, seqNr: Int, cfh: RDB.ApiHandle): Key[Option[Seq[ByteStr]]] =
+    Key.opt(
+      AddressLeaseInfoSeq,
+      intBytes(addressId.toByteArray, seqNr),
+      readLeaseIdSeq,
+      writeLeaseIdSeq,
+      Some(cfh.handle)
+    )
+
+  def transactionMetaById(txId: TransactionId, cfh: RDB.TxMetaHandle): Key[Option[TransactionMeta]] =
+    Key.opt(
+      TransactionMetaById,
+      txId.arr,
+      TransactionMeta.parseFrom,
+      _.toByteArray,
+      Some(cfh.handle)
+    )
+
+  def assetStaticInfo(asset: IssuedAsset): Key[Option[StaticAssetInfo]] =
+    Key.opt(AssetStaticInfo, asset.id.arr.take(20), StaticAssetInfo.parseFrom, _.toByteArray)
+
+  def assetStaticInfo(addr: ERC20Address): Key[Option[StaticAssetInfo]] =
+    Key.opt(AssetStaticInfo, addr.arr, StaticAssetInfo.parseFrom, _.toByteArray)
+
+  def nftCount(addressId: AddressId, cfh: RDB.ApiHandle): Key[Int] =
+    Key(NftCount, addressId.toByteArray, Option(_).fold(0)(Ints.fromByteArray), Ints.toByteArray, Some(cfh.handle))
+
+  def nftAt(addressId: AddressId, index: Int, assetId: IssuedAsset, cfh: RDB.ApiHandle): Key[Option[Unit]] =
+    Key.opt(NftPossession, addressId.toByteArray ++ Longs.toByteArray(index) ++ assetId.id.arr, _ => (), _ => Array.emptyByteArray, Some(cfh.handle))
+
+  def stateHash(height: Height): Key[Option[StateHash]] =
+    Key.opt(StateHash, h(height), readStateHash, writeStateHash)
+
+  def blockStateHash(height: Height): Key[ByteStr] =
+    Key(BlockStateHash, h(height), Option(_).fold(TxStateSnapshotHashBuilder.InitStateHash)(ByteStr(_)), _.arr)
+
+  def ethereumTransactionMeta(height: Height, txNum: TxNum, cfh: RDB.ApiHandle): Key[Option[EthereumTransactionMeta]] =
+    Key.opt(EthereumTransactionMetaTag, hNum(height, txNum), EthereumTransactionMeta.parseFrom, _.toByteArray, Some(cfh.handle))
+
+  def maliciousMinerBanHeights(addressBytes: Array[Byte]): Key[Seq[Height]] =
+    historyKey(MaliciousMinerBanHeights, addressBytes)
+
+  // Writes only after DeterministicFinality activation
+  val finalizedHeight: Key[Option[Height]] = Key(
+    FinalizedBlockHeight,
+    keySuffix = Array.emptyByteArray,
+    readFinalizedHeight,
+    _.fold(Array.emptyByteArray)(_.toByteArray)
+  )
+
+  def finalizedHeightAt(at: Height): Key[Option[Height]] = Key(
+    FinalizedBlockHeightAt,
+    keySuffix = h(at),
+    readFinalizedHeight,
+    _.fold(Array.emptyByteArray)(_.toByteArray)
+  )
+
+  private def readFinalizedHeight(bytes: Array[Byte]): Option[Height] =
+    Option(bytes).collect { case bs if bs.length == Ints.BYTES => tech.hearth.state.Height(Ints.fromByteArray(bytes)) }
+
+  /** Key: Int(committedPeriod.start) ++ Int(commitmentHeight)
+    * @note
+    *   committedPeriod.start >= commitmentHeight, because a generator can commit only for a next period
+    */
+  def committedGenerators(committedPeriod: GenerationPeriod, commitmentHeight: Height): Key[Option[Seq[(AddressId, BlsPublicKey, ByteStr)]]] =
+    Key.opt(
+      CommittedGenerators,
+      h(committedPeriod.start) ++ h(commitmentHeight),
+      readCommittedGenerators,
+      writeCommittedGenerators
+    )
+
+  def conflictGenerators(committedPeriod: GenerationPeriod, conflictEndorsementHeight: Height): Key[Seq[GeneratorIndex]] =
+    Key(
+      ConflictGenerators,
+      h(committedPeriod.start) ++ h(conflictEndorsementHeight),
+      readConflictGenerators,
+      writeConflictGenerators
+    )
+
+  def commitmentTransactions(committedPeriod: GenerationPeriod, commitmentHeight: Height): Key[Seq[TransactionId]] =
+    Key(
+      CommitmentTransactions,
+      h(committedPeriod.start) ++ h(commitmentHeight),
+      readCommitmentTransactions,
+      writeCommitmentTransactions
+    )
+
+  def generatorBalances(at: Height, cfh: RDB.ApiHandle): Key[Option[Seq[(GeneratorIndex, Long)]]] =
+    Key.opt(GeneratorBalances, h(at), readGeneratorBalances, writeGeneratorBalances, Some(cfh.handle))
+}

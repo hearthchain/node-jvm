@@ -15,7 +15,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash(sbt *), Bash(git status *), B
 ## Testing
 
 - **ScalaTest + ScalaCheck.** Unit tests live in `node/tests` (module `node-tests`), shared fixtures and generators in `node/testkit` (module `node-testkit`).
-- **Extend the testkit base classes**, not raw ScalaTest: `com.wavesplatform.test.{FreeSpec, PropSpec, FlatSpec, FunSuite, FeatureSpec}`. They mix in `BaseSuite` (Matchers, `ScalaCheckPropertyChecks`, `ShrinkLowPriority`, `TransactionGen`, `EitherValues`, `OptionValues`, logging, default-network setup). Bypassing `BaseSuite` silently loses the network default and shrink policy.
+- **Extend the testkit base classes**, not raw ScalaTest: `tech.hearth.test.{FreeSpec, PropSpec, FlatSpec, FunSuite, FeatureSpec}`. They mix in `BaseSuite` (Matchers, `ScalaCheckPropertyChecks`, `ShrinkLowPriority`, `TransactionGen`, `EitherValues`, `OptionValues`, logging, default-network setup). Bypassing `BaseSuite` silently loses the network default and shrink policy.
 - **Style choice**: `FreeSpec` for behaviour trees (`"validation" - { "rejects X" in { ... } }`), `PropSpec` + `forAll` for property-based invariants, `FlatSpec`/`FunSuite` only when matching an existing sibling suite.
 - **Generators are shared.** Before writing a new `Gen`, check `node-testkit` (`TransactionGen`, `BlockGen`, `DomainPresets`, ...); add reusable generators there, not in the test file.
 - **Run**: `sbt node-tests/test` for the suite, `sbt "node-tests/testOnly *FooSpec"` for one class, `sbt grpc-server/test` for gRPC. Integration tests (`node-it`) need Docker and are run explicitly, never as part of a routine change.
@@ -23,7 +23,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash(sbt *), Bash(git status *), B
 
 ## Layout and idioms
 
-- Follow the existing package structure under `com.wavesplatform` / `tech.hearth`; new files go next to their closest sibling, not into new top-level packages.
+- Follow the existing package structure under `tech.hearth`; new files go next to their closest sibling, not into new top-level packages.
 - **Errors as values**: this codebase returns `Either[ValidationError, T]` on validation paths; keep that shape, don't introduce exceptions for control flow. Use cats syntax already in scope (`.leftMap`, `.flatMap`, `traverse`) rather than manual pattern-match plumbing.
 - Dependency versions live only in `project/Dependencies.scala` (with `overrides` for transitive pins); never inline a version in `build.sbt` or a module.
 - Concurrency uses the existing monix `Task`/`Observable` machinery; don't mix in a second effect system.

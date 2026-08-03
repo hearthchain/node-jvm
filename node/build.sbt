@@ -40,7 +40,7 @@ inConfig(Compile)(
 
 inTask(assembly)(
   Seq(
-    name := "waves",
+    name := "hearth",
     fullClasspath := {
       val optional = (Optional / update).value.select(configurationFilter("optional")).toSet
       (Runtime / fullClasspath).value.filterNot(item => optional.contains(item.data))
@@ -87,7 +87,7 @@ linuxScriptReplacements += ("network" -> network.value.toString)
 inConfig(Universal)(
   Seq(
     maintainer  := "com.wavesplatform",
-    packageName := s"waves-${version.value}",
+    packageName := s"hearth-jvm-${version.value}",
     mappings += (baseDirectory.value / s"waves-sample.conf" -> "doc/waves.conf.sample"),
     javaOptions ++= Seq(
       // -J prefix is required by the bash script
@@ -171,4 +171,4 @@ inConfig(Debian)(
   )
 )
 
-V.scalaPackage := "com.wavesplatform"
+V.scalaPackage := "tech.hearth"
