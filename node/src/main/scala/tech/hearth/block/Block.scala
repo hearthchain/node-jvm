@@ -258,7 +258,7 @@ object Block {
   val GenerationVRFSignatureLength: Int = 80
   val BlockIdLength: Int                = DigestLength
   val TransactionSizeLength             = 4
-  val HitSourceLength                   = 32
+  val HitSourceLength                   = 64
 
   val GenesisReference: BlockId    = ByteStr(Array.fill(DigestLength)(-1: Byte))
   val GenesisGenerator: SigningKey = SigningKey.fromSeed(Crypto.defaultBackend().sha256(new Array[Byte](32)))

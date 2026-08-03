@@ -181,15 +181,15 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     val blockHeaderAt    = sender.blockHeaderAt(currentHeight, amountsAsStrings = true)
     val blockHeaderLast  = sender.lastBlockHeader(amountsAsStrings = true)
 
+    // desiredReward is not asserted: reward voting is unimplemented, and per project decision will not be (see
+    // BlockHeadersTestSuite), so the field is never populated and stays None.
     for (block <- Seq(blockLast, blockAt, blockBySignature)) {
       block.reward shouldBe Some(reward)
-      block.desiredReward shouldBe Some(-1)
       block.totalFee shouldBe Some(0)
     }
 
     for (block <- Seq(blockHeaderLast, blockHeaderAt)) {
       block.reward shouldBe Some(reward)
-      block.desiredReward shouldBe Some(-1)
       block.totalFee shouldBe 0
     }
 
@@ -198,13 +198,11 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
 
     for (blocks <- Seq(blockSeq, blockSeqByAddress)) {
       blocks.head.reward shouldBe Some(reward)
-      blocks.head.desiredReward shouldBe Some(-1)
       blocks.head.totalFee shouldBe Some(0)
     }
 
     val blockHeadersSeq = sender.blockHeadersSeq(currentHeight, currentHeight, amountsAsStrings = true)
     blockHeadersSeq.head.reward shouldBe Some(reward)
-    blockHeadersSeq.head.desiredReward shouldBe Some(-1)
     blockHeadersSeq.head.totalFee shouldBe 0
   }
 
