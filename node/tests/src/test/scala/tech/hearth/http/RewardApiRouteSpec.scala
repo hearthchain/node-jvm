@@ -124,7 +124,7 @@ class RewardApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
     s"""
        |{
        |  "height" : ${d.blockchain.height},
-       |  "totalWavesAmount" : ${d.blockchain.settings.genesisSettings.initialBalance + d.blockchain.settings.rewardsSettings.initial},
+       |  "totalWavesAmount" : ${d.blockchain.settings.initialBalance + d.blockchain.settings.rewardsSettings.initial},
        |  "currentReward" : ${d.blockchain.settings.rewardsSettings.initial},
        |  "minIncrement" : ${d.blockchain.settings.rewardsSettings.minIncrement},
        |  "term" : ${d.blockchain.settings.rewardsSettings.termAfterCappedRewardFeature},

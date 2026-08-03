@@ -158,31 +158,40 @@ object BlockDiffer {
       )
     }
 
-    if (heightWithNewBlock == Height(0))
-      // The genesis block has no transactions and earns no reward: its whole effect is the predefined snapshot
-      GenesisSnapshot.build(blockchain.settings.genesisSettings)
-    else
-      (for {
-        (minerReward, daoPortfolio) <- addressRewardsE
-        // the block is applied on top of `blockchain`, so it has to reference its last block. this used to be an
-        // unwritten assumption; the carry fee below is only the right one if it actually holds
-        _ <- Either.cond(
-          blockchain.lastBlockId.contains(reference),
-          (),
-          s"Block references $reference, but the blockchain it is applied to is at ${blockchain.lastBlockId.getOrElse("empty")}"
-        )
-        // the referenced block collected these fees per transaction; the miner of this block gets to keep them
-        feeFromPreviousBlock <- blockchain.carryFee(reference)
-        totalMinerReward     <- minerReward.combine(feeFromPreviousBlock.pf)
-        totalMinerPortfolio = Map(minerAddress -> totalMinerReward)
-        totalRewardPortfolios <- Portfolio.combine(totalMinerPortfolio, daoPortfolio)
-        penalties <- maybePrevBlock match {
-          case Some(prevBlock) => calculatePenalties(blockchain, prevBlock)
-          case None            => Map.empty[Address, Portfolio].asRight[String]
-        }
-        withPenaltiesPortfolios <- Portfolio.combine(penalties, totalRewardPortfolios)
-        resultSnapshot          <- StateSnapshot.empty.addBalances(withPenaltiesPortfolios, blockchain)
-      } yield resultSnapshot).leftMap(GenericError(_))
+    // The genesis block has no transactions and earns no reward: its whole effect is a predefined snapshot
+    val rewardPartE: Either[String, StateSnapshot] =
+      if (heightWithNewBlock == Height(0)) Right(StateSnapshot.empty)
+      else
+        for {
+          (minerReward, daoPortfolio) <- addressRewardsE
+          // the block is applied on top of `blockchain`, so it has to reference its last block. this used to be an
+          // unwritten assumption; the carry fee below is only the right one if it actually holds
+          _ <- Either.cond(
+            blockchain.lastBlockId.contains(reference),
+            (),
+            s"Block references $reference, but the blockchain it is applied to is at ${blockchain.lastBlockId.getOrElse("empty")}"
+          )
+          // the referenced block collected these fees per transaction; the miner of this block gets to keep them
+          feeFromPreviousBlock <- blockchain.carryFee(reference)
+          totalMinerReward     <- minerReward.combine(feeFromPreviousBlock.pf)
+          totalMinerPortfolio = Map(minerAddress -> totalMinerReward)
+          totalRewardPortfolios <- Portfolio.combine(totalMinerPortfolio, daoPortfolio)
+          penalties <- maybePrevBlock match {
+            case Some(prevBlock) => calculatePenalties(blockchain, prevBlock)
+            case None            => Map.empty[Address, Portfolio].asRight[String]
+          }
+          withPenaltiesPortfolios <- Portfolio.combine(penalties, totalRewardPortfolios)
+          resultSnapshot          <- StateSnapshot.empty.addBalances(withPenaltiesPortfolios, blockchain)
+        } yield resultSnapshot
+
+    for {
+      rewardPart <- rewardPartE.leftMap(GenericError(_))
+      newBlockHeight = (heightWithNewBlock + 1).toInt
+      combined <- blockchain.settings.predefinedSnapshots.find(_.height == newBlockHeight) match {
+        case Some(s) => PredefinedSnapshot.build(s, SnapshotBlockchain(blockchain, rewardPart)).map(rewardPart |+| _)
+        case None    => Right(rewardPart)
+      }
+    } yield combined
   }
 
   def fromMicroBlock(

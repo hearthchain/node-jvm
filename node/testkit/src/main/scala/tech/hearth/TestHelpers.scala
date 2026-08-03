@@ -5,13 +5,17 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{FileVisitResult, Files, Path, SimpleFileVisitor}
 
 import tech.hearth.account.Address
-import tech.hearth.settings.{GenesisBalanceSettings, GenesisSettings}
+import tech.hearth.settings.{GenesisBalanceSettings, GenesisSettings, PredefinedSnapshotSettings}
+import tech.hearth.state.GenesisBlockHeight
 
 import scala.concurrent.duration.*
 
 object TestHelpers {
-  def genesisSettings(balances: Map[Address, Long], blockTimestamp: Long = System.currentTimeMillis()): GenesisSettings =
-    GenesisSettings(blockTimestamp, None, 1000, 60.seconds, balances = genesisBalances(balances))
+  def genesisSettings(blockTimestamp: Long = System.currentTimeMillis()): GenesisSettings =
+    GenesisSettings(blockTimestamp, None, 1000, 60.seconds)
+
+  def genesisSnapshotSettings(balances: Map[Address, Long]): PredefinedSnapshotSettings =
+    PredefinedSnapshotSettings(GenesisBlockHeight.toInt, balances = genesisBalances(balances))
 
   def genesisBalances(balances: Map[Address, Long]): Seq[GenesisBalanceSettings] =
     balances.map { case (account, amount) => GenesisBalanceSettings(account.toBech32, amount) }.toSeq

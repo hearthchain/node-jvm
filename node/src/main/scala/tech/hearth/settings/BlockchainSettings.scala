@@ -3,10 +3,9 @@ package tech.hearth.settings
 import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.typesafe.config.Config
-import tech.hearth.account.{Address, PublicKey}
+import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
-import tech.hearth.state.Height
+import tech.hearth.state.{GenesisBlockHeight, Height}
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
 
@@ -128,7 +127,7 @@ object FunctionalitySettings {
   )
 }
 
-/** An asset issued in the genesis block. Since there is no issue transaction to derive it from, the id is specified explicitly. */
+/** An asset issued by a predefined snapshot. Since there is no issue transaction to derive it from, the id is specified explicitly. */
 case class GenesisAssetSettings(
     id: ByteStr,
     issuer: String,
@@ -144,7 +143,7 @@ object GenesisAssetSettings {
   given ConfigReader[GenesisAssetSettings] = deriveReader
 }
 
-/** An account committed to generating blocks starting from the very first generation period.
+/** An account committed to generating blocks starting from the generation period of the predefined snapshot's height.
   *
   * @param endorserPublicKey
   *   The BLS key this generator's endorsements are verified with
@@ -153,7 +152,7 @@ object GenesisAssetSettings {
   */
 case class GenesisGeneratorSettings(publicKey: String, endorserPublicKey: String, vrfPublicKey: String) derives ConfigReader
 
-/** Initial balances of an account. Every asset referenced here must be listed in [[GenesisSettings.assets]]. */
+/** Balances credited by a predefined snapshot. Every asset referenced here must be listed in the same [[PredefinedSnapshotSettings.assets]]. */
 case class GenesisBalanceSettings(recipient: String, waves: Long = 0L, assets: Map[String, Long] = Map.empty)
 
 object GenesisBalanceSettings {
@@ -161,14 +160,72 @@ object GenesisBalanceSettings {
   given ConfigReader[GenesisBalanceSettings] = deriveReader
 }
 
-/** The genesis block, and the state it puts into an empty node, are derived from the settings below, so a node that
-  * disagrees about any of them silently builds a chain of its own. [[stateHash]] and [[blockId]] pin that derivation:
-  * when either is set, [[tech.hearth.block.Block.genesis]] refuses to build a genesis block that does not match
-  * it, and the node stops on start instead of forking.
+/** A chunk of state applied outside of transaction processing, before the block at [[height]] applies its own
+  * transactions. Since there is no issue transaction any more, this is the only way to mint a new asset; it can also
+  * credit asset balances and commit generators. Only the height-1 (genesis) entry may credit Waves - Waves supply
+  * growth beyond genesis is tracked as block rewards only. Height-keyed and applied unconditionally for every block
+  * at that height - not tied to feature activation in code, though a network's config typically lines a snapshot's
+  * height up with a feature activation height as a matter of convention. The height-1 entry is the genesis snapshot.
+  */
+case class PredefinedSnapshotSettings(
+    height: Int,
+    assets: Seq[GenesisAssetSettings] = Seq.empty,
+    generators: Seq[GenesisGeneratorSettings] = Seq.empty,
+    balances: Seq[GenesisBalanceSettings] = Seq.empty
+)
+
+object PredefinedSnapshotSettings {
+  // This given is required for default args to work, see FunctionalitySettings.
+  given ConfigReader[PredefinedSnapshotSettings] = deriveReader
+
+  val MAINNET: Seq[PredefinedSnapshotSettings] = Seq(
+    PredefinedSnapshotSettings(
+      height = GenesisBlockHeight.toInt,
+      balances = List(
+        GenesisBalanceSettings("3PAWwWa6GbwcJaFzwqXQN5KQm7H96Y7SHTQ", Constants.UnitsInWave * Constants.TotalWaves - 5 * Constants.UnitsInWave),
+        GenesisBalanceSettings("3P8JdJGYc7vaLu4UXUZc1iRLdzrkGtdCyJM", Constants.UnitsInWave),
+        GenesisBalanceSettings("3PAGPDPqnGkyhcihyjMHe9v36Y4hkAh9yDy", Constants.UnitsInWave),
+        GenesisBalanceSettings("3P9o3ZYwtHkaU1KxsKkFjJqJKS3dLHLC9oF", Constants.UnitsInWave),
+        GenesisBalanceSettings("3PJaDyprvekvPXPuAtxrapacuDJopgJRaU3", Constants.UnitsInWave),
+        GenesisBalanceSettings("3PBWXDFUc86N2EQxKJmW8eFco65xTyMZx6J", Constants.UnitsInWave)
+      )
+    )
+  )
+
+  val TESTNET: Seq[PredefinedSnapshotSettings] = Seq(
+    PredefinedSnapshotSettings(
+      height = GenesisBlockHeight.toInt,
+      balances = List(
+        GenesisBalanceSettings("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8", (Constants.UnitsInWave * Constants.TotalWaves * 0.04).toLong),
+        GenesisBalanceSettings("3NBVqYXrapgJP9atQccdBPAgJPwHDKkh6A8", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
+        GenesisBalanceSettings("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
+        GenesisBalanceSettings("3NCBMxgdghg4tUhEEffSXy11L6hUi6fcBpd", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
+        GenesisBalanceSettings(
+          "3N18z4B8kyyQ96PhN5eyhCAbg4j49CgwZJx",
+          (Constants.UnitsInWave * Constants.TotalWaves - Constants.UnitsInWave * Constants.TotalWaves * 0.1).toLong
+        )
+      )
+    )
+  )
+
+  val STAGENET: Seq[PredefinedSnapshotSettings] = Seq(
+    PredefinedSnapshotSettings(
+      height = GenesisBlockHeight.toInt,
+      balances = List(
+        GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInWave * Constants.TotalWaves)
+      )
+    )
+  )
+}
+
+/** The genesis block is derived from the settings below, so a node that disagrees about any of them silently builds
+  * a chain of its own. [[stateHash]] and [[blockId]] pin that derivation: when either is set,
+  * [[tech.hearth.block.Block.genesis]] refuses to build a genesis block that does not match it, and the node stops
+  * on start instead of forking.
   *
   * @param stateHash
-  *   The hash of the snapshot built from `assets`, `generators` and `balances`. Pins the state the genesis block
-  *   carries.
+  *   The hash of the snapshot built from the height-1 [[PredefinedSnapshotSettings]]. Pins the state the genesis
+  *   block carries.
   * @param blockId
   *   The id of the genesis block, which is the hash of its header, so it covers the state hash along with `timestamp`
   *   and `initial-base-target`. It does not cover `signature`, which is not part of the header and is verified on its
@@ -180,26 +237,9 @@ case class GenesisSettings(
     initialBaseTarget: Long,
     averageBlockDelay: FiniteDuration,
     stateHash: Option[ByteStr] = None,
-    blockId: Option[ByteStr] = None,
-    assets: Seq[GenesisAssetSettings] = Seq.empty,
-    generators: Seq[GenesisGeneratorSettings] = Seq.empty,
-    balances: Seq[GenesisBalanceSettings] = Seq.empty
+    blockId: Option[ByteStr] = None
 ) {
   def blockTimestamp: Long = timestamp
-
-  /** Total amount of Waves in the genesis snapshot. Replaces the formerly configured `initial-balance`. */
-  lazy val initialBalance: Long = balances.map(_.waves).foldLeft(0L)(Math.addExact)
-
-  def render(): String =
-    s"""{
-       |  generators = [
-       |    ${generators.map(g => s"{ address = ${Address.fromPublicKey(PublicKey(Base58.decode(g.publicKey)))} }").mkString("\n")}
-       |  ]
-       |  balances = [
-       |    ${balances.map(b => s"{ address = ${b.recipient}, balance = ${b.waves}}").mkString("\n")}
-       |  ]
-       |}
-       |""".stripMargin
 }
 
 object GenesisSettings { // TODO: Move to network-defaults.conf
@@ -208,55 +248,32 @@ object GenesisSettings { // TODO: Move to network-defaults.conf
 
   // Note: the predefined signatures of the pre-snapshot genesis blocks are gone along with the genesis transactions
   // they were made over. The blocks below are signed by Block.GenesisGenerator instead.
-  val MAINNET: GenesisSettings = GenesisSettings(
-    1465742577614L,
-    None,
-    153722867L,
-    60.seconds,
-    balances = List(
-      GenesisBalanceSettings("3PAWwWa6GbwcJaFzwqXQN5KQm7H96Y7SHTQ", Constants.UnitsInWave * Constants.TotalWaves - 5 * Constants.UnitsInWave),
-      GenesisBalanceSettings("3P8JdJGYc7vaLu4UXUZc1iRLdzrkGtdCyJM", Constants.UnitsInWave),
-      GenesisBalanceSettings("3PAGPDPqnGkyhcihyjMHe9v36Y4hkAh9yDy", Constants.UnitsInWave),
-      GenesisBalanceSettings("3P9o3ZYwtHkaU1KxsKkFjJqJKS3dLHLC9oF", Constants.UnitsInWave),
-      GenesisBalanceSettings("3PJaDyprvekvPXPuAtxrapacuDJopgJRaU3", Constants.UnitsInWave),
-      GenesisBalanceSettings("3PBWXDFUc86N2EQxKJmW8eFco65xTyMZx6J", Constants.UnitsInWave)
-    )
-  )
-
-  val TESTNET: GenesisSettings = GenesisSettings(
-    1478000000000L,
-    None,
-    153722867L,
-    60.seconds,
-    balances = List(
-      GenesisBalanceSettings("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8", (Constants.UnitsInWave * Constants.TotalWaves * 0.04).toLong),
-      GenesisBalanceSettings("3NBVqYXrapgJP9atQccdBPAgJPwHDKkh6A8", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-      GenesisBalanceSettings("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-      GenesisBalanceSettings("3NCBMxgdghg4tUhEEffSXy11L6hUi6fcBpd", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-      GenesisBalanceSettings(
-        "3N18z4B8kyyQ96PhN5eyhCAbg4j49CgwZJx",
-        (Constants.UnitsInWave * Constants.TotalWaves - Constants.UnitsInWave * Constants.TotalWaves * 0.1).toLong
-      )
-    )
-  )
-
-  val STAGENET: GenesisSettings = GenesisSettings(
-    1561705836768L,
-    None,
-    5000,
-    1.minute,
-    balances = List(
-      GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInWave * Constants.TotalWaves)
-    )
-  )
+  val MAINNET: GenesisSettings  = GenesisSettings(1465742577614L, None, 153722867L, 60.seconds)
+  val TESTNET: GenesisSettings  = GenesisSettings(1478000000000L, None, 153722867L, 60.seconds)
+  val STAGENET: GenesisSettings = GenesisSettings(1561705836768L, None, 5000, 1.minute)
 }
 
 case class BlockchainSettings(
     addressSchemeCharacter: Char,
     functionalitySettings: FunctionalitySettings,
     genesisSettings: GenesisSettings,
-    rewardsSettings: RewardsSettings
-)
+    rewardsSettings: RewardsSettings,
+    predefinedSnapshots: Seq[PredefinedSnapshotSettings] = Seq.empty
+) {
+  require(
+    predefinedSnapshots.map(_.height).distinct.size == predefinedSnapshots.size,
+    s"Duplicate predefined snapshot height in: ${predefinedSnapshots.map(_.height)}"
+  )
+
+  /** The height-1 predefined snapshot, or an empty one if the settings don't declare one - settings built directly
+    * in code (tests, tools) often don't; a real network's config always does (enforced when it's parsed).
+    */
+  lazy val genesisSnapshot: PredefinedSnapshotSettings =
+    predefinedSnapshots.find(_.height == GenesisBlockHeight.toInt).getOrElse(PredefinedSnapshotSettings(GenesisBlockHeight.toInt))
+
+  /** Total amount of Waves declared in the genesis (height 1) predefined snapshot. */
+  lazy val initialBalance: Long = genesisSnapshot.balances.map(_.waves).foldLeft(0L)(Math.addExact)
+}
 
 private[settings] object BlockchainType {
   val STAGENET = "STAGENET"
@@ -272,24 +289,28 @@ object BlockchainSettings {
     for {
       objCur               <- cur.asObjectCursor
       blockchainTypeString <- objCur.atKey("type").flatMap(_.asString).map(_.toUpperCase)
-      (addressSchemeCharacter, functionalitySettings, genesisSettings, rewardsSettings) <- blockchainTypeString match {
-        case BlockchainType.STAGENET => Right(('S', FunctionalitySettings.STAGENET, GenesisSettings.STAGENET, RewardsSettings.STAGENET))
-        case BlockchainType.TESTNET  => Right(('T', FunctionalitySettings.TESTNET, GenesisSettings.TESTNET, RewardsSettings.TESTNET))
-        case BlockchainType.MAINNET  => Right(('W', FunctionalitySettings.MAINNET, GenesisSettings.MAINNET, RewardsSettings.MAINNET))
-        case _                       =>
+      (addressSchemeCharacter, functionalitySettings, genesisSettings, rewardsSettings, predefinedSnapshots) <- blockchainTypeString match {
+        case BlockchainType.STAGENET =>
+          Right(('S', FunctionalitySettings.STAGENET, GenesisSettings.STAGENET, RewardsSettings.STAGENET, PredefinedSnapshotSettings.STAGENET))
+        case BlockchainType.TESTNET =>
+          Right(('T', FunctionalitySettings.TESTNET, GenesisSettings.TESTNET, RewardsSettings.TESTNET, PredefinedSnapshotSettings.TESTNET))
+        case BlockchainType.MAINNET =>
+          Right(('W', FunctionalitySettings.MAINNET, GenesisSettings.MAINNET, RewardsSettings.MAINNET, PredefinedSnapshotSettings.MAINNET))
+        case _ =>
           // Custom
           for {
-            customObjCur  <- objCur.atKey("custom").flatMap(_.asObjectCursor)
-            networkId     <- customObjCur.atKey("address-scheme-character").flatMap(_.asString).map(_.charAt(0))
-            functionality <- customObjCur.atKey("functionality").flatMap(ConfigReader[FunctionalitySettings].from)
-            genesis       <- customObjCur.atKey("genesis").flatMap(ConfigReader[GenesisSettings].from)
-            rewards       <- customObjCur.atKey("rewards").flatMap(ConfigReader[RewardsSettings].from)
+            customObjCur       <- objCur.atKey("custom").flatMap(_.asObjectCursor)
+            networkId          <- customObjCur.atKey("address-scheme-character").flatMap(_.asString).map(_.charAt(0))
+            functionality      <- customObjCur.atKey("functionality").flatMap(ConfigReader[FunctionalitySettings].from)
+            genesis            <- customObjCur.atKey("genesis").flatMap(ConfigReader[GenesisSettings].from)
+            rewards            <- customObjCur.atKey("rewards").flatMap(ConfigReader[RewardsSettings].from)
+            predefinedSnapshot <- customObjCur.atKey("predefined-snapshots").flatMap(ConfigReader[Seq[PredefinedSnapshotSettings]].from)
           } yield {
             require(functionality.minBlockTime <= genesis.averageBlockDelay, "min-block-time should be <= average-block-delay")
-            (networkId, functionality, genesis, rewards)
+            (networkId, functionality, genesis, rewards, predefinedSnapshot)
           }
       }
 
-    } yield BlockchainSettings(addressSchemeCharacter, functionalitySettings, genesisSettings, rewardsSettings)
+    } yield BlockchainSettings(addressSchemeCharacter, functionalitySettings, genesisSettings, rewardsSettings, predefinedSnapshots)
   )
 }

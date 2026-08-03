@@ -11,6 +11,7 @@ import tech.hearth.crypto.*
 import tech.hearth.crypto.bls.BlsKeyPair
 import tech.hearth.features.BlockchainFeature
 import tech.hearth.settings.*
+import tech.hearth.state.GenesisBlockHeight
 import tech.hearth.utils.*
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
@@ -106,7 +107,7 @@ object GenesisBlockGenerator {
   }
 
   def createConfig(settings: Settings): String = {
-    def generateAndReport(addrInfos: Iterable[FullAddressInfo], settings: GenesisSettings): String = {
+    def generateAndReport(addrInfos: Iterable[FullAddressInfo], genesisSettings: GenesisSettings, snapshot: PredefinedSnapshotSettings): String = {
       val output = new StringBuilder(8192)
       output.append("Addresses:\n")
       addrInfos.foreach { acc =>
@@ -120,22 +121,27 @@ object GenesisBlockGenerator {
 
       val confBody =
         s"""genesis {
-           |  average-block-delay = ${settings.averageBlockDelay.toMillis}ms
-           |  initial-base-target = ${settings.initialBaseTarget}
-           |  timestamp = ${settings.timestamp}
-           |  block-timestamp = ${settings.blockTimestamp}
-           |  signature = "${settings.signature.get}"
-           |  state-hash = "${settings.stateHash.get}"
-           |  block-id = "${settings.blockId.get}"
-           |  generators = [
-           |    ${settings.generators
-            .map(x => s"""{public-key = "${x.publicKey}", endorser-public-key = "${x.endorserPublicKey}", vrf-public-key = "${x.vrfPublicKey}"}""")
-            .mkString(",\n    ")}
-           |  ]
-           |  balances = [
-           |    ${settings.balances.map(x => s"""{recipient = "${x.recipient}", waves = ${x.waves}}""").mkString(",\n    ")}
-           |  ]
+           |  average-block-delay = ${genesisSettings.averageBlockDelay.toMillis}ms
+           |  initial-base-target = ${genesisSettings.initialBaseTarget}
+           |  timestamp = ${genesisSettings.timestamp}
+           |  block-timestamp = ${genesisSettings.blockTimestamp}
+           |  signature = "${genesisSettings.signature.get}"
+           |  state-hash = "${genesisSettings.stateHash.get}"
+           |  block-id = "${genesisSettings.blockId.get}"
            |}
+           |predefined-snapshots = [
+           |  {
+           |    height = ${snapshot.height}
+           |    generators = [
+           |      ${snapshot.generators
+            .map(x => s"""{public-key = "${x.publicKey}", endorser-public-key = "${x.endorserPublicKey}", vrf-public-key = "${x.vrfPublicKey}"}""")
+            .mkString(",\n      ")}
+           |    ]
+           |    balances = [
+           |      ${snapshot.balances.map(x => s"""{recipient = "${x.recipient}", waves = ${x.waves}}""").mkString(",\n      ")}
+           |    ]
+           |  }
+           |]
            |""".stripMargin
 
       output.append("Settings:\n")
@@ -167,29 +173,32 @@ object GenesisBlockGenerator {
       )
     }
 
-    def genesisSettings(predefined: Option[Long]): GenesisSettings =
+    def genesisSettings(predefined: Option[Long]): (GenesisSettings, PredefinedSnapshotSettings) =
       predefined
         .map(baseTarget => mkGenesisSettings(baseTarget))
         .getOrElse(mkGenesisSettings(calcInitialBaseTarget()))
 
-    def mkGenesisSettings(baseTarget: Long): GenesisSettings = {
-      val unpinned = GenesisSettings(
-        timestamp,
-        None,
-        baseTarget,
-        settings.averageBlockDelay,
-        generators = genesisGenerators,
-        balances = genesisBalances
+    def mkGenesisSettings(baseTarget: Long): (GenesisSettings, PredefinedSnapshotSettings) = {
+      val unpinnedGenesis = GenesisSettings(timestamp, None, baseTarget, settings.averageBlockDelay)
+      val snapshot        = PredefinedSnapshotSettings(GenesisBlockHeight.toInt, generators = genesisGenerators, balances = genesisBalances)
+
+      // Build the very block the node will build from these settings, so the emitted commitments are the ones it
+      // computes. functionalitySettings/rewardsSettings/addressSchemeCharacter don't affect Block.genesis.
+      val blockchainSettings = BlockchainSettings(
+        settings.chainId.toChar,
+        settings.functionalitySettings,
+        unpinnedGenesis,
+        RewardsSettings.MAINNET,
+        Seq(snapshot)
       )
+      val genesis = Block.genesis(blockchainSettings).explicitGet()
 
-      // Build the very block the node will build from these settings, so the emitted commitments are the ones it computes
-      val genesis = Block.genesis(unpinned).explicitGet()
-
-      unpinned.copy(
+      val pinnedGenesis = unpinnedGenesis.copy(
         signature = Some(genesis.signature),
         stateHash = genesis.header.stateHash,
         blockId = Some(genesis.id())
       )
+      (pinnedGenesis, snapshot)
     }
 
     def calcInitialBaseTarget(): Long = {
@@ -270,9 +279,11 @@ object GenesisBlockGenerator {
       baseTargets.take(significantCount).sum / significantCount
     }
 
+    val (pinnedGenesis, snapshot) = genesisSettings(settings.baseTarget)
     generateAndReport(
       addrInfos = shares.map(_._1),
-      settings = genesisSettings(settings.baseTarget)
+      genesisSettings = pinnedGenesis,
+      snapshot = snapshot
     )
   }
 }

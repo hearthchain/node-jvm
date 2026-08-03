@@ -11,8 +11,9 @@ import tech.hearth.state.Height
 
 object NodeConfigs {
 
-  /** Assets declared in template.conf's `genesis.assets` - there is no issue transaction any more, so a test that
-    * needs an existing non-WAVES asset has to reference one of these instead of minting one at runtime.
+  /** Assets declared in template.conf's height-1 `predefined-snapshots` entry - there is no issue transaction any
+    * more, so a test that needs an existing non-WAVES asset has to reference one of these instead of minting one
+    * at runtime.
     */
   object GenesisAssets {
     val TestAsset: IssuedAsset    = IssuedAsset(ByteStr.decodeBase58("9PgUiAftSxvtUGiefVGm2wyVDt5XRqxmHNoaNwEMGDJK").get)

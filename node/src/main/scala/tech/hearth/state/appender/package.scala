@@ -71,7 +71,7 @@ package object appender {
       // TODO: `validGenerators.nonEmpty` is wrong and should go. An ineligible generator - poor or in conflict - must
       // never mine, but when every committed generator of the period is ineligible this lets one of them through
       // anyway (the VRF lookup then passes, since it does hold a commitment). Removing it fails the conflict-endorser
-      // suites and GenesisSnapshotSpec, which still encode the current behaviour.
+      // suites and PredefinedSnapshotSpec, which still encode the current behaviour.
       _ <- Either.raiseWhen(validGenerators.nonEmpty && !generatorSet.contains(minerAddress)) {
         s"$minerAddress is not allowed to generate a block, allowed: ${generatorSet.mkString(", ")}. " +
           s"If this is your node: commit to generation for the next period"

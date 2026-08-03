@@ -36,7 +36,7 @@ package object hearth {
 
   def checkGenesis(settings: WavesSettings, blockchainUpdater: Blockchain & BlockchainUpdater, miner: Miner): Unit = {
     (for {
-      block <- Block.genesis(settings.blockchainSettings.genesisSettings)
+      block <- Block.genesis(settings.blockchainSettings)
       _     <- checkOrAppend(block, blockchainUpdater, miner)
     } yield ()).left
       .foreach { e =>
