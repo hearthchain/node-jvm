@@ -32,13 +32,11 @@ package object sync {
 
   val supportedVersions: List[Byte]               = List(1, 2, 3)
   val burnTxSupportedVersions: List[Byte]         = List(1, 2, 3)
-  val leaseTxSupportedVersions: List[Byte]        = List(1, 2, 3)
   val dataTxSupportedVersions: List[Byte]         = List(1, 2)
   val massTransferTxSupportedVersions: List[Byte] = List(1, 2)
   val sponsorshipTxSupportedVersions: List[Byte]  = List(1, 2)
   val setAssetScrTxSupportedVersions: List[Byte]  = List(1, 2)
   val issueTxSupportedVersions: List[Byte]        = List(1, 2, 3)
-  val transferTxSupportedVersions: List[Byte]     = List(1, 2, 3)
   val aliasTxSupportedVersions: List[Byte]        = List(1, 2, 3)
   val reissueTxSupportedVersions: List[Byte]      = List(1, 2, 3)
 

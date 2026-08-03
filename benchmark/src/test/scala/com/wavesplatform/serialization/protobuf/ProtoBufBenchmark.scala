@@ -25,16 +25,17 @@ class ProtoBufBenchmark {
   @Benchmark
   def serializeMassTransferPB_test(bh: Blackhole): Unit = {
     val vanillaTx = {
+      val sender    = PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet()
+      val recipient = sender.toAddress.toString
       val transfers = MassTransferTransaction
         .parseTransfersList(
-          List(Transfer("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", 100000000L), Transfer("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", 200000000L))
+          List(Transfer(recipient, 100000000L), Transfer(recipient, 200000000L))
         )
         .explicitGet()
 
       MassTransferTransaction
         .create(
-          1.toByte,
-          PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
+          sender,
           Waves,
           transfers,
           200000,
@@ -52,16 +53,17 @@ class ProtoBufBenchmark {
   @Benchmark
   def serializeMassTransferVanilla_test(bh: Blackhole): Unit = {
     val vanillaTx = {
+      val sender    = PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet()
+      val recipient = sender.toAddress.toString
       val transfers = MassTransferTransaction
         .parseTransfersList(
-          List(Transfer("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", 100000000L), Transfer("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", 200000000L))
+          List(Transfer(recipient, 100000000L), Transfer(recipient, 200000000L))
         )
         .explicitGet()
 
       MassTransferTransaction
         .create(
-          1.toByte,
-          PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
+          sender,
           Waves,
           transfers,
           200000,

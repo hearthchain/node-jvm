@@ -77,7 +77,7 @@ object TransactionFactory {
   private def signWith(request: JsObject, signer: SigningKey): Either[ValidationError, Transaction] = {
     val overrides = Json.newBuilder
     if (!request.keys.contains("senderPublicKey")) {
-      overrides += "senderPublicKey" -> signer.publicKey
+      overrides += "senderPublicKey" -> PublicKey(signer.publicKey()).toString
     }
     parseRequest(overrides.result() ++ request).map(_.signWith(signer))
   }

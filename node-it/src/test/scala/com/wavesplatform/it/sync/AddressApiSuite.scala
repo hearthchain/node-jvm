@@ -10,7 +10,6 @@ import com.wavesplatform.state.Height
 import com.wavesplatform.transaction.TxHelpers
 import play.api.libs.json.*
 
-import java.net.URLDecoder
 import scala.util.Random
 
 class AddressApiSuite extends BaseTransactionSuite with NTPTime {

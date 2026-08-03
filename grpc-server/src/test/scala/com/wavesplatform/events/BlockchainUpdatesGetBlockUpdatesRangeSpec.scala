@@ -5,8 +5,6 @@ import com.wavesplatform.account.AddressScheme
 import com.wavesplatform.db.WithState.AddrWithBalance
 import com.wavesplatform.events.api.grpc.protobuf.GetBlockUpdatesRangeRequest
 import com.wavesplatform.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
-import com.wavesplatform.test.*
-import com.wavesplatform.test.DomainPresets.*
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}

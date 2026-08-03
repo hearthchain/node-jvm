@@ -11,7 +11,6 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import com.wavesplatform.account.AddressScheme
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.api.AsyncHttpApi.*
 import com.wavesplatform.it.util.GlobalTimer.instance as timer
 import com.wavesplatform.settings.*
@@ -87,7 +86,7 @@ class Docker(
     r
   }
 
-  private val genesisOverride = Docker.genesisOverride(Some(suiteConfig))
+  private val genesisOverride = Docker.genesisOverride()
 
   private def ipForNode(nodeId: Int) = InetAddress.getByAddress(toByteArray(nodeId & 0xf | networkSeed)).getHostAddress
 
@@ -586,7 +585,7 @@ object Docker {
       .map(_.waves)
       .sum
 
-  def genesisOverride(featuresConfig: Option[Config] = None): Config = {
+  def genesisOverride(): Config = {
     // Starting a node and applying the genesis block takes a non-negligible amount of time. If we do not introduce an offset,
     // the system will treat the genesis block as if it was created in the past. In CI runs, this time gap can reach up
     // to 30 seconds.
@@ -613,21 +612,6 @@ object Docker {
 
     val genesisConfig = timestampOverrides.withFallback(configTemplate)
     val gs            = ConfigSource.fromConfig(genesisConfig).at("waves.blockchain.custom.genesis").loadOrThrow[GenesisSettings]
-    val featuresConfigAdjusted = featuresConfig
-      .map(_.withFallback(configTemplate))
-      .getOrElse(configTemplate)
-      .resolve()
-    val features =
-      ConfigSource
-        .fromConfig(featuresConfigAdjusted)
-        .at("waves.blockchain.custom.functionality.pre-activated-features")
-        .loadOrThrow[Map[Short, Int]]
-
-    val isRideV6Activated          = true
-    val isTxStateSnapshotActivated = true
-
-    // Only the pre-activated features matter here: they gate the genesis generators
-    val fs = FunctionalitySettings(preActivatedFeatures = features)
     // The final config sent to a container is flattened into -D system properties (see startNodeInternal), which
     // cannot represent an absent/null value, so all three commitments are pinned here to the concrete values this
     // genesis block actually computes, rather than left null and risking custom-defaults.conf's placeholders (or an

@@ -18,11 +18,11 @@ class GeneratingBalanceSuite extends GrpcBaseTransactionSuite {
 
     val initialBalance = sender.wavesBalance(senderAddress)
 
-    sender.broadcastTransfer(sender.keyPair, Recipient().withPublicKeyHash(recipientAddress), amount, minFee, 2, waitForTx = true)
+    sender.broadcastTransfer(sender.keyPair, Recipient().withPublicKeyHash(recipientAddress), amount, minFee, waitForTx = true)
 
     val afterTransferBalance = sender.wavesBalance(senderAddress)
 
-    sender.broadcastTransfer(recipient, Recipient().withPublicKeyHash(senderAddress), amount - minFee, minFee, 2, waitForTx = true)
+    sender.broadcastTransfer(recipient, Recipient().withPublicKeyHash(senderAddress), amount - minFee, minFee, waitForTx = true)
 
     val finalBalance = sender.wavesBalance(senderAddress)
 

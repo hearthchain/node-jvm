@@ -8,7 +8,6 @@ import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.Node
 import com.wavesplatform.it.api.SyncHttpApi.RequestAwaitTime
-import com.wavesplatform.it.sync.*
 import com.wavesplatform.protobuf.block.Block.Header
 import com.wavesplatform.protobuf.block.{PBBlocks, VanillaBlock}
 import com.wavesplatform.protobuf.transaction.*
@@ -77,13 +76,12 @@ object SyncGrpcApi extends Assertions {
         sellMatcherFee: Long,
         fee: Long,
         timestamp: Long,
-        version: Byte,
         matcherFeeAssetId: String = "WAVES",
         waitForTx: Boolean = false
     ): PBSignedTransaction = {
       maybeWaitForTransaction(
         sync(
-          async(n).exchange(matcher, buyOrder, sellOrder, amount, price, buyMatcherFee, sellMatcherFee, fee, timestamp, version, matcherFeeAssetId)
+          async(n).exchange(matcher, buyOrder, sellOrder, amount, price, buyMatcherFee, sellMatcherFee, fee, timestamp, matcherFeeAssetId)
         ),
         waitForTx
       )
@@ -94,7 +92,6 @@ object SyncGrpcApi extends Assertions {
         recipient: Recipient,
         amount: Long,
         fee: Long,
-        version: Int = 2,
         assetId: String = "WAVES",
         feeAssetId: String = "WAVES",
         attachment: ByteString = ByteString.EMPTY,
@@ -102,7 +99,7 @@ object SyncGrpcApi extends Assertions {
         waitForTx: Boolean = false
     ): PBSignedTransaction = {
       maybeWaitForTransaction(
-        sync(async(n).broadcastTransfer(source, recipient, amount, fee, version, assetId, feeAssetId, attachment, timestamp)),
+        sync(async(n).broadcastTransfer(source, recipient, amount, fee, assetId, feeAssetId, attachment, timestamp)),
         waitForTx
       )
     }
@@ -183,10 +180,9 @@ object SyncGrpcApi extends Assertions {
         transfers: Seq[MassTransferTransactionData.Transfer],
         attachment: ByteString = ByteString.EMPTY,
         fee: Long,
-        version: Int = 1,
         waitForTx: Boolean = false
     ): PBSignedTransaction = {
-      maybeWaitForTransaction(sync(async(n).broadcastMassTransfer(sender, assetId, transfers, attachment, fee, version)), waitForTx)
+      maybeWaitForTransaction(sync(async(n).broadcastMassTransfer(sender, assetId, transfers, attachment, fee)), waitForTx)
     }
 
     def signedBroadcast(tx: PBSignedTransaction, waitForTx: Boolean = false): PBSignedTransaction = {
@@ -202,14 +198,13 @@ object SyncGrpcApi extends Assertions {
         recipient: Recipient,
         amount: Long,
         fee: Long,
-        version: Int = 2,
         waitForTx: Boolean = false
     ): PBSignedTransaction = {
-      maybeWaitForTransaction(sync(async(n).broadcastLease(source, recipient, amount, fee, version)), waitForTx)
+      maybeWaitForTransaction(sync(async(n).broadcastLease(source, recipient, amount, fee)), waitForTx)
     }
 
-    def broadcastLeaseCancel(source: SigningKey, leaseId: String, fee: Long, version: Int = 2, waitForTx: Boolean = false): PBSignedTransaction = {
-      maybeWaitForTransaction(sync(async(n).broadcastLeaseCancel(source, leaseId, fee, version)), waitForTx)
+    def broadcastLeaseCancel(source: SigningKey, leaseId: String, fee: Long, waitForTx: Boolean = false): PBSignedTransaction = {
+      maybeWaitForTransaction(sync(async(n).broadcastLeaseCancel(source, leaseId, fee)), waitForTx)
     }
 
     def getActiveLeases(address: ByteString): List[LeaseResponse] = {

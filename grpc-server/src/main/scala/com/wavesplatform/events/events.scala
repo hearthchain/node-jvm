@@ -10,7 +10,7 @@ import com.wavesplatform.events.StateUpdate.LeaseUpdate.LeaseStatus
 import com.wavesplatform.events.StateUpdate.{AssetStateUpdate, BalanceUpdate, LeaseUpdate, LeasingBalanceUpdate}
 import com.wavesplatform.events.protobuf.TransactionMetadata
 import com.wavesplatform.protobuf.*
-import com.wavesplatform.protobuf.transaction.{PBAmounts, PBTransactions}
+import com.wavesplatform.protobuf.transaction.PBAmounts
 import com.wavesplatform.state.*
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.assets.exchange.ExchangeTransaction
@@ -342,7 +342,7 @@ object StateUpdate {
     StateUpdate(balances.toVector, leaseBalanceUpdates, assets, updatedLeases.toSeq)
   }
 
-  private def transactionsMetadata(blockchain: Blockchain, snapshot: StateSnapshot): Seq[TransactionMetadata] =
+  private def transactionsMetadata(snapshot: StateSnapshot): Seq[TransactionMetadata] =
     snapshot.transactions.map { case (_, tx) =>
       TransactionMetadata(
         tx.transaction match {
@@ -394,7 +394,7 @@ object StateUpdate {
           )
         }
     val blockchainAfter = SnapshotBlockchain(blockchainBeforeWithReward, totalSnapshot)
-    val metadata        = transactionsMetadata(blockchainAfter, totalSnapshot)
+    val metadata        = transactionsMetadata(totalSnapshot)
     val refAssets       = referencedAssets(blockchainAfter, txsStateUpdates)
     val keyBlockUpdate  = atomic(blockchainBeforeWithReward, keyBlockSnapshot)
     (keyBlockUpdate, txsStateUpdates, metadata, refAssets)

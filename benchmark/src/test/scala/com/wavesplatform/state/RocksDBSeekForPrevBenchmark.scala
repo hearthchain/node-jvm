@@ -1,18 +1,18 @@
 package com.wavesplatform.state
 
-import com.google.common.primitives.{Bytes, Shorts}
+import com.google.common.primitives.Shorts
 import com.typesafe.config.ConfigFactory
 import com.wavesplatform.database.{
   AddressId,
-  CurrentData,
-  DataNode,
+  BalanceNode,
+  CurrentBalance,
   KeyTag,
   Keys,
   RDB,
-  readCurrentData,
-  readDataNode,
-  writeCurrentData,
-  writeDataNode
+  readBalanceNode,
+  readCurrentBalance,
+  writeBalanceNode,
+  writeCurrentBalance
 }
 import com.wavesplatform.settings.{WavesSettings, loadConfig}
 import com.wavesplatform.state.RocksDBSeekForPrevBenchmark.*
@@ -35,9 +35,9 @@ class RocksDBSeekForPrevBenchmark {
   def seekForPrev(st: BaseSt, bh: Blackhole): Unit = {
     bh.consume {
       val iter = st.rdb.db.newIterator(st.readOptions)
-      iter.seekForPrev(st.dataNodeKey(Height(Int.MaxValue)))
-      if (iter.isValid && iter.key().startsWith(st.dataNodeKeyPrefix)) {
-        readDataNode(st.keyString)(iter.value()).prevHeight
+      iter.seekForPrev(st.balanceNodeKey(Height(Int.MaxValue)))
+      if (iter.isValid && iter.key().startsWith(st.balanceNodeKeyPrefix)) {
+        readBalanceNode(iter.value()).prevHeight
       }
       iter.close()
     }
@@ -46,7 +46,7 @@ class RocksDBSeekForPrevBenchmark {
   @Benchmark
   def get(st: BaseSt, bh: Blackhole): Unit = {
     bh.consume {
-      readCurrentData(st.keyString)(st.rdb.db.get(st.currentDataKey)).prevHeight
+      readCurrentBalance(st.rdb.db.get(st.currentBalanceKey)).prevHeight
     }
   }
 }
@@ -65,21 +65,18 @@ object RocksDBSeekForPrevBenchmark {
 
     val addressId: AddressId = AddressId(1L)
 
-    val keyString                          = "key"
-    val currentDataKey: Array[Byte]        = Keys.data(addressId, keyString).keyBytes
-    val dataNodeKey: Height => Array[Byte] = Keys.dataAt(addressId, "key")(_).keyBytes
-    val dataNodeKeyPrefix: Array[Byte] =
-      Bytes.concat(Shorts.toByteArray(KeyTag.DataHistory.ordinal.toShort), addressId.toByteArray, keyString.getBytes)
-
-    private val dataEntry: StringDataEntry = StringDataEntry(keyString, "value")
+    val currentBalanceKey: Array[Byte]        = Keys.wavesBalance(addressId).keyBytes
+    val balanceNodeKey: Height => Array[Byte] = h => Keys.wavesBalanceAt(addressId, h).keyBytes
+    val balanceNodeKeyPrefix: Array[Byte] =
+      Shorts.toByteArray(KeyTag.WavesBalanceHistory.ordinal.toShort) ++ addressId.toByteArray
 
     val readOptions: ReadOptions = new ReadOptions()
 
     Using.Manager { use =>
       val wb = use(new WriteBatch())
-      wb.put(currentDataKey, writeCurrentData(CurrentData(dataEntry, Height(10000), Height(9999))))
+      wb.put(currentBalanceKey, writeCurrentBalance(CurrentBalance(100000000L, Height(10000), Height(9999))))
       (1 to 1000).foreach { h =>
-        wb.put(dataNodeKey(Height(h)), writeDataNode(DataNode(dataEntry, Height(h - 1))))
+        wb.put(balanceNodeKey(Height(h)), writeBalanceNode(BalanceNode(100000000L, Height(h - 1))))
       }
       rdb.db.write(use(new WriteOptions()), wb)
     }

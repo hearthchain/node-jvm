@@ -88,7 +88,6 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
           buyFee,
           sellFee,
           matcherFee,
-          version = 2,
           validate = false
         ),
         CustomValidationError("buyOrder should has OrderType.BUY")
@@ -104,7 +103,6 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
           buyFee,
           sellFee,
           matcherFee,
-          version = 2,
           validate = false
         ),
         CustomValidationError("sellOrder should has OrderType.SELL")
@@ -119,8 +117,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
           TxExchangePrice.unsafeFrom(sellPrice),
           buyFee,
           sellFee,
-          matcherFee,
-          version = 2
+          matcherFee
         )
       } { error =>
         error.id shouldBe StateCheckFailed.Id
@@ -217,12 +214,13 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
   }
 
   test("exchange tx with orders v4 can use price that is impossible for orders v3/v2/v1") {
-    sender.transfer(sender.keyPair, firstAddress, 1000.waves, waitForTx = true)
+    // The genesis NFT (quantity 1) is held entirely by firstKeyPair (see template.conf), so it must be the seller.
+    sender.transfer(sender.keyPair, secondAddress, 1000.waves, waitForTx = true)
 
-    val seller        = acc1
-    val buyer         = acc0
-    val sellerKeyPair = secondKeyPair
-    val buyerKeyPair  = firstKeyPair
+    val seller        = acc0
+    val buyer         = acc1
+    val sellerKeyPair = firstKeyPair
+    val buyerKeyPair  = secondKeyPair
 
     val nftAsset = GenesisAssets.TestNftAsset.id.toString
 

@@ -3,11 +3,11 @@ package com.wavesplatform.generator
 import cats.Show
 import cats.implicits.showInterpolator
 import com.google.common.primitives.{Bytes, Ints}
-import com.wavesplatform.account.{KeyPair, SeedKeyPair}
 import com.wavesplatform.generator.GeneratorSettings.NodeAddress
 import com.wavesplatform.generator.config.ConfigReaders
 import pureconfig.ConfigReader
 import pureconfig.generic.derivation.*
+import tech.hearth.crypto.SigningKey
 
 import java.net.{InetSocketAddress, URI, URL}
 import java.nio.charset.StandardCharsets
@@ -21,13 +21,10 @@ case class GeneratorSettings(
     mode: Mode,
     narrow: NarrowTransactionGenerator.Settings,
     wide: WideTransactionGenerator.Settings,
-    dynWide: DynamicWideTransactionGenerator.Settings,
-    multisig: MultisigTransactionGenerator.Settings,
-    oracle: OracleTransactionGenerator.Settings,
-    swarm: SmartGenerator.Settings
+    dynWide: DynamicWideTransactionGenerator.Settings
 ) derives ConfigReader {
-  val addressScheme: Char                  = chainId.head
-  val privateKeyAccounts: Seq[SeedKeyPair] = accounts.map(s => GeneratorSettings.toKeyPair(s))
+  val addressScheme: Char                 = chainId.head
+  val privateKeyAccounts: Seq[SigningKey] = accounts.map(s => GeneratorSettings.toKeyPair(s))
 }
 
 object GeneratorSettings extends ConfigReaders {
@@ -49,9 +46,6 @@ object GeneratorSettings extends ConfigReaders {
       case Mode.NARROW   => show"$narrow"
       case Mode.WIDE     => show"$wide"
       case Mode.DYN_WIDE => show"$dynWide"
-      case Mode.MULTISIG => show"$multisig"
-      case Mode.ORACLE   => show"$oracle"
-      case Mode.SWARM    => show"$swarm"
     }
 
     s"""network byte: $chainId
@@ -66,7 +60,7 @@ object GeneratorSettings extends ConfigReaders {
        |  ${modeSettings.split('\n').mkString("\n  ")}""".stripMargin
   }
 
-  def toKeyPair(seedText: String): SeedKeyPair = {
-    KeyPair(com.wavesplatform.crypto.secureHash(Bytes.concat(Ints.toByteArray(0), seedText.getBytes(StandardCharsets.UTF_8))))
+  def toKeyPair(seedText: String): SigningKey = {
+    SigningKey.fromSeed(com.wavesplatform.crypto.secureHash(Bytes.concat(Ints.toByteArray(0), seedText.getBytes(StandardCharsets.UTF_8))))
   }
 }

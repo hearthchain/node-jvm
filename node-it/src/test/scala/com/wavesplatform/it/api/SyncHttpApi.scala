@@ -284,7 +284,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         assetId: Option[String] = None,
         feeAssetId: Option[String] = None,
         attachment: ByteStr = ByteStr.empty,
-        version: Byte = 2,
         waitForTx: Boolean = false
     ): Transaction = {
       val tx = TxHelpers.transfer(
@@ -310,7 +309,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         buyMatcherFee: Long,
         sellMatcherFee: Long,
         fee: Long,
-        version: Byte = 2,
         waitForTx: Boolean = false,
         amountsAsStrings: Boolean = false,
         validate: Boolean = true
@@ -326,7 +324,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
             buyMatcherFee,
             sellMatcherFee,
             fee,
-            version,
             amountsAsStrings,
             validate
           )
@@ -342,12 +339,11 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         fee: Long = minFee,
         assetId: Option[String] = None,
         feeAssetId: Option[String] = None,
-        version: Byte = 2,
         attachment: Option[String] = None,
         waitForTx: Boolean = false
     ): Transaction = {
       maybeWaitForTransaction(
-        sync(async(n).transfer(sender, recipient, amount, fee, assetId, feeAssetId, version, attachment)),
+        sync(async(n).transfer(sender, recipient, amount, fee, assetId, feeAssetId, attachment)),
         waitForTx
       )
     }
@@ -356,14 +352,13 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         sender: SigningKey,
         transfers: List[Transfer],
         fee: Long,
-        version: Byte = 2,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
         waitForTx: Boolean = false,
         amountsAsStrings: Boolean = false
     ): Transaction = {
       maybeWaitForTransaction(
-        sync(async(n).massTransfer(sender, transfers, fee, version, attachment, assetId, amountsAsStrings)),
+        sync(async(n).massTransfer(sender, transfers, fee, attachment, assetId, amountsAsStrings)),
         waitForTx
       )
     }
@@ -393,10 +388,9 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         recipient: String,
         leasingAmount: Long,
         leasingFee: Long = minFee,
-        version: Byte = 1,
         waitForTx: Boolean = false
     ): Transaction =
-      maybeWaitForTransaction(sync(async(n).lease(sender, recipient, leasingAmount, leasingFee, version)), waitForTx)
+      maybeWaitForTransaction(sync(async(n).lease(sender, recipient, leasingAmount, leasingFee)), waitForTx)
 
     def getMerkleProof(ids: String*): Seq[MerkleProofResponse] = sync(async(n).getMerkleProof(ids*))
 
@@ -433,10 +427,9 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         sender: SigningKey,
         leaseId: String,
         fee: Long = minFee,
-        version: Byte = 1,
         waitForTx: Boolean = false
     ): Transaction =
-      maybeWaitForTransaction(sync(async(n).cancelLease(sender, leaseId, fee, version)), waitForTx)
+      maybeWaitForTransaction(sync(async(n).cancelLease(sender, leaseId, fee)), waitForTx)
 
     def expectSignedBroadcastRejected(json: JsValue): Int = sync(async(n).expectSignedBroadcastRejected(json))
 

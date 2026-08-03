@@ -35,9 +35,9 @@ case class MassTransferTransaction(
 
   override def addProof(proof: ByteStr): MassTransferTransaction = copy(proofs = this.proofs.add(proof))
 
-  def compactJson: JsObject =
+  def compactJson(recipient: Address): JsObject =
     json() ++ Json.obj(
-      "transfers" -> MassTransferTxSerializer.transfersJson(transfers)
+      "transfers" -> MassTransferTxSerializer.transfersJson(transfers.filter(_.address == recipient))
     )
 }
 

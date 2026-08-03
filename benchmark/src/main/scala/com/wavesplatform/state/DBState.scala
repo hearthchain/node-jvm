@@ -2,13 +2,9 @@ package com.wavesplatform.state
 
 import com.wavesplatform.Application
 import com.wavesplatform.account.AddressScheme
-import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database.{RDB, RocksDBWriter}
-import com.wavesplatform.lang.directives.DirectiveSet
 import com.wavesplatform.settings.WavesSettings
-import com.wavesplatform.transaction.smart.WavesEnvironment
 import com.wavesplatform.utils.ScorexLogging
-import monix.eval.Coeval
 import org.openjdk.jmh.annotations.{Param, Scope, State, TearDown}
 
 import java.io.File
@@ -30,16 +26,6 @@ abstract class DBState extends ScorexLogging {
   )
 
   AddressScheme.current = new AddressScheme { override val chainId: Byte = 'W' }
-
-  lazy val environment = WavesEnvironment(
-    AddressScheme.current.chainId,
-    Coeval.raiseError(new NotImplementedError("`tx` is not implemented")),
-    Coeval(rocksDBWriter.height),
-    rocksDBWriter,
-    null,
-    DirectiveSet.contractDirectiveSet,
-    ByteStr.empty
-  )
 
   @TearDown
   def close(): Unit = {

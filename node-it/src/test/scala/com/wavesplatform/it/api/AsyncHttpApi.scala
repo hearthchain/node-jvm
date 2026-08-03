@@ -1,6 +1,5 @@
 package com.wavesplatform.it.api
 
-import com.google.protobuf.ByteString
 import com.wavesplatform.account.{Address, AddressScheme, PublicKey}
 import com.wavesplatform.api.http.DebugMessage.*
 import com.wavesplatform.api.http.RewardApiRoute.{RewardStatus, RewardVotes}
@@ -8,14 +7,12 @@ import com.wavesplatform.api.http.requests.TransferRequest
 import com.wavesplatform.api.http.{ConnectReq, DebugMessage, RollbackParams, `X-Api-Key`}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.common.utils.Base58
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.features.api.{ActivationStatus, FinalityStatus, activationStatusFormat}
-import com.wavesplatform.it.{Node, keyPairFromSeed}
+import com.wavesplatform.it.Node
 import com.wavesplatform.it.util.*
 import com.wavesplatform.it.util.GlobalTimer.instance as timer
 import com.wavesplatform.state.{AssetDistribution, AssetDistributionPage, Height, LeaseBalance, Portfolio}
-import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
+import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.assets.exchange.{Order, ExchangeTransaction as ExchangeTx}
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import com.wavesplatform.transaction.transfer.*
@@ -217,7 +214,7 @@ object AsyncHttpApi extends Assertions {
     def finalizedHeightAt(at: Height): Future[Height] = get(s"/blocks/finalized/at/$at").as[JsValue].map(v => (v \ "height").as[Height])
 
     def finalityStatus: Future[FinalityStatus] = for {
-      as  <- activationStatus
+      _   <- activationStatus
       jsv <- get("/blockchain/finality").as[JsValue]
     } yield jsv.as[FinalityStatus](using
       FinalityStatus.parse(Some(Height(1)))
@@ -373,7 +370,6 @@ object AsyncHttpApi extends Assertions {
         fee: Long,
         assetId: Option[String] = None,
         feeAssetId: Option[String] = None,
-        version: Byte = 2,
         attachment: Option[String] = None
     ): Future[Transaction] =
       signedBroadcast(
@@ -395,7 +391,7 @@ object AsyncHttpApi extends Assertions {
     def payment(sourceAddress: String, recipient: String, amount: Long, fee: Long): Future[Transaction] =
       postJson("/waves/payment", PaymentRequest(amount, fee, sourceAddress, recipient)).as[Transaction]
 
-    def lease(sender: SigningKey, recipient: String, amount: Long, fee: Long, version: Byte = 2): Future[Transaction] =
+    def lease(sender: SigningKey, recipient: String, amount: Long, fee: Long): Future[Transaction] =
       signedBroadcast(
         LeaseTransaction(
           PublicKey(sender.publicKey()),
@@ -409,7 +405,7 @@ object AsyncHttpApi extends Assertions {
           .json()
       )
 
-    def cancelLease(sender: SigningKey, leaseId: String, fee: Long, version: Byte): Future[Transaction] =
+    def cancelLease(sender: SigningKey, leaseId: String, fee: Long): Future[Transaction] =
       signedBroadcast(
         LeaseCancelTransaction(
           PublicKey(sender.publicKey()),
@@ -442,7 +438,6 @@ object AsyncHttpApi extends Assertions {
         sender: SigningKey,
         transfers: Seq[Transfer],
         fee: Long,
-        version: Byte = 2,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
         amountsAsStrings: Boolean = false
@@ -513,7 +508,6 @@ object AsyncHttpApi extends Assertions {
         buyMatcherFee: Long,
         sellMatcherFee: Long,
         fee: Long,
-        version: Byte,
         amountsAsStrings: Boolean = false,
         validate: Boolean = true
     ): Future[Transaction] = {

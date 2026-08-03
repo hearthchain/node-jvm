@@ -1,12 +1,10 @@
 package com.wavesplatform.events
 
-import com.google.common.primitives.Longs
 import com.google.protobuf.ByteString
 import com.wavesplatform.TestValues
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.crypto.DigestLength
 import com.wavesplatform.db.InterferableDB
 import com.wavesplatform.db.WithState.AddrWithBalance
@@ -19,7 +17,6 @@ import com.wavesplatform.events.protobuf.BlockchainUpdated.Update
 import com.wavesplatform.events.protobuf.StateUpdate.BalanceUpdate as PBBalanceUpdate
 import com.wavesplatform.events.protobuf.serde.*
 import com.wavesplatform.events.protobuf.{TransactionMetadata, BlockchainUpdated as PBBlockchainUpdated, StateUpdate as PBStateUpdate}
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.Domain
 import com.wavesplatform.protobuf.*
 import com.wavesplatform.protobuf.block.PBBlocks

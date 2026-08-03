@@ -54,7 +54,7 @@ final case class TransactionJsonSerializer(blockchain: Blockchain) {
             * only.
             */
           jsObjectSerializer(numbersAsString).serialize(
-            mtt.compactJson ++ transactionMetaJson(meta),
+            mtt.compactJson(address) ++ transactionMetaJson(meta),
             gen,
             serializers
           )

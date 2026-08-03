@@ -16,7 +16,7 @@ import com.wavesplatform.transaction.assets.exchange.Order.Version
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.ParsedTransfer
 import com.wavesplatform.transaction.transfer.{MassTransferTransaction, TransferTransaction}
-import com.wavesplatform.transaction.{Asset, TxHelpers}
+import com.wavesplatform.transaction.TxHelpers
 import org.scalactic.source.Position
 import org.scalatest.Assertions
 import tech.hearth.crypto.SigningKey

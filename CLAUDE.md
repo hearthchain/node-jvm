@@ -317,15 +317,25 @@ neither exercises `RocksDBWriter`'s constructor against a *pre-existing* DB (the
 `DuplicateTransactionAfterRestartSpec` closes that gap by building a second `RocksDBWriter`/`Domain` via
 `TestStorageFactory` against the same `RDB` mid-test, simulating exactly that.
 
-`node-generator` and `benchmark` do not compile as of this pass — pre-existing, predating this fixup, unrelated to
-anything above. `node-generator`'s `NarrowTransactionGenerator.scala`/`DynamicWideTransactionGenerator.scala`
-reference `account.KeyPair`, `TxVersion`, `TransactionType.CreateAlias`, `TxHelpers.createAlias` — all removed earlier
-in the migration (see "Keys", "Transaction JSON") — and `benchmark`'s
-`ScriptEvaluatorBenchmark.scala` is corrupted at the very first line (`Vpackage com.wavesplatform.lang.v1`, breaks
-both the compiler and `scalafmt`). Neither module is touched by `checkPR`'s own suites, but `compilePR`/`scalafmtAll`
-walk the whole build and will report failures here that have nothing to do with whatever you're actually working on;
-don't chase them, and scope `scalafmtAll`/compile commands to the specific project(s) you touched
-(e.g. `sbt "node-it/scalafmtAll"`) to avoid tripping over this.
+`node-generator` and `benchmark` are both back to compiling clean under `compilePR` (fixed in a later pass). Both had
+rotted the same way: whole feature areas the migration removed (RIDE compiler/evaluator/estimator, smart accounts,
+`Issue`/`Reissue`/`Burn`/`CreateAlias`/`Data`/`SponsorFee`/`InvokeScript`/`Ethereum`/`SetScript`, `account.KeyPair`/
+`SeedKeyPair`, `TxVersion`) were still referenced throughout. The fix pattern was the same as everywhere else in this
+migration: delete whole files/benchmarks whose entire subject is a removed feature (nothing to salvage - the RIDE
+evaluator benchmarks under `lang/v1/`, `WavesEnvironmentBenchmark`, `SmartGenerator`/`MultisigTransactionGenerator`/
+`OracleTransactionGenerator` and the `Mode.MULTISIG`/`ORACLE`/`SWARM` cases that drove them), and migrate what's
+still meaningful to the current APIs (`account.KeyPair` → `tech.hearth.crypto.SigningKey`,
+`MassTransferTransaction.create`/`TxHelpers.buy`/`.sell`/`.exchange` current signatures, `Keys.wavesBalance`/
+`wavesBalanceAt` in place of the removed `Keys.data`/`dataAt` data-entry storage `RocksDBSeekForPrevBenchmark`
+benchmarked, `PoSCalculator.hit`/`FairPoSCalculator.calculateDelay` in place of the removed `WavesEnvironment
+.calculateDelay` wrapper). `node-generator`'s two standalone dev utilities under `utils/generator/`
+(`BlockchainGeneratorApp`, `MinerChallengeSimulator`) needed a real fix too, not deletion: `MinerImpl`'s constructor
+dropped its explicit miner-accounts parameter (derived from `MinerSettings` via `GeneratorKeys` instead) and its
+`forgeBlock`/`nextBlockGenerationTime` methods now take a separate `SigningKey`/`VrfKey` pair instead of one unified
+key, and `BlockchainUpdaterImpl`'s constructor dropped its lease-loading-callback parameter entirely. `benchmark`'s
+`NarrowTransactionGenerator`-equivalent (the actual `NarrowTransactionGenerator` in `node-generator`) now only
+generates the six surviving transaction types; `Exchange` generation needs an explicit `tradeAssetId` (a pre-existing
+asset id on the target chain) since there is no way to mint a fresh one any more.
 
 ### Remaining known node-it failures (as of this pass)
 
