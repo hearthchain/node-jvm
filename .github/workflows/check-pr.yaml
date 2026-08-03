@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '25'
           cache: 'sbt'
           gpg-private-key: ${{ secrets.OSSRH_GPG_KEY }}
           gpg-passphrase: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '25'
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: waves-all
@@ -97,7 +97,7 @@ jobs:
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '25'
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: waves-all
@@ -112,7 +112,7 @@ jobs:
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '25'
           cache: 'sbt'
       - uses: sbt/setup-sbt@bfea3c5f48abd221b04a6df4798aa5eb8b6a2baf # v1.5.6
       - name: Run Integration Tests
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '25'
           cache: 'sbt'
           gpg-private-key: ${{ secrets.OSSRH_GPG_KEY }}
           gpg-passphrase: ${{ secrets.OSSRH_GPG_PASSPHRASE }}

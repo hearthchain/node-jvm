@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '25'
           cache: 'sbt'
       - uses: sbt/setup-sbt@bfea3c5f48abd221b04a6df4798aa5eb8b6a2baf # v1.5.6
       - run: ./.github/workflows/prepare-release-draft.sh
