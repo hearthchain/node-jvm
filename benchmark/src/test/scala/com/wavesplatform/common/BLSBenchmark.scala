@@ -1,6 +1,5 @@
 package com.wavesplatform.common
 
-import com.wavesplatform.account.PrivateKey
 import com.wavesplatform.crypto.bls.{BlsKeyPair, BlsPublicKey, BlsSignature}
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -36,7 +35,7 @@ class EndorsementSt {
     val privateKeys = Seq.tabulate(generatorCount) { i =>
       val bs = new Array[Byte](32)
       bs(0) = i.toByte
-      BlsKeyPair(PrivateKey(bs))
+      BlsKeyPair.fromSeed(bs)
     }
 
     publicKeys = privateKeys.map(_.publicKey)

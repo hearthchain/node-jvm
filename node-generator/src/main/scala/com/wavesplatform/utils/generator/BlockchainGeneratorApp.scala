@@ -19,6 +19,7 @@ import monix.reactive.subjects.ConcurrentSubject
 import play.api.libs.json.Json
 import pureconfig.ConfigSource
 import scopt.OParser
+import tech.hearth.crypto.{SigningKey, VrfKey}
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent.TimeUnit
@@ -128,10 +129,10 @@ object BlockchainGeneratorApp extends ScorexLogging {
       blockchainUpdater
     }
 
-    val miners = genSettings.distributions.collect {
+    val miners: Seq[(SigningKey, VrfKey)] = genSettings.distributions.collect {
       case item if item.miner =>
         val info = GenesisBlockGenerator.toFullAddressInfo(item)
-        info.account
+        (info.signingKey, info.vrfKey)
     }
 
     val utx = new UtxPoolImpl(fakeTime, blockchain, wavesSettings.utxSettings, wavesSettings.maxTxErrorLogSize, wavesSettings.minerSettings.enable)
@@ -140,12 +141,11 @@ object BlockchainGeneratorApp extends ScorexLogging {
     val miner = new MinerImpl(
       new DefaultChannelGroup("", null),
       blockchain,
-      wavesSettings,
+      wavesSettings.minerSettings,
       fakeTime,
       utx,
       BlockEndorser.Disabled,
       EndorsementStorage.Disabled,
-      miners,
       posSelector,
       scheduler,
       scheduler,
@@ -211,9 +211,9 @@ object BlockchainGeneratorApp extends ScorexLogging {
     }
 
     while (!Thread.currentThread().isInterrupted && !quit) synchronized {
-      val times = miners.flatMap { kp =>
-        val time = miner.nextBlockGenerationTime(blockchain, kp)
-        time.toOption.map(kp -> _)
+      val times = miners.flatMap { case (signingKey, vrfKey) =>
+        val time = miner.nextBlockGenerationTime(blockchain, signingKey, vrfKey)
+        time.toOption.map((signingKey, vrfKey) -> _)
       }
 
       for {
@@ -231,7 +231,7 @@ object BlockchainGeneratorApp extends ScorexLogging {
       val (bestMiner, nextTime) = times.minBy(_._2)
       fakeTime.time = nextTime
 
-      miner.forgeBlock(bestMiner) match {
+      miner.forgeBlock(bestMiner._1, bestMiner._2) match {
         case ForgeAttemptResult.Success(block, _) =>
           blockAppender(block).runSyncUnsafe() match {
             case Right(_) =>

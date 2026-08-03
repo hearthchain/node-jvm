@@ -19,21 +19,17 @@ class BlockSizeConstraintsSuite extends BaseFreeSpec with TransferSending {
   private lazy val nodeAddresses = nodeConfigs.map(_.getString("address")).toSet
 
   private lazy val transfers = generateTransfersToRandomAddresses(maxTxsGroup, nodeAddresses)
-  s"Block is limited by size after activation" in result(
+  // MiningConstraints.MaxTxsSizeInBytes (1MB) is an unconditional constant, not gated behind a feature any more,
+  // so the limit applies from genesis; there is no "before activation" state left to compare against.
+  s"Block is limited by size" in result(
     for {
-      _                 <- Future.sequence((0 to maxGroups).map(_ => processRequests(transfers, includeAttachment = true)))
-      _                 <- miner.waitForHeight(Height(3))
-      _                 <- Future.sequence((0 to maxGroups).map(_ => processRequests(transfers, includeAttachment = true)))
-      blockHeaderBefore <- miner.blockHeaderAt(Height(2))
-      _                 <- miner.waitForHeight(Height(4))
-      blockHeaderAfter  <- miner.blockHeaderAt(Height(3))
+      _                <- Future.sequence((0 to maxGroups).map(_ => processRequests(transfers, includeAttachment = true)))
+      _                <- miner.waitForHeight(Height(3))
+      blockHeaderAfter <- miner.blockHeaderAt(Height(2))
     } yield {
-      val maxSizeInBytesAfterActivation = (1.1d * 1024 * 1024).toInt // including headers
-      val blockSizeInBytesBefore        = blockHeaderBefore.blocksize
-      blockSizeInBytesBefore should be > maxSizeInBytesAfterActivation
-
+      val maxSizeInBytes        = (1.1d * 1024 * 1024).toInt // including headers
       val blockSizeInBytesAfter = blockHeaderAfter.blocksize
-      blockSizeInBytesAfter should be <= maxSizeInBytesAfterActivation
+      blockSizeInBytesAfter should be <= maxSizeInBytes
     },
     10.minutes
   )
@@ -61,20 +57,8 @@ object BlockSizeConstraintsSuite {
                                                              |  }
                                                              |
                                                              |  blockchain.custom {
-                                                             |    functionality {
-                                                             |      feature-check-blocks-period = 1
-                                                             |      blocks-for-feature-activation = 1
-                                                             |
-                                                             |      pre-activated-features {
-                                                             |        2: 0
-                                                             |        3: 2
-                                                             |      }
-                                                             |    }
-                                                             |
                                                              |    store-transactions-in-state = false
                                                              |  }
-                                                             |
-                                                             |  features.supported = [2, 3]
                                                              |}""".stripMargin)
 
 }

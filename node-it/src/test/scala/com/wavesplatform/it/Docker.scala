@@ -11,7 +11,6 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import com.wavesplatform.account.AddressScheme
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.api.AsyncHttpApi.*
 import com.wavesplatform.it.util.GlobalTimer.instance as timer
 import com.wavesplatform.settings.*
@@ -87,7 +86,7 @@ class Docker(
     r
   }
 
-  private val genesisOverride = Docker.genesisOverride(Some(suiteConfig))
+  private val genesisOverride = Docker.genesisOverride()
 
   private def ipForNode(nodeId: Int) = InetAddress.getByAddress(toByteArray(nodeId & 0xf | networkSeed)).getHostAddress
 
@@ -234,7 +233,7 @@ class Docker(
         val maxCacheSize = Option(System.getenv("MAX_CACHE_SIZE")).fold("")(x => s"-Dwaves.max-cache-size=$x ")
 
         var config = s"$javaOptions ${renderProperties(asProperties(overrides))} " +
-          s"-Dlogback.stdout.level=TRACE -Dlogback.file.level=OFF -Dwaves.network.declared-address=$ip:$networkPort $ntpServer $maxCacheSize"
+          s"-Dlogback.stdout.level=TRACE -Dlogback.file.level=OFF -Dwaves.network.declared-address=$ip:$networkPort -Dhearth.hrp=thrth $ntpServer $maxCacheSize"
 
         // Debugger
         if (enableDebugger) config += s"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$internalDebuggerPort "
@@ -577,10 +576,16 @@ object Docker {
   private val jsonMapper  = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
-  val configTemplate: Config   = parseResources("template.conf")
-  val initialWavesAmount: Long = configTemplate.getLong("waves.blockchain.custom.genesis.initial-balance")
+  val configTemplate: Config = parseResources("template.conf")
+  val initialWavesAmount: Long =
+    ConfigSource
+      .fromConfig(configTemplate)
+      .at("waves.blockchain.custom.genesis.balances")
+      .loadOrThrow[Seq[GenesisBalanceSettings]]
+      .map(_.waves)
+      .sum
 
-  def genesisOverride(featuresConfig: Option[Config] = None): Config = {
+  def genesisOverride(): Config = {
     // Starting a node and applying the genesis block takes a non-negligible amount of time. If we do not introduce an offset,
     // the system will treat the genesis block as if it was created in the past. In CI runs, this time gap can reach up
     // to 30 seconds.
@@ -595,38 +600,40 @@ object Docker {
     val offsetMs        = 12_000
     val genesisTs: Long = System.currentTimeMillis() + offsetMs
 
+    // state-hash/block-id are also unpinned here so Block.genesis computes them fresh below, instead of validating
+    // them against custom-defaults.conf's placeholder values (which this custom network doesn't match).
     val timestampOverrides = parseString(s"""waves.blockchain.custom.genesis {
                                             |  timestamp = $genesisTs
                                             |  block-timestamp = $genesisTs
                                             |  signature = null # To calculate it in Block.genesis
+                                            |  state-hash = null
+                                            |  block-id = null
                                             |}""".stripMargin)
 
     val genesisConfig = timestampOverrides.withFallback(configTemplate)
     val gs            = ConfigSource.fromConfig(genesisConfig).at("waves.blockchain.custom.genesis").loadOrThrow[GenesisSettings]
-    val featuresConfigAdjusted = featuresConfig
-      .map(_.withFallback(configTemplate))
-      .getOrElse(configTemplate)
-      .resolve()
-    val features =
-      ConfigSource
-        .fromConfig(featuresConfigAdjusted)
-        .at("waves.blockchain.custom.functionality.pre-activated-features")
-        .loadOrThrow[Map[Short, Int]]
+    // The final config sent to a container is flattened into -D system properties (see startNodeInternal), which
+    // cannot represent an absent/null value, so all three commitments are pinned here to the concrete values this
+    // genesis block actually computes, rather than left null and risking custom-defaults.conf's placeholders (or an
+    // empty string from the properties round-trip) leaking through as a mismatched commitment.
+    val genesisBlock = Block.genesis(gs).explicitGet()
 
-    val isRideV6Activated          = true
-    val isTxStateSnapshotActivated = true
-
-    // Only the pre-activated features matter here: they gate the genesis generators
-    val fs               = FunctionalitySettings(preActivatedFeatures = features)
-    val genesisSignature = Block.genesis(gs).explicitGet().id()
-
-    parseString(s"waves.blockchain.custom.genesis.signature = $genesisSignature").withFallback(timestampOverrides)
+    parseString(s"""waves.blockchain.custom.genesis {
+                   |  signature = ${genesisBlock.signature}
+                   |  state-hash = ${genesisBlock.header.stateHash.get}
+                   |  block-id = ${genesisBlock.id()}
+                   |}""".stripMargin).withFallback(timestampOverrides)
   }
 
   AddressScheme.current = new AddressScheme {
     override val chainId: Byte =
       ConfigSource.fromConfig(configTemplate).at("waves.blockchain.custom.address-scheme-character").loadOrThrow[String].charAt(0).toByte
   }
+
+  // Addresses are bech32m, keyed by a process-wide default HRP rather than the chain id above (see
+  // tech.hearth.crypto.Address); this JVM (running the test/genesis-computation code) needs it set the same way
+  // the containerized node does, via the -Dhearth.hrp JAVA_OPTS added in startNodeInternal.
+  tech.hearth.crypto.Address.setDefaultHrp("thrth")
 
   def apply(owner: Class[?]): Docker = new Docker(tag = owner.getSimpleName)
 

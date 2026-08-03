@@ -146,7 +146,9 @@ class Transaction(
     val expression: Option[String],
     val commitmentSignature: Option[String],
     val generationPeriodStart: Option[Int],
-    val endorserPublicKey: Option[String]
+    val endorserPublicKey: Option[String],
+    val vrfPublicKey: Option[String],
+    val vrfCommitmentSignature: Option[String]
 ) {
   import Transaction.*
   override def toString: String = Json.toJson(this).toString
@@ -187,7 +189,9 @@ object Transaction {
       expression: Option[String],
       commitmentSignature: Option[String],
       generationPeriodStart: Option[Int],
-      endorserPublicKey: Option[String]
+      endorserPublicKey: Option[String],
+      vrfPublicKey: Option[String],
+      vrfCommitmentSignature: Option[String]
   ): Transaction = new Transaction(
     _type,
     id,
@@ -216,7 +220,9 @@ object Transaction {
     expression,
     commitmentSignature,
     generationPeriodStart,
-    endorserPublicKey
+    endorserPublicKey,
+    vrfPublicKey,
+    vrfCommitmentSignature
   )
 
   implicit val transactionFormat: Format[Transaction] = Format(
@@ -236,23 +242,25 @@ object Transaction {
           case Some(_) if _type == 4 || _type == 11 => (jsv \ "attachment").validateOpt[String]
           case _                                    => JsSuccess(None)
         }
-        price                 <- (jsv \ "price").validateOpt[Long]
-        sellMatcherFee        <- (jsv \ "sellMatcherFee").validateOpt[Long]
-        buyMatcherFee         <- (jsv \ "buyMatcherFee").validateOpt[Long]
-        sellOrderMatcherFee   <- (jsv \ "order2" \ "matcherFee").validateOpt[Long]
-        buyOrderMatcherFee    <- (jsv \ "order1" \ "matcherFee").validateOpt[Long]
-        minSponsoredAssetFee  <- (jsv \ "minSponsoredAssetFee").validateOpt[Long]
-        transfers             <- (jsv \ "transfers").validateOpt[Seq[Transfer]]
-        totalAmount           <- (jsv \ "totalAmount").validateOpt[Long]
-        senderPublicKey       <- (jsv \ "senderPublicKey").validateOpt[String]
-        recipient             <- (jsv \ "recipient").validateOpt[String]
-        proofs                <- (jsv \ "proofs").validateOpt[Seq[String]]
-        applicationStatus     <- (jsv \ "applicationStatus").validateOpt[String]
-        feeAssetId            <- (jsv \ "feeAssetId").validateOpt[String]
-        expression            <- (jsv \ "expression").validateOpt[String]
-        commitmentSignature   <- (jsv \ "commitmentSignature").validateOpt[String]
-        generationPeriodStart <- (jsv \ "generationPeriodStart").validateOpt[Int]
-        endorserPublicKey     <- (jsv \ "endorserPublicKey").validateOpt[String]
+        price                  <- (jsv \ "price").validateOpt[Long]
+        sellMatcherFee         <- (jsv \ "sellMatcherFee").validateOpt[Long]
+        buyMatcherFee          <- (jsv \ "buyMatcherFee").validateOpt[Long]
+        sellOrderMatcherFee    <- (jsv \ "order2" \ "matcherFee").validateOpt[Long]
+        buyOrderMatcherFee     <- (jsv \ "order1" \ "matcherFee").validateOpt[Long]
+        minSponsoredAssetFee   <- (jsv \ "minSponsoredAssetFee").validateOpt[Long]
+        transfers              <- (jsv \ "transfers").validateOpt[Seq[Transfer]]
+        totalAmount            <- (jsv \ "totalAmount").validateOpt[Long]
+        senderPublicKey        <- (jsv \ "senderPublicKey").validateOpt[String]
+        recipient              <- (jsv \ "recipient").validateOpt[String]
+        proofs                 <- (jsv \ "proofs").validateOpt[Seq[String]]
+        applicationStatus      <- (jsv \ "applicationStatus").validateOpt[String]
+        feeAssetId             <- (jsv \ "feeAssetId").validateOpt[String]
+        expression             <- (jsv \ "expression").validateOpt[String]
+        commitmentSignature    <- (jsv \ "commitmentSignature").validateOpt[String]
+        generationPeriodStart  <- (jsv \ "generationPeriodStart").validateOpt[Int]
+        endorserPublicKey      <- (jsv \ "endorserPublicKey").validateOpt[String]
+        vrfPublicKey           <- (jsv \ "vrfPublicKey").validateOpt[String]
+        vrfCommitmentSignature <- (jsv \ "vrfCommitmentSignature").validateOpt[String]
       } yield new Transaction(
         _type,
         id,
@@ -281,36 +289,40 @@ object Transaction {
         expression,
         commitmentSignature,
         generationPeriodStart,
-        endorserPublicKey
+        endorserPublicKey,
+        vrfPublicKey,
+        vrfCommitmentSignature
       )
     ),
     Writes { t =>
       Json.obj(
-        "type"                  -> t._type,
-        "id"                    -> t.id,
-        "chainId"               -> t.chainId,
-        "fee"                   -> t.fee,
-        "timestamp"             -> t.timestamp,
-        "sender"                -> t.sender,
-        "version"               -> t.version,
-        "name"                  -> t.name,
-        "amount"                -> t.amount,
-        "description"           -> t.description,
-        "attachment"            -> t.attachment,
-        "price"                 -> t.price,
-        "sellMatcherFee"        -> t.sellMatcherFee,
-        "buyMatcherFee"         -> t.buyMatcherFee,
-        "sellOrderFee"          -> t.sellOrderMatcherFee,
-        "buyOrderFee"           -> t.buyOrderMatcherFee,
-        "minSponsoredAssetFee"  -> t.minSponsoredAssetFee,
-        "transfers"             -> t.transfers,
-        "totalAmount"           -> t.totalAmount,
-        "commitmentSignature"   -> t.commitmentSignature,
-        "generationPeriodStart" -> t.generationPeriodStart,
-        "endorserPublicKey"     -> t.endorserPublicKey,
-        "senderPublicKey"       -> t.senderPublicKey,
-        "recipient"             -> t.recipient,
-        "proofs"                -> t.proofs
+        "type"                   -> t._type,
+        "id"                     -> t.id,
+        "chainId"                -> t.chainId,
+        "fee"                    -> t.fee,
+        "timestamp"              -> t.timestamp,
+        "sender"                 -> t.sender,
+        "version"                -> t.version,
+        "name"                   -> t.name,
+        "amount"                 -> t.amount,
+        "description"            -> t.description,
+        "attachment"             -> t.attachment,
+        "price"                  -> t.price,
+        "sellMatcherFee"         -> t.sellMatcherFee,
+        "buyMatcherFee"          -> t.buyMatcherFee,
+        "sellOrderFee"           -> t.sellOrderMatcherFee,
+        "buyOrderFee"            -> t.buyOrderMatcherFee,
+        "minSponsoredAssetFee"   -> t.minSponsoredAssetFee,
+        "transfers"              -> t.transfers,
+        "totalAmount"            -> t.totalAmount,
+        "commitmentSignature"    -> t.commitmentSignature,
+        "generationPeriodStart"  -> t.generationPeriodStart,
+        "endorserPublicKey"      -> t.endorserPublicKey,
+        "vrfPublicKey"           -> t.vrfPublicKey,
+        "vrfCommitmentSignature" -> t.vrfCommitmentSignature,
+        "senderPublicKey"        -> t.senderPublicKey,
+        "recipient"              -> t.recipient,
+        "proofs"                 -> t.proofs
       )
     }
   )
@@ -842,8 +854,8 @@ object Block {
         fee                 <- (jsv \ "fee").validate[Long]
         transactions        <- (jsv \ "transactions").validate[Seq[Transaction]]
         version             <- (jsv \ "version").validateOpt[Byte]
-        generationSignature <- (jsv \ "nxt-consensus" \ "generation-signature").validateOpt[String]
-        baseTarget          <- (jsv \ "nxt-consensus" \ "base-target").validateOpt[Int]
+        generationSignature <- (jsv \ "generationSignature").validateOpt[String]
+        baseTarget          <- (jsv \ "baseTarget").validateOpt[Int]
         transactionsRoot    <- (jsv \ "transactionsRoot").validateOpt[String]
         vrf                 <- (jsv \ "VRF").validateOpt[String]
         challengedHeader    <- (jsv \ "challengedHeader").validateOpt[ChallengedBlockHeader]
@@ -911,8 +923,8 @@ object BlockHeader {
         desiredReward       <- (jsv \ "desiredReward").validateOpt[Long]
         totalFee            <- (jsv \ "totalFee").validate[Long]
         version             <- (jsv \ "version").validateOpt[Byte]
-        generationSignature <- (jsv \ "nxt-consensus" \ "generation-signature").validateOpt[String]
-        baseTarget          <- (jsv \ "nxt-consensus" \ "base-target").validateOpt[Int]
+        generationSignature <- (jsv \ "generationSignature").validateOpt[String]
+        baseTarget          <- (jsv \ "baseTarget").validateOpt[Int]
         transactionsRoot    <- (jsv \ "transactionsRoot").validateOpt[String]
         vrf                 <- (jsv \ "VRF").validateOpt[String]
         challengedHeader    <- (jsv \ "challengedHeader").validateOpt[ChallengedBlockHeader]

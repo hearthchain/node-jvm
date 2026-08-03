@@ -1,13 +1,13 @@
 package com.wavesplatform.generator
 
 import cats.Show
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.generator.WideTransactionGenerator.Settings
 import com.wavesplatform.generator.utils.Gen
 import com.wavesplatform.transaction.Transaction
 import pureconfig.ConfigReader
+import tech.hearth.crypto.SigningKey
 
-class WideTransactionGenerator(settings: Settings, accounts: Seq[KeyPair]) extends TransactionGenerator {
+class WideTransactionGenerator(settings: Settings, accounts: Seq[SigningKey]) extends TransactionGenerator {
   require(accounts.nonEmpty)
 
   private val limitedRecipientGen = Gen.address(settings.limitDestAccounts)

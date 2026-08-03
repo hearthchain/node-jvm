@@ -73,7 +73,7 @@ object PreActivatedFeaturesTestSuite {
                                                              |    feature-check-blocks-period = $votingInterval
                                                              |    blocks-for-feature-activation = 1
                                                              |  }
-                                                             |  features.supported = [$featureNum]
+                                                             |  miner.supported-features = [$featureNum]
                                                              |  miner.quorum = 1
                                                              |}""".stripMargin)
   private val preactivatedConfig = ConfigFactory.parseString(s"""waves {
@@ -81,20 +81,9 @@ object PreActivatedFeaturesTestSuite {
                                                                 |  feature-check-blocks-period = $votingInterval
                                                                 |  pre-activated-features {
                                                                 |        1 = 0
-                                                                |        2 = 100
-                                                                |        3 = 100
-                                                                |        4 = 100
-                                                                |        5 = 100
-                                                                |        6 = 100
-                                                                |        7 = 100
-                                                                |        8 = 100
-                                                                |        9 = 100
-                                                                |        10 = 100
-                                                                |        11 = 100
-                                                                |        15 = 0
                                                                 |      }
                                                                 |  }
-                                                                |  features.supported = [$featureNum]
+                                                                |  miner.supported-features = [$featureNum]
                                                                 |  miner.quorum = 1
                                                                 |}""".stripMargin)
   val Configs: Seq[Config] = Seq(

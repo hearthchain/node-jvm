@@ -5,7 +5,6 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import com.wavesplatform.Application
 import com.wavesplatform.account.AddressScheme
-import com.wavesplatform.features.EstimatorProvider.*
 import com.wavesplatform.generator.GeneratorSettings.NodeAddress
 import com.wavesplatform.generator.Preconditions.{PGenSettings, UniverseHolder}
 import com.wavesplatform.generator.cli.ScoptImplicits
@@ -88,53 +87,6 @@ object TransactionsGeneratorApp extends ScoptImplicits {
           }
         )
 
-      cmd("multisig")
-        .action { (_, c) =>
-          c.copy(mode = Mode.MULTISIG)
-        }
-        .text("Multisig cycle of funding, initializng and sending funds back")
-        .children(
-          opt[Int]("transactions").abbr("t").optional().text("number of transactions").action { (x, c) =>
-            c.copy(multisig = c.multisig.copy(transactions = x))
-          },
-          opt[Boolean]("first-run").abbr("first").optional().text("generate set multisig script transaction").action { (x, c) =>
-            c.copy(multisig = c.multisig.copy(firstRun = x))
-          }
-        )
-
-      cmd("oracle")
-        .action { (_, c) =>
-          c.copy(mode = Mode.ORACLE)
-        }
-        .text("Oracle load test")
-        .children(
-          opt[Int]("transactions").abbr("t").optional().text("number of transactions").action { (x, c) =>
-            c.copy(oracle = c.oracle.copy(transactions = x))
-          },
-          opt[Boolean]("enabled").abbr("e").optional().text("DataEnty value").action { (x, c) =>
-            c.copy(multisig = c.multisig.copy(firstRun = x))
-          }
-        )
-
-      cmd("swarm")
-        .action { (_, c) =>
-          c.copy(mode = Mode.SWARM)
-        }
-        .text("SetScript load test")
-        .children(
-          opt[Int]("scripts").abbr("st").optional().text("number of SetScripts transactions").action { (x, c) =>
-            c.copy(swarm = c.swarm.copy(scripts = x))
-          },
-          opt[Int]("transfers").abbr("tt").optional().text("number of Transfer transactions").action { (x, c) =>
-            c.copy(swarm = c.swarm.copy(transfers = x))
-          },
-          opt[Boolean]("complexity").abbr("ct").optional().text(" script complexity").action { (x, c) =>
-            c.copy(swarm = c.swarm.copy(complexity = x))
-          },
-          opt[Int]("exchange").abbr("et").optional().text("number of exchange transactions").action { (x, c) =>
-            c.copy(swarm = c.swarm.copy(exchange = x))
-          }
-        )
     }
 
     val configParamParser = new OptionParser[File]("configuration") {
@@ -169,23 +121,17 @@ object TransactionsGeneratorApp extends ScoptImplicits {
         val preconditions =
           ConfigSource.fromConfig(ConfigFactory.load("preconditions.conf")).at("preconditions").loadOrThrow[Option[PGenSettings]]
 
-        val estimator = wavesSettings.estimator
-
         val (universe, initialUniTransactions, initialTailTransactions) = preconditions
           .fold((UniverseHolder(), List.empty[Transaction], List.empty[Transaction]))(
             Preconditions.mk(_, finalConfig.privateKeyAccounts, time)
           )
 
-        Universe.IssuedAssets = universe.issuedAssets
         Universe.Leases = universe.leases
 
         val generator: TransactionGenerator = finalConfig.mode match {
-          case Mode.NARROW   => NarrowTransactionGenerator(finalConfig.narrow, finalConfig.privateKeyAccounts, time, estimator)
+          case Mode.NARROW   => NarrowTransactionGenerator(finalConfig.narrow, finalConfig.privateKeyAccounts)
           case Mode.WIDE     => new WideTransactionGenerator(finalConfig.wide, finalConfig.privateKeyAccounts)
           case Mode.DYN_WIDE => new DynamicWideTransactionGenerator(finalConfig.dynWide, finalConfig.privateKeyAccounts)
-          case Mode.MULTISIG => new MultisigTransactionGenerator(finalConfig.multisig, finalConfig.privateKeyAccounts, estimator)
-          case Mode.ORACLE   => new OracleTransactionGenerator(finalConfig.oracle, finalConfig.privateKeyAccounts, estimator)
-          case Mode.SWARM    => new SmartGenerator(finalConfig.swarm, finalConfig.privateKeyAccounts, estimator)
         }
 
         val threadPool                            = Executors.newFixedThreadPool(Math.max(1, finalConfig.sendTo.size))

@@ -319,8 +319,12 @@ object AssetsApiRoute {
     Right(
       JsObject(
         Seq(
-          "assetId"             -> JsString(id.id.toString),
-          "issueHeight"         -> JsNumber(description.issueHeight.toInt),
+          "assetId"     -> JsString(id.id.toString),
+          "issueHeight" -> JsNumber(description.issueHeight.toInt),
+          // Nothing issues an asset via a transaction any more (see CLAUDE.md's Transaction JSON notes), so there's
+          // no real issue timestamp to report; kept as a field for API compatibility, always 0, matching
+          // getAssetDetails/AssetDetails below.
+          "issueTimestamp"      -> JsNumber(0),
           "issuer"              -> JsString(description.issuer.toAddress.toString),
           "issuerPublicKey"     -> JsString(description.issuer.toString),
           "name"                -> JsString(description.name.toStringUtf8),

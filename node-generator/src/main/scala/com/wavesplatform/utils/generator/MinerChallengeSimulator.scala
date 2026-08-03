@@ -6,7 +6,7 @@ import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
 import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.consensus.PoSSelector
-import com.wavesplatform.database.{RDB, RocksDBWriter, loadActiveLeases}
+import com.wavesplatform.database.{RDB, RocksDBWriter}
 import com.wavesplatform.events.{BlockchainUpdateTriggers, UtxEvent}
 import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.history.StorageFactory
@@ -71,19 +71,17 @@ object MinerChallengeSimulator {
       settings.copy(blockchainSettings = blockchainSettings, minerSettings = settings.minerSettings.copy(quorum = 0))
     }
 
-    val miners = genSettings.distributions.collect {
+    val miners: Seq[(SigningKey, VrfKey)] = genSettings.distributions.collect {
       case item if item.miner =>
         val info = GenesisBlockGenerator.toFullAddressInfo(item)
-        info.account
+        (info.signingKey, info.vrfKey)
     }
 
     val maliciousMiner   = miners.head
     val challengingMiner = miners(challengingMinerIdx)
 
-    val minerAccounts: Seq[(SignerKey, VrfKey)] = ???
-
     var originalBlockchain =
-      BlockchainObjects.createOriginal(wavesSettings, minerAccounts, genSettings.timestamp.getOrElse(System.currentTimeMillis()))
+      BlockchainObjects.createOriginal(wavesSettings, genSettings.timestamp.getOrElse(System.currentTimeMillis()))
     var challengingBlockchain: Option[BlockchainObjects] = None
 
     while (!Thread.currentThread().isInterrupted && !quit) synchronized {
@@ -103,8 +101,8 @@ object MinerChallengeSimulator {
       if (originalBlockchain.blockchain.height == forkHeight + 1 && challengingBlockchain.isEmpty) {
         originalBlockchain.blockchain.shutdown()
         originalBlockchain.rdb.close()
-        challengingBlockchain = Some(BlockchainObjects.createChallenging(wavesSettings, minerAccounts, challengingMiner, maliciousMiner))
-        originalBlockchain = BlockchainObjects.createOriginal(wavesSettings, minerAccounts, prevTime.time)
+        challengingBlockchain = Some(BlockchainObjects.createChallenging(wavesSettings, challengingMiner, maliciousMiner))
+        originalBlockchain = BlockchainObjects.createOriginal(wavesSettings, prevTime.time)
       }
     }
   }
@@ -117,7 +115,11 @@ object MinerChallengeSimulator {
       fakeTime: FakeTime,
       isChallenging: Boolean
   ) {
-    def forgeAndAppendBlock(miners: List[(SigningKey, VrfKey)], challengingMiner: KeyPair, maliciousMiner: KeyPair): Option[BigInt] = {
+    def forgeAndAppendBlock(
+        miners: Seq[(SigningKey, VrfKey)],
+        challengingMiner: (SigningKey, VrfKey),
+        maliciousMiner: (SigningKey, VrfKey)
+    ): Option[BigInt] = {
       val miningTimes = getBlockMiningTimes(miners)
       val (bestMiner, nextTime) = if (blockchain.height == forkHeight && isChallenging) {
         miningTimes.find(_._1 == challengingMiner).get
@@ -145,7 +147,7 @@ object MinerChallengeSimulator {
       }
     }
 
-    private def getBlockMiningTimes(miners: List[(SigningKey, VrfKey)]): Seq[((SigningKey, VrfKey), Long)] =
+    private def getBlockMiningTimes(miners: Seq[(SigningKey, VrfKey)]): Seq[((SigningKey, VrfKey), Long)] =
       miners.flatMap { case kp @ (sk, vk) =>
         val time = miner.nextBlockGenerationTime(blockchain, sk, vk)
         time.toOption.map(kp -> _)
@@ -153,7 +155,7 @@ object MinerChallengeSimulator {
   }
 
   object BlockchainObjects {
-    def createOriginal(wavesSettings: WavesSettings, minerAccounts: Seq[(SigningKey, VrfKey)], startTime: Long): BlockchainObjects = {
+    def createOriginal(wavesSettings: WavesSettings, startTime: Long): BlockchainObjects = {
       val rdb      = RDB.open(wavesSettings.dbSettings)
       val fakeTime = createFakeTime(startTime)
       val (blockchainUpdater, _) =
@@ -163,15 +165,14 @@ object MinerChallengeSimulator {
         blockchainUpdater.shutdown()
         rdb.close()
       })
-      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, wavesSettings, minerAccounts)
+      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, wavesSettings)
       BlockchainObjects(blockchainUpdater, rdb, miner, appender, fakeTime, false)
     }
 
     def createChallenging(
         wavesSettings: WavesSettings,
-        minerAccounts: Seq[(SigningKey, VrfKey)],
-        challengingMiner: KeyPair,
-        maliciousMiner: KeyPair
+        challengingMiner: (SigningKey, VrfKey),
+        maliciousMiner: (SigningKey, VrfKey)
     ): BlockchainObjects = {
       val correctBlockchainDbDir = wavesSettings.dbSettings.directory + "/../challenged"
       FileUtils.copyDirectory(new File(wavesSettings.dbSettings.directory), new File(correctBlockchainDbDir))
@@ -189,19 +190,18 @@ object MinerChallengeSimulator {
         rocksDBWriter,
         fixedWavesSettings,
         fakeTime,
-        BlockchainUpdateTriggers.noop,
-        (minHeight, maxHeight) => loadActiveLeases(rdb, minHeight, maxHeight)
+        BlockchainUpdateTriggers.noop
       ) {
         override def balanceSnapshots(address: Address, from: Int, to: Option[BlockId]): Seq[BalanceSnapshot] = {
           val initSnapshots = super.balanceSnapshots(address, from, to)
 
-          if (address == maliciousMiner.toAddress) {
+          if (address == maliciousMiner._1.toAddress) {
             initSnapshots.map { bs =>
               bs.copy(leaseOut = bs.regularBalance)
             }
-          } else if (address == challengingMiner.toAddress) {
+          } else if (address == challengingMiner._1.toAddress) {
             initSnapshots.map { bs =>
-              bs.copy(leaseIn = super.balance(maliciousMiner.toAddress))
+              bs.copy(leaseIn = super.balance(maliciousMiner._1.toAddress))
             }
           } else {
             initSnapshots
@@ -215,15 +215,14 @@ object MinerChallengeSimulator {
         rdb.close()
       })
 
-      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, wavesSettings, minerAccounts)
+      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, wavesSettings)
       BlockchainObjects(blockchainUpdater, rdb, miner, appender, fakeTime, true)
     }
 
     private def createMinerAndAppender(
         blockchain: BlockchainUpdaterImpl,
         fakeTime: Time,
-        wavesSettings: WavesSettings,
-        minerAccounts: Seq[(SigningKey, VrfKey)]
+        wavesSettings: WavesSettings
     ): (
         MinerImpl,
         (
@@ -237,12 +236,11 @@ object MinerChallengeSimulator {
       val miner = new MinerImpl(
         new DefaultChannelGroup("", null),
         blockchain,
-        wavesSettings,
+        wavesSettings.minerSettings,
         fakeTime,
         utx,
         BlockEndorser.Disabled,
         EndorsementStorage.Disabled,
-        minerAccounts,
         posSelector,
         scheduler,
         scheduler,

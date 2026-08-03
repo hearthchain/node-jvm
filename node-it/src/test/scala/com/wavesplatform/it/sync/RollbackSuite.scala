@@ -1,7 +1,6 @@
 package com.wavesplatform.it.sync
 
 import com.typesafe.config.Config
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.*
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.state.Height
@@ -14,10 +13,13 @@ import scala.util.Random
 @LoadTest
 class RollbackSuite extends BaseFunSuite with TransferSending with TableDrivenPropertyChecks {
   import NodeConfigs.*
+  // Zeroed so that the block reward - which scales with however many blocks the same 190 transactions happen to spread
+  // across on each mining attempt - doesn't dominate the state comparison below; without this, "Apply the same transfer
+  // transactions twice with return to UTX" fails whenever the two attempts don't mine into the same number of blocks.
   override def nodeConfigs: Seq[Config] = Seq(
     BiggestMiner.quorum(0),
     NotMiner
-  )
+  ).map(_.overrides("waves.blockchain.custom.rewards.initial = 0"))
 
   private lazy val nodeAddresses = nodeConfigs.map(_.getString("address")).toSet
 
@@ -27,10 +29,10 @@ class RollbackSuite extends BaseFunSuite with TransferSending with TableDrivenPr
 
     val transactionIds = Await.result(processRequests(generateTransfersToRandomAddresses(190, nodeAddresses)), 2.minutes).map(_.id)
     nodes.waitFor("empty utx")(_.utxSize)(_.forall(_ == 0))
-    nodes.waitForHeightArise()
+    val maxHeightFirstTry = Height(sender.transactionStatus(transactionIds).flatMap(_.height).max)
+    sender.waitForHeight(maxHeightFirstTry + 2) // so that NG fees won't affect miner's balances
 
-    val stateHeight        = sender.height
-    val stateAfterFirstTry = nodes.head.debugStateAt(stateHeight)
+    val stateAfterFirstTry = nodes.head.debugStateAt(maxHeightFirstTry + 1)
 
     nodes.rollback(startHeight)
     nodes.waitFor("empty utx")(_.utxSize)(_.forall(_ == 0))

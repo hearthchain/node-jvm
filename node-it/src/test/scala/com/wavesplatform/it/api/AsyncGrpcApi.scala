@@ -48,7 +48,6 @@ object AsyncGrpcApi {
         recipient: Recipient,
         amount: Long,
         fee: Long,
-        version: Int = 2,
         assetId: String = "WAVES",
         feeAssetId: String = "WAVES",
         attachment: ByteString = ByteString.EMPTY,
@@ -85,7 +84,6 @@ object AsyncGrpcApi {
         sellMatcherFee: Long,
         fee: Long,
         timestamp: Long,
-        version: Byte,
         matcherFeeAssetId: String = "WAVES"
     ): Future[PBSignedTransaction] = {
 
@@ -168,8 +166,7 @@ object AsyncGrpcApi {
         assetId: Option[String] = None,
         transfers: Seq[MassTransferTransactionData.Transfer],
         attachment: ByteString = ByteString.EMPTY,
-        fee: Long,
-        version: Int = 1
+        fee: Long
     ): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
         chainId,
@@ -188,7 +185,7 @@ object AsyncGrpcApi {
       transactions.broadcast(SignedTransaction.of(Some(unsigned), Seq(ByteString.copyFrom(proofs))))
     }
 
-    def broadcastLease(source: SigningKey, recipient: Recipient, amount: Long, fee: Long, version: Int = 2): Future[PBSignedTransaction] = {
+    def broadcastLease(source: SigningKey, recipient: Recipient, amount: Long, fee: Long): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(source.publicKey()),
@@ -200,7 +197,7 @@ object AsyncGrpcApi {
       transactions.broadcast(SignedTransaction.of(Some(unsigned), Seq(ByteString.copyFrom(proofs))))
     }
 
-    def broadcastLeaseCancel(source: SigningKey, leaseId: String, fee: Long, version: Int = 2): Future[PBSignedTransaction] = {
+    def broadcastLeaseCancel(source: SigningKey, leaseId: String, fee: Long): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(source.publicKey()),

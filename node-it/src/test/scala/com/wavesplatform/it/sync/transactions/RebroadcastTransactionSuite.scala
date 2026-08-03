@@ -17,8 +17,10 @@ class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDoc
 
   import RebroadcastTransactionSuite.*
 
+  // BiggestMiner (not Miners.head, the lowest-balance generator) so PoS block delay stays comfortably under the
+  // fixture's own tx-await timeout (8 * average-block-delay); Miners.head's expected delay was marginal against it.
   override protected def nodeConfigs: Seq[Config] =
-    Seq(configWithRebroadcastAllowed.withFallback(Miners.head), configWithRebroadcastAllowed.withFallback(NotMiner))
+    Seq(configWithRebroadcastAllowed.withFallback(BiggestMiner), configWithRebroadcastAllowed.withFallback(NotMiner))
 
   private def nodeAIsMiner: Node    = nodes.head
   private def nodeBIsNotMiner: Node = nodes.last

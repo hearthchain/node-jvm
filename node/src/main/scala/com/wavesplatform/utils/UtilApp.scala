@@ -15,7 +15,6 @@ import com.wavesplatform.wallet.Wallet
 import com.wavesplatform.{Application, Version}
 import play.api.libs.json.{JsObject, Json}
 import scopt.OParser
-import supranational.blst.SecretKey
 import tech.hearth.crypto.SigningKey
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
@@ -279,16 +278,12 @@ object UtilApp {
 
       val blsSK1bs = new Array[Byte](32)
       Random.nextBytes(blsSK1bs)
-      val sk1 = SecretKey()
-      sk1.from_bendian(blsSK1bs)
-      val blsSK1  = BlsKeyPair(sk1)
+      val blsSK1  = BlsKeyPair.fromSeed(blsSK1bs)
       val blsSig1 = blsSK1.sign(message)
 
       val blsSK2bs = new Array[Byte](32)
       Random.nextBytes(blsSK2bs)
-      val sk2 = SecretKey()
-      sk2.from_bendian(blsSK2bs)
-      val blsSK2  = BlsKeyPair(sk2)
+      val blsSK2  = BlsKeyPair.fromSeed(blsSK2bs)
       val blsSig2 = blsSK2.sign(message)
 
       val aggSig = BlsSignature.agg(Seq(blsSig1, blsSig2)).explicitGet()

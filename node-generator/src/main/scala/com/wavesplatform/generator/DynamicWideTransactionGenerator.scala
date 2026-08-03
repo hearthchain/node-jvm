@@ -1,15 +1,15 @@
 package com.wavesplatform.generator
 
 import cats.Show
-import com.wavesplatform.account.KeyPair
 import com.wavesplatform.generator.DynamicWideTransactionGenerator.Settings
 import com.wavesplatform.generator.utils.Gen
 import com.wavesplatform.transaction.Transaction
 import pureconfig.ConfigReader
+import tech.hearth.crypto.SigningKey
 
 import java.util.concurrent.atomic.AtomicReference
 
-class DynamicWideTransactionGenerator(settings: Settings, accounts: Seq[KeyPair]) extends TransactionGenerator {
+class DynamicWideTransactionGenerator(settings: Settings, accounts: Seq[SigningKey]) extends TransactionGenerator {
   require(accounts.nonEmpty)
 
   private val nextTxsNumber = new AtomicReference[Double](settings.start)

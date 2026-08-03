@@ -17,8 +17,8 @@ import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
 import com.wavesplatform.transaction.*
 import com.wavesplatform.transaction.assets.exchange.*
+import com.wavesplatform.transaction.transfer.MassTransferTransaction
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
-import com.wavesplatform.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import org.asynchttpclient.util.HttpConstants
 import org.scalatest
 import org.scalatest.BeforeAndAfterAll
@@ -47,9 +47,14 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     def assertSignBadJson(json: JsObject, expectedMessage: String, code: Int = 400): scalatest.Assertion =
       assertBadRequestAndMessage(sender.postJsonWithApiKey("/transactions/sign", json), expectedMessage, code)
 
+    // /transactions/sign resolves "sender" against the node's own wallet, which the miner's own address (sender.address)
+    // is never registered in - the wallet derives its accounts from a separate seed. Use a wallet-backed address so
+    // these cases actually reach the request-shape validation they're testing, instead of failing wallet lookup first.
+    val walletAddress = sender.createAddressServerSide()
+
     val json = Json.obj(
       "type"      -> TransactionType.Transfer.id,
-      "sender"    -> sender.address,
+      "sender"    -> walletAddress,
       "recipient" -> firstAddress,
       "amount"    -> 1,
       "fee"       -> 100000
@@ -59,13 +64,13 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     assertSignBadJson(json - "recipient", WrongJson.WrongJsonDataMessage)
 
     val obsoleteTx =
-      Json.obj("type" -> TransactionType.Genesis.id, "sender" -> sender.address, "recipient" -> firstAddress, "amount" -> 1, "fee" -> 100000)
+      Json.obj("type" -> TransactionType.Genesis.id, "sender" -> walletAddress, "recipient" -> firstAddress, "amount" -> 1, "fee" -> 100000)
     assertSignBadJson(obsoleteTx, "transaction type not supported", 501)
 
     val bigBaseTx =
       Json.obj(
         "type"       -> TransactionType.Transfer.id,
-        "sender"     -> sender.address,
+        "sender"     -> walletAddress,
         "recipient"  -> firstAddress,
         "amount"     -> 1,
         "fee"        -> 100000,
@@ -120,9 +125,11 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
 
     assertBroadcastBadJson(json, "Proof doesn't validate")
     assertBroadcastBadJson(json - "type", WrongJson.WrongJsonDataMessage)
-    assertBroadcastBadJson(json - "type" + ("type"       -> Json.toJson(88)), "Bad transaction type")
-    assertBroadcastBadJson(json - "chainId" + ("chainId" -> Json.toJson(123)), "Address belongs to another network")
+    assertBroadcastBadJson(json - "type" + ("type" -> Json.toJson(88)), "Bad transaction type")
     assertBroadcastBadJson(json - "recipient", WrongJson.WrongJsonDataMessage)
+    // A chainId mismatch case used to be tested here, but TransferRequest has no chainId field of its own - the reader
+    // ignores whatever the request JSON carries and always builds the transaction against the server's own network -
+    // so a Transfer broadcast can never actually reach CommonValidation.disallowFromAnotherNetwork this way.
   }
 
   test("/transactions/sign should produce transfer transaction that is good for /transactions/broadcast") {
@@ -160,7 +167,10 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
   }
 
   test("/transactions/sign/{signerAddress} should sign a transaction by key of signerAddress") {
-    val firstAddress = sender.createKeyPairServerSide()
+    // Only the public key is embedded in the request JSON below; the actual signing is done server-side by
+    // sender's own wallet (see the /transactions/sign/{sender.address} call), so a purely local key pair
+    // suffices here (there is no API to recover a key/seed from a server-generated address any more).
+    val firstAddress = sender.createKeyPair()
 
     val json = Json.obj(
       "type"            -> TransactionType.Transfer.id,

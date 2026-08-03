@@ -1,6 +1,6 @@
 package com.wavesplatform.state
 
-import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.consensus.{FairPoSCalculator, PoSCalculator}
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 
@@ -21,31 +21,19 @@ import java.util.concurrent.TimeUnit
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 10, time = 1)
 class CalculateDelayBenchmark {
-  import CalculateDelayBenchmark.*
+  @Benchmark
+  def calculateDelay1(bh: Blackhole): Unit =
+    bh.consume(FairPoSCalculator.V2.calculateDelay(PoSCalculator.hit(Array.empty), 1, 0))
 
   @Benchmark
-  def calculateDelay1(bh: Blackhole, st: St): Unit =
-    bh.consume(st.environment.calculateDelay(ByteStr.empty, 0))
+  def calculateDelay2(bh: Blackhole): Unit =
+    bh.consume(FairPoSCalculator.V2.calculateDelay(PoSCalculator.hit(Array.fill[Byte](26)(127)), Long.MaxValue, Long.MaxValue))
 
   @Benchmark
-  def calculateDelay2(bh: Blackhole, st: St): Unit =
-    bh.consume(
-      st.environment.calculateDelay(ByteStr.fill(26)(127), Long.MaxValue)
-    )
+  def calculateDelay3(bh: Blackhole): Unit =
+    bh.consume(FairPoSCalculator.V2.calculateDelay(PoSCalculator.hit(Array.fill[Byte](26)(-128)), Long.MinValue, Long.MinValue))
 
   @Benchmark
-  def calculateDelay3(bh: Blackhole, st: St): Unit =
-    bh.consume(
-      st.environment.calculateDelay(ByteStr.fill(26)(-128), Long.MinValue)
-    )
-
-  @Benchmark
-  def calculateDelay4(bh: Blackhole, st: St): Unit =
-    bh.consume(
-      st.environment.calculateDelay(ByteStr.fill(26)(32), 100_000_000)
-    )
-}
-
-object CalculateDelayBenchmark {
-  class St extends DBState {}
+  def calculateDelay4(bh: Blackhole): Unit =
+    bh.consume(FairPoSCalculator.V2.calculateDelay(PoSCalculator.hit(Array.fill[Byte](26)(32)), 100_000_000, 100_000_000))
 }

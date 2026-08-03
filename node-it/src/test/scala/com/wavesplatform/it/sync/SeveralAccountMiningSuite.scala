@@ -8,7 +8,7 @@ import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.SeveralAccountMiningSuite.*
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.*
-import tech.hearth.crypto.{Crypto, Hex, SigningKey}
+import tech.hearth.crypto.{Hex, SigningKey}
 
 import scala.concurrent.duration.*
 
@@ -18,9 +18,12 @@ class SeveralAccountMiningSuite extends BaseFunSuite {
 
   test("only private keys from config used for mining when specified") {
     miner.waitForHeight(Height(2), 1.minute)
-    val minerBalance1 = miner.balance(MinerPk1.toAddress.toString).balance
-    val fromHeight    = miner.height
+    val fromHeight = miner.height
     miner.waitForHeight(miner.height + 5, 2.minutes)
+    // available (unlike the regular balance) excludes the generation deposit MinerPk1 reserves as a committed
+    // generator (see CLAUDE.md's "Balance snapshots" notes), and is read only now - not before the 5-block wait
+    // above, during which it also earns mining rewards - so the spent amount is actually spendable.
+    val minerBalance1       = miner.balanceDetails(MinerPk1.toAddress.toString).available
     val tx                  = miner.transfer(MinerPk1, notMiner.address, minerBalance1 - 10.waves, waitForTx = true)
     val minerTransferHeight = nodes.waitForTransaction(tx.id).height
     nodes.waitForHeight(Height(minerTransferHeight) + 5)
@@ -41,17 +44,23 @@ object SeveralAccountMiningSuite {
   private def signingSeed(idx: Int): Array[Byte] =
     com.wavesplatform.crypto.secureHash(Base58.decode(Default(idx).getString("account-seed")))
 
-  private def vrfSeed(signingSeed: Array[Byte]): Array[Byte] =
-    Crypto.defaultBackend().sha256(SigningKey.fromSeed(signingSeed).publicKey())
-
   private def getNodeKeyPair(idx: Int): SigningKey = SigningKey.fromSeed(signingSeed(idx))
 
   val MinerPk1: SigningKey = getNodeKeyPair(2)
   val MinerPk2: SigningKey = getNodeKeyPair(3)
 
+  // vrf-key/bls-key can't be re-derived from account-seed the way the signing key is above: nodes.conf generates
+  // them independently per node index, and genesis has already committed node03/node04 (indices 2 and 3) under
+  // those exact template values - a self-derived vrf-key here would register a different VRF public key than the
+  // one genesis committed, and every block this account mines would fail with "Invalid VRF proof". Using the
+  // template's own values for the same index keeps this test's accounts consistent with what genesis expects.
+  private def templateMinerAccount(idx: Int): Config = Default(idx).getConfigList("waves.miner.accounts").get(0)
+
   private def accountConfig(idx: Int): String = {
-    val seed = signingSeed(idx)
-    s"""{ signing-key = "${Hex.encode(seed)}", vrf-key = "${Hex.encode(vrfSeed(seed))}" }"""
+    val seed            = signingSeed(idx)
+    val templateAccount = templateMinerAccount(idx)
+    s"""{ signing-key = "${Hex.encode(seed)}", vrf-key = "${templateAccount.getString("vrf-key")}", bls-key = "${templateAccount
+        .getString("bls-key")}" }"""
   }
 
   private val minerConfig =

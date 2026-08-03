@@ -50,7 +50,11 @@ case class EndorsementFilter(
     val richest         = mutable.PriorityQueue.from(items)(using Ordering.by[Item, Long](_.balance))
     var endorserIndexes = Vector.empty[GeneratorIndex]
     var endorsedBalance = BigInt(minerBalance)
-    var reached         = false
+    // The miner's own balance (mining is already an endorsement, see BlockEndorser) can already meet the 2/3
+    // threshold alone - most commonly with a single committed generator, where there is nobody left to add and the
+    // loop below never runs at all. Checking only reached inside the loop would leave it false forever despite
+    // endorsedBalance already covering totalBalance.
+    var reached = endorsedBalance * 3 >= doubledTotalBalance
     while (endorserIndexes.size < maxValidEndorsers && richest.nonEmpty && !reached) {
       val x = richest.dequeue()
       endorserIndexes = endorserIndexes.appended(x.idx)

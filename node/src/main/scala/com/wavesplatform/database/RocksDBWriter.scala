@@ -30,6 +30,7 @@ import com.wavesplatform.transaction.transfer.{MassTransferTransaction, Transfer
 import com.wavesplatform.transaction.{CommitToGenerationTransaction, *}
 import com.wavesplatform.utils.ScorexLogging
 import io.netty.util.concurrent.DefaultThreadFactory
+import org.rocksdb.ReadOptions
 import org.slf4j.LoggerFactory
 
 import java.time.Duration
@@ -357,34 +358,41 @@ class RocksDBWriter(
       val prevFilter = mkFilter()
 
       var fromHeight = height
-      Using(writableDB.newIterator()) { iter =>
-        iter.seek(Keys.blockMetaAt(Height(height)).keyBytes)
-        var lastBlockTs = TxFilterResetTs
+      // Column families here are opened with a 10-byte capped prefix extractor (see RDB.newColumnFamilyOptions):
+      // a seek() to a key without an exact match only sees keys sharing that key's prefix bucket unless
+      // TotalOrderSeek is set, so both iterators below need it explicitly - without it, a fresh RocksDBWriter
+      // (e.g. after a real restart) silently rebuilds these tx bloom filters as empty, and disallowDuplicateIds
+      // then lets an already-mined transaction back in.
+      Using.resource(new ReadOptions().setTotalOrderSeek(true)) { ro =>
+        Using(writableDB.newIterator(ro)) { iter =>
+          iter.seek(Keys.blockMetaAt(Height(height)).keyBytes)
+          var lastBlockTs = TxFilterResetTs
 
-        while (
-          iter.isValid &&
-          iter.key().startsWith(KeyTag.BlockInfoAtHeight.prefixBytes) &&
-          (TxFilterResetTs - lastBlockTs) < settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2
-        ) {
-          lastBlockTs = readBlockMeta(iter.value()).getHeader.timestamp
-          fromHeight = Ints.fromByteArray(iter.key().drop(2))
-          iter.prev()
+          while (
+            iter.isValid &&
+            iter.key().startsWith(KeyTag.BlockInfoAtHeight.prefixBytes) &&
+            (TxFilterResetTs - lastBlockTs) < settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2
+          ) {
+            lastBlockTs = readBlockMeta(iter.value()).getHeader.timestamp
+            fromHeight = Ints.fromByteArray(iter.key().drop(2))
+            iter.prev()
+          }
         }
-      }
 
-      Using(writableDB.newIterator(rdb.txHandle.handle)) { iter =>
-        var counter = 0
-        iter.seek(Keys.transactionAt(Height(fromHeight), TxNum(0.toShort), rdb.txHandle).keyBytes)
-        while (
-          iter.isValid &&
-          iter.key().startsWith(KeyTag.NthTransactionInfoAtHeight.prefixBytes) &&
-          Ints.fromByteArray(iter.key().slice(2, 6)) <= height
-        ) {
-          counter += 1
-          prevFilter.put(readTransaction(Height(0))(iter.value())._2.id().arr)
-          iter.next()
+        Using(writableDB.newIterator(rdb.txHandle.handle, ro)) { iter =>
+          var counter = 0
+          iter.seek(Keys.transactionAt(Height(fromHeight), TxNum(0.toShort), rdb.txHandle).keyBytes)
+          while (
+            iter.isValid &&
+            iter.key().startsWith(KeyTag.NthTransactionInfoAtHeight.prefixBytes) &&
+            Ints.fromByteArray(iter.key().slice(2, 6)) <= height
+          ) {
+            counter += 1
+            prevFilter.put(readTransaction(Height(0))(iter.value())._2.id().arr)
+            iter.next()
+          }
+          log.debug(s"Loaded $counter tx IDs from [$fromHeight, $height]")
         }
-        log.debug(s"Loaded $counter tx IDs from [$fromHeight, $height]. Filter size is ${memMeter.measureDeep(prevFilter)} bytes")
       }
 
       prevFilter

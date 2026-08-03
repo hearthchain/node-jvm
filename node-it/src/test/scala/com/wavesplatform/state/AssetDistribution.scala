@@ -29,7 +29,7 @@ object AssetDistributionPage {
     Json.obj(
       "hasNext"  -> JsBoolean(page.hasNext),
       "lastItem" -> Json.toJson(page.lastItem.map(_.toString)),
-      "items"    -> Json.toJson(page.items)(AssetDistribution.writes)
+      "items"    -> Json.toJson(page.items)(using AssetDistribution.writes)
     )
   }
 }

@@ -1,8 +1,6 @@
 package com.wavesplatform.it.sync
 
 import com.typesafe.config.Config
-import com.wavesplatform.common.utils.EitherExt2.*
-import com.wavesplatform.account.PublicKey
 import com.wavesplatform.it.BaseFunSuite
 import com.wavesplatform.it.NodeConfigs.*
 import com.wavesplatform.it.keyPairFromSeed

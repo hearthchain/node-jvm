@@ -1,17 +1,12 @@
 package com.wavesplatform.generator.config
 
 import com.google.common.base.CaseFormat
-import com.typesafe.config.*
 import com.wavesplatform.generator.Worker
 import com.wavesplatform.settings.*
-import com.wavesplatform.state.DataEntry
 import com.wavesplatform.transaction.TransactionType
-import play.api.libs.json.*
 import pureconfig.*
-import pureconfig.error.ThrowableFailure
 
 import scala.concurrent.duration.FiniteDuration
-import scala.util.control.NonFatal
 
 trait ConfigReaders {
 
@@ -25,14 +20,6 @@ trait ConfigReaders {
       }
     }
   }
-
-  given ConfigReader[DataEntry[?]] =
-    ConfigReader.fromFunction(v =>
-      try Right(Json.parse(v.render(ConfigRenderOptions.concise())).as[DataEntry[?]])
-      catch {
-        case NonFatal(e) => ConfigReader.Result.fail(ThrowableFailure(e, Some(v.origin())))
-      }
-    )
 
   given ConfigReader[Worker.Settings] = ConfigReader.fromCursor { v =>
     def readInitialDelay(obj: ConfigObjectCursor, path: String, delay: FiniteDuration): ConfigReader.Result[Either[FiniteDuration, FiniteDuration]] =

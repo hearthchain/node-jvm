@@ -54,8 +54,9 @@ object GenesisSnapshot {
           decimalsError = GenericError(s"Genesis asset ${a.id}: ${TxDecimals.errMsg}, got ${a.decimals}")
           _ <- Either.cond(a.decimals.isValidByte, (), decimalsError)
           _ <- TxDecimals.from(a.decimals.toByte).leftMap(_ => decimalsError)
+          isNft = a.quantity == 1 && a.decimals == 0 && !a.reissuable
         } yield IssuedAsset(a.id) -> NewAssetInfo(
-          AssetStaticInfo(a.id, TransactionId(a.id), issuer, a.decimals, nft = false),
+          AssetStaticInfo(a.id, TransactionId(a.id), issuer, a.decimals, nft = isNft),
           AssetInfo(a.name, a.description, GenesisBlockHeight),
           AssetVolumeInfo(a.reissuable, BigInt(a.quantity))
         )

@@ -1,9 +1,10 @@
-package com.wavesplatform.lang.v1
+package com.wavesplatform.common
 
 import com.esaulpaugh.headlong.util.FastHex
 import com.sun.org.apache.xerces.internal.impl.dv.util.HexBin
 import com.wavesplatform.common.utils.*
-import com.wavesplatform.lang.v1.DataFuncs.*
+import com.wavesplatform.common.DataFuncs.*
+import com.wavesplatform.utils.randomBytes
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 

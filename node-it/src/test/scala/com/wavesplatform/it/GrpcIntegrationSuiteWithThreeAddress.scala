@@ -15,9 +15,11 @@ import tech.hearth.crypto.SigningKey
 trait GrpcIntegrationSuiteWithThreeAddress extends BaseSuite with ScalaFutures with IntegrationPatience with RecoverMethods with ScorexLogging {
   this: TestSuite & Nodes =>
 
-  protected lazy val firstAcc: SigningKey  = keyPairFromSeed("first_acc".getBytes("UTF-8"))
-  protected lazy val secondAcc: SigningKey = keyPairFromSeed("second_acc".getBytes("UTF-8"))
-  protected lazy val thirdAcc: SigningKey  = keyPairFromSeed("third_acc".getBytes("UTF-8"))
+  // Same seeds as IntegrationSuiteWithThreeAddresses (the REST fixture), so grpc suites trading the shared
+  // genesis test asset (see template.conf) reach the same accounts it was distributed to.
+  protected lazy val firstAcc: SigningKey  = keyPairFromSeed("firstKeyPair".getBytes("UTF-8"))
+  protected lazy val secondAcc: SigningKey = keyPairFromSeed("secondKeyPair".getBytes("UTF-8"))
+  protected lazy val thirdAcc: SigningKey  = keyPairFromSeed("thirdKeyPair".getBytes("UTF-8"))
 
   protected lazy val firstAddress: ByteString  = PBRecipients.create(Address.fromPublicKey(PublicKey(firstAcc.publicKey()))).publicKeyHash
   protected lazy val secondAddress: ByteString = PBRecipients.create(Address.fromPublicKey(PublicKey(secondAcc.publicKey()))).publicKeyHash

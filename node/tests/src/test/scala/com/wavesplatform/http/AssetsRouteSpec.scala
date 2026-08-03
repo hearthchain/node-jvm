@@ -332,6 +332,7 @@ class AssetsRouteSpec
 
   private def checkResponse(desc: AssetDescription, assetId: String, response: JsObject): Unit = {
     (response \ "assetId").as[String] shouldBe assetId
+    (response \ "issueTimestamp").as[Long] shouldBe 0L
     (response \ "issuer").as[String] shouldBe desc.issuer.toAddress.toString
     (response \ "name").as[String] shouldBe desc.name.toStringUtf8
     (response \ "description").as[String] shouldBe desc.description.toStringUtf8

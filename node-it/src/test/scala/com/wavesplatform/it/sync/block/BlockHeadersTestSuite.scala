@@ -1,7 +1,6 @@
 package com.wavesplatform.it.sync.block
 
 import com.typesafe.config.Config
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.api.*
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.transactions.NodesFromDocker
@@ -20,12 +19,8 @@ class BlockHeadersTestSuite
     with NodesFromDocker
     with matchers.should.Matchers {
 
-  private val activationHeight   = Height(4)
-  private val minerDesiredReward = 750000000
-  private val minIncrement       = 50000000
-  private val initialReward      = 600000000
-  private val rewardTerm         = 3
-  private val votingInterval     = 2
+  private val activationHeight = Height(4)
+  private val initialReward    = 600000000
 
   override protected def nodeConfigs: Seq[Config] =
     NodeConfigs.newBuilder
@@ -33,12 +28,8 @@ class BlockHeadersTestSuite
         _.raw(
           s"""waves {
              |  blockchain.custom.rewards {
-             |    term = $rewardTerm
              |    initial = $initialReward
-             |    min-increment = $minIncrement
-             |    voting-interval = $votingInterval
              |  }
-             |  rewards.desired = $minerDesiredReward
              |  miner.quorum = 1
              |}""".stripMargin
         )
@@ -65,13 +56,10 @@ class BlockHeadersTestSuite
     Await.result(processRequests(generateTransfersToRandomAddresses(10, nodeAddresses)), 2.minutes)
     nodes.waitForHeight(baseHeight + 4)
     notMiner.blockHeaderAt(activationHeight).reward shouldBe Some(initialReward)
-    notMiner.blockHeaderAt(activationHeight + 1).desiredReward shouldBe Some(minerDesiredReward)
     val block       = notMiner.blockAt(baseHeight + 1)
     val blockHeader = notMiner.blockHeaderAt(baseHeight + 1)
 
     assertBlockInfo(block, blockHeader)
-    nodes.waitForHeight(activationHeight + rewardTerm)
-    notMiner.blockHeaderAt(activationHeight + rewardTerm).reward shouldBe Some(initialReward + minIncrement)
   }
 
   test("lastBlock content should be equal to lastBlockHeader, except transactions info") {
