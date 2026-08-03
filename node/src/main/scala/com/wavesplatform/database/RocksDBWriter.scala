@@ -391,7 +391,7 @@ class RocksDBWriter(
             prevFilter.put(readTransaction(Height(0))(iter.value())._2.id().arr)
             iter.next()
           }
-          log.debug(s"Loaded $counter tx IDs from [$fromHeight, $height]. Filter size is ${memMeter.measureDeep(prevFilter)} bytes")
+          log.debug(s"Loaded $counter tx IDs from [$fromHeight, $height]")
         }
       }
 

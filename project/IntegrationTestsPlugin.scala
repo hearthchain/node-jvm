@@ -60,6 +60,7 @@ object IntegrationTestsPlugin extends AutoPlugin {
                 workingDirectory = Option(baseDirectory.value),
                 runJVMOptions = Vector(
                   "-Dwaves.it.logging.appender=FILE",
+                  "-J--enable-native-access=ALL-UNNAMED",
                   s"-Dwaves.it.logging.dir=${logDirectoryValue / suite.name.replaceAll("""(\w)\w*\.""", "$1.")}" // foo.bar.Baz -> f.b.Baz
                 ) ++ javaOptionsValue,
                 connectInput = false,

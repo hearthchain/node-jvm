@@ -18,7 +18,6 @@ import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.{Asset, CommitToGenerationTransaction, DiscardedBlocks, Transaction}
 import com.wavesplatform.utils.ObservedLoadingCache
 import monix.reactive.Observer
-import org.github.jamm.MemoryMeter
 
 import java.{lang, util}
 import scala.collection.immutable.VectorMap
@@ -142,8 +141,6 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     val curVf = volumeAndFeeCache.get(orderId)
     VolumeAndFee(curVf.volume, curVf.fee)
   }
-
-  protected val memMeter = MemoryMeter.builder().build()
 
   private var lastAddressId = loadMaxAddressId()
   protected def loadMaxAddressId(): Long
