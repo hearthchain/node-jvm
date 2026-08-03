@@ -1,6 +1,7 @@
 package com.wavesplatform.it.api
 
 import com.google.protobuf.ByteString
+import com.wavesplatform.account.Address
 import com.wavesplatform.api.grpc.BalanceResponse.WavesBalances
 import com.wavesplatform.api.grpc.{TransactionStatus as PBTransactionStatus, *}
 import com.wavesplatform.common.utils.Base58
@@ -237,7 +238,9 @@ object SyncGrpcApi extends Assertions {
     }
 
     def blockSeqByAddress(address: String, fromHeight: Int, toHeight: Int): Seq[VanillaBlock] = {
-      val filter = BlockRangeRequest.Filter.GeneratorAddress(ByteString.copyFrom(Base58.decode(address)))
+      // Addresses are bech32m now (see CLAUDE.md's node-it fixtures notes), not base58 - Base58.decode(address)
+      // threw on the first non-base58 character.
+      val filter = BlockRangeRequest.Filter.GeneratorAddress(ByteString.copyFrom(Address.fromString(address).explicitGet().toBytes()))
       blockSeq(fromHeight, toHeight, filter)
     }
 

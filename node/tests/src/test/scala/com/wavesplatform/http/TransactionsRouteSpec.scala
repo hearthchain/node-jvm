@@ -458,6 +458,21 @@ class TransactionsRouteSpec
         }
       }
     }
+
+    // A client that round-trips a transaction through its own model can end up with a literal "version": null
+    // (the key present, but not a usable value) rather than the key being absent - nothing writes a version any
+    // more, and a plain Option[Byte] writer renders None as null. TransactionFactory.parseRequest has to treat that
+    // the same as an absent key, not read it as a value and fail on JsNull.
+    "transaction with an explicit null version" in {
+      val txn                 = TxHelpers.commitToGeneration(Height(settings.blockchainSettings.functionalitySettings.generationPeriodLength + 1))
+      val jsonWithNullVersion = txn.json() ++ Json.obj("version" -> JsNull)
+      Post(routePath("/broadcast"), jsonWithNullVersion) ~> route ~> check {
+        val jsObject = responseAs[JsObject]
+        withClue(s"$jsObject ") {
+          status shouldEqual StatusCodes.OK
+        }
+      }
+    }
   }
 
   routePath("/merkleProof") - {

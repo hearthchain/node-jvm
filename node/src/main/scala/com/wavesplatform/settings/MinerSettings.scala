@@ -2,6 +2,7 @@ package com.wavesplatform.settings
 
 import com.wavesplatform.mining.Miner
 import pureconfig.*
+import pureconfig.generic.semiauto.deriveReader
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -28,4 +29,9 @@ case class MiningAccount(
     signingKey: Option[String],
     vrfKey: Option[String],
     blsKey: Option[String]
-) derives ConfigReader
+)
+
+object MiningAccount {
+  // This given is required for default args to work, see FunctionalitySettings.
+  given ConfigReader[MiningAccount] = deriveReader
+}

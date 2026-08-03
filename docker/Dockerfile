@@ -1,4 +1,4 @@
-ARG baseImage=eclipse-temurin:21-jre-noble
+ARG baseImage=eclipse-temurin:25-jre-noble
 FROM $baseImage
 
 ARG TARGETARCH
@@ -18,6 +18,8 @@ ENV WVDATA=/var/lib/waves
 ENV WVLOG=/var/log/waves
 ENV WAVES_INSTALL_PATH=/usr/share/waves
 ENV WAVES_CONFIG=/etc/waves/waves.conf
+
+RUN apt-get update && apt-get install -y --no-install-recommends wget curl ca-certificates
 
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
         export CORRETTO_ARCH="linux-x86_64"; \

@@ -2,10 +2,8 @@ package com.wavesplatform.it.sync
 
 import com.typesafe.config.{Config, ConfigFactory}
 import com.wavesplatform.api.http.ApiError.{CustomValidationError, InvalidIds}
-import com.wavesplatform.block.Block
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.crypto.Blake2b256
-import com.wavesplatform.features.BlockchainFeatures
 import com.wavesplatform.it.BaseFreeSpec
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.activation.ActivationStatusRequest
@@ -20,7 +18,8 @@ class MerkleRootTestSuite extends BaseFreeSpec with ActivationStatusRequest with
   override protected def nodeConfigs: Seq[Config] = Configs
 
   "not able to get merkle proof before activation" in {
-    miner.waitForHeight(ActivationHeight - 1)
+    // minimal-block-generation-offset (30s) alone is close to waitForHeight's 50s default timeout.
+    miner.waitForHeight(ActivationHeight - 1, 2.minutes)
     val txId = miner.broadcastTransfer(miner.keyPair, miner.address, transferAmount, minFee, None, None).id
     assertApiError(
       miner.getMerkleProof(txId),
@@ -110,7 +109,7 @@ class MerkleRootTestSuite extends BaseFreeSpec with ActivationStatusRequest with
 
 object MerkleRootTestSuite {
 
-  import com.wavesplatform.it.NodeConfigs.Default
+  import com.wavesplatform.it.NodeConfigs.Miners
 
   val MicroblockActivationHeight = 0
   val FairPosActivationHeight    = 0
@@ -127,5 +126,7 @@ object MerkleRootTestSuite {
        |}""".stripMargin
   )
 
-  val Configs: Seq[Config] = Default.map(Config.withFallback(_)).take(1)
+  // Miners.last (the highest-balance miner-eligible account): a low-balance miner's PoS delay for its very first
+  // block, on top of the 30s minimal-block-generation-offset above, can exceed waitForHeight's 50s default timeout.
+  val Configs: Seq[Config] = Seq(Config.withFallback(Miners.last))
 }

@@ -13,20 +13,24 @@ import com.wavesplatform.protobuf.transaction.PBRecipients
 class BlocksApiSuite extends GrpcBaseTransactionSuite {
   private val BlockV4Height = 3
   private val BlockV5Height = 5
+  import NodeConfigs.{Default, overrides}
+
+  // withDefault(1).buildNonConflicting() always assigns the lowest-index NonConflictingNodes entry (node01) as the
+  // sole miner - the lowest-balance miner-eligible account in the whole fixture (see CLAUDE.md's node-it fixtures
+  // notes), which slows this suite's beforeAll (100 sequential transfers) enough to intermittently time out.
+  // Default(6) (node07) is far enough ahead in balance to avoid that.
   override protected def nodeConfigs: Seq[Config] =
-    NodeConfigs.newBuilder
-      .overrideBase(_.raw(s"""waves {
-                             |  miner { 
-                             |    quorum = 0
-                             |    max-transactions-in-micro-block = 1
-                             |  }
-                             |  blockchain.custom.functionality.pre-activated-features {
-                             |    14 = $BlockV4Height
-                             |    15 = $BlockV5Height
-                             |  }
-                             |}""".stripMargin))
-      .withDefault(1)
-      .buildNonConflicting()
+    Seq(
+      // Block format is a single, unconditional version now (no more per-height feature-gated transitions), and
+      // every check below is version-agnostic (chainId), so BlockV4Height/BlockV5Height just pick heights to
+      // sample rather than gate an actual behavior change.
+      Default(6).overrides(s"""waves {
+                              |  miner {
+                              |    quorum = 0
+                              |    max-transactions-in-micro-block = 1
+                              |  }
+                              |}""".stripMargin)
+    )
 
   private lazy val blocksApi = BlocksApiGrpc.blockingStub(sender.grpcChannel)
 

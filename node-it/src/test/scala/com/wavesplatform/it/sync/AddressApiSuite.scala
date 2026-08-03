@@ -97,7 +97,11 @@ class AddressApiSuite extends BaseTransactionSuite with NTPTime {
   }
 
   private def transferAndReturnHeights(addresses: List[(String, Long)], asset: Option[String]): List[Int] = {
-    val ids = addresses.map { case (address, a) => miner.transfer(miner.keyPair, address, a, minFee, asset).id }
+    // Genesis assets are only ever distributed to firstKeyPair/secondKeyPair, never to a node's own account (see
+    // CLAUDE.md's node-it fixtures notes), so an asset transfer has to be sent from firstKeyPair; miner.keyPair
+    // still works fine for the plain-WAVES case.
+    val sender = asset.fold(miner.keyPair)(_ => firstKeyPair)
+    val ids    = addresses.map { case (address, a) => miner.transfer(sender, address, a, minFee, asset).id }
     ids.map(id => miner.waitForTransaction(id).height)
   }
 

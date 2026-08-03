@@ -78,13 +78,13 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
 
       assertGrpcError(
         sender.broadcastLease(firstAcc, Recipient().withPublicKeyHash(secondAddress), firstBalance.regular, minFee, version = v),
-        "Accounts balance errors",
+        errorMessage,
         Code.INVALID_ARGUMENT
       )
 
       assertGrpcError(
         sender.broadcastLease(firstAcc, Recipient().withPublicKeyHash(secondAddress), firstBalance.regular - minFee / 2, minFee, version = v),
-        "Accounts balance errors",
+        errorMessage,
         Code.INVALID_ARGUMENT
       )
 
@@ -170,11 +170,18 @@ class LeasingTransactionsGrpcSuite extends GrpcBaseTransactionSuite {
   test("can not make leasing to yourself") {
     for (v <- leaseTxSupportedVersions) {
       val firstBalance = sender.wavesBalance(firstAddress)
-      assertGrpcError(
-        sender.broadcastLease(firstAcc, PBRecipients.create(firstAcc.toAddress), leasingAmount, minFee, v),
-        "Transaction to yourself",
-        Code.INVALID_ARGUMENT
-      )
+      // A self-lease is now caught by PBTransactions.vanilla's construction-time validation inside broadcastLease
+      // itself (LeaseTxValidator, run while building the domain LeaseTransaction from the protobuf request), before
+      // any gRPC call is made - so it surfaces as a plain client-side RuntimeException (EitherExt2.explicitGet on a
+      // Left(TxValidationError.ToSelf)), not a GrpcStatusRuntimeException from the server, and assertGrpcError
+      // doesn't apply here.
+      the[RuntimeException] thrownBy sender.broadcastLease(
+        firstAcc,
+        PBRecipients.create(firstAcc.toAddress),
+        leasingAmount,
+        minFee,
+        v
+      ) should have message "ToSelf"
       sender.wavesBalance(firstAddress).regular shouldBe firstBalance.regular
       sender.wavesBalance(firstAddress).effective shouldBe firstBalance.effective
       sender.getActiveLeases(firstAddress) shouldBe List.empty

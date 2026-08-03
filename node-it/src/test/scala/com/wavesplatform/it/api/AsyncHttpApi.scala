@@ -105,8 +105,6 @@ object AsyncHttpApi extends Assertions {
     def delete(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
       retrying(f(_delete(s"${n.nodeApiEndpoint}$path")).withApiKey(n.apiKey).build())
 
-    def seed(address: String): Future[String] = getWithApiKey(s"/addresses/seed/$address").as[JsValue].map(v => (v \ "seed").as[String])
-
     def getWithApiKey(path: String): Future[Response] = retrying {
       _get(s"${n.nodeApiEndpoint}$path")
         .withApiKey(n.apiKey)
@@ -563,11 +561,11 @@ object AsyncHttpApi extends Assertions {
 
     def createKeyPair(): Future[SigningKey] = Future.successful(n.generateKeyPair())
 
-    def createKeyPairServerSide(): Future[SigningKey] =
-      for {
-        address <- post(s"${n.nodeApiEndpoint}/addresses").as[JsValue].map(v => (v \ "address").as[String])
-        seed    <- seed(address)
-      } yield keyPairFromSeed(seed).explicitGet()
+    // There is no API to recover a seed or key from an address any more (see CLAUDE.md "Keys"), so this can only
+    // return the address, not a SigningKey; use it where the node itself must hold the key (e.g. to sign server-side
+    // on the caller's behalf), and createKeyPair() where a purely local key suffices.
+    def createAddressServerSide(): Future[String] =
+      post(s"${n.nodeApiEndpoint}/addresses").as[JsValue].map(v => (v \ "address").as[String])
 
     def waitForNextBlock: Future[BlockHeader] =
       for {

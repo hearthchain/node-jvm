@@ -16,12 +16,18 @@ import scala.concurrent.duration.*
 
 class BlockV5GrpcSuite extends freespec.AnyFreeSpec with ActivationStatusRequest with OptionValues with GrpcIntegrationSuiteWithThreeAddress {
 
+  import NodeConfigs.{Default, notMiner, quorum}
+
+  // withDefault(1).withSpecial(1, _.nonMiner).buildNonConflicting() always assigns the lowest-index
+  // NonConflictingNodes entry (node01) as the miner - the lowest-balance miner-eligible account in the whole
+  // fixture (see CLAUDE.md's node-it fixtures notes), whose PoS delay for the very first block intermittently
+  // exceeded GrpcIntegrationSuiteWithThreeAddress's 50s beforeAll waitForHeight(2) timeout. Default(6) (node07) is
+  // far enough ahead in balance to reach it comfortably.
   override def nodeConfigs: Seq[Config] =
-    NodeConfigs.newBuilder
-      .overrideBase(_.quorum(0))
-      .withDefault(1)
-      .withSpecial(1, _.nonMiner)
-      .buildNonConflicting()
+    Seq(
+      Default(6).quorum(0),
+      Default(0).quorum(0).notMiner
+    )
 
   "block v5 appears and blockchain grows" - {
     "when feature activation happened" in {

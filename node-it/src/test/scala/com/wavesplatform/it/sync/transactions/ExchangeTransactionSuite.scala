@@ -2,7 +2,6 @@ package com.wavesplatform.it.sync.transactions
 
 import com.typesafe.config.Config
 import com.wavesplatform.api.http.ApiError.{CustomValidationError, StateCheckFailed}
-import com.wavesplatform.common.utils.EitherExt2.*
 import com.wavesplatform.it.NodeConfigs.GenesisAssets
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.it.sync.*
@@ -20,20 +19,19 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
   private def acc1 = secondKeyPair
   private def acc2 = thirdKeyPair
 
-  private val transactionV1versions = (1: Byte, 1: Byte, 1: Byte) // in ExchangeTransactionV1 only orders V1 are supported
-  private val transactionV2versions = for {
+  // ExchangeTransaction no longer carries its own version (see CLAUDE.md "Transaction JSON"), so this collapses
+  // to version-per-order only.
+  private val versions = for {
     o1ver <- 1 to 3
     o2ver <- 1 to 3
-    txVer <- 2 to 3
-  } yield (o1ver.toByte, o2ver.toByte, txVer.toByte)
-
-  private val versions = transactionV1versions +: transactionV2versions
+  } yield (o1ver.toByte, o2ver.toByte)
 
   test("cannot exchange non-issued assets") {
-    // an asset id that was never declared in genesis, so it is genuinely "not issued"
-    val neverIssuedAssetId = "11111111111111111111111111111111111111111111111111"
+    // 32 zero bytes, base58-encoded (32 '1' characters): a syntactically valid asset id that was never
+    // declared in genesis, so it is genuinely "not issued" without tripping the byte-length validation gate.
+    val neverIssuedAssetId = "1" * 32
 
-    for ((buyVersion, sellVersion, exchangeVersion) <- versions) {
+    for ((buyVersion, sellVersion) <- versions) {
       val buyer   = acc0
       val seller  = acc1
       val matcher = acc2
@@ -78,8 +76,8 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       val buyFee  = (BigInt(matcherFee) * amount / buy.amount.value).toLong
       val sellFee = (BigInt(matcherFee) * amount / sell.amount.value).toLong
 
-      val protoVersion = exchangeVersion > 2
-
+      // ExchangeTransaction has no version of its own any more, so there is exactly one validator
+      // (ExchangeTxValidator) and exactly one message for each of these, regardless of order version.
       assertApiError(
         sender.broadcastExchange(
           matcher,
@@ -90,10 +88,10 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
           buyFee,
           sellFee,
           matcherFee,
-          exchangeVersion,
+          version = 2,
           validate = false
         ),
-        if (protoVersion) CustomValidationError("buyOrder should has OrderType.BUY") else CustomValidationError("order1 should have OrderType.BUY")
+        CustomValidationError("buyOrder should has OrderType.BUY")
       )
 
       assertApiError(
@@ -106,37 +104,24 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
           buyFee,
           sellFee,
           matcherFee,
-          exchangeVersion,
+          version = 2,
           validate = false
         ),
         CustomValidationError("sellOrder should has OrderType.SELL")
       )
 
       assertApiError {
-        if (protoVersion)
-          sender.broadcastExchange(
-            matcher,
-            sell,
-            buy,
-            TxExchangeAmount.unsafeFrom(amount),
-            TxExchangePrice.unsafeFrom(sellPrice),
-            buyFee,
-            sellFee,
-            matcherFee,
-            exchangeVersion
-          )
-        else
-          sender.broadcastExchange(
-            matcher,
-            buy,
-            sell,
-            TxExchangeAmount.unsafeFrom(amount),
-            TxExchangePrice.unsafeFrom(sellPrice),
-            buyFee,
-            sellFee,
-            matcherFee,
-            exchangeVersion
-          )
+        sender.broadcastExchange(
+          matcher,
+          buy,
+          sell,
+          TxExchangeAmount.unsafeFrom(amount),
+          TxExchangePrice.unsafeFrom(sellPrice),
+          buyFee,
+          sellFee,
+          matcherFee,
+          version = 2
+        )
       } { error =>
         error.id shouldBe StateCheckFailed.Id
         error.statusCode shouldBe StateCheckFailed.Code.intValue

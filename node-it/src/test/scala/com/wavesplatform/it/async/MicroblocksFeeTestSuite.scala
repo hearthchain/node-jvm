@@ -39,65 +39,63 @@ class MicroblocksFeeTestSuite extends BaseFreeSpec {
     }
   }
 
-  "fee distribution when NG activates" in {
+  // NG (microblocks, and with it the 40%/60% own-block/carry fee split - see CLAUDE.md's "Block fees" notes) is
+  // unconditional now, not gated by feature 2 any more; pre-activating it crashes the node outright once the chain
+  // reaches that height ("UNIMPLEMENTED FEATURE 2 has been ACTIVATED ON BLOCKCHAIN", see CLAUDE.md's node-it
+  // fixtures notes on stale feature ids). There is no "before activation" state to test any more, so this only
+  // checks the always-on split holds across two consecutive blocks. This suite's sole miner (see nodeConfigs below)
+  // generates every block, so blockBefore/blockAt/blockAfter all share one generator.
+  "fee distribution" in {
     val f = for {
       _ <- traverse(nodes)(_.height).map(_.max)
 
-      _ <- traverse(nodes)(_.waitForHeight(microblockActivationHeight - 1))
+      _ <- traverse(nodes)(_.waitForHeight(checkHeight - 1))
       _ <- txRequestsGen(200, 2.waves)
-      _ <- traverse(nodes)(_.waitForHeight(microblockActivationHeight + 3))
+      _ <- traverse(nodes)(_.waitForHeight(checkHeight + 1))
 
-      initialBalances <- notMiner.debugStateAt(microblockActivationHeight - 1) // 100%
+      balancesBefore <- notMiner.debugStateAt(checkHeight - 1)
+      blockBefore    <- notMiner.blockHeaderAt(checkHeight - 1)
 
-      balancesBeforeActivation <- notMiner.debugStateAt(microblockActivationHeight) // 100%
-      blockBeforeActivation    <- notMiner.blockHeaderAt(microblockActivationHeight)
+      balancesAt <- notMiner.debugStateAt(checkHeight)
+      blockAt    <- notMiner.blockHeaderAt(checkHeight)
 
-      balancesOnActivation <- notMiner.debugStateAt(microblockActivationHeight + 1) // 40%
-      blockOnActivation    <- notMiner.blockHeaderAt(microblockActivationHeight + 1)
-
-      balancesAfterActivation <- notMiner.debugStateAt(microblockActivationHeight + 2) // 60% of previous + 40% of current
-      blockAfterActivation    <- notMiner.blockHeaderAt(microblockActivationHeight + 2)
+      balancesAfter <- notMiner.debugStateAt(checkHeight + 1)
+      blockAfter    <- notMiner.blockHeaderAt(checkHeight + 1)
     } yield {
-
-      balancesBeforeActivation(blockBeforeActivation.generator) shouldBe {
+      balancesAt(blockAt.generator) shouldBe {
         nodes.head.settings.blockchainSettings.rewardsSettings.initial +
-          initialBalances(blockBeforeActivation.generator) + blockBeforeActivation.totalFee
+          balancesBefore(blockAt.generator) + blockBefore.totalFee * 6 / 10 + blockAt.totalFee * 4 / 10
       }
 
-      balancesOnActivation(blockOnActivation.generator) shouldBe {
+      balancesAfter(blockAfter.generator) shouldBe {
         nodes.head.settings.blockchainSettings.rewardsSettings.initial +
-          balancesBeforeActivation(blockOnActivation.generator) + blockOnActivation.totalFee * 4 / 10
-      }
-
-      balancesAfterActivation(blockAfterActivation.generator) shouldBe {
-        nodes.head.settings.blockchainSettings.rewardsSettings.initial +
-          balancesOnActivation(blockAfterActivation.generator) + blockOnActivation.totalFee * 6 / 10 +
-          blockAfterActivation.totalFee * 4 / 10
+          balancesAt(blockAfter.generator) + blockAt.totalFee * 6 / 10 + blockAfter.totalFee * 4 / 10
       }
     }
 
     Await.result(f, 5.minute)
   }
 
-  private val microblockActivationHeight = Height(10)
+  private val checkHeight = Height(10)
   private val minerConfig = ConfigFactory.parseString(
-    s"""waves {
-       |  blockchain.custom.functionality.pre-activated-features.2 = $microblockActivationHeight
-       |  miner.quorum = 3
-       |}
+    """waves {
+      |  miner.quorum = 3
+      |}
       """.stripMargin
   )
 
   private val notMinerConfig = ConfigFactory.parseString(
-    s"""waves {
-       |  blockchain.custom.functionality.pre-activated-features.2 = $microblockActivationHeight
-       |  miner.enable = no
-       |}
+    """waves {
+      |  miner.enable = no
+      |}
       """.stripMargin
   )
 
+  // Default(0) (node01) is the lowest-balance miner-eligible account in the whole fixture (see CLAUDE.md's node-it
+  // fixtures notes); as the suite's sole miner its PoS delay averaged ~30s/block, timing this test out before it
+  // ever reached microblockActivationHeight. Default(8) (node09, the highest-balance one) reaches it comfortably.
   override protected val nodeConfigs: Seq[Config] = Seq(
-    minerConfig.withFallback(Default(0)),
+    minerConfig.withFallback(Default(8)),
     notMinerConfig.withFallback(Default(1)),
     notMinerConfig.withFallback(Default(2)),
     notMinerConfig.withFallback(Default(3))

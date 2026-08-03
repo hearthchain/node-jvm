@@ -3,12 +3,10 @@ package com.wavesplatform.it.sync.grpc
 import com.wavesplatform.it.NTPTime
 import com.wavesplatform.it.NodeConfigs.GenesisAssets
 import com.wavesplatform.it.api.SyncGrpcApi.*
-import com.wavesplatform.it.sync.{matcherFee, minFee}
-import com.wavesplatform.test.*
+import com.wavesplatform.it.sync.matcherFee
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.transaction.assets.exchange.{Order, OrderType}
-import com.wavesplatform.utils.*
 import io.grpc.Status.Code
 
 import scala.collection.immutable
@@ -78,7 +76,9 @@ class ExchangeTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
   }
 
   test("cannot exchange non-issued assets") {
-    val neverIssuedAssetId = "11111111111111111111111111111111111111111111111111"
+    // 32 zero bytes, base58-encoded (32 '1' characters): a syntactically valid asset id that was never
+    // declared in genesis, so it is genuinely "not issued" without tripping the byte-length validation gate.
+    val neverIssuedAssetId = "1" * 32
 
     for ((o1ver, o2ver, tver) <- versions) {
       val ts                  = ntpTime.correctedTime()

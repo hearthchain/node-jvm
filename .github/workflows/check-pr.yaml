@@ -8,6 +8,7 @@ concurrency:
 
 permissions:
   checks: write
+  contents: read
 
 jobs:
   check-pr:

@@ -56,8 +56,10 @@ object LeaseStatusTestSuite {
                                                             |}
      """.stripMargin)
 
+  // A higher-balance generator (not Default.head, the lowest-balance one) so PoS block delay stays comfortably
+  // under the fixture's own tx-await timeout (8 * average-block-delay).
   val Configs: Seq[Config] = Seq(
-    minerConfig.withFallback(Default.head),
+    minerConfig.withFallback(Default(8)),
     notMinerConfig.withFallback(Default(1))
   )
 

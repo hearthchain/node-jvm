@@ -4,14 +4,35 @@ purpose: Canonical agent instructions for the node-jvm repo (AGENTS.md is a thin
 
 # node-jvm: agent instructions
 
-Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC API, RIDE). sbt multi-module build, JDK 17. README.md covers node quickstart; keep this file short and laconic.
+Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC API, RIDE). sbt multi-module build, JDK 25. README.md covers node quickstart; keep this file short and laconic.
 
 ## Build / test
 
 - `sbt compilePR`: clean, `scalafmtCheck`, compile everything (Test included) with `-Werror`; warnings block.
 - `sbt checkPR`: `compilePR` + unit tests (`node-tests`, `grpc-server`) + `node/assembly` + docker tarballs. This is what CI (`check-pr.yaml`) runs.
 - `sbt node-tests/test`: unit tests only; single suite via `sbt "node-tests/testOnly *SuiteName"`.
-- `sbt "node-it/docker;node-it/test"`: integration tests (needs Docker); slow, don't run by default.
+- `sbt "node-it/docker;node-it/test"`: integration tests (needs Docker); slow, don't run by default. `node-it/docker`
+  builds the image from whatever `node`/`grpc-server` currently compile to; it is not rebuilt automatically, so re-run
+  it by hand after touching either module's sources before `node-it/testOnly ...`.
+- Sandboxed dev environments: the default Docker builder here cannot do nested overlayfs mounts, so `node-it/docker`
+  (or any `docker build`/`docker buildx build` using the default `docker` driver) fails every `RUN` layer with
+  `mount source: "overlay", ... err: operation not permitted`, even for a trivial `RUN echo`. Switch to a
+  docker-container buildx builder first (`docker buildx create --use` if none exists, or `docker buildx use
+  <existing-container-builder>` — check `docker buildx ls` for one already running), then build the image directly:
+  `cd docker && docker buildx build --load -t com.wavesplatform/node-it:latest .`. `sbt node-it/docker` itself always
+  uses the default builder and cannot be told to use buildx, so it will keep failing in this environment; run the
+  `docker buildx build` command by hand instead (the tarballs it needs are still produced by
+  `sbt node-it/docker`'s dependency on `buildTarballsForDocker`, which itself works fine — only the final
+  `docker build` step needs the workaround, so letting `sbt node-it/docker` fail once first to produce fresh
+  tarballs before the manual `buildx build` is a reasonable way to sequence it).
+- node-it test suites run with `-Dwaves.it.max-parallel-suites=N` to cap Docker resource usage (each suite starts
+  its own set of containers); pass this as a JVM property on the `sbt` command line, not inside the sbt shell.
+  Per-suite failures are deterministic (confirmed identical across parallelism 3 and 6 on the same code), so lowering
+  parallelism only helps with wall-clock/resource pressure, not with distinguishing real failures from flakiness.
+  Per-suite logs land in `node-it/target/logs/<run-id>/<abbreviated.suite.Name>/`, but the real assertion/exception
+  message for a failure is only in the sbt console output (the per-suite `test.log` is DEBUG-level container/HTTP
+  traffic and rarely contains the failure reason); grep the sbt output for `*** FAILED ***`/`*** ABORTED ***` and the
+  lines immediately following instead.
 - `sbt scalafmtAll`: auto-format before committing.
 
 ## Modules
@@ -145,13 +166,289 @@ features that produced them.
 
 ## node-it fixtures
 
-`node-it/src/test/resources/template.conf`'s genesis section still uses the pre-migration schema
-(`genesis.transactions`/`initial-balance`, base58 addresses), while `Docker.scala` parses genesis through the current
-`GenesisSettings` (`balances`/`generators`, bech32 addresses, optional `assets`). This predates any single change and
-is unrelated to whatever test is failing: the module compiles, but a Docker node won't actually boot off this fixture
-until the schema is migrated. `genesis.assets` entries exist for tests that need a pre-issued asset
-(`NodeConfigs.GenesisAssets`), but nothing distributes them into a `balances` entry yet, so trading them still fails at
-runtime even though the test compiles.
+`template.conf`'s genesis section is on the current `balances`/`generators` schema (bech32 addresses), not the old
+`transactions`/`initial-balance` one. Every miner-eligible node in `nodes.conf` (node01-node09; node10 stays a plain
+account) is both a funded account and a committed generator: its `waves.miner.accounts` entry's `signing-key` is the
+same hex seed as its own account (so the address that mines is also a regular funded address), with independently
+generated `vrf-key`/`bls-key` alongside it. `genesis.assets` (`NodeConfigs.GenesisAssets`) are fully distributed
+between the "firstKeyPair"/"secondKeyPair" fixture accounts (`IntegrationSuiteWithThreeAddresses`), not to any node.
+
+Genesis-committed generators are only committed for the genesis period, and nothing in node-it ever sends a
+`CommitToGenerationTransaction` to renew that commitment for a later one. `generation-period-length` therefore has to
+stay large enough (currently 1000000) that no suite's run ever crosses into a period the genesis commitment doesn't
+cover — mining halts silently otherwise, surfacing only as a timeout waiting for a transaction to be mined, with
+`Error mining block by X: ... is not a committed generator of period [a, b]` in the node's own log.
+
+A block finalizes once the miner plus the endorsers `EndorsementFilter.simulate` greedily picks (richest first) reach
+**2/3 of the total generating balance of every generator committed for that block's period** —
+`endorsedBalance * 3 >= totalBalance * 2` in `EndorsementFilter.scala`, not a majority (1/2). A block's miner
+endorses only its immediate parent - there is no retry or gradual accumulation across several blocks if quorum isn't
+reached; the same generator set either clears 2/3 on that one attempt or the parent never finalizes at all, no matter
+how many further blocks pass.
+
+This bites node-it suites that override `generation-period-length` down to something small to actually reach a later
+period (the finalization suites are the case that found it): every one of node01-node09 is committed *for the
+genesis period* regardless of which of them the suite's own `nodeConfigs` actually starts containers for (see
+above), so a single-node suite's one running node holds only its own slice of all nine nodes' combined balance for
+every block in the genesis period - for `BiggestMiner` alone that's roughly 25%, nowhere near 2/3 - and finalization
+cannot progress at all during it. Once the chain crosses into a later period the suite itself committed generators
+for, the very first block of that period becomes endorsable by the new, presumably fully-online set, but that
+endorsement can only land in the *next* block (one shot at the immediate parent, per the paragraph above) - so a
+`finalizedHeight` baseline taken right at the period boundary itself still reflects the stuck genesis-period value;
+it has to be read one block later, not "waited out" over several.
+
+`Docker.genesisOverride` computes and pins all three genesis commitments (`signature`, `state-hash`, `block-id`) fresh
+on every run, from the `Block.genesis` this config actually produces — it cannot leave any of them unset, because the
+config that reaches a container is flattened into `-D` system properties (`Docker.asProperties`/`renderProperties`),
+which has no way to express an absent value: a `null` HOCON key becomes an empty string once flattened, and
+`GenesisSettings`'s `Option[ByteStr]` fields decode that as `Some(ByteStr.empty)`, not `None`. Left unpinned,
+`custom-defaults.conf`'s placeholders (e.g. `state-hash = "BASE58STATEHASH"`) leak through as a real, failing mismatch.
+
+Addresses are bech32m keyed by a process-wide default HRP (`tech.hearth.crypto.Address.setDefaultHrp`/`-Dhearth.hrp`),
+a *different* setting from `AddressScheme.current.chainId` (which only affects a transaction's `chain_id` byte).
+Nothing in `Application.scala` calls `setDefaultHrp` — a real node crashes the first time it renders or parses any
+address (`IllegalStateException: default HRP not configured`) unless `-Dhearth.hrp` is set some other way. node-it
+works around this for itself (`Docker.scala` calls `setDefaultHrp("thrth")` for its own JVM and passes
+`-Dhearth.hrp=thrth` to every container's `JAVA_OPTS`), but this is a genuine unfixed gap for real deployments.
+
+`entrypoint.sh` runs `exec java $JAVA_OPTS ...` with `$JAVA_OPTS` unquoted, so any config value containing a space
+(e.g. a genesis asset `description`) is split into separate argv words by the shell; the first bareword-looking piece
+is then parsed by `java` as the main class name (`Could not find or load main class ...`), silently discarding every
+argument after it. node-it's own fixtures avoid this by keeping every config value space-free; the underlying bug
+(`Docker.renderProperties` wraps a multi-word value in quotes that only `eval` would honor) is still there.
+
+Minimum-fee validation is not implemented: `FeeValidation.getMinFee` computes the minimum fee for a transaction type,
+but nothing in `TransactionDiffer`/`CommonValidation` ever calls it — `FeeValidation.apply` only checks `fee > 0`. A
+transaction below the nominal minimum (e.g. a Transfer at 99999 instead of 100000) is currently accepted. This is
+deliberate debt pending a fee-rules design, not an oversight; `TransferTransactionSuite`'s `fee = 99999` case is
+commented out with a TODO until it exists.
+
+Many individual suites carry their own `pre-activated-features`/`features.supported` overrides left over from the
+pre-migration feature set (ids 2 through 15+); since only id 1 (`SmallerMinimalGeneratingBalance`) is implemented now,
+activating any other id crashes the node outright (`UNIMPLEMENTED FEATURE N has been ACTIVATED ON BLOCKCHAIN, UPDATE
+THE NODE IMMEDIATELY`, logged, then the process force-stops), which surfaces in node-it only as the whole suite
+timing out/aborting with no useful client-side message — the real cause is only visible in that suite's own
+`nodeNN.log` under `node-it/target/logs/`. This was the single largest cause of aborted (not just failed) suites
+during the post-migration test fixup: check every crashing suite's node logs for this line before assuming a timeout
+is a logic bug. The fix is almost always to just delete the stale feature ids from that suite's config (keeping `1`
+if the suite still wants it pre-activated) — the behaviors those old ids used to gate (NG/microblocks, FairPoS, VRF,
+block v4/v5 fields, block-size-by-bytes limiting) are all unconditional now, so a suite testing "before vs. after
+activation" for one of them no longer has a meaningful "before" state and needs its assertions collapsed to just the
+always-on behavior (see `BlockSizeConstraintsSuite`, `BlocksApiSuite`).
+
+A generator account's `waves.miner.accounts` entry now requires all three of `signing-key`/`vrf-key`/`bls-key` (a
+hex-encoded seed each) when not using a mnemonic; `GeneratorKeys.fromSettings` throws `bls-key is required when
+mnemonic is not provided` at node startup (another node-log-only crash) if a suite's hand-built account config only
+sets the first two, which several still did since bls-key postdates when they were written.
+
+Suites that pick `Miners.head`/`Default.head` (or any other low-index `NodeConfigs.Default` entry) as their sole
+miner can time out waiting for even the very first transaction to be mined: genesis balances are distributed
+unevenly (node01 has the smallest, node10 — non-mining — the largest; see the `balances` list in `template.conf`),
+so a low-balance generator's expected PoS delay can exceed the fixture's own `8 * average-block-delay` tx-await
+timeout. Prefer `BiggestMiner` (`Miners.last`) or another high-balance index when a suite doesn't care which specific
+account mines.
+
+Some suites (`GrpcReflectionApiSuite`, `BlockV5GrpcSuite`, `BlocksApiSuite`, and others built via
+`NodeConfigs.newBuilder`/`NodeConfigs.Builder`) pick their node set via `Random.shuffle` inside `build`/
+`buildNonConflicting`, so which specific account ends up mining varies run to run; combined with the low-balance-miner
+timing issue above, this makes such suites intermittently slow/flaky rather than deterministically broken. Not fixed
+as of this writing — `Builder`'s shuffle would need seeding or a balance-aware selection to make these reliably fast.
+
+The REST API's block JSON moved the consensus fields out of the old nested `"nxt-consensus": {"generation-signature":
+..., "base-target": ...}` object into flat top-level `"generationSignature"`/`"baseTarget"` fields
+(`BlockHeaderSerializer.toJson`); `node-it`'s own `api/model.scala` `Block`/`BlockHeader` readers still expected the
+old nested path, so `generationSignature`/`baseTarget` silently parsed as `None` in every suite that reads a block
+header (breaking anything that then calls `.get` on them, e.g. `BlockV5TestSuite`).
+
+`/addresses/seed/{address}` (used to recover a server-wallet-generated account's seed over the API) is gone, matching
+the rest of the "no seed recoverable from a node" design (see "Keys" above); node-it's `createKeyPairServerSide()`
+test helper still called it and always 404'd. Split into `createAddressServerSide()` (registers a fresh account with
+the node's own wallet, for when the *node* must sign with it via `/transactions/sign`, and returns only the address)
+and the existing, purely-local `createKeyPair()` (no node round-trip at all, for when a caller just needs some
+distinct public key and never needs the node to hold or use its private key). `createAddressServerSide()` is *not*
+enough for a `CommitToGenerationTransaction` specifically, despite registering the address in the node's wallet:
+`TransactionFactory.signCommitToGeneration` signs with `GeneratorKeys.signingKey(address)`, sourced only from
+`waves.miner.accounts` (see "Keys"), never from the wallet — an address the node only knows about through its wallet
+fails `/transactions/sign` with `$address is not one of this node's generators, see waves.miner.accounts`. A node-it
+suite that needs a *second or third* generator identity on a single node (e.g. to test multiple committed generators
+without spinning up that many containers) needs new fixture support for provisioning extra `waves.miner.accounts`
+entries with known seeds, which doesn't exist yet; `OneNodeFinalizationTestSuite`/`TwoNodesFinalizationTestSuite` hit
+exactly this and can't pass until it's built.
+
+Watch for this when a test deliberately diverges one setting between two node configs for comparison purposes (e.g.
+zeroing `rewards.initial` on just the mining node to keep the reward out of a balance assertion): if *both* nodes
+independently compute state hashes for the blocks the miner produces — which they always do, `supportsLightNodeBlockFields`
+is unconditionally on — an override applied to only one node's config makes the two nodes disagree about it,
+which is a real `InvalidStateHash` divergence (not the intended narrower test difference): the miner embeds a hash
+computed under its own config, the other node recomputes independently and blacklists it, and the node that's now
+short a peer never converges (endless reconnect/reject loop until whatever wait the test is doing times out). This
+surfaces only as an unrelated-looking timeout with no obvious cause unless you check the non-miner's log for
+`InvalidStateHash`/`Blacklisting`; a config override meant to affect block *content* has to go on every node's
+config in the cluster, not just the miner's, `RollbackSuite`'s reward-zeroing being the case that found this.
+
+`generation-balance-depth-from-50-to-1000-after-height` doesn't correspond to any settings field any more —
+`GeneratingBalanceProvider.SecondDepth` hardcodes the generating-balance lookback window to 1000 blocks
+unconditionally, with no shorter pre-transition window at all. A test relying on the old shorter window to observe a
+funded account becoming mining-eligible within some practical number of blocks can't work any more — it would need
+to wait out a real 1000-block window, well over an hour in node-it. `MinerStateTestSuite`'s only test is `ignore`d for
+this reason, confirmed as permanent (depth-50 is not coming back).
+
+Reward voting (a miner's `rewards.desired` setting influencing the term-end block reward) is not implemented and,
+per project decision, will not be: `RewardApiRoute` hardcodes `RewardVotes(0, 0)` and nothing reads `rewards.desired`
+to attach a vote to a mined block. `RewardsTestSuite` (entirely about this) was deleted rather than ignored, and
+`BlockHeadersTestSuite`'s `desiredReward`/term-increase assertions were dropped for the same reason.
+
+A duplicate already-mined transaction resubmitted via `/transactions/broadcast` after restarting the node(s) that
+mined it used to be accepted again instead of being rejected with `AlreadyInState`/`AlreadyInTheState`
+(`NodeRestartTestSuite`, "the duplicate transaction cannot be put into the blockchain"). Root cause, confirmed with a
+repro (`DuplicateTransactionAfterRestartSpec`): `RocksDBWriter`'s constructor rebuilds its tx bloom filters
+(`prevTxFilter`/`currentTxFilter`) by seeking into the `txHandle`/default column families with plain
+`writableDB.newIterator(...)` — default `ReadOptions`, no `setTotalOrderSeek(true)`. Every column family here is
+opened with a 10-byte capped prefix extractor (`RDB.newColumnFamilyOptions`, for iterator performance), under which a
+`seek()` to a key that isn't an exact match only sees keys sharing that key's prefix bucket unless total-order-seek is
+set — exactly the caveat the surrounding comment already documented ("if specified key has less than 10 bytes:
+iterator finds the exact key for seek(key) and becomes invalid after next()"). Every *other* iterator constructed
+anywhere else in the database package (`ReadOnlyDB`, `DBResource`) already sets `setTotalOrderSeek(true)`; this one
+constructor didn't. The practical effect: on a real restart, a fresh `RocksDBWriter` rebuilds these filters as
+effectively empty, `containsTransaction` false-negatives for recently-mined transactions, and
+`disallowDuplicateIds` silently lets them back in. Fixed by wrapping both iterators in a shared
+`new ReadOptions().setTotalOrderSeek(true)`. `CommonValidationTest`/`TxBloomFilterSpec` never caught this because
+neither exercises `RocksDBWriter`'s constructor against a *pre-existing* DB (they only ever build a fresh, empty one);
+`DuplicateTransactionAfterRestartSpec` closes that gap by building a second `RocksDBWriter`/`Domain` via
+`TestStorageFactory` against the same `RDB` mid-test, simulating exactly that.
+
+`node-generator` and `benchmark` do not compile as of this pass — pre-existing, predating this fixup, unrelated to
+anything above. `node-generator`'s `NarrowTransactionGenerator.scala`/`DynamicWideTransactionGenerator.scala`
+reference `account.KeyPair`, `TxVersion`, `TransactionType.CreateAlias`, `TxHelpers.createAlias` — all removed earlier
+in the migration (see "Keys", "Transaction JSON") — and `benchmark`'s
+`ScriptEvaluatorBenchmark.scala` is corrupted at the very first line (`Vpackage com.wavesplatform.lang.v1`, breaks
+both the compiler and `scalafmt`). Neither module is touched by `checkPR`'s own suites, but `compilePR`/`scalafmtAll`
+walk the whole build and will report failures here that have nothing to do with whatever you're actually working on;
+don't chase them, and scope `scalafmtAll`/compile commands to the specific project(s) you touched
+(e.g. `sbt "node-it/scalafmtAll"`) to avoid tripping over this.
+
+### Remaining known node-it failures (as of this pass)
+
+Fixed since the previous pass:
+
+- `activation.FeatureActivationTestSuite`/`PreActivatedFeaturesTestSuite` — both set `waves.features.supported`,
+  a dead config path; the miner's actual vote list (and what `ActivationApiRoute` reports) comes from
+  `waves.miner.supported-features` (`MinerSettings.supportedFeatures`), which neither suite ever set, so the node
+  never voted and status fell through to `Implemented` instead of `Voted`. Fixed both suites' config key; all 7 tests
+  across the two suites pass now.
+- `sync.transactions.SignAndBroadcastApiSuite`, "/transactions/sign should handle erroneous input" — not a
+  validation-order issue as first suspected: the test signed as `sender.address` (the node's own miner/generator
+  account), which is never in that node's wallet (wallet derives from a wholly separate seed, see "Keys"), so
+  `resolveSigner`'s wallet lookup failed before ever reaching the request-shape check being tested — for *every*
+  case in the test, not just one. Fixed by signing as a wallet-backed address from `createAddressServerSide()`
+  instead. The suite's chainId-mismatch broadcast case was a separate, deeper issue: `TransferRequest` has no
+  `chainId` field at all, so the request reader always builds the transaction against the server's own network
+  regardless of what the request JSON says — that check is structurally unreachable for a `Transfer` broadcast via
+  this route. Removed that assertion with a comment; it was also asserting a message
+  (`"Address belongs to another network"`) that doesn't match current error text
+  (`"Transaction from another network, expected: ..."` from `CommonValidation.disallowFromAnotherNetwork`) regardless.
+- `sync.RollbackSuite`, "Apply the same transfer transactions twice with return to UTX" — two stacked causes, not
+  the rollback logic: (1) the state snapshots being compared were taken one block apart between the two mining
+  attempts, so a block reward difference leaked into the comparison whenever the same 190 transactions happened to
+  need a different number of blocks between attempts — fixed by zeroing `rewards.initial` for the suite; (2) that fix
+  was first applied to only one of the two node configs, which produced a genuine `InvalidStateHash` divergence
+  between the two nodes (see the note on this under "node-it fixtures" above) rather than fixing anything — fixed by
+  applying the override to both.
+- `sync.MinerStateTestSuite` — two timing bugs (low-balance-miner selection, a too-tight explicit wait; see
+  "node-it fixtures" above for both patterns) got the test running cleanly up to its actual assertion, which then
+  turned out to depend on the removed depth-50 window (see "node-it fixtures" above); the test itself is now
+  `ignore`d for that reason, permanently, per project decision.
+
+Fixed in a later pass (same session), all following the two patterns already documented above (low-balance-miner
+selection, and stale pre-`tech.hearth` migration assumptions):
+
+- `sync.MerkleRootTestSuite`, `sync.SeveralAccountMiningSuite`, `sync.AddressApiSuite` (asset transfers must come from
+  `firstKeyPair`, never a node's own account — see "node-it fixtures" above),
+  `sync.AmountAsStringSuite` (fixed via the `AssetsApiRoute.jsonDetails` `issueTimestamp` fix, see "Transaction JSON")
+  — all low-balance-miner or stale-assumption fixes, no node bugs found.
+- `sync.lightnode.LightNodeMiningSuite` — two stacked bugs: (1) `fullNode.transfer(..., fullNode.balance(...).balance
+  - 1.waves)` tried to spend the 100 WAVES committed-generator deposit along with the rest of the regular balance
+  (see "Balance snapshots" above; fixed by reading `.balanceDetails(...).available` instead); (2) once that no longer
+  crashed the transfer, the test still failed on its core assertion — its `buildNonConflicting()`-based node
+  selection always assigns node01 as the "full" node and node04 as the "light" one, but node04's genesis balance is
+  2.5x node01's (see the `balances` list in `template.conf`), so the light node actually out-mined the full node in
+  the early blocks the test asserts belong to the latter. Fixed by picking node07/node01 explicitly instead of
+  through the builder, keeping the full node's balance well ahead of the light node's.
+- `async.MicroblocksFeeTestSuite` — two stacked bugs: (1) the suite's sole miner was `Default(0)` (node01, the
+  lowest-balance account in the whole fixture), whose PoS delay averaged ~30s/block; (2) once given a high-balance
+  miner instead, the suite crashed outright the moment it reached its `pre-activated-features.2` height — NG (and
+  with it the 40%/60% fee split under test) is unconditional now, not feature-gated, so pre-activating it hits the
+  same "UNIMPLEMENTED FEATURE ... ACTIVATED ON BLOCKCHAIN" force-stop documented above. Rewrote the test to check the
+  always-on 40%/60% split across two consecutive blocks instead of a before/on/after-activation sequence, matching
+  how `BlockSizeConstraintsSuite`/`BlocksApiSuite` were collapsed earlier.
+- `sync.grpc.LeasingTransactionsGrpcSuite` ("can not make leasing to yourself") and
+  `sync.grpc.MassTransferTransactionGrpcSuite` ("cannot broadcast invalid mass transfer tx") — not node bugs: both
+  `AsyncGrpcApi`'s `broadcastLease`/`broadcastMassTransfer` call `PBTransactions.vanilla(...).explicitGet()` on the
+  client side, to compute `bodyBytes` for signing, before any gRPC call is made. That runs full domain-object
+  construction (`LeaseTransaction`/`MassTransferTransaction.create`, which invoke their `TxValidator`s and
+  `TxNonNegativeAmount`'s bounds check), so every one of these tests' structural rejections (self-lease, negative
+  transfer amount, too many transfers, oversized attachment) now happens client-side as a plain
+  `RuntimeException(validationError.toString)` (`EitherExt2.explicitGet` on a `Left`), never reaching the server as a
+  `GrpcStatusRuntimeException`. `assertGrpcError` only handles the latter, so `case Failure(e) => Assertions.fail(e)`
+  swallowed the real cause (confirmed by running with a temporary debug print). Fixed both tests to assert on the
+  plain exception and its `ValidationError.toString` message directly instead of using `assertGrpcError`.
+- `sync.grpc.BlockV5GrpcSuite`, `grpc.BlocksApiSuite`, `grpc.GrpcReflectionApiSuite` — not flakiness: all three
+  build their `nodeConfigs` via `NodeConfigs.newBuilder`/`Builder(...).buildNonConflicting()`, which (unlike `build()`)
+  does *not* shuffle nodes — it deterministically assigns the lowest-index `NonConflictingNodes` entry (node01, the
+  fixture's lowest-balance account) as the sole/default miner, so these were consistent low-balance-miner failures,
+  not intermittent ones; the "remain intermittently-aborting, not failure-vs-flake confirmed" framing from the
+  previous pass was wrong. Fixed all three the same way, picking a high-balance node (node07) explicitly instead of
+  going through the builder. `BlockV5GrpcSuite` additionally needed `SyncGrpcApi.blockSeqByAddress`'s
+  `Base58.decode(address)` fixed to `Address.fromString(address).explicitGet().toBytes()` — addresses are bech32m
+  now (see "Keys" above), so the raw `Base58.decode` call threw on the first non-base58 character.
+  `GrpcReflectionApiSuite` additionally needed its `FileContainingSymbol` queries updated from the pre-migration
+  `waves.events.grpc.BlockchainUpdatesApi`/`waves.node.grpc.BlocksApi` proto symbols to their current
+  `hearth.events.grpc`/`hearth.node.grpc` packages (see "Protobuf package migration" above) — reflection returned a
+  valid, successful response either way, just an `ErrorResponse` instead of a `FileDescriptorResponse` for a symbol
+  that no longer exists under the old package, so the failure surfaced as a plain assertion mismatch, not a call
+  error.
+
+Fixed in a later pass (same session), a real production bug found by tracing `TwoNodesFinalizationTestSuite` through
+both nodes' logs line by line (connectivity, endorsement gossip, and chain agreement all confirmed fine first):
+
+- `EndorsementFilter.simulate` (`state/EndorsementFilter.scala`) only ever set `reached = true` *inside* the `while`
+  loop that greedily adds endorsers one at a time. If the miner's own `endorsedBalance` (which already includes its
+  balance before the loop starts - "a miner doesn't need to endorse its own block, mining is already an
+  endorsement") already meets the 2/3 threshold by itself, or more generally if there is nobody left in `richest` to
+  add, the loop body never executes even once - so `reached` stayed `false` forever despite `endorsedBalance` already
+  equaling `totalBalance`. This is the single-committed-generator case exactly (`OneNodeFinalizationTestSuite`), and
+  would hit in production for any generator set where quorum is already satisfied by the miner alone or before the
+  last needed endorser is actually added. Fixed by computing the pre-loop `reached` value from the miner's own
+  `endorsedBalance` up front, instead of hardcoding `false`. Regression test added in
+  `EndorsementFilterSpec` ("reaches finalization on the miner's own balance alone, with nobody left to endorse").
+- `TwoNodesFinalizationTestSuite` also had its own bug once the above was fixed: the "Finalized height checks" loop's
+  runaway guard compared current height against a small fixed offset from the *pre-loop* `finalizedHeight` baseline
+  (effectively ~5), but by the time this step starts the chain is already ~20 blocks in (quorum is structurally
+  impossible during the genesis period, see above, so all of those blocks pass with `finalizedHeight` stuck at its
+  genesis value) - so the guard fired and failed the test on its very first loop iteration, before any transaction/
+  microblock ever got a chance to actually apply the now-correctly-computed quorate vote. Fixed by tracking height
+  since the step itself started instead of the stale baseline. With both fixes, `TwoNodesFinalizationTestSuite`
+  passes outright (5m15s).
+
+Still blocked, not a test-infra gap any more - a genuine unresolved question in the always-on-node-restart path:
+
+- `OneNodeFinalizationTestSuite` (single committed generator, so the `EndorsementFilter` fix above is exactly what
+  it needed) now gets past every step through "Survives restart" - finalization itself works - but still fails at
+  "Finalization voting in a block header": `node.blockHeaderAt(finalizedBlock1.height + 1).finalizationVoting` is
+  `None`. `MicroBlockMinerImpl.forgeBlocks` embeds the accumulated `FinalizationVoting` by *re-signing the current
+  liquid (not-yet-solidified) key block* on every microblock, so the data only becomes durably readable once a
+  further key block supersedes it. This suite restarts the node's container between the finalized-height check and
+  this assertion; if the block that reached quorum was still the liquid tip (not yet superseded) at the moment of
+  restart, that in-memory liquid state is exactly what NG never persists separately from a solid key block, so it
+  would be lost on restart regardless of whether finalization succeeded. Not yet confirmed as the actual cause vs.
+  some other height/timing mismatch - next step is checking whether the block that reached quorum had already been
+  superseded by a further key block *before* the restart happens, and if not, whether the test should wait for one
+  more block before restarting.
+
+Also newly found this pass, not yet fixed: `sync.transactions.SignAndBroadcastApiSuite`'s
+"/transactions/broadcast should handle erroneous input" chainId case (see above) — the chainId check itself is fine,
+but it's untestable for `Transfer` via broadcast as things stand; nothing wrong with proof-before-chainId validation
+ordering, that part was a red herring.
 
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
@@ -260,8 +557,8 @@ checked in `Block.genesis` — the single place every path builds it (startup's 
 - `signature` is verified against the header bytes by `validateGenesis`.
 
 The id is the hash of the header and the signature is not part of it, so `block-id` does not pin `signature` and the
-two are independent — conflating them is a live bug in node-it's `Docker.genesisOverride`, which writes the id into
-`signature`.
+two are independent. node-it's `Docker.genesisOverride` used to conflate them (writing the id into `signature`, and
+never pinning `state-hash`/`block-id` at all); it now computes and pins all three separately (see "node-it fixtures").
 
 A mismatch fails `Block.genesis`, and `checkGenesis` turns that into a force-stop, so a node refuses to run on genesis
 settings that would build a different chain. `custom-defaults.conf` ships placeholder `state-hash`/`block-id` that

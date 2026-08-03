@@ -18,7 +18,8 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
 
   lazy val node: Node = nodes.head
 
-  private lazy val issuer = node.keyPair
+  // The fixture asset is held by firstKeyPair/secondKeyPair (see template.conf), not by any node's own account.
+  private lazy val issuer = firstKeyPair
   private val assetId     = GenesisAssets.TestAsset.id.toString
 
   test("'Asset distribution at height' method works properly") {
@@ -44,7 +45,10 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
 
     nodes.waitForHeightArise()
 
-    node.assetDistributionAtHeight(assetId, initialHeight, 100).items shouldBe Map.empty
+    // The fixture asset is already distributed at genesis (to issuer and secondKeyPair), so the distribution at
+    // initialHeight isn't empty; only the new recipients below shouldn't appear in it yet.
+    val distributionAtInitialHeight = node.assetDistributionAtHeight(assetId, initialHeight, 100).items
+    addresses.foreach(addr => distributionAtInitialHeight should not contain key(addr.toString))
 
     val assetDis = node
       .assetDistributionAtHeight(assetId, distributionHeight, 100)
@@ -57,14 +61,17 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
     issuerAssetDis.size shouldBe 1
     issuerAssetDis.head shouldBe (issuerBalanceBefore - addresses.length * transferAmount)
 
-    val othersAssetDis = assetDis.view.filterKeys(_ != issuer.toAddress)
+    // secondKeyPair also holds a genesis share of this asset but wasn't a recipient here, so it must be
+    // excluded alongside the issuer rather than assumed away as "everyone but the issuer".
+    val recipientAddresses = addresses.toSet
+    val othersAssetDis     = assetDis.view.filterKeys(recipientAddresses.contains)
 
     assert(othersAssetDis.values.forall(_ == transferAmount))
 
     val assetDisFull =
       distributionPages(assetId, distributionHeight, 100)
         .flatMap(_.items.toList)
-        .filterNot(_._1 == issuer.toAddress)
+        .filter(e => recipientAddresses.contains(e._1))
 
     assert(assetDisFull.forall(_._2 == transferAmount))
 

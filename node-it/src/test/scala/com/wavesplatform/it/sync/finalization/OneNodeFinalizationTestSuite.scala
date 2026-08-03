@@ -1,12 +1,13 @@
 package com.wavesplatform.it.sync.finalization
 
 import com.typesafe.config.Config
-import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.it.BaseFreeSpec
+import com.wavesplatform.common.utils.EitherExt2.*
+import com.wavesplatform.it.{BaseFreeSpec, keyPairFromSeed}
 import com.wavesplatform.it.api.*
 import com.wavesplatform.it.api.SyncHttpApi.*
 import com.wavesplatform.state.Height
 import com.wavesplatform.test.NumericExt
+import com.wavesplatform.transaction.TxHelpers
 import com.wavesplatform.utils.ScorexLogging
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.scalatest.OptionValues
@@ -15,8 +16,12 @@ import scala.concurrent.duration.DurationInt
 
 class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLogging {
   import com.wavesplatform.it.NodeConfigs.*
+  // The default generation-period-length (1000000, kept large elsewhere so no other suite's run ever crosses a
+  // period boundary the genesis commitment doesn't cover) would make period1 below - the very next period after
+  // genesis - unreachable within any practical test timeout. This suite's whole point is to commit for and then
+  // reach that next period, so it needs a short one instead.
   override val nodeConfigs: Seq[Config] = Seq(
-    BiggestMiner.quorum(0)
+    BiggestMiner.quorum(0).overrides("waves.blockchain.custom.functionality.generation-period-length = 20")
   )
 
   private def node            = dockerNodes().last
@@ -24,9 +29,16 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
   private lazy val miner1Addr = node.address
 
   "finalization activated and works" in {
-    val miner2Acc, miner3Acc = node.createKeyPairServerSide()
-    val miner2Addr           = miner2Acc.toAddress.toString
-    val miner3Addr           = miner3Acc.toAddress.toString
+    // A second committed generator on the same single node can't be signed via /transactions/sign - that only ever
+    // signs with a generator this node itself holds keys for (waves.miner.accounts), which a fresh address never is
+    // (see CLAUDE.md's node-it fixtures notes on createAddressServerSide()). Built and signed locally instead, with
+    // VRF/BLS keys derived from its own SigningKey the same way TxHelpers.commitToGeneration does everywhere else.
+    // Genesis-funded already (it's node02's own account, whose container this suite never starts) so the commit's
+    // generating-balance check passes immediately - a fresh address funded via a same-run transfer wouldn't clear it,
+    // since generating balance is a minimum over a lookback window that a same-run credit hasn't accumulated yet.
+    val miner2Acc  = keyPairFromSeed(Miners(1).getString("account-seed")).explicitGet()
+    val miner2Addr = miner2Acc.toAddress.toString
+    val miner3Addr = node.createAddressServerSide()
 
     log.warn(s"M2=$miner2Addr, M3=$miner3Addr")
 
@@ -36,12 +48,13 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
     val commitTxn1 = node.signCommitToGenerationRequest(miner1Addr)
     commitTxn1.generationPeriodStart.value shouldBe period1.start.toInt
 
-    val commitTxn2 = node.signCommitToGenerationRequest(miner2Addr)
+    val commitTxn2 = node.signedBroadcast(TxHelpers.commitToGeneration(Height(period1.start.toInt), sender = miner2Acc).json())
     commitTxn2.generationPeriodStart.value shouldBe period1.start.toInt
 
     node.broadcastRequest(commitTxn1)
-    node.broadcastRequest(commitTxn2)
-    node.waitForGenerationPeriod(period1)
+    // 20 blocks at this environment's actual ~12s/block pace (vs. the 10s configured average-block-delay) is close
+    // to 4 minutes, past waitForGenerationPeriod's 3-minute default.
+    node.waitForGenerationPeriod(period1, 6.minutes)
 
     step("Generators")
     isolated {
@@ -52,6 +65,15 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
         miner2Addr -> commitTxn2.id
       )
     }
+
+    // The committed set for the genesis period is every genesis-committed node in the fixture (see CLAUDE.md's
+    // node-it fixtures notes on the 2/3 endorsement threshold), not just the ones this suite actually starts, so
+    // finalization can never reach quorum during it - a block's miner endorses only its immediate parent, has one
+    // shot per block, and doesn't retry or accumulate progress across several. period1.start's own block is the
+    // first one endorsable under the new, fully-online [miner1, miner2] set; its endorsement can only land in the
+    // *next* block, so the finalizedHeight baseline below has to be read after that one arrives, not at
+    // period1.start itself, or it still reflects the stuck genesis-period value.
+    nodes.waitForHeightArise()
 
     step("Finalized height checks")
     val finalizedHeight1       = node.finalizedHeight

@@ -66,32 +66,21 @@ class NetworkSeparationTestSuite extends BaseFreeSpec, ScorexLogging {
 
 object NetworkSeparationTestSuite {
   import com.wavesplatform.it.NodeConfigs.*
-  private val woFeatureConfig = ConfigFactory.parseString(s"""
-                                                             |waves {
-                                                             |  synchronization.synchronization-timeout = 10s
-                                                             |  blockchain.custom.functionality {
-                                                             |    pre-activated-features = {
-                                                             |     1 = 0
-                                                             |     6 = 100
-                                                             |     }
-                                                             |  }
-                                                             |  miner.quorum = 0 
-                                                             |}""".stripMargin)
-
-  private val withFeatureConfig = ConfigFactory.parseString(s"""
-                                                               |waves {
-                                                               |  synchronization.synchronization-timeout = 10s
-                                                               |  blockchain.custom.functionality {
-                                                               |    pre-activated-features = {
-                                                               |    1 = 0
-                                                               |    6 = 0
-                                                               |    }
-                                                               |  }
-                                                               |  miner.quorum = 0
-                                                               |}""".stripMargin)
+  // Both nodes used to differ on a second, now-removed feature (id 6); only feature 1 survives, and this
+  // suite's fork/reconnect scenario never depended on that other feature, so both configs collapse to the same one.
+  private val config = ConfigFactory.parseString(s"""
+                                                    |waves {
+                                                    |  synchronization.synchronization-timeout = 10s
+                                                    |  blockchain.custom.functionality {
+                                                    |    pre-activated-features = {
+                                                    |     1 = 0
+                                                    |     }
+                                                    |  }
+                                                    |  miner.quorum = 0
+                                                    |}""".stripMargin)
 
   val Configs: Seq[Config] = Seq(
-    woFeatureConfig.withFallback(Miners.head),
-    withFeatureConfig.withFallback(Miners.last)
+    config.withFallback(Miners.head),
+    config.withFallback(Miners.last)
   )
 }

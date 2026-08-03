@@ -26,17 +26,14 @@ class FairPoSTestSuite extends BaseFunSuite {
 
 object FairPoSTestSuite {
   import com.wavesplatform.it.NodeConfigs.*
-  private val microblockActivationHeight = 0
-  private val fairPoSActivationHeight    = 10
-  private val vrfActivationHeight        = 14
 
+  // FairPoS, microblocks and VRF are all unconditional now (no feature gate left to pre-activate).
   private val config =
     ConfigFactory.parseString(
       s"""
          |waves {
          |   blockchain.custom {
          |      functionality {
-         |        pre-activated-features {1 = $microblockActivationHeight, 8 = $fairPoSActivationHeight, 17 = $vrfActivationHeight}
          |        generation-balance-depth-from-50-to-1000-after-height = 1000
          |      }
          |   }

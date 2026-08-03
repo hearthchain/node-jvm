@@ -29,5 +29,5 @@ object FinalityStatus {
   private val generationPeriodReads: Reads[GenerationPeriod] =
     (
       (__ \ "start").read[Height] and (__ \ "end").read[Height]
-    )((start, end) => GenerationPeriod(start, end - start))
+    )((start, end) => GenerationPeriod(start, end - start + 1))
 }

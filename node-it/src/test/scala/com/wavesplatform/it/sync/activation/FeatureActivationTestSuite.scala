@@ -22,7 +22,7 @@ class FeatureActivationTestSuite extends BaseFreeSpec with ActivationStatusReque
                                                     |    feature-check-blocks-period = $votingInterval
                                                     |    blocks-for-feature-activation = $blocksForActivation
                                                     |  }
-                                                    |  features.supported = [$featureNum]
+                                                    |  miner.supported-features = [$featureNum]
                                                     |  miner.quorum = 1
                                                     |}""".stripMargin))
 

@@ -72,6 +72,23 @@ class EndorsementFilterSpec extends FreeSpec {
     r.endorsedBalance shouldBe BigInt(44915958000000L)
   }
 
+  "reaches finalization on the miner's own balance alone, with nobody left to endorse" in {
+    val filter = EndorsementFilter(
+      maxValidEndorsers = 8,
+      miner = GeneratorIndex(0),
+      isMiner = true,
+      finalizedId = TxHelpers.randomBlockId,
+      finalizedHeight = Height(1),
+      endorsedId = TxHelpers.randomBlockId,
+      normalizedGeneratorSet = Vector(mkItem(0, 100L)),
+      conflict = Set.empty
+    )
+
+    val r = filter.simulate(Seq.empty, Set.empty)
+    r.reachedFinalization shouldBe true
+    r.endorsedBalance shouldBe BigInt(100L)
+  }
+
   "takes only maxValidEndorsers" in {
     val filter = EndorsementFilter(
       maxValidEndorsers = 5,

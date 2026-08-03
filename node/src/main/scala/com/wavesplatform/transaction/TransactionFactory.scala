@@ -87,11 +87,16 @@ object TransactionFactory {
     if (!request.keys.contains("timestamp")) {
       overrides += "timestamp" -> System.currentTimeMillis()
     }
-    if (!request.keys.contains("version")) {
+    // A round-tripped transaction (e.g. one read back from /transactions/sign into a client-side model and
+    // re-broadcast) can carry an explicit "version": null - the key is present, but not a usable value - since
+    // nothing writes a version any more and a plain Option[Byte] writer renders None as null rather than omitting
+    // the key. Checking key presence alone leaves that null in place, and then it (not this override) wins the
+    // merge below, so the fallback has to trigger on it too.
+    if ((request \ "version").asOpt[Byte].isEmpty) {
       overrides += "version" -> 1
     }
 
-    val jsv = overrides.result() ++ request
+    val jsv = request ++ overrides.result()
 
     val typeId  = (jsv \ "type").as[Byte]
     val version = (jsv \ "version").as[Byte]

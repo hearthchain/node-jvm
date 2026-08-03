@@ -42,8 +42,5 @@ object MicroblocksGenerationSuite {
                                                              |      max-transactions-in-key-block = 0
                                                              |      max-transactions-in-micro-block = $txsInMicroBlock
                                                              |    }
-                                                             |
-                                                             |    blockchain.custom.functionality.pre-activated-features.2 = 0
-                                                             |    features.supported = [2]
                                                              |}""".stripMargin)
 }

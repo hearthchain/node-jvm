@@ -17,13 +17,20 @@ class MinerStateTestSuite extends BaseFunSuite {
 
   private def last = nodes.last
 
-  test("node w/o balance can forge blocks after effective balance increase") {
+  // generation-balance-depth-from-50-to-1000-after-height doesn't correspond to any settings field any more -
+  // GeneratingBalanceProvider.SecondDepth hardcodes the generating-balance lookback window to 1000 blocks
+  // unconditionally, and the shorter pre-height-100 window this test relies on to observe the transition in ~51
+  // blocks is gone for good. Waiting out a real 1000-block window here would take well over an hour, so this test's
+  // premise can no longer be exercised within a practical integration-test run.
+  ignore("node w/o balance can forge blocks after effective balance increase") {
     val newKeyPair = last.createKeyPair()
     val newAddress = newKeyPair.toAddress.toString
 
     val (balance1, eff1)        = miner.accountBalances(miner.address)
     val minerFullBalanceDetails = miner.balanceDetails(miner.address)
-    assert(balance1 == minerFullBalanceDetails.available)
+    // miner is a committed generator, so its regular balance includes the generation deposit while available/
+    // effective do not (see CLAUDE.md "Balance snapshots"); accountBalances reports regular, not available.
+    assert(balance1 == minerFullBalanceDetails.regular)
     assert(eff1 == minerFullBalanceDetails.effective)
 
     val (balance2, eff2)     = last.accountBalances(newAddress)
@@ -42,7 +49,9 @@ class MinerStateTestSuite extends BaseFunSuite {
 
     last.assertBalances(newAddress, balance2 + transferAmount, eff2 + transferAmount)
 
-    last.waitForHeight(heightAfterTransfer + 51, 6.minutes) // if you know how to reduce waiting time, please ping @monroid
+    // 51 blocks at this environment's actual ~6-7s/block pace (vs. the 5s configured average-block-delay) can brush
+    // up against 6 minutes; if you know how to reduce waiting time, please ping @monroid
+    last.waitForHeight(heightAfterTransfer + 51, 10.minutes)
 
     assert(last.balanceDetails(newAddress).generating == balance2 + transferAmount)
 
@@ -69,7 +78,6 @@ object MinerStateTestSuite {
                                                          |  synchronization.synchronization-timeout = 10s
                                                          |  blockchain.custom.functionality {
                                                          |    pre-activated-features.1 = 0
-                                                         |    generation-balance-depth-from-50-to-1000-after-height = 100
                                                          |  }
                                                          |  blockchain.custom.genesis {
                                                          |     average-block-delay = 5s
@@ -77,9 +85,11 @@ object MinerStateTestSuite {
                                                          |  miner.quorum = 1
                                                          |}""".stripMargin)
 
+  // The two highest-balance miner-eligible accounts: BaseSuite.miner is nodes.head, and a low-balance miner's PoS
+  // delay for its very first block can exceed waitForHeightAriseAndTxPresent's tx-await timeout.
   val Configs: Seq[Config] = Seq(
-    minerConfig.withFallback(Default.head),
-    minerConfig.withFallback(Default(1))
+    minerConfig.withFallback(Miners.last),
+    minerConfig.withFallback(Miners(Miners.size - 2))
   )
 
 }

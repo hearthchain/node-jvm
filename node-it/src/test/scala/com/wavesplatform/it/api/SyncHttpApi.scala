@@ -179,9 +179,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     def rewardStatus(height: Option[Height] = None, amountsAsStrings: Boolean = false): RewardStatus =
       sync(async(n).rewardStatus(height, amountsAsStrings))
 
-    def seed(address: String): String =
-      sync(async(n).seed(address))
-
     def lastBlock(amountsAsStrings: Boolean = false): Block = sync(async(n).lastBlock(amountsAsStrings))
 
     def blockById(id: String, amountsAsStrings: Boolean = false): Block = sync(async(n).blockById(id, amountsAsStrings))
@@ -452,7 +449,7 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
 
     def createKeyPair(): SigningKey = sync(async(n).createKeyPair())
 
-    def createKeyPairServerSide(): SigningKey = sync(async(n).createKeyPairServerSide())
+    def createAddressServerSide(): String = sync(async(n).createAddressServerSide())
 
     def rawTransactionInfo(txId: String): JsValue =
       sync(async(n).rawTransactionInfo(txId))
