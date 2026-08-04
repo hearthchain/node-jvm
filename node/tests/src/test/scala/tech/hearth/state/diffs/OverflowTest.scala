@@ -23,7 +23,7 @@ class OverflowTest extends PropSpec with WithDomain {
   private val recipient = TxHelpers.signer(2).toAddress
 
   // These two can no longer be set up: overflowing the recipient's balance needs the sender to hold the counterpart,
-  // so the genesis total necessarily exceeds Long.MaxValue - which GenesisSnapshot rejects, since a chain's total
+  // so the genesis total necessarily exceeds Long.MaxValue - which PredefinedSnapshot rejects, since a chain's total
   // Waves has to fit in a Long. Reaching that ceiling now requires minting via block rewards rather than genesis.
   ignore("transfer overflow") {
     numPairs(transferFee).foreach { case (recipientBalance, transferAmount) =>

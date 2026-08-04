@@ -18,12 +18,12 @@ package object history {
   val DefaultBlockchainSettings = BlockchainSettings(
     addressSchemeCharacter = 'N',
     functionalitySettings = TestFunctionalitySettings.Enabled,
-    // Genesis balances are part of the genesis snapshot built from these settings, and tests declare their own,
-    // so start from an empty genesis rather than TESTNET's.
+    // Genesis balances are part of a predefined snapshot built from these settings, and tests declare their own
+    // (or none at all, defaulting to an empty genesis - see Block.genesis), so this doesn't set predefinedSnapshots.
     // The timestamp starts at 0 because the generators driving these tests produce transactions near the epoch, and
     // blocks are timestamped from their transactions (see buildBlockOfTxs) - a 2016 genesis would put every one of
     // those transactions hours "in the past" relative to it.
-    genesisSettings = GenesisSettings.TESTNET.copy(balances = Seq.empty, timestamp = 0L),
+    genesisSettings = GenesisSettings.TESTNET.copy(timestamp = 0L),
     rewardsSettings = RewardsSettings.TESTNET
   )
 

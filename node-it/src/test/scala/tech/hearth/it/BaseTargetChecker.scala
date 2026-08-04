@@ -32,7 +32,7 @@ object BaseTargetChecker {
       val genesisBlock =
         Block
           .genesis(
-            settings.blockchainSettings.genesisSettings
+            settings.blockchainSettings
           )
           .explicitGet()
       blockchainUpdater.processBlock(genesisBlock, genesisBlock.header.generationSignature, snapshot = None, generatorSet = Seq.empty)

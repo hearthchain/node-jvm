@@ -47,17 +47,22 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |        block-id = "BASE58BLKHASH"
           |        initial-base-target = 153722867
           |        average-block-delay = 60s
-          |        assets = [
-          |          {id = "BASE58ASSETXYZ", issuer = "BASE58ISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
-          |        ]
-          |        generators = [
-          |          {public-key = "BASE58PUBLICKEY", endorser-public-key = "BASE58BLSKEY", vrf-public-key = "BASE58VRFKEY"}
-          |        ]
-          |        balances = [
-          |          {recipient = "ADDRESS1", waves = 50000000000001},
-          |          {recipient = "ADDRESS2", waves = 49999999999999, assets {BASE58ASSETXYZ = 1000}}
-          |        ]
           |      }
+          |      predefined-snapshots = [
+          |        {
+          |          height = 1
+          |          assets = [
+          |            {id = "BASE58ASSETXYZ", issuer = "BASE58ISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
+          |          ]
+          |          generators = [
+          |            {public-key = "BASE58PUBLICKEY", endorser-public-key = "BASE58BLSKEY", vrf-public-key = "BASE58VRFKEY"}
+          |          ]
+          |          balances = [
+          |            {recipient = "ADDRESS1", waves = 50000000000001},
+          |            {recipient = "ADDRESS2", waves = 49999999999999, assets {BASE58ASSETXYZ = 1000}}
+          |          ]
+          |        }
+          |      ]
           |    }
           |  }
           |}""".stripMargin
@@ -83,7 +88,8 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.genesisSettings.blockId should be(ByteStr.decodeBase58("BASE58BLKHASH").toOption)
     settings.genesisSettings.initialBaseTarget should be(153722867)
     settings.genesisSettings.averageBlockDelay should be(60.seconds)
-    settings.genesisSettings.assets should be(
+    val genesisSnapshot = settings.predefinedSnapshots.find(_.height == 1).get
+    genesisSnapshot.assets should be(
       Seq(
         GenesisAssetSettings(
           ByteStr.decodeBase58("BASE58ASSETXYZ").get,
@@ -95,15 +101,15 @@ class BlockchainSettingsSpecification extends FlatSpec {
         )
       )
     )
-    settings.genesisSettings.generators should be(Seq(GenesisGeneratorSettings("BASE58PUBLICKEY", "BASE58BLSKEY", "BASE58VRFKEY")))
-    settings.genesisSettings.balances should be(
+    genesisSnapshot.generators should be(Seq(GenesisGeneratorSettings("BASE58PUBLICKEY", "BASE58BLSKEY", "BASE58VRFKEY")))
+    genesisSnapshot.balances should be(
       Seq(
         GenesisBalanceSettings("ADDRESS1", 50000000000001L),
         GenesisBalanceSettings("ADDRESS2", 49999999999999L, Map("BASE58ASSETXYZ" -> 1000L))
       )
     )
     // Derived from the genesis balances rather than configured
-    settings.genesisSettings.initialBalance should be(100000000000000L)
+    settings.initialBalance should be(100000000000000L)
   }
 
   it should "read testnet settings" in {
@@ -130,9 +136,9 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.votingInterval should be(10000)
     settings.genesisSettings.timestamp should be(1478000000000L)
     settings.genesisSettings.signature should be(None) // The genesis block is signed by Block.GenesisGenerator
-    settings.genesisSettings.initialBalance should be(10000000000000000L)
+    settings.initialBalance should be(10000000000000000L)
 
-    settings.genesisSettings.balances should be(
+    settings.predefinedSnapshots.find(_.height == 1).get.balances should be(
       Seq(
         GenesisBalanceSettings("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8", 400000000000000L),
         GenesisBalanceSettings("3NBVqYXrapgJP9atQccdBPAgJPwHDKkh6A8", 200000000000000L),
@@ -167,8 +173,8 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.votingInterval should be(10000)
     settings.genesisSettings.timestamp should be(1465742577614L)
     settings.genesisSettings.signature should be(None) // The genesis block is signed by Block.GenesisGenerator
-    settings.genesisSettings.initialBalance should be(10000000000000000L)
-    settings.genesisSettings.balances should be(
+    settings.initialBalance should be(10000000000000000L)
+    settings.predefinedSnapshots.find(_.height == 1).get.balances should be(
       Seq(
         GenesisBalanceSettings("3PAWwWa6GbwcJaFzwqXQN5KQm7H96Y7SHTQ", 9999999500000000L),
         GenesisBalanceSettings("3P8JdJGYc7vaLu4UXUZc1iRLdzrkGtdCyJM", 100000000L),

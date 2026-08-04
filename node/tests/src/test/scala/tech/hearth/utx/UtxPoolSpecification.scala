@@ -57,14 +57,15 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
   import UtxPoolSpecification.*
 
   private def withBlockchain[A](genAccounts: Map[Address, Long])(test: BlockchainUpdaterImpl => A): A = {
-    val genesisSettings = TestHelpers.genesisSettings(genAccounts)
+    val genesisSettings = TestHelpers.genesisSettings()
     val origSettings    = WavesSettings.default()
     val settings = origSettings.copy(
       blockchainSettings = BlockchainSettings(
         'T',
         FunctionalitySettings.TESTNET,
         genesisSettings,
-        RewardsSettings.TESTNET
+        RewardsSettings.TESTNET,
+        predefinedSnapshots = Seq(TestHelpers.genesisSnapshotSettings(genAccounts))
       ),
       autoShutdownOnUnsupportedFeature = false
     )
@@ -75,7 +76,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
         bcu.processBlock(
           Block
             .genesis(
-              genesisSettings
+              settings.blockchainSettings
             )
             .explicitGet()
         ) should beRight

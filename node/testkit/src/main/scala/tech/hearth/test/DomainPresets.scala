@@ -3,7 +3,15 @@ package tech.hearth.test
 import tech.hearth.db.WithState
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.features.BlockchainFeature
-import tech.hearth.settings.{FunctionalitySettings, GenesisAssetSettings, GenesisBalanceSettings, WavesSettings, loadConfig}
+import tech.hearth.settings.{
+  FunctionalitySettings,
+  GenesisAssetSettings,
+  GenesisBalanceSettings,
+  PredefinedSnapshotSettings,
+  WavesSettings,
+  loadConfig
+}
+import tech.hearth.state.GenesisBlockHeight
 import tech.hearth.crypto.SigningKey
 
 import scala.concurrent.duration.DurationInt
@@ -15,44 +23,40 @@ object DomainPresets {
     def withFunctionalitySettings(fs: FunctionalitySettings): WavesSettings =
       ws.copy(blockchainSettings = ws.blockchainSettings.copy(functionalitySettings = fs))
 
+    // Finds-or-creates the PredefinedSnapshotSettings entry at `height` and replaces it in the list.
+    private def updatePredefinedSnapshot(height: Int)(f: PredefinedSnapshotSettings => PredefinedSnapshotSettings): WavesSettings = {
+      val current  = ws.blockchainSettings.predefinedSnapshots
+      val existing = current.find(_.height == height).getOrElse(PredefinedSnapshotSettings(height))
+      ws.copy(blockchainSettings = ws.blockchainSettings.copy(predefinedSnapshots = f(existing) +: current.filterNot(_.height == height)))
+    }
+
     def withGenesisBalances(balances: AddrWithBalance*): WavesSettings =
       if (balances.isEmpty) ws
       else
-        ws.copy(blockchainSettings =
-          ws.blockchainSettings.copy(
-            genesisSettings = ws.blockchainSettings.genesisSettings.copy(
-              // Dedupe by recipient (genesis forbids duplicate recipients): lets a caller prepend a shared funding list
-              // - e.g. a committed generator pool - in front of its own per-test entries without colliding.
-              balances = balances
-                .distinctBy(_.address)
-                .map(b => GenesisBalanceSettings(b.address.toBech32, b.balance, b.assets.map { case (k, v) => k.toString -> v }))
-            )
+        updatePredefinedSnapshot(GenesisBlockHeight.toInt) { s =>
+          s.copy(
+            // Dedupe by recipient (genesis forbids duplicate recipients): lets a caller prepend a shared funding list
+            // - e.g. a committed generator pool - in front of its own per-test entries without colliding.
+            balances = balances
+              .distinctBy(_.address)
+              .map(b => GenesisBalanceSettings(b.address.toBech32, b.balance, b.assets.map { case (k, v) => k.toString -> v }))
           )
-        )
+        }
 
     def withGenesisGenerators(generators: SigningKey*): WavesSettings =
       if (generators.isEmpty) ws
       else
-        ws.copy(blockchainSettings =
-          ws.blockchainSettings.copy(
-            genesisSettings = ws.blockchainSettings.genesisSettings.copy(
-              // Callers may commit an overlapping pool (e.g. a fixed generator pool plus a challenger drawn from it),
-              // so dedupe by public key: a generator is committed once, matching the genesis snapshot's own rule.
-              generators = generators.distinctBy(g => tech.hearth.common.state.ByteStr(g.publicKey())).map(WithState.genesisGeneratorFor)
-            )
+        updatePredefinedSnapshot(GenesisBlockHeight.toInt) { s =>
+          s.copy(
+            // Callers may commit an overlapping pool (e.g. a fixed generator pool plus a challenger drawn from it),
+            // so dedupe by public key: a generator is committed once, matching the genesis snapshot's own rule.
+            generators = generators.distinctBy(g => tech.hearth.common.state.ByteStr(g.publicKey())).map(WithState.genesisGeneratorFor)
           )
-        )
+        }
 
     def withGenesisAssets(assets: GenesisAssetSettings*): WavesSettings =
       if (assets.isEmpty) ws
-      else
-        ws.copy(blockchainSettings =
-          ws.blockchainSettings.copy(
-            genesisSettings = ws.blockchainSettings.genesisSettings.copy(
-              assets = assets
-            )
-          )
-        )
+      else updatePredefinedSnapshot(GenesisBlockHeight.toInt)(_.copy(assets = assets))
 
     def configure(transformF: FunctionalitySettings => FunctionalitySettings): WavesSettings = {
       val functionalitySettings = transformF(ws.blockchainSettings.functionalitySettings)
@@ -94,14 +98,12 @@ object DomainPresets {
 
   lazy val SettingsFromDefaultConfig: WavesSettings = {
     val settings = WavesSettings.fromRootConfig(loadConfig(None))
-    // The default config is TESTNET, but genesis balances are now part of the genesis snapshot built from the settings,
-    // and tests declare their own via withDomain(balances = ...). So start from an empty genesis.
+    // The default config is TESTNET, but genesis balances are now part of a predefined snapshot built from the
+    // settings, and tests declare their own via withDomain(balances = ...). So start with an empty genesis snapshot.
     settings.copy(blockchainSettings =
-      settings.blockchainSettings.copy(genesisSettings =
-        settings.blockchainSettings.genesisSettings.copy(
-          balances = Seq.empty,
-          timestamp = genesisTimestamp
-        )
+      settings.blockchainSettings.copy(
+        genesisSettings = settings.blockchainSettings.genesisSettings.copy(timestamp = genesisTimestamp),
+        predefinedSnapshots = Seq(PredefinedSnapshotSettings(GenesisBlockHeight.toInt))
       )
     )
   }

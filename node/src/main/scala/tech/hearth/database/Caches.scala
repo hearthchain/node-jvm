@@ -241,7 +241,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       voting      <- parentBlock.header.finalizationVoting
     } yield voting.conflict.size
 
-    val totalWavesAmount = current.meta.fold(settings.genesisSettings.initialBalance)(_.totalWavesAmount) +
+    val totalWavesAmount = current.meta.fold(settings.initialBalance)(_.totalWavesAmount) +
       reward.getOrElse(0L) * this.blockRewardBoost(newHeight) -
       conflictEndorsersInPrevBlock.getOrElse(0) * CommitToGenerationTransaction.DepositInWavelets
 

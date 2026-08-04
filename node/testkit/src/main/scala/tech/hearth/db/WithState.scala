@@ -410,8 +410,9 @@ trait WithDomain extends WithState {
       // How the updater brings the node down on an unimplemented activated feature; pass a probe to observe it
       onFatalStop: ApplicationStopReason => Unit = forceStopApplication
   )(test: Domain => A): A = {
-    val noExplicitGenerators = generators.isEmpty && settings.blockchainSettings.genesisSettings.generators.isEmpty
-    val effectiveGenerators  = if (noExplicitGenerators) Seq(TxHelpers.defaultSigner) else generators
+    val noExplicitGenerators = generators.isEmpty &&
+      settings.blockchainSettings.predefinedSnapshots.find(_.height == GenesisBlockHeight.toInt).forall(_.generators.isEmpty)
+    val effectiveGenerators = if (noExplicitGenerators) Seq(TxHelpers.defaultSigner) else generators
     // When defaultSigner is auto-committed as the generator (no explicit generators), it also has to be funded to cover
     // its generation deposit. Fund it unless the caller already did, so an explicit defaultSigner balance still wins.
     val withDefaultSignerFunded =
@@ -522,7 +523,7 @@ object WithState {
     // BlockDiffer builds it. Using the reward snapshot here instead would compute a state hash the differ rejects.
     TracedResult(
       if (Height(blockchain.height + 1) == GenesisBlockHeight)
-        GenesisSnapshot.build(blockchain.settings.genesisSettings)
+        PredefinedSnapshot.build(blockchain.settings.genesisSnapshot, blockchain)
       else
         BlockDiffer
           .createInitialBlockSnapshot(
@@ -566,5 +567,5 @@ object WithState {
   }
 
   def createGenesisBlock(settings: WavesSettings): Block =
-    Block.genesis(settings.blockchainSettings.genesisSettings).explicitGet()
+    Block.genesis(settings.blockchainSettings).explicitGet()
 }

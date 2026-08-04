@@ -314,7 +314,7 @@ class AssetsRouteSpec
   }
 
   /* There was an "/nft/list - NFTs in 1 block" property here. An asset can only come from the genesis snapshot now,
-   * and `GenesisSnapshot` builds every one of them with `nft = false` - there is no way to declare an NFT, so the
+   * and `PredefinedSnapshot` builds every one of them with `nft = false` - there is no way to declare an NFT, so the
    * property cannot be set up at all. It has to come back with whatever issues NFTs, if anything does.
    */
 

@@ -212,11 +212,13 @@ features that produced them.
 ## node-it fixtures
 
 `template.conf`'s genesis section is on the current `balances`/`generators` schema (bech32 addresses), not the old
-`transactions`/`initial-balance` one. Every miner-eligible node in `nodes.conf` (node01-node09; node10 stays a plain
-account) is both a funded account and a committed generator: its `waves.miner.accounts` entry's `signing-key` is the
-same hex seed as its own account (so the address that mines is also a regular funded address), with independently
-generated `vrf-key`/`bls-key` alongside it. `genesis.assets` (`NodeConfigs.GenesisAssets`) are fully distributed
-between the "firstKeyPair"/"secondKeyPair" fixture accounts (`IntegrationSuiteWithThreeAddresses`), not to any node.
+`transactions`/`initial-balance` one, though the balances/generators/assets themselves now live in the height-1 entry
+of a `predefined-snapshots` array alongside `genesis`, not inside `genesis` itself (see "Predefined snapshots" below).
+Every miner-eligible node in `nodes.conf` (node01-node09; node10 stays a plain account) is both a funded account and a
+committed generator: its `waves.miner.accounts` entry's `signing-key` is the same hex seed as its own account (so the
+address that mines is also a regular funded address), with independently generated `vrf-key`/`bls-key` alongside it.
+`predefined-snapshots`' height-1 `assets` (`NodeConfigs.GenesisAssets`) are fully distributed between the
+"firstKeyPair"/"secondKeyPair" fixture accounts (`IntegrationSuiteWithThreeAddresses`), not to any node.
 
 Genesis-committed generators are only committed for the genesis period, and nothing in node-it ever sends a
 `CommitToGenerationTransaction` to renew that commitment for a later one. `generation-period-length` therefore has to
@@ -607,7 +609,8 @@ though the message still refers to non-scripted accounts.
 `GenesisSettings` carries three commitments to what the genesis block must come out as. All are optional, and all are
 checked in `Block.genesis` — the single place every path builds it (startup's `checkGenesis`, `WithState`, tests):
 
-- `state-hash` pins the snapshot the settings describe: assets, generators, balances;
+- `state-hash` pins the snapshot the settings describe, sourced from the height-1 entry of `predefinedSnapshots`
+  (`BlockchainSettings.genesisSnapshot`, see "Predefined snapshots" below), not from `GenesisSettings` itself;
 - `block-id` pins the header, so it covers the state hash along with `timestamp` and `initial-base-target`;
 - `signature` is verified against the header bytes by `validateGenesis`.
 
@@ -620,6 +623,56 @@ settings that would build a different chain. `custom-defaults.conf` ships placeh
 every custom-network config inherits, so config-driven custom networks fail closed until the real values from
 `GenesisBlockGenerator` are pasted in. Settings built in code — `DomainPresets`, `withDomain`,
 `TestHelpers.genesisSettings` — leave all three `None` and stay unpinned, which is why tests are unaffected.
+
+## Predefined snapshots
+
+Genesis is no longer a special code path for state. `GenesisSettings` carries only chain/header params (`timestamp`,
+`signature`, `initialBaseTarget`, `averageBlockDelay`, `stateHash`, `blockId`); the state genesis puts into an empty
+node (assets, generators, balances) comes from `PredefinedSnapshotSettings`, a height-keyed entry in
+`BlockchainSettings.predefinedSnapshots`, and genesis is simply the entry at `GenesisBlockHeight` (1). This exists
+because there is no issue transaction any more (see "Transaction JSON"), so a predefined snapshot bundled in a
+network's own config is the only way to mint a new asset, and since the mechanism is height-keyed rather than
+genesis-only, minting can happen at any later height too, typically lined up with a feature activation only by
+config-authoring convention, not by any code coupling to feature-activation logic.
+
+`BlockDiffer.mkInitialSnapshot` looks up `predefinedSnapshots` for the height of the block about to be built, on
+every block, and merges a match (`PredefinedSnapshot.build`, via the `StateSnapshot` monoid) into the
+reward/carry-fee/penalty part that height already computes. At genesis that reward/carry/penalty part is
+`StateSnapshot.empty` (no prior block to reference, no reward system running yet), so genesis is the degenerate case
+of the same merge, not a separate branch.
+
+A missing height-1 entry does not fail startup: `BlockchainSettings.genesisSnapshot` (used by `Block.genesis` and
+`WithState`) falls back to an empty `PredefinedSnapshotSettings`, the same as an empty genesis balances list did
+before predefined snapshots existed. A CUSTOM network's `predefined-snapshots` HOCON key is mandatory at parse time
+(and MAINNET/TESTNET/STAGENET each have a hardcoded height-1 entry), but nothing checks a height-1 entry is actually
+among its elements; settings built directly in code (tests, tools) routinely have none at all.
+
+Only the height-1 (genesis) entry may credit `waves`; `PredefinedSnapshot.build` rejects a later entry that does
+("crediting Waves is only supported at genesis"). Waves supply growth beyond genesis is tracked as block rewards only
+(`Blockchain.wavesAmount`/`BlockMeta.totalWavesAmount` compute purely from `previous + reward - penalties`, never from
+a snapshot's own balances), so a later entry silently crediting Waves would desync the reported supply from the real
+one. A predefined snapshot beyond genesis is for minting new assets, not new Waves.
+
+The committed-generator funding check (`Generator X balance ... is less than required for generation`) has to
+resolve against the *resulting* blockchain view (`SnapshotBlockchain(blockchain, snapshot).balance(...)`), not the
+snapshot's own balance map alone: that map only holds entries for addresses this specific entry's own `balances`
+touched, so a generator funded earlier (e.g. at genesis) and merely committed at a later height, with no balance
+entry of its own in that entry, would otherwise look like it holds 0 and get wrongly rejected.
+
+A predefined snapshot beyond genesis also rejects an asset id that already exists on chain
+(`blockchain.assetDescription(id).isEmpty`), a check genesis itself never needs since state is empty at that point.
+
+Rollback needs no special-casing for a non-genesis predefined snapshot: `RocksDBWriter`/`Caches` already undo
+whatever got persisted at a height purely from what is there, not from why. The one genesis-specific branch anywhere
+(committed generators are effective for the *current* period at `GenesisBlockHeight`, the *next* period everywhere
+else) is keyed on height alone, so a later-height predefined snapshot's own committed generators automatically get
+the correct non-genesis semantics.
+
+`GenesisSnapshot`/`GenesisSnapshotSpec` were renamed `PredefinedSnapshot`/`PredefinedSnapshotSpec` as part of this;
+`EmptyBlockchain` moved from `node-testkit` into `node` (`tech.hearth.utils`), since `Block.genesis` now needs an
+always-empty `Blockchain` to build the height-1 snapshot against, independent of the real chain's current state (it
+runs unconditionally on every startup, including against an already-populated chain, to verify the persisted genesis
+block still matches).
 
 ## Node Tests
 
@@ -660,7 +713,7 @@ node does it today; a period whose generator set is empty currently cannot be ex
 An ineligible generator — poor or in conflict — must never mine either. `findBlockAndGetGenerators` does not enforce
 that yet: it only rejects a foreign miner `when(validGenerators.nonEmpty && ...)`, so when *every* committed generator
 of the period is ineligible one of them is still let through. That guard is wrong and is marked TODO; dropping it
-currently fails the conflict-endorser suites and `GenesisSnapshotSpec`, which encode the present behaviour rather than
+currently fails the conflict-endorser suites and `PredefinedSnapshotSpec`, which encode the present behaviour rather than
 the intended rule.
 
 A test that empties a generator set is therefore testing the unimplemented rule, whatever else it looks like it is
@@ -755,7 +808,7 @@ the total block id to compare against.
 
 Nothing issues an asset whose id a test hardcodes, so trading it fails with `Assets should be issued before they can be
 traded`. Declare it in the genesis snapshot instead — `withDomain(..., assets = Seq(GenesisAssetSettings(...)))`, and
-the same parameter on `assertDiffEi`/`assertLeft`. `GenesisSnapshot` rejects a partially distributed asset, so the
+the same parameter on `assertDiffEi`/`assertLeft`. `PredefinedSnapshot` rejects a partially distributed asset, so the
 genesis balances must hold exactly the declared quantity between them; splitting it between the two traders is usually
 what a test wants, since each side has to hold what it sells. To test a *balance* failure, issue the asset but give it
 to someone uninvolved — otherwise the trade dies on "not issued" before reaching the check under test.

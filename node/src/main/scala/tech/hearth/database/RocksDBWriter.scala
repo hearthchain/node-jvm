@@ -290,7 +290,7 @@ class RocksDBWriter(
   }
 
   override def wavesAmount(height: Int): BigInt =
-    loadBlockMeta(Height(height)).fold(settings.genesisSettings.initialBalance)(_.totalWavesAmount)
+    loadBlockMeta(Height(height)).fold(settings.initialBalance)(_.totalWavesAmount)
 
   override def blockReward(height: Int): Option[Long] =
     if (height == 1) None

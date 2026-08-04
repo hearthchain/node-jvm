@@ -43,7 +43,7 @@ class BlockDifferDetailedSnapshotTest extends FreeSpec with WithState with WithD
     }
 
   "BlockDiffer DetailedSnapshot" - {
-    // The "one genesis transaction" case is gone with GenesisTransaction: GenesisSnapshotSpec covers the genesis
+    // The "one genesis transaction" case is gone with GenesisTransaction: PredefinedSnapshotSpec covers the genesis
     // snapshot that replaced it.
 
     "genesis and transfers" - {

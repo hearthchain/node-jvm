@@ -14,6 +14,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.api.AsyncHttpApi.*
 import tech.hearth.it.util.GlobalTimer.instance as timer
 import tech.hearth.settings.*
+import tech.hearth.state.GenesisBlockHeight
 import tech.hearth.utils.ScorexLogging
 import monix.eval.Coeval
 import org.apache.commons.compress.archivers.ArchiveStreamFactory
@@ -580,8 +581,10 @@ object Docker {
   val initialWavesAmount: Long =
     ConfigSource
       .fromConfig(configTemplate)
-      .at("waves.blockchain.custom.genesis.balances")
-      .loadOrThrow[Seq[GenesisBalanceSettings]]
+      .at("waves.blockchain.custom.predefined-snapshots")
+      .loadOrThrow[Seq[PredefinedSnapshotSettings]]
+      .find(_.height == GenesisBlockHeight.toInt)
+      .fold(Seq.empty[GenesisBalanceSettings])(_.balances)
       .map(_.waves)
       .sum
 
@@ -611,12 +614,12 @@ object Docker {
                                             |}""".stripMargin)
 
     val genesisConfig = timestampOverrides.withFallback(configTemplate)
-    val gs            = ConfigSource.fromConfig(genesisConfig).at("waves.blockchain.custom.genesis").loadOrThrow[GenesisSettings]
+    val bs            = ConfigSource.fromConfig(genesisConfig).at("waves.blockchain").loadOrThrow[BlockchainSettings]
     // The final config sent to a container is flattened into -D system properties (see startNodeInternal), which
     // cannot represent an absent/null value, so all three commitments are pinned here to the concrete values this
     // genesis block actually computes, rather than left null and risking custom-defaults.conf's placeholders (or an
     // empty string from the properties round-trip) leaking through as a mismatched commitment.
-    val genesisBlock = Block.genesis(gs).explicitGet()
+    val genesisBlock = Block.genesis(bs).explicitGet()
 
     parseString(s"""waves.blockchain.custom.genesis {
                    |  signature = ${genesisBlock.signature}

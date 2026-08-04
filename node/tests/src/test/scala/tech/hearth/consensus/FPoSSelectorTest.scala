@@ -295,10 +295,13 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
         TestFunctionalitySettings.Stub
       )
       base.copy(blockchainSettings =
-        base.blockchainSettings.copy(genesisSettings =
-          base.blockchainSettings.genesisSettings.copy(
-            balances = TestHelpers.genesisBalances(genesisBalances),
-            generators = if (VRFActivated) genesisGenerators else Seq.empty
+        base.blockchainSettings.copy(predefinedSnapshots =
+          Seq(
+            PredefinedSnapshotSettings(
+              GenesisBlockHeight.toInt,
+              balances = TestHelpers.genesisBalances(genesisBalances),
+              generators = if (VRFActivated) genesisGenerators else Seq.empty
+            )
           )
         )
       )

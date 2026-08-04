@@ -9,10 +9,11 @@ import tech.hearth.crypto.*
 import tech.hearth.lang.ValidationError
 import tech.hearth.protobuf.block.PBBlocks
 import tech.hearth.protobuf.transaction.PBTransactions
-import tech.hearth.settings.GenesisSettings
+import tech.hearth.settings.BlockchainSettings
 import tech.hearth.state.*
 import tech.hearth.transaction.*
 import tech.hearth.transaction.TxValidationError.GenericError
+import tech.hearth.utils.EmptyBlockchain
 import monix.eval.Coeval
 import play.api.libs.json.*
 
@@ -192,15 +193,24 @@ object Block {
     ).validate
       .map(_.sign(signer))
 
-  /** The genesis block has no transactions: its effect on the state is the predefined snapshot built from [[GenesisSettings]]. */
+  /** The genesis block has no transactions: its effect on the state is the height-1 predefined snapshot, built against an
+    * always-empty view since nothing precedes genesis - unlike [[tech.hearth.state.diffs.BlockDiffer]]'s own genesis handling,
+    * this runs unconditionally on every startup (see [[tech.hearth.checkGenesis]]), including against an already-populated
+    * chain, to verify the persisted genesis block still matches.
+    */
   def genesis(
-      genesisSettings: GenesisSettings
+      blockchainSettings: BlockchainSettings
   ): Either[ValidationError, Block] =
     for {
-      snapshot <- GenesisSnapshot.build(genesisSettings)
-      baseTarget = genesisSettings.initialBaseTarget
-      timestamp  = genesisSettings.blockTimestamp
-      stateHash  = TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)
+      // A real network's config must declare predefined-snapshots (parsing fails otherwise, see BlockchainSettings'
+      // ConfigReader), but nothing checks a height-1 entry is actually among them, nor do settings built directly in
+      // code (tests, tools) necessarily have one; either way this defaults to an empty snapshot rather than failing
+      // here, same as an empty genesis balances list did before predefined snapshots existed.
+      snapshot <- PredefinedSnapshot.build(blockchainSettings.genesisSnapshot, EmptyBlockchain)
+      genesisSettings = blockchainSettings.genesisSettings
+      baseTarget      = genesisSettings.initialBaseTarget
+      timestamp       = genesisSettings.blockTimestamp
+      stateHash       = TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)
       // The configured snapshot is what a misconfiguration silently changes, so check it before anything derived from it
       _ <- checkPredefined("state hash", genesisSettings.stateHash, stateHash)
       // The state hash goes into the header before signing: the block is protobuf-serialized, so its body bytes cover it
@@ -248,7 +258,7 @@ object Block {
   val GenerationVRFSignatureLength: Int = 80
   val BlockIdLength: Int                = DigestLength
   val TransactionSizeLength             = 4
-  val HitSourceLength                   = 32
+  val HitSourceLength                   = 64
 
   val GenesisReference: BlockId    = ByteStr(Array.fill(DigestLength)(-1: Byte))
   val GenesisGenerator: SigningKey = SigningKey.fromSeed(Crypto.defaultBackend().sha256(new Array[Byte](32)))

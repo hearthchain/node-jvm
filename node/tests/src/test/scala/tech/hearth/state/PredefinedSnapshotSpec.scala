@@ -11,10 +11,17 @@ import tech.hearth.crypto.bls.BlsKeyPair
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.mining.MiningConstraint
-import tech.hearth.settings.{BlockchainSettings, GenesisAssetSettings, GenesisBalanceSettings, GenesisGeneratorSettings, WavesSettings}
+import tech.hearth.settings.{
+  BlockchainSettings,
+  GenesisAssetSettings,
+  GenesisBalanceSettings,
+  GenesisGeneratorSettings,
+  PredefinedSnapshotSettings,
+  WavesSettings
+}
 import tech.hearth.state.diffs.BlockDiffer
+import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.test.{FreeSpec, NumericExt}
 import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.TxHelpers.*
@@ -22,7 +29,7 @@ import tech.hearth.utils.EmptyBlockchain
 import org.scalatest.EitherValues
 import tech.hearth.crypto.{Crypto, SigningKey, VrfKey}
 
-class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
+class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
   private val assetId = ByteStr(Array.fill[Byte](32)(7))
   private val issuer  = TxHelpers.signer(1)
 
@@ -40,8 +47,8 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       balances: Seq[GenesisBalanceSettings] = Seq.empty
   ): WavesSettings =
     base.copy(blockchainSettings =
-      base.blockchainSettings.copy(genesisSettings =
-        base.blockchainSettings.genesisSettings.copy(assets = assets, generators = generators, balances = balances)
+      base.blockchainSettings.copy(predefinedSnapshots =
+        Seq(PredefinedSnapshotSettings(GenesisBlockHeight.toInt, assets = assets, generators = generators, balances = balances))
       )
     )
 
@@ -153,7 +160,7 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
     def genesisBlockAndResult(ws: WavesSettings): (Block, BlockDiffer.Result) = {
       val block = Block
         .genesis(
-          ws.blockchainSettings.genesisSettings
+          ws.blockchainSettings
         )
         .explicitGet()
       val blockchain = preGenesisBlockchain(ws)
@@ -216,66 +223,81 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
   "the genesis block commitments" - {
     // Everything the genesis block puts into the state comes from these settings, so a node started with the wrong ones
     // silently builds its own chain. The commitments below are what stops it.
-    val unpinned = settingsWith(balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves))).blockchainSettings.genesisSettings
-    val genesis  = Block.genesis(unpinned).explicitGet()
-    val pinned   = unpinned.copy(stateHash = genesis.header.stateHash, blockId = Some(genesis.id()))
+    val unpinnedBlockchainSettings = settingsWith(balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves))).blockchainSettings
+    val unpinned                   = unpinnedBlockchainSettings.genesisSettings
+    val genesis                    = Block.genesis(unpinnedBlockchainSettings).explicitGet()
+    val pinned                     = unpinned.copy(stateHash = genesis.header.stateHash, blockId = Some(genesis.id()))
+    val pinnedBlockchainSettings   = unpinnedBlockchainSettings.copy(genesisSettings = pinned)
+    val snapshot                   = unpinnedBlockchainSettings.predefinedSnapshots.find(_.height == GenesisBlockHeight.toInt).value
 
     val otherHash = ByteStr(Array.fill[Byte](DigestLength)(1))
 
     "are optional" in {
       unpinned.stateHash shouldBe None
       unpinned.blockId shouldBe None
-      Block.genesis(unpinned) should beRight
+      Block.genesis(unpinnedBlockchainSettings) should beRight
     }
 
     "are accepted when they match the settings they were derived from" in {
-      val block = Block.genesis(pinned).explicitGet()
+      val block = Block.genesis(pinnedBlockchainSettings).explicitGet()
       block.header.stateHash shouldBe pinned.stateHash
       block.id() shouldBe pinned.blockId.value
     }
 
     "reject a state hash that is not the hash of the configured snapshot" in {
-      Block.genesis(unpinned.copy(stateHash = Some(otherHash))).left.value.toString should include(
+      Block
+        .genesis(pinnedBlockchainSettings.copy(genesisSettings = pinned.copy(stateHash = Some(otherHash))))
+        .left
+        .value
+        .toString should include(
         s"Genesis state hash mismatch: settings declare $otherHash"
       )
     }
 
     "reject a block id that is not the id of the configured block" in {
-      Block.genesis(unpinned.copy(blockId = Some(otherHash))).left.value.toString should include(
+      Block
+        .genesis(pinnedBlockchainSettings.copy(genesisSettings = pinned.copy(blockId = Some(otherHash))))
+        .left
+        .value
+        .toString should include(
         s"Genesis block id mismatch: settings declare $otherHash"
       )
     }
 
     "reject a balance that was changed without updating them" in {
-      val extraBalance = pinned.copy(balances = pinned.balances :+ GenesisBalanceSettings(address(2).toBech32, 5.waves))
-      Block.genesis(extraBalance).left.value.toString should include("Genesis state hash mismatch")
+      val extraBalance = snapshot.copy(balances = snapshot.balances :+ GenesisBalanceSettings(address(2).toBech32, 5.waves))
+      Block.genesis(pinnedBlockchainSettings.copy(predefinedSnapshots = Seq(extraBalance))).left.value.toString should include(
+        "Genesis state hash mismatch"
+      )
     }
 
     "reject a generator that was committed without updating them" in {
       val generator = TxHelpers.signer(4)
-      val extraGenerator = pinned.copy(
+      val extraGenerator = snapshot.copy(
         generators = Seq(generatorSettings(generator, blsKeyPair(4), vrfKey(4))),
-        balances = pinned.balances :+ GenesisBalanceSettings(generator.toAddress.toBech32, 100000.waves)
+        balances = snapshot.balances :+ GenesisBalanceSettings(generator.toAddress.toBech32, 100000.waves)
       )
-      Block.genesis(extraGenerator).left.value.toString should include("Genesis state hash mismatch")
+      Block.genesis(pinnedBlockchainSettings.copy(predefinedSnapshots = Seq(extraGenerator))).left.value.toString should include(
+        "Genesis state hash mismatch"
+      )
     }
 
     // The state hash covers the snapshot only; the header fields around it are pinned by the block id alone
     "reject a timestamp that was changed without updating them" in {
-      val moved = pinned.copy(timestamp = pinned.timestamp + 1)
+      val moved = pinnedBlockchainSettings.copy(genesisSettings = pinned.copy(timestamp = pinned.timestamp + 1))
       Block.genesis(moved).left.value.toString should include(s"Genesis block id mismatch: settings declare ${pinned.blockId.value}")
     }
 
     "reject a base target that was changed without updating them" in {
-      val retargeted = pinned.copy(initialBaseTarget = pinned.initialBaseTarget + 1)
+      val retargeted = pinnedBlockchainSettings.copy(genesisSettings = pinned.copy(initialBaseTarget = pinned.initialBaseTarget + 1))
       Block.genesis(retargeted).left.value.toString should include("Genesis block id mismatch")
     }
   }
 
-  "the genesis snapshot is rejected when" - {
+  "the predefined snapshot is rejected when" - {
     def buildFails(settings: WavesSettings): String =
-      GenesisSnapshot
-        .build(settings.blockchainSettings.genesisSettings)
+      PredefinedSnapshot
+        .build(settings.blockchainSettings.predefinedSnapshots.find(_.height == GenesisBlockHeight.toInt).value, EmptyBlockchain)
         .left
         .value
         .toString
@@ -297,7 +319,7 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       val settings = settingsWith(
         balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.waves), GenesisBalanceSettings(address(1).toBech32, 5.waves))
       )
-      buildFails(settings) should include("Duplicate genesis balance recipient")
+      buildFails(settings) should include("Duplicate predefined snapshot balance recipient")
     }
 
     "committed generator does not have enough balance" in {
@@ -314,6 +336,99 @@ class GenesisSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
       )
 
       buildFails(settings) should include("not enough funds for deposit")
+    }
+  }
+
+  "a predefined snapshot beyond genesis" - {
+    "mints a new asset exactly at its configured height, and rolls it back below it" in {
+      val asset = IssuedAsset(assetId)
+      val snapshotAtHeight3 = PredefinedSnapshotSettings(
+        height = 3,
+        assets = Seq(assetSettings(quantity = 1000)),
+        balances = Seq(GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> 1000L)))
+      )
+      val settings = TransactionStateSnapshot.copy(blockchainSettings =
+        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
+          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
+        )
+      )
+
+      withDomain(settings, Seq(address(1) -> 1.waves)) { d =>
+        d.blockchain.height shouldBe 1
+        d.blockchain.assetDescription(asset) shouldBe None
+
+        d.appendBlock() // height 2
+        d.blockchain.height shouldBe 2
+        d.blockchain.assetDescription(asset) shouldBe None
+
+        d.appendBlock() // height 3
+        d.blockchain.height shouldBe 3
+        val description = d.blockchain.assetDescription(asset).value
+        description.totalVolume shouldBe BigInt(1000)
+        d.blockchain.balance(address(2), asset) shouldBe 1000L
+
+        d.rollbackTo(2)
+        d.blockchain.height shouldBe 2
+        d.blockchain.assetDescription(asset) shouldBe None
+        d.blockchain.balance(address(2), asset) shouldBe 0L
+      }
+    }
+
+    "rejects an asset id that already exists on chain" in {
+      val asset              = IssuedAsset(assetId)
+      val withAssetAtGenesis = settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 1000)))
+      val snapshotAtHeight3 = PredefinedSnapshotSettings(
+        height = 3,
+        assets = Seq(assetSettings(quantity = 1000)),
+        balances = Seq(GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> 1000L)))
+      )
+      val settings = withAssetAtGenesis.copy(blockchainSettings =
+        withAssetAtGenesis.blockchainSettings.copy(predefinedSnapshots =
+          withAssetAtGenesis.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
+        )
+      )
+
+      withDomain(
+        settings,
+        balances = Seq(AddrWithBalance(address(1), 1.waves, Map(asset -> 1000L)))
+      ) { d =>
+        d.appendBlock() // height 2
+        d.appendBlockE() should produce("an asset with this id already exists")
+      }
+    }
+
+    "rejects crediting Waves at a non-genesis height" in {
+      val snapshotAtHeight3 = PredefinedSnapshotSettings(height = 3, balances = Seq(GenesisBalanceSettings(address(2).toBech32, 5.waves)))
+      val settings = TransactionStateSnapshot.copy(blockchainSettings =
+        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
+          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
+        )
+      )
+
+      withDomain(settings, Seq(address(1) -> 1.waves)) { d =>
+        d.appendBlock() // height 2
+        d.appendBlockE() should produce("crediting Waves is only supported at genesis")
+      }
+    }
+
+    "commits a generator at a non-genesis height who was already funded at genesis, with no balances entry of its own" in {
+      val generator         = TxHelpers.signer(5)
+      val blsKey            = blsKeyPair(43)
+      val vrf               = vrfKey(43)
+      val snapshotAtHeight3 = PredefinedSnapshotSettings(height = 3, generators = Seq(generatorSettings(generator, blsKey, vrf)))
+      val settings = TransactionStateSnapshot.copy(blockchainSettings =
+        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
+          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
+        )
+      )
+
+      // `generator` is funded once, at genesis; the height-3 snapshot only commits it, crediting nothing further -
+      // the deposit check has to resolve its real cumulative balance rather than what this snapshot alone touched.
+      withDomain(settings, Seq(generator.toAddress -> 100000.waves)) { d =>
+        d.appendBlock() // height 2
+        d.appendBlock() // height 3
+        d.blockchain.height shouldBe 3
+      }
     }
   }
 }
