@@ -6,7 +6,7 @@ import com.typesafe.config.Config
 import tech.hearth.account.*
 import tech.hearth.api.http.requests.TransferRequest
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.TransferSending.Req
 import tech.hearth.it.api.AsyncHttpApi.*
@@ -59,7 +59,7 @@ trait TransferSending extends ScorexLogging {
     val srcDest = balances.toSeq
       .map { case (config, _) =>
         val accountSeed = config.getString("account-seed")
-        (config, keyPairFromSeed(Base58.decode(accountSeed)))
+        (config, keyPairFromSeed(Base16.decode(accountSeed)))
       }
 
     val sourceAndDest = (1 to n).map { _ =>
@@ -109,7 +109,7 @@ trait TransferSending extends ScorexLogging {
       .map { case (x, i) =>
         createSignedTransferRequest(
           TxHelpers.transfer(
-            keyPairFromSeed(Base58.decode(x.senderSeed)),
+            keyPairFromSeed(Base16.decode(x.senderSeed)),
             Address.fromString(x.targetAddress).explicitGet(),
             x.amount,
             Waves,

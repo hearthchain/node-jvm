@@ -1,7 +1,7 @@
 package tech.hearth.it.sync
 
 import com.typesafe.config.{Config, ConfigFactory}
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.it.BaseFunSuite
 import tech.hearth.it.NodeConfigs.Default
 import tech.hearth.it.api.SyncHttpApi.*
@@ -42,7 +42,7 @@ object SeveralAccountMiningSuite {
   // MinerSettings has no raw private-keys list any more: an account is either a mnemonic (with derivation
   // nonces) or hex-encoded signingKey/vrfKey seeds, from which MinerImpl derives the runtime SigningKey/VrfKey.
   private def signingSeed(idx: Int): Array[Byte] =
-    tech.hearth.crypto.secureHash(Base58.decode(Default(idx).getString("account-seed")))
+    tech.hearth.crypto.secureHash(Base16.decode(Default(idx).getString("account-seed")))
 
   private def getNodeKeyPair(idx: Int): SigningKey = SigningKey.fromSeed(signingSeed(idx))
 

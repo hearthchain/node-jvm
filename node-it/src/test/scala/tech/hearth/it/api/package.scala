@@ -92,7 +92,7 @@ package object api {
       tech.hearth.account.Address
         .fromString(addrStr)
         .fold(err => JsError(err.toString), addr => JsSuccess(addr))
-    case _ => JsError("Expected base58 encoded address")
+    case _ => JsError("Expected bech32 encoded address")
   }
 
   implicit val dstMapReads: Reads[Map[tech.hearth.account.Address, Long]] = Reads { json =>

@@ -5,7 +5,7 @@ import tech.hearth.account.*
 import tech.hearth.api.BlockMeta
 import tech.hearth.api.common.CommonBlocksApi
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.database
 import tech.hearth.database.{DBExt, Keys, RDB, RocksDBWriter}
@@ -52,7 +52,7 @@ object RocksDBWriterBenchmark {
 
   @State(Scope.Benchmark)
   class TransactionByIdSt extends BaseSt {
-    val allTxs: Vector[ByteStr] = load(benchSettings.restTxsFile)(x => ByteStr(Base58.tryDecodeWithLimit(x).get))
+    val allTxs: Vector[ByteStr] = load(benchSettings.restTxsFile)(x => ByteStr(Base16.tryDecodeWithLimit(x).get))
   }
 
   @State(Scope.Benchmark)
@@ -62,7 +62,7 @@ object RocksDBWriterBenchmark {
 
   @State(Scope.Benchmark)
   class BlocksByIdSt extends BaseSt {
-    val allBlocks: Vector[ByteStr] = load(benchSettings.blocksFile)(x => ByteStr(Base58.tryDecodeWithLimit(x).get))
+    val allBlocks: Vector[ByteStr] = load(benchSettings.blocksFile)(x => ByteStr(Base16.tryDecodeWithLimit(x).get))
   }
 
   @State(Scope.Benchmark)

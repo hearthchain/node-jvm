@@ -6,7 +6,7 @@ import tech.hearth.events.FakeObserver.*
 import tech.hearth.events.api.grpc.protobuf.SubscribeRequest
 import tech.hearth.events.protobuf.TransactionMetadata
 import tech.hearth.protobuf.*
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.RideV6
@@ -29,7 +29,7 @@ class MetadataSpec extends FreeSpec with WithBUDomain {
         AddrWithBalance(matcher.toAddress, 100.waves),
         AddrWithBalance(leased.toAddress, 100.waves)
       ),
-      assets = Seq(GenesisAssetSettings(asset.id, Base58.encode(issuer.publicKey()), "asset", 8, 1000L))
+      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 8, 1000L))
     ) { (d, r) =>
       val transfer = TxHelpers.transfer(issuer, matcher.toAddress, 1.waves)
       val lease    = TxHelpers.lease(issuer, leased.toAddress, 1.waves)

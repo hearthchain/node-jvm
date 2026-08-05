@@ -3,7 +3,7 @@ package tech.hearth.state.snapshot
 import tech.hearth.utils.randomBytes
 import tech.hearth.TestValues.fee
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
@@ -29,7 +29,7 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
     withDomain(
       RideV6.configure(_.copy(daoAddress = None)),
       Seq(AddrWithBalance(defaultAddress, ENOUGH_AMT, Map(asset -> 1000000000)), AddrWithBalance(secondAddress, ENOUGH_AMT)),
-      assets = Seq(GenesisAssetSettings(asset.id, Base58.encode(randomBytes()), "AAAA", 8, 1000000000))
+      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(randomBytes()), "AAAA", 8, 1000000000))
     ) { d =>
       val sender           = secondSigner
       val senderAddress    = secondAddress

@@ -92,7 +92,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
         }
 
         withDomain(DomainPresets.RideV6, withMiner) { d =>
-          d.lastBlock.header.stateHash shouldBe ByteStr.decodeBase58("CYrgmsnWwSka8BgHs8XD9srdaL51HUWG8ebSFHwSY9js").toOption
+          d.lastBlock.header.stateHash shouldBe ByteStr.decodeBase16("ab99bdbad4c40a72f782dff360ec7b2c8be19104c15c8b87bf7ae1b62b0b33fe").toOption
           d.blockchain.height shouldBe 1
           balances.foreach { case AddrWithBalance(address, amount, _) => d.blockchain.balance(address) shouldBe amount }
         }

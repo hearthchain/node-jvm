@@ -7,7 +7,7 @@ import tech.hearth.transaction.*
 import tech.hearth.transaction.serialization.impl.TransferTxSerializer
 import tech.hearth.transaction.validation.*
 import tech.hearth.transaction.validation.impl.TransferTxValidator
-import tech.hearth.utils.base58Length
+import tech.hearth.utils.base16Length
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
@@ -37,7 +37,7 @@ object TransferTransaction {
   type TransactionT = TransferTransaction
 
   val MaxAttachmentSize            = 140
-  val MaxAttachmentStringSize: Int = base58Length(MaxAttachmentSize)
+  val MaxAttachmentStringSize: Int = base16Length(MaxAttachmentSize)
 
   implicit val validator: TxValidator[TransferTransaction] = TransferTxValidator
 
@@ -54,7 +54,7 @@ object TransferTransaction {
       chainId: Byte = AddressScheme.current.chainId
   ): Either[ValidationError, TransferTransaction] =
     for {
-      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, asset.maybeBase58Repr.getOrElse("waves")))
+      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, asset.maybeBase16Repr.getOrElse("waves")))
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
       tx     <- TransferTransaction(sender, recipient, asset, amount, feeAsset, fee, attachment, timestamp, proofs, chainId).validatedEither
     } yield tx

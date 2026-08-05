@@ -42,9 +42,9 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |      genesis {
           |        timestamp = 1460678400000
           |        block-timestamp = 1460678400000
-          |        signature = "BASE58BLKSGNATURE"
-          |        state-hash = "BASE58STATEHASH"
-          |        block-id = "BASE58BLKHASH"
+          |        signature = "aa11bb22cc33dd44"
+          |        state-hash = "ee55ff66aa77bb88"
+          |        block-id = "1122334455667788"
           |        initial-base-target = 153722867
           |        average-block-delay = 60s
           |      }
@@ -52,14 +52,14 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |        {
           |          height = 1
           |          assets = [
-          |            {id = "BASE58ASSETXYZ", issuer = "BASE58ISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
+          |            {id = "aabbccddeeff00112233445566778899", issuer = "HEXISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
           |          ]
           |          generators = [
-          |            {public-key = "BASE58PUBLICKEY", endorser-public-key = "BASE58BLSKEY", vrf-public-key = "BASE58VRFKEY"}
+          |            {public-key = "HEXPUBLICKEY", endorser-public-key = "HEXBLSKEY", vrf-public-key = "HEXVRFKEY"}
           |          ]
           |          balances = [
           |            {recipient = "ADDRESS1", waves = 50000000000001},
-          |            {recipient = "ADDRESS2", waves = 49999999999999, assets {BASE58ASSETXYZ = 1000}}
+          |            {recipient = "ADDRESS2", waves = 49999999999999, assets {aabbccddeeff00112233445566778899 = 1000}}
           |          ]
           |        }
           |      ]
@@ -83,17 +83,17 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.votingInterval should be(10000)
     settings.genesisSettings.blockTimestamp should be(1460678400000L)
     settings.genesisSettings.timestamp should be(1460678400000L)
-    settings.genesisSettings.signature should be(ByteStr.decodeBase58("BASE58BLKSGNATURE").toOption)
-    settings.genesisSettings.stateHash should be(ByteStr.decodeBase58("BASE58STATEHASH").toOption)
-    settings.genesisSettings.blockId should be(ByteStr.decodeBase58("BASE58BLKHASH").toOption)
+    settings.genesisSettings.signature should be(ByteStr.decodeBase16("aa11bb22cc33dd44").toOption)
+    settings.genesisSettings.stateHash should be(ByteStr.decodeBase16("ee55ff66aa77bb88").toOption)
+    settings.genesisSettings.blockId should be(ByteStr.decodeBase16("1122334455667788").toOption)
     settings.genesisSettings.initialBaseTarget should be(153722867)
     settings.genesisSettings.averageBlockDelay should be(60.seconds)
     val genesisSnapshot = settings.predefinedSnapshots.find(_.height == 1).get
     genesisSnapshot.assets should be(
       Seq(
         GenesisAssetSettings(
-          ByteStr.decodeBase58("BASE58ASSETXYZ").get,
-          "BASE58ISSUERKEY",
+          ByteStr.decodeBase16("aabbccddeeff00112233445566778899").get,
+          "HEXISSUERKEY",
           "Asset",
           decimals = 4,
           quantity = 1000,
@@ -101,11 +101,11 @@ class BlockchainSettingsSpecification extends FlatSpec {
         )
       )
     )
-    genesisSnapshot.generators should be(Seq(GenesisGeneratorSettings("BASE58PUBLICKEY", "BASE58BLSKEY", "BASE58VRFKEY")))
+    genesisSnapshot.generators should be(Seq(GenesisGeneratorSettings("HEXPUBLICKEY", "HEXBLSKEY", "HEXVRFKEY")))
     genesisSnapshot.balances should be(
       Seq(
         GenesisBalanceSettings("ADDRESS1", 50000000000001L),
-        GenesisBalanceSettings("ADDRESS2", 49999999999999L, Map("BASE58ASSETXYZ" -> 1000L))
+        GenesisBalanceSettings("ADDRESS2", 49999999999999L, Map("aabbccddeeff00112233445566778899" -> 1000L))
       )
     )
     // Derived from the genesis balances rather than configured

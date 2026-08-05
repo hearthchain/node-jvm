@@ -25,7 +25,7 @@ object TxHelpers {
       timestamp,
       PBTransaction.Data.MassTransfer(
         MassTransferTransactionData.of(
-          if (assetId.isDefined) ByteString.copyFrom(Base58.decode(assetId.get)) else ByteString.EMPTY,
+          if (assetId.isDefined) ByteString.copyFrom(Base16.decode(assetId.get)) else ByteString.EMPTY,
           transfers,
           attachment
         )

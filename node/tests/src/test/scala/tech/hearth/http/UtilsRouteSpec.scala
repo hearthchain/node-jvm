@@ -2,7 +2,7 @@ package tech.hearth.http
 
 import tech.hearth.api.http.ApiError.TooBigArrayAllocation
 import tech.hearth.api.http.utils.UtilsApiRoute
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.crypto
 import tech.hearth.utils.{EmptyBlockchain, Schedulers, Time}
 import io.netty.util.HashedWheelTimer
@@ -42,7 +42,7 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
 
   routePath("/seed") in {
     Get(routePath("/seed")) ~> route ~> check {
-      val seed = Base58.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
+      val seed = Base16.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
       seed.get.length shouldEqual UtilsApiRoute.DefaultSeedSize
     }
   }
@@ -52,7 +52,7 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
       Get(routePath(s"/seed/$l")) ~> route should produce(TooBigArrayAllocation)
     } else {
       Get(routePath(s"/seed/$l")) ~> route ~> check {
-        val seed = Base58.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
+        val seed = Base16.tryDecodeWithLimit((responseAs[JsValue] \ "seed").as[String])
         seed.get.length shouldEqual l
       }
     }
@@ -70,7 +70,7 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
         Post(uri, s) ~> route ~> check {
           val r = responseAs[JsObject]
           (r \ "message").as[String] shouldEqual s
-          (r \ "hash").as[String] shouldEqual Base58.encode(f(s))
+          (r \ "hash").as[String] shouldEqual Base16.encode(f(s))
         }
       }
     }

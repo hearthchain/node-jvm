@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import tech.hearth.account.PublicKey
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto.DigestLength
 import tech.hearth.crypto.bls.BlsKeyPair
@@ -38,7 +38,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
   private def vrfKey(i: Int): VrfKey         = VrfKey.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(i)))
 
   private def generatorSettings(generator: SigningKey, blsKey: BlsKeyPair, vrf: VrfKey): GenesisGeneratorSettings =
-    GenesisGeneratorSettings(ByteStr(generator.publicKey()).toString, blsKey.publicKey.base58, ByteStr(vrf.publicKey()).toString)
+    GenesisGeneratorSettings(ByteStr(generator.publicKey()).toString, blsKey.publicKey.base16, ByteStr(vrf.publicKey()).toString)
 
   private def settingsWith(
       base: WavesSettings = DeterministicFinality,
@@ -327,9 +327,9 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       val settings = settingsWith(
         generators = Seq(
           GenesisGeneratorSettings(
-            Base58.encode(generator.publicKey()),
-            blsKeyOf(generator).publicKey.base58,
-            Base58.encode(vrfKey(1005).publicKey())
+            Base16.encode(generator.publicKey()),
+            blsKeyOf(generator).publicKey.base16,
+            Base16.encode(vrfKey(1005).publicKey())
           )
         ),
         balances = Seq(GenesisBalanceSettings(generator.toAddress.toString, 5.waves))

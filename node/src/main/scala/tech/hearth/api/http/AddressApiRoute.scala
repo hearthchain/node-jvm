@@ -57,7 +57,7 @@ case class AddressApiRoute(
       val height = maybeHeight.getOrElse(blockchain.height)
       validateBalanceDepth(height)(
         complete(
-          balancesJson(height, addresses.toSeq, assetId.fold(Waves: Asset)(a => IssuedAsset(ByteStr.decodeBase58(a).get)))
+          balancesJson(height, addresses.toSeq, assetId.fold(Waves: Asset)(a => IssuedAsset(ByteStr.decodeBase16(a).get)))
         )
       )
   }
@@ -66,7 +66,7 @@ case class AddressApiRoute(
     val height    = (request \ "height").asOpt[Int].getOrElse(blockchain.height)
     val addresses = (request \ "addresses").as[Seq[String]]
     val assetId   = (request \ "asset").asOpt[String]
-    validateBalanceDepth(height)(complete(balancesJson(height, addresses, assetId.fold(Waves: Asset)(a => IssuedAsset(ByteStr.decodeBase58(a).get)))))
+    validateBalanceDepth(height)(complete(balancesJson(height, addresses, assetId.fold(Waves: Asset)(a => IssuedAsset(ByteStr.decodeBase16(a).get)))))
   }
 
   def balanceDetails: Route = (path("balance" / "details" / AddrSegment) & get) { address =>
@@ -118,7 +118,7 @@ case class AddressApiRoute(
     complete(
       generatorKeys
         .endorserPublicKey(address)
-        .fold[ToResponseMarshallable](MissingSenderPrivateKey)(pk => Json.obj("blsPublicKey" -> pk.base58))
+        .fold[ToResponseMarshallable](MissingSenderPrivateKey)(pk => Json.obj("blsPublicKey" -> pk.base16))
     )
   }
 

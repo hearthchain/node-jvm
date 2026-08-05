@@ -11,7 +11,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
 import tech.hearth.protobuf.Amount
 import tech.hearth.protobuf.transaction.PBRecipients
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.state.{BlockRewardCalculator, Height}
 import tech.hearth.test.*
@@ -42,7 +42,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     withDomain(
       DomainPresets.RideV6,
       balances = Seq(AddrWithBalance(sender.toAddress, assets = Map(asset -> assetTransferAmount.toLong))),
-      assets = Seq(GenesisAssetSettings(asset.id, Base58.encode(sender.publicKey()), "asset", 0, assetTransferAmount))
+      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(sender.publicKey()), "asset", 0, assetTransferAmount))
     ) { d =>
       val grpcApi = getGrpcApi(d)
 

@@ -409,7 +409,7 @@ object AsyncHttpApi extends Assertions {
       signedBroadcast(
         LeaseCancelTransaction(
           PublicKey(sender.publicKey()),
-          ByteStr.decodeBase58(leaseId).get,
+          ByteStr.decodeBase16(leaseId).get,
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
           Proofs.empty,
@@ -664,7 +664,7 @@ object AsyncHttpApi extends Assertions {
     }
 
     implicit val assetMapReads: Reads[VectorMap[IssuedAsset, Long]] = implicitly[Reads[Map[String, Long]]].map(_.map { case (k, v) =>
-      IssuedAsset(ByteStr.decodeBase58(k).get) -> v
+      IssuedAsset(ByteStr.decodeBase16(k).get) -> v
     }.to(VectorMap))
     implicit val leaseBalanceFormat: Reads[LeaseBalance] = Json.reads[LeaseBalance]
     implicit val portfolioFormat: Reads[Portfolio]       = Json.reads[Portfolio]

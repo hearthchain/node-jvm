@@ -16,9 +16,9 @@ case class SignedLeaseCancelV1Request(
 ) {
   def toTx: Either[ValidationError, LeaseCancelTransaction] =
     for {
-      _sender    <- PublicKey.fromBase58String(senderPublicKey)
-      _signature <- parseBase58(signature, "invalid.signature", SignatureStringLength)
-      _leaseTx   <- parseBase58(leaseId, "invalid.leaseTx", SignatureStringLength)
+      _sender    <- PublicKey.fromBase16String(senderPublicKey)
+      _signature <- parseBase16(signature, "invalid.signature", SignatureStringLength)
+      _leaseTx   <- parseBase16(leaseId, "invalid.leaseTx", SignatureStringLength)
       _t         <- LeaseCancelTransaction.create(_sender, _leaseTx, fee, timestamp, Proofs(_signature))
     } yield _t
 }

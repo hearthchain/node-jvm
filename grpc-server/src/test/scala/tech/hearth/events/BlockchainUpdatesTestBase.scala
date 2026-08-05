@@ -7,7 +7,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.StateUpdate.LeaseUpdate.LeaseStatus
 import tech.hearth.events.fixtures.WavesTxChecks.*
 import tech.hearth.events.protobuf.BlockchainUpdated.Append
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.settings.{GenesisAssetSettings, WavesSettings}
 import tech.hearth.test.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
@@ -43,8 +43,8 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
   val secondTokenQuantity: Long     = 6000000000L
 
   val genesisAssets: Seq[GenesisAssetSettings] = Seq(
-    GenesisAssetSettings(firstTokenAsset.id, Base58.encode(firstTxParticipant.publicKey()), "firstToken", 2, firstTokenQuantity),
-    GenesisAssetSettings(secondTokenAsset.id, Base58.encode(secondTxParticipant.publicKey()), "secondToken", 6, secondTokenQuantity)
+    GenesisAssetSettings(firstTokenAsset.id, Base16.encode(firstTxParticipant.publicKey()), "firstToken", 2, firstTokenQuantity),
+    GenesisAssetSettings(secondTokenAsset.id, Base16.encode(secondTxParticipant.publicKey()), "secondToken", 6, secondTokenQuantity)
   )
 
   val tokenBalances: Seq[AddrWithBalance] = Seq(

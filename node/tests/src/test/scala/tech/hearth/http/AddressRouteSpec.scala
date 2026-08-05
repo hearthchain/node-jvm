@@ -153,7 +153,7 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
 
     Get(routePath(s"/bls/$address")) ~> route ~> check {
       val r = responseAs[JsObject]
-      (r \ "blsPublicKey").as[String] shouldEqual expectedBlsPublicKey.base58
+      (r \ "blsPublicKey").as[String] shouldEqual expectedBlsPublicKey.base16
     }
   }
 

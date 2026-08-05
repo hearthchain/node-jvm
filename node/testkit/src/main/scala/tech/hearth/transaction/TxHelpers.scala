@@ -73,7 +73,7 @@ object TxHelpers {
 
   @throws[IllegalArgumentException]
   def signature(sig: String): Proofs =
-    Proofs(ByteStr.decodeBase58(sig).get)
+    Proofs(ByteStr.decodeBase16(sig).get)
 
   def transfer(
       from: SigningKey = defaultSigner,

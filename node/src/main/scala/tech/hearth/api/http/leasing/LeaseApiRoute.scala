@@ -4,7 +4,7 @@ import tech.hearth.api.common.{CommonAccountsApi, LeaseInfo}
 import tech.hearth.api.http.*
 import tech.hearth.api.http.ApiError.{InvalidIds, TransactionDoesNotExist}
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.network.TransactionPublisher
 import tech.hearth.settings.RestAPISettings
 import tech.hearth.state.Blockchain
@@ -58,7 +58,7 @@ case class LeaseApiRoute(
   private def leasingInfosMap(ids: Iterable[String]): Either[InvalidIds, Map[String, LeaseInfo]] = {
     val infos = ids.map(id =>
       (for {
-        id <- Base58.tryDecodeWithLimit(id).toOption
+        id <- Base16.tryDecodeWithLimit(id).toOption
         li <- commonAccountApi.leaseInfo(ByteStr(id))
       } yield li).toRight(id)
     )

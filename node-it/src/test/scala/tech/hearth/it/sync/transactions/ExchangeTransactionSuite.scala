@@ -27,9 +27,9 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
   } yield (o1ver.toByte, o2ver.toByte)
 
   test("cannot exchange non-issued assets") {
-    // 32 zero bytes, base58-encoded (32 '1' characters): a syntactically valid asset id that was never
+    // 32 zero bytes, hex-encoded (64 '0' characters): a syntactically valid asset id that was never
     // declared in genesis, so it is genuinely "not issued" without tripping the byte-length validation gate.
-    val neverIssuedAssetId = "1" * 32
+    val neverIssuedAssetId = "0" * 64
 
     for ((buyVersion, sellVersion) <- versions) {
       val buyer   = acc0

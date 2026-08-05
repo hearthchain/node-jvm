@@ -3,7 +3,7 @@ package tech.hearth.it.sync
 import com.typesafe.config.Config
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.crypto
 import tech.hearth.crypto.Blake2b256
 import tech.hearth.it.BaseFreeSpec
@@ -33,13 +33,13 @@ class BlockV5TestSuite extends BaseFreeSpec with ActivationStatusRequest with Op
       val blockAtCurrentHeight           = nodes.head.blockAt(currentHeight)
       val blockHeaderCurrentHeight       = nodes.head.blockHeaderAt(currentHeight)
       val blockBySignatureCurrentHeight  = nodes.head.blockById(blockAtCurrentHeight.id)
-      val generationSignatureInBlockJson = ByteStr.decodeBase58(blockAtCurrentHeight.generationSignature.get).get
+      val generationSignatureInBlockJson = ByteStr.decodeBase16(blockAtCurrentHeight.generationSignature.get).get
 
-      Base58.decode(blockAtCurrentHeight.id).length shouldBe crypto.DigestLength
-      Base58.decode(blockAtCurrentHeight.vrf.value).length shouldBe Block.HitSourceLength
-      Base58.decode(blockHeaderCurrentHeight.vrf.value).length shouldBe Block.HitSourceLength
-      blockAtCurrentHeight.transactionsRoot.value shouldBe Base58.encode(Blake2b256.hash(Array(0.toByte)))
-      blockHeaderCurrentHeight.transactionsRoot.value shouldBe Base58.encode(Blake2b256.hash(Array(0.toByte)))
+      Base16.decode(blockAtCurrentHeight.id).length shouldBe crypto.DigestLength
+      Base16.decode(blockAtCurrentHeight.vrf.value).length shouldBe Block.HitSourceLength
+      Base16.decode(blockHeaderCurrentHeight.vrf.value).length shouldBe Block.HitSourceLength
+      blockAtCurrentHeight.transactionsRoot.value shouldBe Base16.encode(Blake2b256.hash(Array(0.toByte)))
+      blockHeaderCurrentHeight.transactionsRoot.value shouldBe Base16.encode(Blake2b256.hash(Array(0.toByte)))
       generationSignatureInBlockJson.arr.length shouldBe Block.GenerationVRFSignatureLength
 
       blockAtCurrentHeight shouldBe blockBySignatureCurrentHeight
@@ -56,27 +56,27 @@ class BlockV5TestSuite extends BaseFreeSpec with ActivationStatusRequest with Op
 
       val blockAfterVRFUsing = nodes.head.blockAt(currentHeight + 1)
       blockAfterVRFUsing.reference shouldBe nodes.head.blockAt(currentHeight).id
-      Base58.decode(blockAfterVRFUsing.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
+      Base16.decode(blockAfterVRFUsing.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
 
       val blockSeq = nodes.head.blockSeq(currentHeight - 1, currentHeight + 1)
       for (block <- blockSeq) {
-        Base58.decode(block.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
-        Base58.decode(block.vrf.value).length shouldBe Block.HitSourceLength
-        block.transactionsRoot.value shouldBe Base58.encode(Blake2b256.hash(Array(0.toByte)))
+        Base16.decode(block.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
+        Base16.decode(block.vrf.value).length shouldBe Block.HitSourceLength
+        block.transactionsRoot.value shouldBe Base16.encode(Blake2b256.hash(Array(0.toByte)))
       }
 
       val blockHeadersSeq = nodes.head.blockHeadersSeq(currentHeight - 1, currentHeight + 1)
       for (block <- blockHeadersSeq) {
-        Base58.decode(block.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
-        Base58.decode(block.vrf.value).length shouldBe Block.HitSourceLength
-        block.transactionsRoot.value shouldBe Base58.encode(Blake2b256.hash(Array(0.toByte)))
+        Base16.decode(block.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
+        Base16.decode(block.vrf.value).length shouldBe Block.HitSourceLength
+        block.transactionsRoot.value shouldBe Base16.encode(Blake2b256.hash(Array(0.toByte)))
       }
 
       val blockSeqByAddress = nodes.head.blockSeqByAddress(nodes.head.address, currentHeight - 1, currentHeight + 1)
       for (block <- blockSeqByAddress) {
-        Base58.decode(block.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
-        Base58.decode(block.vrf.value).length shouldBe Block.HitSourceLength
-        block.transactionsRoot.value shouldBe Base58.encode(Blake2b256.hash(Array(0.toByte)))
+        Base16.decode(block.generationSignature.get).length shouldBe Block.GenerationVRFSignatureLength
+        Base16.decode(block.vrf.value).length shouldBe Block.HitSourceLength
+        block.transactionsRoot.value shouldBe Base16.encode(Blake2b256.hash(Array(0.toByte)))
       }
 
       nodes.head.transfer(nodes.head.keyPair, nodes.last.address, transferAmount, minFee, waitForTx = true)

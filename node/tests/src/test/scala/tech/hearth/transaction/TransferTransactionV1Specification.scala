@@ -13,33 +13,41 @@ class TransferTransactionV1Specification extends PropSpec {
   property("JSON format validation") {
     val js = Json.parse("""{
                         "type": 2,
-                        "id": "GJbbcY4TJkBhSE5QBXdPNZKPFTEUJsA772xPf9UEU5FX",
+                        "id": "e3614bdd1a9185b8bf74e5bf3e5d92a35f1a72782282f4698d3c2b260a8e2cc2",
                         "sender": "thrth152e79nwdg3hjl3rf7uwxv627075zfjez374h0k",
-                        "senderPublicKey": "8XDzkyFJggLsVviN3cdQoJ9LSdFYVx457mq1azfPohR7",
+                        "senderPublicKey": "6fbfed5c2d3ef24b6765cd294500600915a4f5b634f526f6f68a70f5b5dc3a26",
                         "fee": 100000,
                         "chainId": 84,
                         "timestamp": 1526552510868,
-                        "proofs": ["eaV1i3hEiXyYQd6DQY7EnPg9XzpAvB9VA3bnpin2qJe4G36GZXaGnYKCgSf9xiQ61DcAwcBFzjSXh6FwCgazzFz"],
+                        "proofs": ["2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981"],
                         "recipient": "thrth1u3u7e4n4j7zqtrun5g5sgx8kyp74z328jpqatj",
                         "assetId": null,
                         "feeAsset":null,
                         "feeAssetId":null,
                         "amount": 1900000,
-                        "attachment": "4t2Xazb2SX"
+                        "attachment": "66616c6166656c"
                         }
     """)
 
     val recipient = TxHelpers.address(1020)
     val tx = TransferTransaction(
-      PublicKey(ByteStr.decodeBase58("8XDzkyFJggLsVviN3cdQoJ9LSdFYVx457mq1azfPohR7").get),
+      PublicKey(ByteStr.decodeBase16("6fbfed5c2d3ef24b6765cd294500600915a4f5b634f526f6f68a70f5b5dc3a26").get),
       recipient,
       Waves,
       TxPositiveAmount.unsafeFrom(1900000),
       Waves,
       TxPositiveAmount.unsafeFrom(100000),
-      ByteStr.decodeBase58("4t2Xazb2SX").get,
+      ByteStr.decodeBase16("66616c6166656c").get,
       1526552510868L,
-      Proofs(Seq(ByteStr.decodeBase58("eaV1i3hEiXyYQd6DQY7EnPg9XzpAvB9VA3bnpin2qJe4G36GZXaGnYKCgSf9xiQ61DcAwcBFzjSXh6FwCgazzFz").get)),
+      Proofs(
+        Seq(
+          ByteStr
+            .decodeBase16(
+              "2067bd334bdb70dc3252968d8e06970e45e5d6a5abf260097fe4a8a483a549b9ac878c5aad7a2da5ac5ffc9c53ffd3d46fe12dc54c9e06033f10d729d96f4981"
+            )
+            .get
+        )
+      ),
       AddressScheme.current.chainId
     )
 

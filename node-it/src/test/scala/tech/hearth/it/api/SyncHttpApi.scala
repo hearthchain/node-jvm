@@ -413,7 +413,7 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     def broadcastCancelLease(source: SigningKey, leaseId: String, fee: Long = minFee, waitForTx: Boolean = false): Transaction = {
       val tx = TxHelpers
         .leaseCancel(
-          ByteStr.decodeBase58(leaseId).get,
+          ByteStr.decodeBase16(leaseId).get,
           source,
           fee,
           System.currentTimeMillis(),

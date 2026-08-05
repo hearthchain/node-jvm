@@ -1061,7 +1061,7 @@ object OrderbookHistory {
   implicit val byteStrFormat: Format[ByteStr] = Format(
     Reads {
       case JsString(str) =>
-        ByteStr.decodeBase58(str) match {
+        ByteStr.decodeBase16(str) match {
           case Success(x) => JsSuccess(x)
           case Failure(e) => JsError(e.getMessage)
         }

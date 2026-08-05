@@ -69,7 +69,7 @@ case class AssetsApiRoute(
       pathPrefix("balance" / AddrSegment) { address =>
         anyParam("id", limit = settings.assetDetailsLimit) { assetIds =>
           val assetIdsValidated = assetIds.toList
-            .map(assetId => ByteStr.decodeBase58(assetId).fold(_ => Left(assetId), bs => Right(IssuedAsset(bs))).toValidatedNel)
+            .map(assetId => ByteStr.decodeBase16(assetId).fold(_ => Left(assetId), bs => Right(IssuedAsset(bs))).toValidatedNel)
             .sequence
 
           assetIdsValidated match {
@@ -104,7 +104,7 @@ case class AssetsApiRoute(
     }
 
   private def multipleDetails(ids: List[String]): ToResponseMarshallable =
-    ids.map(id => ByteStr.decodeBase58(id).toEither.leftMap(_ => id)).separate match {
+    ids.map(id => ByteStr.decodeBase16(id).toEither.leftMap(_ => id)).separate match {
       case (Nil, assetIds) =>
         assetIds.map(id => assetDetails(IssuedAsset(id))).separate match {
           case (Nil, details) => details
@@ -210,7 +210,7 @@ case class AssetsApiRoute(
   def singleDetails(assetId: IssuedAsset): Route = complete(assetDetails(assetId))
 
   def nft(address: Address, limit: Int, maybeAfter: Option[String]): Route = {
-    val after = maybeAfter.collect { case s if s.nonEmpty => IssuedAsset(ByteStr.decodeBase58(s).getOrElse(throw ApiException(InvalidAssetId))) }
+    val after = maybeAfter.collect { case s if s.nonEmpty => IssuedAsset(ByteStr.decodeBase16(s).getOrElse(throw ApiException(InvalidAssetId))) }
     if (limit > settings.transactionsByAddressLimit) complete(TooBigArrayAllocation)
     else {
       import cats.syntax.either.*

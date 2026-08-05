@@ -4,7 +4,7 @@ import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.api.http.*
 import tech.hearth.api.http.ApiError.TooBigArrayAllocation
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.crypto
 import tech.hearth.settings.RestAPISettings
 import tech.hearth.state.Blockchain
@@ -30,7 +30,7 @@ case class UtilsApiRoute(
   private def seed(length: Int): JsObject = {
     val seed = new Array[Byte](length)
     new SecureRandom().nextBytes(seed) // seed mutated here!
-    Json.obj("seed" -> Base58.encode(seed))
+    Json.obj("seed" -> Base16.encode(seed))
   }
 
   override val route: Route = pathPrefix("utils") {
@@ -52,13 +52,13 @@ case class UtilsApiRoute(
 
   def hashSecure: Route = (path("hash" / "secure") & post) {
     entity(as[String]) { message =>
-      complete(Json.obj("message" -> message, "hash" -> Base58.encode(crypto.secureHash(message))))
+      complete(Json.obj("message" -> message, "hash" -> Base16.encode(crypto.secureHash(message))))
     }
   }
 
   def hashFast: Route = (path("hash" / "fast") & post) {
     entity(as[String]) { message =>
-      complete(Json.obj("message" -> message, "hash" -> Base58.encode(crypto.fastHash(message))))
+      complete(Json.obj("message" -> message, "hash" -> Base16.encode(crypto.fastHash(message))))
     }
   }
 

@@ -91,14 +91,13 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
       // TODO: minimum-fee validation isn't implemented yet (FeeValidation.getMinFee is computed but never checked
       // by TransactionDiffer/CommonValidation); restore this case once fee rules are designed and enforced.
       // (invalidTx(fee = 99999), "Fee .* does not exceed minimal value"),
-      // utils.byteArrayFromString now rejects an over-long base58 string outright (Base58.tryDecodeWithLimit), before
-      // an attachment-specific length check ever runs. Repeated '1' bytes (0x31) base58-encode long enough to trip
-      // that generic gate; repeated 0x01 bytes encode short enough to still reach the attachment-specific check below.
-      (invalidTx(attachment = ("1" * (MaxAttachmentSize + 1)).getBytes(StandardCharsets.UTF_8)), "Can't parse '.*' as base58 encoded byte array"),
-      (
-        invalidTx(attachment = Array.fill(MaxAttachmentSize + 1)(1)),
-        "Invalid attachment. Length \\d+ bytes exceeds maximum of \\d+ bytes."
-      )
+      // utils.byteArrayFromString rejects an over-long hex string outright (Base16.tryDecodeWithLimit), before an
+      // attachment-specific length check ever runs. Hex encodes exactly 2 chars per byte with no compression, and
+      // MaxAttachmentStringSize is sized from the same 140-byte bound as MaxAttachmentSize, so any attachment over
+      // MaxAttachmentSize is also over the generic string-length limit - the attachment-specific "Invalid attachment.
+      // Length ... exceeds maximum" check is unreachable via this endpoint under hex and is exercised directly in
+      // node/tests instead (MassTransferTransactionSpecification).
+      (invalidTx(attachment = ("1" * (MaxAttachmentSize + 1)).getBytes(StandardCharsets.UTF_8)), "Can't parse '.*' as base16 encoded byte array")
     )
 
     for ((tx, diag) <- invalidTxs) {

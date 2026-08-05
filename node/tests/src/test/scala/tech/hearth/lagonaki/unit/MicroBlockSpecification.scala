@@ -95,15 +95,21 @@ class MicroBlockSpecification extends FunSuite {
   }
 
   test("FinalizationVoting serialization matches Go reference output") {
-    def decode(s: String): ByteStr = ByteStr.decodeBase58(s).get
+    def decode(s: String): ByteStr = ByteStr.decodeBase16(s).get
 
-    val referenceId = decode("37ex9gonRZtUddDHgSzSes5Ds9UeQyS74DyAXtGFrDpJnEg7sjGdi2ncaV4rVpZnLboQmid3whcbZUWS49FV3ZCs")
-    val endorsedId  = decode("5GszB5vY2KTxLvYq4zAFQvRkJxv5Rt5BcuTGHZrxgSLTzPtni7eY5k1DN1mJ7mY4ixP5fiHD9z1AfM99AA8yxhjg")
+    val referenceId =
+      decode("69c5be3f0212b385eb66d0e8ab6112460b263c077c447dee64f29e4c9d1c7738fec9cc9164fe05235d9e296d46d5b6e29f361986721966c53dd1350119d18080")
+    val endorsedId =
+      decode("d5c2f16adf3a3408a55436b81b0db0f2f91398f3c65363f29f356efaf7775c0f2858c4e2b25ce004975793da9672041ee4fe601e5f02949d7c7bfa951314e783")
     val aggregatedSig = BlsSignature(
-      decode("nBWfaRLW7EdcwxhDMaXuZZFMhHyowAxY7476rkBsUUeguTXrMSNuTVkuWLmZjRmRfgMXEGuvdHiu1V7joRFSLz3X6MQBF8m88kHJEj6Tc2ktBnMTzihh2JMGpuuWBLSK8rv")
+      decode(
+        "8328e45f6813d989b3a2a4fe80263bce0771789ef949af84b588d0cbaa9f0df20a2e727a4824420bc7ec0fc0bcfb002216677891671c45f5fca64ff53c58148c666d7e61702102791b8a557b1c4351192ef33e1ebd772c7bae2f5765cbc5be8b"
+      )
     ).explicitGet()
     val conflictSig = BlsSignature(
-      decode("RNMTkL736x3TmXfjQufKnxSgySaaoec3WYnxmujcum9BHEmCdjmwvjoUehghqYCWJcNj5CNfb9QdnujV9o2DRitbLgq2bnLdTU5s1DLBWBkVx8mBayvdfx7rPZ3mtUWeh5L")
+      decode(
+        "46bd707f14a1508952a4e82a5a366aa87ab185d86fd4f3198629875703aec6dddc80d95aa344ab4825adbbc474ac48a16fb5c87b16b332a249030012fc6ba6c7f2761e8f8463af1180e5077619bf8f558668fc5abf1936753c087aafd118e7d3"
+      )
     ).explicitGet()
 
     val conflictFinalizedHeight = 12345
@@ -130,15 +136,21 @@ class MicroBlockSpecification extends FunSuite {
 
   test("MicroBlock serialization matches Go reference output (without signature)") {
     pendingUntilFixed {
-      def decode(s: String): ByteStr = ByteStr.decodeBase58(s).get
+      def decode(s: String): ByteStr = ByteStr.decodeBase16(s).get
 
-      val referenceId = decode("37ex9gonRZtUddDHgSzSes5Ds9UeQyS74DyAXtGFrDpJnEg7sjGdi2ncaV4rVpZnLboQmid3whcbZUWS49FV3ZCs")
-      val endorsedId  = decode("5GszB5vY2KTxLvYq4zAFQvRkJxv5Rt5BcuTGHZrxgSLTzPtni7eY5k1DN1mJ7mY4ixP5fiHD9z1AfM99AA8yxhjg")
+      val referenceId =
+        decode("69c5be3f0212b385eb66d0e8ab6112460b263c077c447dee64f29e4c9d1c7738fec9cc9164fe05235d9e296d46d5b6e29f361986721966c53dd1350119d18080")
+      val endorsedId =
+        decode("d5c2f16adf3a3408a55436b81b0db0f2f91398f3c65363f29f356efaf7775c0f2858c4e2b25ce004975793da9672041ee4fe601e5f02949d7c7bfa951314e783")
       val aggregatedSig = BlsSignature(
-        decode("nBWfaRLW7EdcwxhDMaXuZZFMhHyowAxY7476rkBsUUeguTXrMSNuTVkuWLmZjRmRfgMXEGuvdHiu1V7joRFSLz3X6MQBF8m88kHJEj6Tc2ktBnMTzihh2JMGpuuWBLSK8rv")
+        decode(
+          "8328e45f6813d989b3a2a4fe80263bce0771789ef949af84b588d0cbaa9f0df20a2e727a4824420bc7ec0fc0bcfb002216677891671c45f5fca64ff53c58148c666d7e61702102791b8a557b1c4351192ef33e1ebd772c7bae2f5765cbc5be8b"
+        )
       ).explicitGet()
       val conflictSig = BlsSignature(
-        decode("RNMTkL736x3TmXfjQufKnxSgySaaoec3WYnxmujcum9BHEmCdjmwvjoUehghqYCWJcNj5CNfb9QdnujV9o2DRitbLgq2bnLdTU5s1DLBWBkVx8mBayvdfx7rPZ3mtUWeh5L")
+        decode(
+          "46bd707f14a1508952a4e82a5a366aa87ab185d86fd4f3198629875703aec6dddc80d95aa344ab4825adbbc474ac48a16fb5c87b16b332a249030012fc6ba6c7f2761e8f8463af1180e5077619bf8f558668fc5abf1936753c087aafd118e7d3"
+        )
       ).explicitGet()
 
       val conflictFinalizedHeight = 12345
@@ -159,10 +171,12 @@ class MicroBlockSpecification extends FunSuite {
 
       val txBytesBase64 =
         "ClcIVBIg7FlNNgjs8B4KV3mLFwdyeS2xRTKEN3fgrPVEXywc8wQaBBCgjQYgydOsyLgtKAHCBiEKFgoUflp9MfPSElPDgt8e0bJfEbpsP6wSBxCA7oO7rwESQEz8sQx7qThcCFVSdgGm5Dk0VKETkPcJXXJYxnt70rxfsarlD7D4gHB5yTXdDzfndnHAyXH7NwZfzy8YR/CizgY="
-      val transaction        = PBTransactions.vanilla(PBSignedTransaction.parseFrom(Base64.decode(txBytesBase64))).explicitGet()
-      val senderPublicKey    = PublicKey(ByteStr(Base64.decode("xJSp5EjVj+mv4H1T062etqFbqsDYN+7U+sYuhC6feGI=")))
-      val referenceSignature = decode("37ex9gonRZtUddDHgSzSes5Ds9UeQyS74DyAXtGFrDpJnEg7sjGdi2ncaV4rVpZnLboQmid3whcbZUWS49FV3ZCs")
-      val totalResSignature  = decode("3ta68P5LdLHWKuKcDvASsjcCMEQsm1ySrpxYZwqmzCHiAWHgrYJE1ZmaTsh3ytPqY73545EUPDaGfVdrguTqVTHg")
+      val transaction     = PBTransactions.vanilla(PBSignedTransaction.parseFrom(Base64.decode(txBytesBase64))).explicitGet()
+      val senderPublicKey = PublicKey(ByteStr(Base64.decode("xJSp5EjVj+mv4H1T062etqFbqsDYN+7U+sYuhC6feGI=")))
+      val referenceSignature =
+        decode("69c5be3f0212b385eb66d0e8ab6112460b263c077c447dee64f29e4c9d1c7738fec9cc9164fe05235d9e296d46d5b6e29f361986721966c53dd1350119d18080")
+      val totalResSignature =
+        decode("9081a55d1cae10c50c846228736ba7e1d6d8904d80d7a7d6e5413b7b4bdec0894e40dfc8d2296a0c5ebe10ffcd0d2d7d2da81edb1e9041312cd333969ce8c28f")
 
       val microBlock = MicroBlock(
         sender = senderPublicKey,

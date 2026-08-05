@@ -36,17 +36,17 @@ case class SignedTransferV1Request(
 ) {
   def toTx: Either[ValidationError, TransferTransaction] =
     for {
-      _sender <- PublicKey.fromBase58String(senderPublicKey)
-      _assetId <- parseBase58ToAsset(
+      _sender <- PublicKey.fromBase16String(senderPublicKey)
+      _assetId <- parseBase16ToAsset(
         assetId,
         "invalid.assetId"
-      ) // parseBase58ToOption(assetId.filter(_.length > 0), "invalid.assetId", transaction.AssetIdStringLength).map(AssetId.fromCompatId)
-      _feeAssetId <- parseBase58ToAsset(
+      ) // parseBase16ToOption(assetId.filter(_.length > 0), "invalid.assetId", transaction.AssetIdStringLength).map(AssetId.fromCompatId)
+      _feeAssetId <- parseBase16ToAsset(
         feeAssetId,
         "invalid.feeAssetId"
-      ) // parseBase58ToOption(feeAssetId.filter(_.length > 0), "invalid.feeAssetId", transaction.AssetIdStringLength).map(AssetId.fromCompatId)
-      _signature  <- parseBase58(signature, "invalid.signature", SignatureStringLength)
-      _attachment <- parseBase58(attachment.filter(_.length > 0), "invalid.attachment", TransferTransaction.MaxAttachmentStringSize)
+      ) // parseBase16ToOption(feeAssetId.filter(_.length > 0), "invalid.feeAssetId", transaction.AssetIdStringLength).map(AssetId.fromCompatId)
+      _signature  <- parseBase16(signature, "invalid.signature", SignatureStringLength)
+      _attachment <- parseBase16(attachment.filter(_.length > 0), "invalid.attachment", TransferTransaction.MaxAttachmentStringSize)
       _account    <- Address.fromString(recipient)
       tx <- TransferTransaction.create(
         _sender,

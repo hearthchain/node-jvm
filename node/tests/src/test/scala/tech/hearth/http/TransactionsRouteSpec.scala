@@ -5,7 +5,7 @@ import tech.hearth.api.http.ApiError.*
 import tech.hearth.api.http.{CustomJson, RouteTimeout, TransactionsApiRoute}
 import tech.hearth.common.merkle.Merkle
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.defaultSigner
 import tech.hearth.protobuf.transaction.PBTransactions
@@ -86,7 +86,9 @@ class TransactionsRouteSpec
 
   private val route = seal(transactionsApiRoute.route)
 
-  private val invalidBase58Gen = alphaNumStr.map(_ + "0")
+  // Guaranteed even length (HexFormat checks parity before individual characters) and a trailing 'z', which is
+  // never a valid hex digit, so this always fails to decode with "not a hexadecimal digit", not "string length not even".
+  private val invalidHexGen = choose(0, 10).map(n => "1" * (n * 2) + "zz")
 
   routePath("/calculateFee") - {
     "waves" in {
@@ -184,7 +186,7 @@ class TransactionsRouteSpec
     val txByAddressLimit = settings.restAPISettings.transactionsByAddressLimit
     "handles parameter errors with corresponding responses" - {
       "invalid address bytes" in {
-        Get(routePath(s"/address/${Base58.encode(new Array[Byte](24))}/limit/1")) ~> route should produce(InvalidAddress)
+        Get(routePath(s"/address/${Base16.encode(new Array[Byte](24))}/limit/1")) ~> route should produce(InvalidAddress)
       }
 
       // Addresses are bech32 now, so nothing base58-decodes them and a malformed one is simply not an address
@@ -201,10 +203,10 @@ class TransactionsRouteSpec
       }
 
       "invalid after" in {
-        val invalidBase58String = "1" * 23 + "0"
-        Get(routePath(s"/address/$richAddress/limit/$txByAddressLimit?after=$invalidBase58String")) ~> route ~> check {
+        val invalidHexString = "1" * 23 + "z"
+        Get(routePath(s"/address/$richAddress/limit/$txByAddressLimit?after=$invalidHexString")) ~> route ~> check {
           status shouldEqual StatusCodes.BadRequest
-          (responseAs[JsObject] \ "message").as[String] shouldEqual s"Unable to decode transaction id $invalidBase58String"
+          (responseAs[JsObject] \ "message").as[String] shouldEqual s"Unable to decode transaction id $invalidHexString"
         }
       }
     }
@@ -299,8 +301,8 @@ class TransactionsRouteSpec
     }
 
     "handles invalid signature" in {
-      forAll(invalidBase58Gen) { invalidBase58 =>
-        Get(routePath(s"/info/$invalidBase58")) ~> route should produce(InvalidTransactionId("Wrong char"), matchMsg = true)
+      forAll(invalidHexGen) { invalidHex =>
+        Get(routePath(s"/info/$invalidHex")) ~> route should produce(InvalidTransactionId("not a hexadecimal digit"), matchMsg = true)
       }
 
       Get(routePath(s"/info/")) ~> route should produce(InvalidTransactionId("Transaction ID was not specified"))
@@ -311,8 +313,8 @@ class TransactionsRouteSpec
 
   routePath("/status/{signature}") - {
     "handles invalid signature" in {
-      forAll(invalidBase58Gen) { invalidBase58 =>
-        Get(routePath(s"/status?id=$invalidBase58")) ~> route should produce(InvalidIds(Seq(invalidBase58)))
+      forAll(invalidHexGen) { invalidHex =>
+        Get(routePath(s"/status?id=$invalidHex")) ~> route should produce(InvalidIds(Seq(invalidHex)))
       }
     }
 
@@ -364,8 +366,8 @@ class TransactionsRouteSpec
 
     routePath("/unconfirmed/info/{id}") - {
       "handles invalid signature" in {
-        forAll(invalidBase58Gen) { invalidBase58 =>
-          Get(routePath(s"/unconfirmed/info/$invalidBase58")) ~> route should produce(InvalidTransactionId("Wrong char"), matchMsg = true)
+        forAll(invalidHexGen) { invalidHex =>
+          Get(routePath(s"/unconfirmed/info/$invalidHex")) ~> route should produce(InvalidTransactionId("not a hexadecimal digit"), matchMsg = true)
         }
 
         Get(routePath(s"/unconfirmed/info/")) ~> route should produce(InvalidSignature)
@@ -404,50 +406,43 @@ class TransactionsRouteSpec
         }
         (jsObject \ "generationPeriodStart").as[Int] shouldBe 3001
         (jsObject \ "senderPublicKey").as[String] shouldBe PublicKey(sender.publicKey()).toString
-        (jsObject \ "endorserPublicKey").as[String] shouldBe blsKP.publicKey.base58
+        (jsObject \ "endorserPublicKey").as[String] shouldBe blsKP.publicKey.base16
         (jsObject \ "commitmentSignature").asOpt[String] shouldBe defined
       }
     }
   }
 
   routePath("/broadcast") - {
-    "checks the length of base58 attachment in symbols" in {
-      val attachmentSizeInSymbols = TransferTransaction.MaxAttachmentStringSize + 1
-      val attachmentStr           = "1" * attachmentSizeInSymbols
+    "checks the length of hex attachment in symbols" in {
+      // Hex encodes exactly 2 chars per byte, so one byte past the string-length limit is enough to exceed it.
+      val attachmentBytes = Array.fill(TransferTransaction.MaxAttachmentStringSize / 2 + 1)(1: Byte)
+      val attachmentStr   = Base16.encode(attachmentBytes)
 
       val tx = TxHelpers
         .transfer()
-        .copy(attachment = ByteStr(Base58.decode(attachmentStr))) // to bypass a validation
+        .copy(attachment = ByteStr(attachmentBytes)) // to bypass a validation
         .signWith(defaultSigner)
 
-      // Too long to base58-decode at all: the reader reports that rather than measuring the string, see
+      // Too long to hex-decode at all: the reader reports that rather than measuring the string, see
       // `utils.byteArrayFromString`
       Post(routePath("/broadcast"), tx.json()) ~> route should produce(
         WrongJson(
           errors = Seq(
-            JsPath \ "attachment" -> Seq(JsonValidationError(s"Can't parse '$attachmentStr' as base58 encoded byte array"))
+            JsPath \ "attachment" -> Seq(JsonValidationError(s"Can't parse '$attachmentStr' as base16 encoded byte array"))
           ),
           msg = Some("json data validation error, see validationErrors for details")
         )
       )
     }
 
-    "checks the length of base58 attachment in bytes" in {
-      val attachmentSizeInSymbols = TransferTransaction.MaxAttachmentSize + 1
-      val attachmentStr           = "1" * attachmentSizeInSymbols
-      val attachment              = ByteStr(Base58.decode(attachmentStr))
-
-      val tx = TxHelpers
-        .transfer()
-        .copy(attachment = attachment)
-        .signWith(defaultSigner)
-
-      Post(routePath("/broadcast"), tx.json()) ~> route should produce(
-        TooBigInBytes(
-          s"Invalid attachment. Length ${attachment.size} bytes exceeds maximum of ${TransferTransaction.MaxAttachmentSize} bytes."
-        )
-      )
-    }
+    // Base58 could encode an all-zero-byte attachment more compactly than one char per byte (leading zero bytes
+    // collapse to leading '1's), so a byte array one byte over MaxAttachmentSize could still round-trip through a
+    // string under the generic decode-length limit, reaching this endpoint's TooBigInBytes check. Hex encodes
+    // exactly two chars per byte with no such compression, so a byte array over MaxAttachmentSize is always over
+    // the generic string-length limit too (they're sized from the same 140-byte bound, see Base16) and is now
+    // rejected by the JSON reader before ever reaching this check - this scenario is unreachable via this endpoint.
+    // The check itself is still exercised directly in MassTransferTransactionSpecification.
+    "checks the length of hex attachment in bytes" ignore {}
 
     "CommitToGeneration transaction" in {
       val txn = TxHelpers.commitToGeneration(Height(settings.blockchainSettings.functionalitySettings.generationPeriodLength + 1))
@@ -486,7 +481,7 @@ class TransactionsRouteSpec
       proofs.zip(expected).foreach { case (p, (id, hash, index)) =>
         val transactionId    = (p \ "id").as[String]
         val transactionIndex = (p \ "transactionIndex").as[Int]
-        val digests          = (p \ "merkleProof").as[List[String]].map(s => Base58.decode(s))
+        val digests          = (p \ "merkleProof").as[List[String]].map(s => Base16.decode(s))
 
         transactionId shouldEqual id.toString
         transactionIndex shouldEqual index

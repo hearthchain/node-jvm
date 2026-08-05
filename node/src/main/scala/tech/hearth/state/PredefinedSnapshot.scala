@@ -58,7 +58,7 @@ object PredefinedSnapshot {
       _ <- checkNoDuplicates(settings.assets.map(_.id.toString), "asset id")
       assets <- settings.assets.toList.traverse { a =>
         for {
-          issuer <- PublicKey.fromBase58String(a.issuer).leftMap(e => GenericError(s"Predefined snapshot asset ${a.id}: invalid issuer: $e"))
+          issuer <- PublicKey.fromBase16String(a.issuer).leftMap(e => GenericError(s"Predefined snapshot asset ${a.id}: invalid issuer: $e"))
           _ <- Either.cond(a.quantity > 0, (), GenericError(s"Predefined snapshot asset ${a.id}: quantity must be greater than 0, got ${a.quantity}"))
           decimalsError = GenericError(s"Predefined snapshot asset ${a.id}: ${TxDecimals.errMsg}, got ${a.decimals}")
           _ <- Either.cond(a.decimals.isValidByte, (), decimalsError)
@@ -83,7 +83,8 @@ object PredefinedSnapshot {
   ): Either[ValidationError, VectorMap[(Address, Asset), Long]] = {
     val knownAssets = assets.map(_._1).toSet
     for {
-      _ <- checkNoDuplicates(settings.balances.map(_.recipient), "predefined snapshot balance recipient")
+      // Bech32 decoding is case-insensitive, so duplicates are checked on the lowercased form
+      _ <- checkNoDuplicates(settings.balances.map(_.recipient.toLowerCase), "predefined snapshot balance recipient")
       // Waves supply growth is tracked as reward + genesis balance only (see Blockchain.wavesAmount); a predefined
       // snapshot beyond genesis is for minting new assets, not new Waves, so it must not credit any.
       _ <- Either.cond(
@@ -98,11 +99,12 @@ object PredefinedSnapshot {
         for {
           address <- Address.fromString(b.recipient).leftMap(e => GenericError(s"Predefined snapshot balance ${b.recipient}: invalid recipient: $e"))
           _ <- Either.cond(b.waves >= 0, (), GenericError(s"Predefined snapshot balance $address: Waves amount must not be negative, got ${b.waves}"))
-          _ <- checkNoDuplicates(b.assets.keys.toSeq, s"asset id in the balance of $address")
+          // Hex decoding is case-insensitive, so duplicates are checked on the lowercased form
+          _ <- checkNoDuplicates(b.assets.keys.toSeq.map(_.toLowerCase), s"asset id in the balance of $address")
           assetEntries <- b.assets.toList.traverse { case (id, amount) =>
             for {
               assetId <- ByteStr
-                .decodeBase58(id)
+                .decodeBase16(id)
                 .toEither
                 .leftMap(e => GenericError(s"Predefined snapshot balance $address: invalid asset id $id: $e"))
               asset = IssuedAsset(assetId)
@@ -154,21 +156,22 @@ object PredefinedSnapshot {
     if (settings.isEmpty) Right(Seq.empty)
     else
       for {
-        _ <- checkNoDuplicates(settings.map(_.publicKey), "predefined snapshot generator public key")
-        _ <- checkNoDuplicates(settings.map(_.endorserPublicKey), "predefined snapshot generator endorser public key")
-        _ <- checkNoDuplicates(settings.map(_.vrfPublicKey), "predefined snapshot generator VRF public key")
+        // Hex decoding is case-insensitive, so duplicates are checked on the lowercased form
+        _ <- checkNoDuplicates(settings.map(_.publicKey.toLowerCase), "predefined snapshot generator public key")
+        _ <- checkNoDuplicates(settings.map(_.endorserPublicKey.toLowerCase), "predefined snapshot generator endorser public key")
+        _ <- checkNoDuplicates(settings.map(_.vrfPublicKey.toLowerCase), "predefined snapshot generator VRF public key")
         generators <- settings.toList.traverse { g =>
           for {
-            publicKey <- PublicKey.fromBase58String(g.publicKey).leftMap(e => GenericError(s"Predefined snapshot generator ${g.publicKey}: $e"))
+            publicKey <- PublicKey.fromBase16String(g.publicKey).leftMap(e => GenericError(s"Predefined snapshot generator ${g.publicKey}: $e"))
             rawEndorserKey <- ByteStr
-              .decodeBase58(g.endorserPublicKey)
+              .decodeBase16(g.endorserPublicKey)
               .toEither
               .leftMap(e => GenericError(s"Predefined snapshot generator ${g.publicKey}: invalid endorser public key: $e"))
             endorserKey <- BlsPublicKey(rawEndorserKey)
               .leftMap(e => GenericError(s"Predefined snapshot generator ${g.publicKey}: invalid endorser key: $e"))
             _ <- endorserKey.validated.leftMap(e => GenericError(s"Predefined snapshot generator ${g.publicKey}: invalid endorser public key: $e"))
             vrfKey <- ByteStr
-              .decodeBase58(g.vrfPublicKey)
+              .decodeBase16(g.vrfPublicKey)
               .toEither
               .leftMap(e => GenericError(s"Predefined snapshot generator ${g.publicKey}: invalid VRF public key: $e"))
             _ <- Either.cond(
