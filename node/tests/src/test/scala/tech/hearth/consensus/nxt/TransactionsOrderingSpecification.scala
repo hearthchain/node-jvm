@@ -1,12 +1,15 @@
 package tech.hearth.consensus.nxt
 
+import com.google.protobuf.ByteString
 import tech.hearth.common.state.ByteStr
 import tech.hearth.consensus.TransactionsOrdering
+import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
 import tech.hearth.test.PropSpec
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.{Asset, TxHelpers}
 import tech.hearth.crypto.SigningKey
+import tech.hearth.utils.EmptyBlockchain
 
 import scala.util.Random
 
@@ -126,7 +129,27 @@ class TransactionsOrderingSpecification extends PropSpec {
       )
     )
 
-    val sorted = Random.shuffle(correctSeq).sorted(using TransactionsOrdering.InUTXPool(Set.empty))
+    val sorted = Random.shuffle(correctSeq).sorted(using TransactionsOrdering.InUTXPool(Set.empty, EmptyBlockchain))
+
+    sorted shouldBe correctSeq
+  }
+
+  property("TransactionsOrdering.InUTXPool sorts an asset-fee transaction by its waves-equivalent fee density") {
+    val asset  = IssuedAsset(ByteStr.fill(32)(1))
+    val minFee = 1000L
+    val blockchainWithAsset = new EmptyBlockchain {
+      override def assetDescription(id: IssuedAsset): Option[AssetDescription] =
+        if (id == asset) Some(AssetDescription(ByteString.EMPTY, ByteString.EMPTY, 0, BigInt(1), 0, Height(1), MinAssetFee.unsafeFrom(minFee)))
+        else None
+    }
+
+    // fee = 10 * minFee in `asset` converts to (fee * FeeUnit / minFee) = 10 * FeeUnit waves-equivalent, dwarfing the
+    // 124-wavelet Waves fee below - the asset-fee tx must sort first, not last as a zero-fee tx would.
+    val assetFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, minFee * 10, asset, ByteStr.empty, 1)
+    val wavesFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, 124L, Waves, ByteStr.empty, 2)
+    val correctSeq = Seq(assetFeeTx, wavesFeeTx)
+
+    val sorted = Random.shuffle(correctSeq).sorted(using TransactionsOrdering.InUTXPool(Set.empty, blockchainWithAsset))
 
     sorted shouldBe correctSeq
   }

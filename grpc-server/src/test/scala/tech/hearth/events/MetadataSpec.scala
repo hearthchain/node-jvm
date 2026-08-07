@@ -29,7 +29,7 @@ class MetadataSpec extends FreeSpec with WithBUDomain {
         AddrWithBalance(matcher.toAddress, 100.waves),
         AddrWithBalance(leased.toAddress, 100.waves)
       ),
-      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 8, 1000L))
+      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 8, 1000L, 100000L))
     ) { (d, r) =>
       val transfer = TxHelpers.transfer(issuer, matcher.toAddress, 1.waves)
       val lease    = TxHelpers.lease(issuer, leased.toAddress, 1.waves)

@@ -1,6 +1,7 @@
 package tech.hearth.state
 
 import com.google.common.primitives.Ints
+import tech.hearth.TestValues
 import tech.hearth.account.PublicKey
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
@@ -16,6 +17,7 @@ import tech.hearth.settings.{
   GenesisAssetSettings,
   GenesisBalanceSettings,
   GenesisGeneratorSettings,
+  MinAssetFeeSettings,
   PredefinedSnapshotSettings,
   WavesSettings
 }
@@ -52,13 +54,14 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       )
     )
 
-  private def assetSettings(quantity: Long, reissuable: Boolean = false): GenesisAssetSettings =
+  private def assetSettings(quantity: Long, reissuable: Boolean = false, minFee: Long = TestValues.fee): GenesisAssetSettings =
     GenesisAssetSettings(
       id = assetId,
       issuer = ByteStr(issuer.publicKey()).toString,
       name = "Genesis",
       decimals = 2,
       quantity = quantity,
+      minFee = minFee,
       description = "Issued in the genesis block",
       reissuable = reissuable
     )
@@ -89,9 +92,8 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
 
         description.totalVolume shouldBe BigInt(1000)
         description.decimals shouldBe 2
-        description.reissuable shouldBe false
-        description.issuer shouldBe PublicKey(issuer.publicKey())
         description.issueHeight shouldBe Height(1)
+        description.minAssetFee.value shouldBe TestValues.fee
 
         d.blockchain.balance(address(1), asset) shouldBe 600L
         d.blockchain.balance(address(2), asset) shouldBe 400L
@@ -115,8 +117,8 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
         val persisted = d.rocksDBWriter.assetDescription(asset).value
         persisted.totalVolume shouldBe BigInt(1000)
         persisted.decimals shouldBe 2
-        persisted.issuer shouldBe PublicKey(issuer.publicKey())
         persisted.issueHeight shouldBe Height(1)
+        persisted.minAssetFee.value shouldBe TestValues.fee
 
         d.rocksDBWriter.balance(address(1), asset) shouldBe 600L
         d.rocksDBWriter.balance(address(2), asset) shouldBe 400L
@@ -394,6 +396,60 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       ) { d =>
         d.appendBlock() // height 2
         d.appendBlockE() should produce("an asset with this id already exists")
+      }
+    }
+
+    "changes an existing asset's minAssetFee at a later height" in {
+      val asset     = IssuedAsset(assetId)
+      val newMinFee = TestValues.fee * 2
+      val snapshotAtHeight3 =
+        PredefinedSnapshotSettings(height = 3, minAssetFees = Seq(MinAssetFeeSettings(assetId, newMinFee)))
+      val withAssetAtGenesis = settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 1000)))
+      val settings = withAssetAtGenesis.copy(blockchainSettings =
+        withAssetAtGenesis.blockchainSettings.copy(predefinedSnapshots =
+          withAssetAtGenesis.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
+        )
+      )
+
+      withDomain(settings, balances = Seq(AddrWithBalance(address(1), 1.waves, Map(asset -> 1000L)))) { d =>
+        d.blockchain.assetDescription(asset).value.minAssetFee.value shouldBe TestValues.fee
+
+        d.appendBlock() // height 2
+        d.blockchain.assetDescription(asset).value.minAssetFee.value shouldBe TestValues.fee
+
+        d.appendBlock() // height 3
+        d.blockchain.assetDescription(asset).value.minAssetFee.value shouldBe newMinFee
+      }
+    }
+
+    "rejects a non-positive minFee change" in {
+      val snapshotAtHeight3 =
+        PredefinedSnapshotSettings(height = 3, minAssetFees = Seq(MinAssetFeeSettings(assetId, 0)))
+      val withAssetAtGenesis = settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 1000)))
+      val settings = withAssetAtGenesis.copy(blockchainSettings =
+        withAssetAtGenesis.blockchainSettings.copy(predefinedSnapshots =
+          withAssetAtGenesis.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
+        )
+      )
+
+      withDomain(settings, balances = Seq(AddrWithBalance(address(1), 1.waves, Map(IssuedAsset(assetId) -> 1000L)))) { d =>
+        d.appendBlock() // height 2
+        d.appendBlockE() should produce("minFee must be positive")
+      }
+    }
+
+    "rejects a minFee change for an unknown asset" in {
+      val unknownAssetId    = ByteStr.fill(32)(8)
+      val snapshotAtHeight3 = PredefinedSnapshotSettings(height = 3, minAssetFees = Seq(MinAssetFeeSettings(unknownAssetId, TestValues.fee)))
+      val settings = TransactionStateSnapshot.copy(blockchainSettings =
+        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
+          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
+        )
+      )
+
+      withDomain(settings, Seq(address(1) -> 1.waves)) { d =>
+        d.appendBlock() // height 2
+        d.appendBlockE() should produce("does not exist")
       }
     }
 

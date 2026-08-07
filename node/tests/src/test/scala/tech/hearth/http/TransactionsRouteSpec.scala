@@ -61,7 +61,8 @@ class TransactionsRouteSpec
           issuer = ByteStr(tradedAssetIssuer.publicKey()).toString,
           name = "test",
           decimals = 8,
-          quantity = tradedAssetQuantity
+          quantity = tradedAssetQuantity,
+          minFee = TestValues.fee
         )
       )
   }

@@ -2,7 +2,7 @@ package tech.hearth.state
 
 import cats.implicits.catsSyntaxSemigroup
 import cats.syntax.either.*
-import com.google.common.primitives.{Ints, Longs, UnsignedBytes}
+import com.google.common.primitives.{Longs, UnsignedBytes}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto
@@ -58,18 +58,16 @@ object TxStateSnapshotHashBuilder {
     }
 
     snapshot.assetStatics.foreach { case (asset, (assetInfo, _)) =>
-      changedKeys += asset.id.arr ++ assetInfo.issuer.arr ++ Array(assetInfo.decimals.toByte) ++ booleanToBytes(assetInfo.nft)
+      changedKeys += asset.id.arr ++
+        assetInfo.issuer.arr ++
+        Array(assetInfo.decimals.toByte) ++
+        booleanToBytes(assetInfo.nft) ++
+        assetInfo.name.toByteArray ++
+        assetInfo.description.toByteArray
     }
 
     snapshot.assetVolumes.foreach { case (asset, volume) =>
-      changedKeys += asset.id.arr ++ booleanToBytes(volume.isReissuable) ++ volume.volume.toByteArray
-    }
-
-    snapshot.assetNamesAndDescriptions.foreach { case (asset, assetInfo) =>
-      changedKeys += asset.id.arr ++
-        assetInfo.name.toByteArray ++
-        assetInfo.description.toByteArray ++
-        Ints.toByteArray(assetInfo.lastUpdatedAt.toInt)
+      changedKeys += asset.id.arr ++ volume.volume.toByteArray
     }
 
     snapshot.nextCommittedGenerators.foreach { gc =>

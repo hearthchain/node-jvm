@@ -6,6 +6,7 @@ import tech.hearth.account.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.*
+import tech.hearth.transaction.Asset.Waves
 import tech.hearth.transaction.TxValidationError.*
 import tech.hearth.transaction.serialization.impl.MassTransferTxSerializer
 import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
@@ -21,13 +22,14 @@ case class MassTransferTransaction(
     assetId: Asset,
     transfers: Seq[ParsedTransfer],
     fee: TxPositiveAmount,
+    feeAssetId: Asset,
     timestamp: TxTimestamp,
     attachment: ByteStr,
     proofs: Proofs,
     chainId: Byte
 ) extends Transaction(TransactionType.MassTransfer),
       ProvenTransaction,
-      TxWithFee.InWaves,
+      TxWithFee.InCustomAsset,
       FastHashId {
   override type T = MassTransferTransaction
 
@@ -69,11 +71,12 @@ object MassTransferTransaction {
       timestamp: TxTimestamp,
       attachment: ByteStr,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId
+      chainId: Byte = AddressScheme.current.chainId,
+      feeAssetId: Asset = Waves
   ): Either[ValidationError, MassTransferTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- MassTransferTransaction(sender, assetId, transfers, fee, timestamp, attachment, proofs, chainId).validatedEither
+      tx  <- MassTransferTransaction(sender, assetId, transfers, fee, feeAssetId, timestamp, attachment, proofs, chainId).validatedEither
     } yield tx
 
   def parseTransfersList(transfers: List[Transfer]): Validation[List[ParsedTransfer]] =

@@ -7,7 +7,9 @@ import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.bls.BlsPublicKey
 import tech.hearth.state.GeneratorIndex
-import tech.hearth.transaction.{Asset, BlockchainUpdater}
+import tech.hearth.transaction.{Asset, BlockchainUpdater, RefinedTypeOps}
+import eu.timepit.refined.api.Refined
+import eu.timepit.refined.numeric.Positive
 import play.api.libs.json.*
 
 import scala.annotation.targetName
@@ -100,6 +102,9 @@ package object state {
   type CompleteBlockchainUpdater = Blockchain & BlockchainUpdater & NG
 
   opaque type TransactionId = ByteStr
+
+  type MinAssetFee = Long Refined Positive
+  object MinAssetFee extends RefinedTypeOps[MinAssetFee, Long]
 
   opaque type BlockFee = Portfolio
   object BlockFee {

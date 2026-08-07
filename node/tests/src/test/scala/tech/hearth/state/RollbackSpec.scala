@@ -1,5 +1,6 @@
 package tech.hearth.state
 
+import tech.hearth.TestValues
 import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.api.common.LeaseInfo
 import tech.hearth.api.common.LeaseInfo.Status.Active
@@ -195,7 +196,8 @@ class RollbackSpec extends FreeSpec with WithDomain {
             issuer = ByteStr(sender.publicKey()).toString,
             name = "Rollback",
             decimals = 2,
-            quantity = assetAmount
+            quantity = assetAmount,
+            minFee = TestValues.fee
           )
         )
       ) { d =>

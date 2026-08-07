@@ -1,8 +1,9 @@
 package tech.hearth
 
-import tech.hearth.account.{Address, PublicKey}
+import com.google.protobuf.ByteString
+import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
-import tech.hearth.state.{AssetDescription, Height, TransactionId}
+import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
 import tech.hearth.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.{TransactionType, TxHelpers}
@@ -18,17 +19,15 @@ object TestValues {
 
   val commitToGenerationFee: Long = FeeConstants(TransactionType.CommitToGeneration) * FeeUnit
 
+  val minAssetFee: MinAssetFee = MinAssetFee.unsafeFrom(fee)
+
   val assetDescription: AssetDescription = AssetDescription(
-    TransactionId(asset.id),
-    PublicKey(TxHelpers.defaultSigner.publicKey),
-    null,
-    null,
+    ByteString.EMPTY,
+    ByteString.EMPTY,
     0,
-    reissuable = true,
     BigInt(1),
-    Height(1),
-    nft = false,
     0,
-    Height(1)
+    Height(1),
+    minAssetFee
   )
 }

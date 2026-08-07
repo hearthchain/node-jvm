@@ -109,7 +109,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     withDomain(
       DomainPresets.TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(issuer.toAddress, assets = Map(asset -> 1L)),
-      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 0, 1L))
+      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 0, 1L, 100000L))
     ) { d =>
       val grpcApi = getGrpcApi(d)
 

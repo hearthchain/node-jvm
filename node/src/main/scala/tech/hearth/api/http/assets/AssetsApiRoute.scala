@@ -42,7 +42,6 @@ case class AssetsApiRoute(
     serverRequestTimeout: FiniteDuration,
     wallet: Wallet,
     blockchain: Blockchain,
-    compositeBlockchain: () => Blockchain,
     time: Time,
     commonAccountApi: CommonAccountsApi,
     commonAssetsApi: CommonAssetsApi,
@@ -92,9 +91,7 @@ case class AssetsApiRoute(
           singleDetails(assetId)
         }
       } ~ get {
-        (path("nft" / AddrSegment / "limit" / IntNumber) & parameter("after".as[String].?)) { (address, limit, maybeAfter) =>
-          nft(address, limit, maybeAfter)
-        } ~ pathPrefix(AssetId / "distribution") { assetId =>
+        pathPrefix(AssetId / "distribution") { assetId =>
           pathEndOrSingleSlash(balanceDistribution(assetId)) ~
             (path(IntNumber / "limit" / IntNumber) & parameter("after".?)) { (height, limit, maybeAfter) =>
               balanceDistributionAtHeight(assetId, height, limit, maybeAfter)
@@ -127,7 +124,6 @@ case class AssetsApiRoute(
           case Some(CommonAssetsApi.AssetInfo(assetInfo)) =>
             AssetInfo.FullAssetInfo(
               assetId = asset.id.toString,
-              reissuable = assetInfo.reissuable,
               quantity = BigDecimal(assetInfo.totalVolume),
               balance = balance,
               sequenceInBlock = assetInfo.sequenceInBlock
@@ -209,27 +205,6 @@ case class AssetsApiRoute(
 
   def singleDetails(assetId: IssuedAsset): Route = complete(assetDetails(assetId))
 
-  def nft(address: Address, limit: Int, maybeAfter: Option[String]): Route = {
-    val after = maybeAfter.collect { case s if s.nonEmpty => IssuedAsset(ByteStr.decodeBase16(s).getOrElse(throw ApiException(InvalidAssetId))) }
-    if (limit > settings.transactionsByAddressLimit) complete(TooBigArrayAllocation)
-    else {
-      import cats.syntax.either.*
-      implicit val jsonStreamingSupport: ToResponseMarshaller[Source[AssetDetails, NotUsed]] = jacksonStreamMarshaller()(using assetDetailsSerializer)
-
-      routeTimeout.executeStreamed {
-        commonAccountApi
-          .nftList(address, after)
-          .concatMapIterable { a =>
-            AssetsApiRoute
-              .getAssetDetails(a)
-              .valueOr(err => throw new IllegalArgumentException(err))
-          }
-          .take(limit)
-          .toListL
-      }(identity)
-    }
-  }
-
   private def balanceJson(address: Address, assetId: IssuedAsset): JsObject =
     Json.obj(
       "address" -> address,
@@ -296,25 +271,6 @@ object AssetsApiRoute {
     } yield limit
   }
 
-  def getAssetDetails(assets: Seq[(IssuedAsset, AssetDescription)]): Either[String, Seq[AssetDetails]] = {
-    Right(assets.map { case (id, description) =>
-      AssetDetails(
-        assetId = id.id.toString,
-        issueHeight = description.issueHeight,
-        issueTimestamp = 0L,
-        issuer = description.issuer.toAddress.toString,
-        issuerPublicKey = description.issuer.toString,
-        name = description.name.toStringUtf8,
-        description = description.description.toStringUtf8,
-        decimals = description.decimals,
-        reissuable = description.reissuable,
-        quantity = BigDecimal(description.totalVolume),
-        originTransactionId = description.originTransactionId.toString,
-        sequenceInBlock = description.sequenceInBlock
-      )
-    })
-  }
-
   def jsonDetails(id: IssuedAsset, description: AssetDescription): Either[String, JsObject] =
     Right(
       JsObject(
@@ -322,42 +278,22 @@ object AssetsApiRoute {
           "assetId"     -> JsString(id.id.toString),
           "issueHeight" -> JsNumber(description.issueHeight.toInt),
           // Nothing issues an asset via a transaction any more (see CLAUDE.md's Transaction JSON notes), so there's
-          // no real issue timestamp to report; kept as a field for API compatibility, always 0, matching
-          // getAssetDetails/AssetDetails below.
-          "issueTimestamp"      -> JsNumber(0),
-          "issuer"              -> JsString(description.issuer.toAddress.toString),
-          "issuerPublicKey"     -> JsString(description.issuer.toString),
-          "name"                -> JsString(description.name.toStringUtf8),
-          "description"         -> JsString(description.description.toStringUtf8),
-          "decimals"            -> JsNumber(description.decimals),
-          "reissuable"          -> JsBoolean(description.reissuable),
-          "quantity"            -> JsNumber(BigDecimal(description.totalVolume)),
-          "originTransactionId" -> JsString(description.originTransactionId.toString),
-          "sequenceInBlock"     -> JsNumber(description.sequenceInBlock)
+          // no real issue timestamp to report; kept as a field for API compatibility, always 0.
+          "issueTimestamp"  -> JsNumber(0),
+          "name"            -> JsString(description.name.toStringUtf8),
+          "description"     -> JsString(description.description.toStringUtf8),
+          "decimals"        -> JsNumber(description.decimals),
+          "quantity"        -> JsNumber(BigDecimal(description.totalVolume)),
+          "sequenceInBlock" -> JsNumber(description.sequenceInBlock),
+          "minAssetFee"     -> JsNumber(description.minAssetFee.value)
         )
       )
     )
-
-  case class AssetDetails(
-      assetId: String,
-      issueHeight: Height,
-      issueTimestamp: Long,
-      issuer: String,
-      issuerPublicKey: String,
-      name: String,
-      description: String,
-      decimals: Int,
-      reissuable: Boolean,
-      quantity: BigDecimal,
-      originTransactionId: String,
-      sequenceInBlock: Int
-  )
 
   sealed trait AssetInfo
   object AssetInfo {
     case class FullAssetInfo(
         assetId: String,
-        reissuable: Boolean,
         quantity: BigDecimal,
         balance: Long,
         sequenceInBlock: Int
@@ -366,31 +302,12 @@ object AssetsApiRoute {
     case class AssetId(assetId: String) extends AssetInfo
   }
 
-  def assetDetailsSerializer(numbersAsString: Boolean): JsonSerializer[AssetDetails] =
-    (details: AssetDetails, gen: JsonGenerator, _: SerializerProvider) => {
-      gen.writeStartObject()
-      gen.writeStringField("assetId", details.assetId)
-      gen.writeNumberField("issueHeight", details.issueHeight.toInt, numbersAsString)
-      gen.writeNumberField("issueTimestamp", details.issueTimestamp, numbersAsString)
-      gen.writeStringField("issuer", details.issuer)
-      gen.writeStringField("issuerPublicKey", details.issuerPublicKey)
-      gen.writeStringField("name", details.name)
-      gen.writeStringField("description", details.description)
-      gen.writeNumberField("decimals", details.decimals, numbersAsString)
-      gen.writeBooleanField("reissuable", details.reissuable)
-      gen.writeNumberField("quantity", details.quantity, numbersAsString)
-      gen.writeStringField("originTransactionId", details.originTransactionId)
-      gen.writeNumberField("sequenceInBlock", details.sequenceInBlock, numbersAsString)
-      gen.writeEndObject()
-    }
-
   def assetInfoSerializer(numbersAsString: Boolean): JsonSerializer[AssetInfo] =
     (value: AssetInfo, gen: JsonGenerator, _: SerializerProvider) => {
       value match {
         case info: AssetInfo.FullAssetInfo =>
           gen.writeStartObject()
           gen.writeStringField("assetId", info.assetId)
-          gen.writeBooleanField("reissuable", info.reissuable)
           gen.writeNumberField("quantity", info.quantity, numbersAsString)
           gen.writeNumberField("balance", info.balance, numbersAsString)
           gen.writeNumberField("sequenceInBlock", info.sequenceInBlock, numbersAsString)

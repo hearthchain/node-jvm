@@ -464,7 +464,6 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           serverRequestTimeout,
           wallet,
           blockchainUpdater,
-          () => blockchainUpdater.snapshotBlockchain,
           time,
           extensionContext.accountsApi,
           extensionContext.assetsApi,

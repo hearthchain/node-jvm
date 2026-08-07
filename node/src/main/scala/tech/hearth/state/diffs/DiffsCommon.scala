@@ -5,31 +5,11 @@ import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.{Blockchain, Height, LeaseBalance, LeaseDetails, LeaseStaticInfo, Portfolio, StateSnapshot, TransactionId}
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.Waves
 import tech.hearth.transaction.TxPositiveAmount
 import tech.hearth.transaction.TxValidationError.GenericError
 
 object DiffsCommon {
-  def validateAsset(
-      blockchain: Blockchain,
-      asset: IssuedAsset,
-      sender: Address,
-      issuerOnly: Boolean
-  ): Either[ValidationError, Unit] = {
-    @inline
-    def validIssuer(issuerOnly: Boolean, sender: Address, issuer: Address) =
-      !issuerOnly || sender == issuer
-
-    blockchain.assetDescription(asset) match {
-      case Some(ad) if !validIssuer(issuerOnly, sender, ad.issuer.toAddress) =>
-        Left(GenericError("Asset was issued by other address"))
-      case None =>
-        Left(GenericError("Referenced assetId not found"))
-      case Some(_) =>
-        Right({})
-    }
-  }
-
   def processLease(
       blockchain: Blockchain,
       amount: TxPositiveAmount,

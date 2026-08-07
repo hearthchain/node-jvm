@@ -9,7 +9,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.metrics.TxProcessingStats
 import tech.hearth.metrics.TxProcessingStats.measureForType
 import tech.hearth.state.TxMeta.Status
-import tech.hearth.state.{Blockchain, NewTransactionInfo, Portfolio, Sponsorship, StateSnapshot}
+import tech.hearth.state.{Blockchain, NewTransactionInfo, Portfolio, StateSnapshot}
 import tech.hearth.transaction.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
 import tech.hearth.transaction.TxValidationError.*
@@ -178,21 +178,16 @@ object TransactionDiffer {
           case (Waves, fee) => Map[Address, Portfolio](ptx.sender.toAddress -> Portfolio(-fee)).asRight
           case (asset @ IssuedAsset(_), fee) =>
             for {
-              assetInfo <- blockchain
+              minFee <- blockchain
                 .assetDescription(asset)
                 .toRight(GenericError(s"Asset $asset does not exist, cannot be used to pay fees"))
-              wavesFee <- Either.cond(
-                false,
-                Sponsorship.toWaves(fee, 0),
-                GenericError(s"Asset $asset is not sponsored, cannot be used to pay fees")
+                .map(_.minAssetFee)
+              _ <- Either.cond(
+                minFee.value <= fee,
+                (),
+                GenericError(s"Fee $fee in asset $asset does not exceed minimal value of ${minFee.value}")
               )
-              portfolios <- Portfolio
-                .combine(
-                  Map(ptx.sender.toAddress       -> Portfolio.build(asset, -fee)),
-                  Map(assetInfo.issuer.toAddress -> Portfolio.build(-wavesFee, asset, fee))
-                )
-                .leftMap(GenericError(_))
-            } yield portfolios
+            } yield Map(ptx.sender.toAddress -> Portfolio.build(asset, -fee))
         }
       case _ => UnsupportedTransactionType.asLeft
     }

@@ -65,7 +65,7 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
     "should return order ids in exchange metadata" in withDomainAndRepo(
       DomainPresets.RideV4,
       balances = Seq(AddrWithBalance(TxHelpers.secondAddress, assets = Map(tradeAsset -> 1L))),
-      assets = Seq(GenesisAssetSettings(tradeAsset.id, Base16.encode(TxHelpers.secondSigner.publicKey()), "asset", 8, 1L))
+      assets = Seq(GenesisAssetSettings(tradeAsset.id, Base16.encode(TxHelpers.secondSigner.publicKey()), "asset", 8, 1L, TestValues.fee))
     ) { case (d, repo) =>
       val subscription = repo.createFakeObserver(SubscribeRequest.of(1, 0))
       val exchange =

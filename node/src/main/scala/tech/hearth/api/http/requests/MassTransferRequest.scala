@@ -16,6 +16,7 @@ object MassTransferRequest {
         (JsPath \ "assetId").readNullable[Asset] and
         (JsPath \ "transfers").read[List[Transfer]] and
         (JsPath \ "fee").read[Long] and
+        (JsPath \ "feeAssetId").readNullable[Asset] and
         (JsPath \ "timestamp").read[Long] and
         (JsPath \ "attachment").readWithDefault(ByteStr.empty) and
         (JsPath \ "proofs").readWithDefault(Proofs.empty)
@@ -29,6 +30,7 @@ case class MassTransferRequest(
     assetId: Option[Asset],
     transfers: List[Transfer],
     fee: Long,
+    feeAssetId: Option[Asset],
     timestamp: Long,
     attachment: ByteStr = ByteStr.empty,
     proofs: Proofs
@@ -44,7 +46,8 @@ case class MassTransferRequest(
         fee,
         timestamp,
         attachment,
-        proofs
+        proofs,
+        feeAssetId = feeAssetId.getOrElse(Asset.Waves)
       )
     } yield t
 }

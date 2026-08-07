@@ -3,62 +3,16 @@ package tech.hearth.api.common
 import com.google.common.collect.AbstractIterator
 import com.google.common.primitives.Ints
 import tech.hearth.account.Address
-import tech.hearth.api.common.NFTIterator.BatchSize
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
-import tech.hearth.database.{AddressId, CurrentBalance, DBResource, Key, KeyTag, Keys, readCurrentBalance}
-import tech.hearth.state.{AssetDescription, StateSnapshot}
+import tech.hearth.database.{AddressId, DBResource, KeyTag, Keys, readCurrentBalance}
+import tech.hearth.state.StateSnapshot
 import tech.hearth.transaction.Asset
 import tech.hearth.transaction.Asset.IssuedAsset
 
 import java.nio.ByteBuffer
 import scala.collection.immutable.VectorMap
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
-
-class NFTIterator(addressId: AddressId, maybeAfter: Option[IssuedAsset], resource: DBResource) extends AbstractIterator[Seq[(IssuedAsset, Long)]] {
-  private val prefixBytes: Array[Byte] = KeyTag.NftPossession.prefixBytes ++ addressId.toByteArray
-
-  resource.withSafePrefixIterator { dbIterator =>
-    dbIterator.seek(prefixBytes)
-
-    for (after <- maybeAfter) {
-      @inline
-      def skipEntry(key: Array[Byte]): Boolean =
-        !key.endsWith(after.id.arr)
-
-      while (dbIterator.isValid && skipEntry(dbIterator.key()))
-        dbIterator.next()
-      if (dbIterator.isValid && !skipEntry(dbIterator.key()))
-        dbIterator.next()
-    }
-  }(())
-
-  override def computeNext(): Seq[(IssuedAsset, Long)] =
-    resource.withSafePrefixIterator { dbIterator =>
-      val keysBuffer   = new ArrayBuffer[Key[CurrentBalance]]()
-      val assetsBuffer = new ArrayBuffer[IssuedAsset]()
-      while (dbIterator.isValid && keysBuffer.length < BatchSize) {
-        val assetId = IssuedAsset(ByteStr(dbIterator.key().takeRight(crypto.DigestLength)))
-        keysBuffer.addOne(Keys.assetBalance(addressId, assetId))
-        assetsBuffer.addOne(assetId)
-        dbIterator.next()
-      }
-      if (keysBuffer.nonEmpty) {
-        resource
-          .multiGet(keysBuffer, 16)
-          .zip(assetsBuffer)
-          .map { case (curBalance, asset) =>
-            asset -> curBalance.balance
-          }
-          .toSeq
-      } else endOfData()
-    }(endOfData())
-}
-
-object NFTIterator {
-  val BatchSize = 1000
-}
 
 class AssetBalanceIterator(addressId: AddressId, resource: DBResource) extends AbstractIterator[Seq[(IssuedAsset, Long)]] {
   private val prefixBytes: Array[Byte] = KeyTag.AssetBalance.prefixBytes ++ addressId.toByteArray
@@ -118,33 +72,10 @@ class BalanceIterator(
 }
 
 object AddressPortfolio {
-  def nftIterator(
-      resource: DBResource,
-      address: Address,
-      snapshot: StateSnapshot,
-      maybeAfter: Option[IssuedAsset],
-      loadAssetDescription: IssuedAsset => Option[AssetDescription]
-  ): Iterator[Seq[(IssuedAsset, AssetDescription)]] =
-    new BalanceIterator(
-      address,
-      resource
-        .get(Keys.addressId(address))
-        .fold(Iterator.empty[Seq[(IssuedAsset, Long)]])(addressId => new NFTIterator(addressId, maybeAfter, resource).asScala),
-      snapshot.balances
-    ).asScala
-      .map { assets =>
-        maybeAfter
-          .filter(after => assets.exists(_._1 == after))
-          .fold(assets)(after => assets.dropWhile(_._1 != after).drop(1))
-          .collect { case (asset, balance) if balance > 0 => asset }
-          .flatMap(asset => loadAssetDescription(asset).collect { case description if description.nft => asset -> description })
-      }
-
   def assetBalanceIterator(
       resource: DBResource,
       address: Address,
-      snapshot: StateSnapshot,
-      includeAsset: IssuedAsset => Boolean
+      snapshot: StateSnapshot
   ): Iterator[Seq[(IssuedAsset, Long)]] =
     new BalanceIterator(
       address,
@@ -154,6 +85,6 @@ object AddressPortfolio {
       snapshot.balances
     ).asScala
       .map(
-        _.filter { case (asset, balance) => includeAsset(asset) && balance > 0 }
+        _.filter { case (_, balance) => balance > 0 }
       )
 }

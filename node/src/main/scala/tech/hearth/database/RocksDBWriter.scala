@@ -1,6 +1,5 @@
 package tech.hearth.database
 
-import cats.implicits.catsSyntaxNestedBitraverse
 import com.google.common.cache.CacheBuilder
 import com.google.common.collect.MultimapBuilder
 import com.google.common.hash.{BloomFilter, Funnels}
@@ -307,12 +306,10 @@ class RocksDBWriter(
 
   private def appendBalances(
       balances: Map[(AddressId, Asset), (CurrentBalance, BalanceNode)],
-      assetStatics: Map[IssuedAsset, (AssetStaticInfo, Int)],
       rw: RW
   ): Unit = {
     var changedWavesBalances = List.empty[AddressId]
     val changedAssetBalances = MultimapBuilder.hashKeys().hashSetValues().build[IssuedAsset, java.lang.Long]()
-    val updatedNftLists      = MultimapBuilder.hashKeys().linkedHashSetValues().build[java.lang.Long, IssuedAsset]()
 
     for (((addressId, asset), (currentBalance, balanceNode)) <- balances) {
       asset match {
@@ -324,22 +321,6 @@ class RocksDBWriter(
           changedAssetBalances.put(a, addressId.toLong)
           rw.put(Keys.assetBalance(addressId, a), currentBalance)
           rw.put(Keys.assetBalanceAt(addressId, a, currentBalance.height), balanceNode)
-
-          val isNFT = currentBalance.balance > 0 && assetStatics
-            .get(a)
-            .map(_._1.nft)
-            .orElse(assetDescription(a).map(_.nft))
-            .getOrElse(false)
-          if (currentBalance.prevHeight == Height(0) && isNFT) updatedNftLists.put(addressId.toLong, a)
-      }
-    }
-
-    for ((addressId, nftIds) <- updatedNftLists.asMap().asScala) {
-      val kCount           = Keys.nftCount(AddressId(addressId.toLong), rdb.apiHandle)
-      val previousNftCount = rw.get(kCount)
-      rw.put(kCount, previousNftCount + nftIds.size())
-      for ((id, idx) <- nftIds.asScala.zipWithIndex) {
-        rw.put(Keys.nftAt(AddressId(addressId.toLong), previousNftCount + idx, id, rdb.apiHandle), Some(()))
       }
     }
 
@@ -464,7 +445,7 @@ class RocksDBWriter(
 
       val threshold = newSafeRollbackHeight
 
-      appendBalances(balances, snapshot.assetStatics, rw)
+      appendBalances(balances, rw)
 
       val changedAddresses = (addressTransactions.asScala.keys ++ balances.keys.map(_._1)).toSet
       rw.put(Keys.changedAddresses(Height(height)), changedAddresses.toSeq)
@@ -482,37 +463,30 @@ class RocksDBWriter(
 
       for ((asset, (assetStatic, assetNum)) <- snapshot.assetStatics) {
         val pbAssetStatic = StaticAssetInfo(
-          assetStatic.source.toByteString,
           assetStatic.issuer.toByteString,
           assetStatic.decimals,
           assetStatic.nft,
           assetNum,
           height,
-          asset.id.toByteString
+          asset.id.toByteString,
+          assetStatic.name,
+          assetStatic.description
         )
         rw.put(Keys.assetStaticInfo(asset), Some(pbAssetStatic))
       }
 
-      val updatedAssetSet = snapshot.assetVolumes.keySet ++ snapshot.assetNamesAndDescriptions.keySet
-      for (asset <- updatedAssetSet) {
-        lazy val dbInfo = rw.fromHistory(Keys.assetDetailsHistory(asset), Keys.assetDetails(asset))
-        val volume =
-          snapshot.assetVolumes
-            .get(asset)
-            .map(v => AssetVolumeInfo(v.isReissuable, BigInt(v.volume.toByteArray)))
-            .orElse(dbInfo.map(_._2))
-        val nameAndDescription =
-          snapshot.assetNamesAndDescriptions
-            .get(asset)
-            .map(nd => AssetInfo(nd.name, nd.description, nd.lastUpdatedAt))
-            .orElse(dbInfo.map(_._1))
-        (nameAndDescription, volume).bisequence
-          .foreach(rw.put(Keys.assetDetails(asset)(Height(height)), _))
+      // an asset's volume is fixed forever at issuance (see StateSnapshot.assetVolumes), so this is always a
+      // fresh write for a newly-issued asset, never a merge with an existing one
+      for ((asset, volume) <- snapshot.assetVolumes) {
+        rw.put(Keys.assetVolumeDetails(asset)(Height(height)), volume)
+        expiredKeys ++= updateHistory(rw, Keys.assetVolumeDetailsHistory(asset), threshold, Keys.assetVolumeDetails(asset))
       }
 
-      for (asset <- snapshot.assetStatics.keySet ++ updatedAssetSet) {
-        expiredKeys ++= updateHistory(rw, Keys.assetDetailsHistory(asset), threshold, Keys.assetDetails(asset))
+      for ((asset, minFee) <- snapshot.minAssetFees) {
+        rw.put(Keys.assetMinFee(asset)(Height(height)), minFee)
+        expiredKeys ++= updateHistory(rw, Keys.assetMinFeeHistory(asset), threshold, Keys.assetMinFee(asset))
       }
+      if (snapshot.minAssetFees.nonEmpty) rw.put(Keys.assetsWithMinFee(Height(height)), snapshot.minAssetFees.keySet.toSeq)
 
       for ((id, li) <- snapshot.newLeases) {
         rw.put(Keys.leaseDetails(id)(Height(height)), Some(LeaseDetails(li, snapshot.cancelledLeases.getOrElse(id, LeaseDetails.Status.Active))))
@@ -633,7 +607,6 @@ class RocksDBWriter(
 
       // TODO: height
       rw.put(Keys.issuedAssets(Height(height)), snapshot.assetStatics.keySet.toSeq)
-      rw.put(Keys.updatedAssets(Height(height)), updatedAssetSet.toSeq)
 
       rw.put(Keys.blockStateHash(Height(height)), computedBlockStateHash)
 
@@ -965,26 +938,26 @@ class RocksDBWriter(
   }
 
   private def rollbackAssetsInfo(rw: RW, currentHeight: Height): Unit = {
-    val issuedKey      = Keys.issuedAssets(currentHeight)
-    val updatedKey     = Keys.updatedAssets(currentHeight)
-    val sponsorshipKey = Keys.sponsorshipAssets(currentHeight)
-
-    val issued  = rw.get(issuedKey)
-    val updated = rw.get(updatedKey)
+    val issuedKey    = Keys.issuedAssets(currentHeight)
+    val minFeeKey    = Keys.assetsWithMinFee(currentHeight)
+    val issued       = rw.get(issuedKey)
+    val minFeeAssets = rw.get(minFeeKey)
 
     rw.delete(issuedKey)
-    rw.delete(updatedKey)
-    rw.delete(sponsorshipKey)
+    rw.delete(minFeeKey)
 
     issued.foreach { asset =>
       rw.delete(Keys.assetStaticInfo(asset))
+      rw.delete(Keys.assetVolumeDetails(asset)(currentHeight))
+      rw.filterHistory(Keys.assetVolumeDetailsHistory(asset), currentHeight)
     }
 
-    (issued ++ updated).foreach { asset =>
-      rw.delete(Keys.assetDetails(asset)(currentHeight))
-      rw.filterHistory(Keys.assetDetailsHistory(asset), currentHeight)
-      discardAssetDescription(asset)
+    minFeeAssets.foreach { asset =>
+      rw.delete(Keys.assetMinFee(asset)(currentHeight))
+      rw.filterHistory(Keys.assetMinFeeHistory(asset), currentHeight)
     }
+
+    (issued ++ minFeeAssets).distinct.foreach(discardAssetDescription)
   }
 
   private def rollbackOrderFill(rw: RW, orderId: ByteStr, height: Height): ByteStr = {

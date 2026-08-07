@@ -1,8 +1,7 @@
 package tech.hearth.http
 
 import com.google.protobuf.ByteString
-import tech.hearth.TestWallet
-import tech.hearth.account.PublicKey
+import tech.hearth.{TestValues, TestWallet}
 import tech.hearth.api.http.ApiError.{AssetIdNotSpecified, AssetsDoesNotExist, InvalidIds, TooBigArrayAllocation}
 import tech.hearth.api.http.RouteTimeout
 import tech.hearth.api.http.assets.AssetsApiRoute
@@ -11,7 +10,7 @@ import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.{Domain, defaultSigner}
 import tech.hearth.settings.{GenesisAssetSettings, WavesSettings}
-import tech.hearth.state.{AssetDescription, Height, TransactionId}
+import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.Asset.IssuedAsset
@@ -55,7 +54,6 @@ class AssetsRouteSpec
             60.seconds,
             testWallet,
             d.blockchain,
-            () => d.blockchain.snapshotBlockchain,
             TestTime(),
             d.accountsApi,
             d.assetsApi,
@@ -73,30 +71,33 @@ class AssetsRouteSpec
     */
   private val assetIssuer = TxHelpers.signer(700)
 
-  private def genesisAsset(index: Int, quantity: Long = 100, reissuable: Boolean = true, decimals: Int = 0): GenesisAssetSettings =
+  private def genesisAsset(
+      index: Int,
+      quantity: Long = 100,
+      reissuable: Boolean = true,
+      decimals: Int = 0,
+      minFee: Long = TestValues.fee
+  ): GenesisAssetSettings =
     GenesisAssetSettings(
       id = ByteStr.fill(AssetIdLength)(index.toByte),
       issuer = ByteStr(assetIssuer.publicKey()).toString,
       name = "test",
       decimals = decimals,
       quantity = quantity,
+      minFee = minFee,
       description = "description",
       reissuable = reissuable
     )
 
   private def descriptionOf(asset: GenesisAssetSettings, sequenceInBlock: Int): AssetDescription =
     AssetDescription(
-      TransactionId(asset.id),
-      issuer = PublicKey(assetIssuer.publicKey()),
       name = ByteString.copyFromUtf8(asset.name),
       description = ByteString.copyFromUtf8(asset.description),
       decimals = asset.decimals,
-      reissuable = asset.reissuable,
       totalVolume = asset.quantity,
-      lastUpdatedAt = Height(1),
-      nft = false,
       sequenceInBlock,
-      Height(1)
+      Height(1),
+      minAssetFee = MinAssetFee.unsafeFrom(asset.minFee)
     )
 
   "/balance/{address}" - {
@@ -333,15 +334,11 @@ class AssetsRouteSpec
   private def checkResponse(desc: AssetDescription, assetId: String, response: JsObject): Unit = {
     (response \ "assetId").as[String] shouldBe assetId
     (response \ "issueTimestamp").as[Long] shouldBe 0L
-    (response \ "issuer").as[String] shouldBe desc.issuer.toAddress.toString
     (response \ "name").as[String] shouldBe desc.name.toStringUtf8
     (response \ "description").as[String] shouldBe desc.description.toStringUtf8
     (response \ "decimals").as[Int] shouldBe desc.decimals
-    (response \ "reissuable").as[Boolean] shouldBe desc.reissuable
     (response \ "quantity").as[BigDecimal] shouldBe desc.totalVolume
-    (response \ "minSponsoredAssetFee").asOpt[Long] shouldBe empty
-    // The asset was declared, not issued, so it stands in for its own origin transaction
-    (response \ "originTransactionId").as[String] shouldBe assetId
     (response \ "sequenceInBlock").as[Int] shouldBe desc.sequenceInBlock
+    (response \ "minAssetFee").as[Long] shouldBe desc.minAssetFee.value
   }
 }

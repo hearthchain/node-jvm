@@ -440,6 +440,7 @@ object AsyncHttpApi extends Assertions {
         fee: Long,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
+        feeAssetId: Option[String] = None,
         amountsAsStrings: Boolean = false
     ): Future[Transaction] = {
       signedBroadcast(
@@ -448,6 +449,7 @@ object AsyncHttpApi extends Assertions {
           Asset.fromString(assetId),
           transfers.map(t => ParsedTransfer(Address.fromString(t.recipient).explicitGet(), TxNonNegativeAmount.unsafeFrom(t.amount))),
           TxPositiveAmount.unsafeFrom(fee),
+          Asset.fromString(feeAssetId),
           System.currentTimeMillis(),
           attachment.fold(ByteStr.empty)(s => ByteStr(s.getBytes())),
           Proofs.empty,

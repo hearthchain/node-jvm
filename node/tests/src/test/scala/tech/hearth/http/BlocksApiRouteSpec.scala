@@ -1,6 +1,6 @@
 package tech.hearth.http
 
-import tech.hearth.TestWallet
+import tech.hearth.{TestValues, TestWallet}
 import tech.hearth.account.PublicKey
 import tech.hearth.api.BlockMeta
 import tech.hearth.api.common.CommonBlocksApi
@@ -441,7 +441,8 @@ class BlocksApiRouteSpec
           issuer = ByteStr(issuer.publicKey()).toString,
           name = "Price",
           decimals = 2,
-          quantity = 1000L
+          quantity = 1000L,
+          minFee = TestValues.fee
         )
       )
     ) { d =>

@@ -1,5 +1,6 @@
 package tech.hearth.state.diffs
 
+import tech.hearth.TestValues
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
@@ -50,7 +51,7 @@ class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
   property("MassTransfer fails on non-issued asset") {
     val recipient = TxHelpers.address(2)
     val asset     = IssuedAsset(ByteStr.fill(32)(1))
-    val assets    = Seq(GenesisAssetSettings(asset.id, ByteStr.fill(32)(3).toString, "AAAA", 8, 100000000))
+    val assets    = Seq(GenesisAssetSettings(asset.id, ByteStr.fill(32)(3).toString, "AAAA", 8, 100000000, TestValues.fee))
     val transfer =
       TxHelpers.massTransfer(master, Seq(recipient -> 100000L), asset)
 
@@ -65,6 +66,37 @@ class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
 
     assertDiffEi(Seq(block(Seq())), block(Seq(transfer)), fs, masterBalance) { blockDiffEi =>
       blockDiffEi should produce("Attempt to transfer unavailable funds")
+    }
+  }
+
+  property("MassTransfer fee in an asset at or above its minAssetFee is accepted, below is rejected") {
+    val feeAsset = IssuedAsset(ByteStr.fill(32)(2))
+    val minFee   = 1000L
+    val assets   = Seq(GenesisAssetSettings(feeAsset.id, ByteStr(master.publicKey()).toString, "Fee", 0, 10000L, minFee))
+    val balances = Seq(
+      AddrWithBalance(TxHelpers.defaultSigner.toAddress),
+      AddrWithBalance(master.toAddress, TestValues.bigMoney, Map(feeAsset -> 10000L))
+    )
+    val recipient = TxHelpers.address(2)
+
+    val okTransfer = TxHelpers.massTransfer(master, Seq(recipient -> 1L), Waves, fee = minFee, feeAsset = feeAsset)
+    assertDiffEi(Seq(block(Seq())), block(Seq(okTransfer)), fs, balances, assets) { blockDiffEi =>
+      blockDiffEi should beRight
+    }
+
+    val tooLowTransfer = TxHelpers.massTransfer(master, Seq(recipient -> 1L), Waves, fee = minFee - 1, feeAsset = feeAsset)
+    assertDiffEi(Seq(block(Seq())), block(Seq(tooLowTransfer)), fs, balances, assets) { blockDiffEi =>
+      blockDiffEi should produce("does not exceed minimal value")
+    }
+  }
+
+  property("MassTransfer fee in a non-existent asset is rejected") {
+    val unknownAsset = IssuedAsset(ByteStr.fill(32)(3))
+    val recipient    = TxHelpers.address(2)
+    val transfer     = TxHelpers.massTransfer(master, Seq(recipient -> 1L), Waves, fee = TestValues.fee, feeAsset = unknownAsset)
+
+    assertDiffEi(Seq(block(Seq())), block(Seq(transfer)), fs, masterBalance) { blockDiffEi =>
+      blockDiffEi should produce("does not exist, cannot be used to pay fees")
     }
   }
 }

@@ -118,6 +118,7 @@ object TxHelpers {
       to: Seq[(Address, Long)] = Seq(secondAddress -> 1.waves),
       asset: Asset = Waves,
       fee: Long = FeeConstants(TransactionType.MassTransfer) * FeeUnit,
+      feeAsset: Asset = Waves,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
   ): MassTransferTransaction =
@@ -130,7 +131,8 @@ object TxHelpers {
         timestamp,
         ByteStr.empty,
         Proofs.empty,
-        chainId
+        chainId,
+        feeAsset
       )
       .map(_.signWith(from))
       .explicitGet()

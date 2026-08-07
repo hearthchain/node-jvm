@@ -1,11 +1,11 @@
 package tech.hearth.api.common
 
 import tech.hearth.account.Address
-import tech.hearth.api.common.AddressPortfolio.{assetBalanceIterator, nftIterator}
+import tech.hearth.api.common.AddressPortfolio.assetBalanceIterator
 import tech.hearth.api.common.lease.AddressLeaseInfo
 import tech.hearth.common.state.ByteStr
 import tech.hearth.database.{DBExt, RDB}
-import tech.hearth.state.{AssetDescription, Blockchain, SnapshotBlockchain}
+import tech.hearth.state.{Blockchain, SnapshotBlockchain}
 import tech.hearth.transaction.Asset.IssuedAsset
 import monix.eval.Task
 import monix.reactive.Observable
@@ -22,8 +22,6 @@ trait CommonAccountsApi {
   def assetBalance(address: Address, asset: IssuedAsset): Long
 
   def portfolio(address: Address): Observable[Seq[(IssuedAsset, Long)]]
-
-  def nftList(address: Address, after: Option[IssuedAsset]): Observable[Seq[(IssuedAsset, AssetDescription)]]
 
   def activeLeases(address: Address): Observable[LeaseInfo]
 
@@ -67,19 +65,8 @@ object CommonAccountsApi {
 
     override def portfolio(address: Address): Observable[Seq[(IssuedAsset, Long)]] = {
       val compBlockchain = compositeBlockchain()
-      // ReduceNFTFee is active: NFTs are excluded from the portfolio
-      def includeNft(assetId: IssuedAsset): Boolean =
-        !compBlockchain.assetDescription(assetId).exists(_.nft)
-
       rdb.db.resourceObservable.flatMap { resource =>
-        Observable.fromIterator(Task(assetBalanceIterator(resource, address, compBlockchain.snapshot, includeNft)))
-      }
-    }
-
-    override def nftList(address: Address, after: Option[IssuedAsset]): Observable[Seq[(IssuedAsset, AssetDescription)]] = {
-      rdb.db.resourceObservable(rdb.apiHandle.handle).flatMap { resource =>
-        Observable
-          .fromIterator(Task(nftIterator(resource, address, compositeBlockchain().snapshot, after, blockchain.assetDescription)))
+        Observable.fromIterator(Task(assetBalanceIterator(resource, address, compBlockchain.snapshot)))
       }
     }
 

@@ -354,11 +354,12 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         fee: Long,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
+        feeAssetId: Option[String] = None,
         waitForTx: Boolean = false,
         amountsAsStrings: Boolean = false
     ): Transaction = {
       maybeWaitForTransaction(
-        sync(async(n).massTransfer(sender, transfers, fee, attachment, assetId, amountsAsStrings)),
+        sync(async(n).massTransfer(sender, transfers, fee, attachment, assetId, feeAssetId, amountsAsStrings)),
         waitForTx
       )
     }

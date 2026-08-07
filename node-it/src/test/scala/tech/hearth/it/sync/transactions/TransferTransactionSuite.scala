@@ -129,6 +129,18 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
     miner.assertBalances(secondAddress, secondBalance, secondEffBalance)
   }
 
+  test("fee in an asset at or above its minAssetFee is accepted, below is rejected") {
+    val assetId = GenesisAssets.TestAsset.id.toString
+
+    val okTransfer = sender.transfer(firstKeyPair, secondAddress, amount = 1L, fee = minFee, assetId = None, feeAssetId = Some(assetId))
+    nodes.waitForHeightAriseAndTxPresent(okTransfer.id)
+
+    assertBadRequestAndResponse(
+      sender.transfer(firstKeyPair, secondAddress, amount = 1L, fee = minFee - 1, assetId = None, feeAssetId = Some(assetId)),
+      "does not exceed minimal value"
+    )
+  }
+
   test("can forge block with sending majority of some asset to self and to other account") {
     val assetId                           = GenesisAssets.TestAsset.id.toString
     val (firstBalance, firstEffBalance)   = miner.accountBalances(firstAddress)

@@ -173,7 +173,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
     withDomain(
       DomainPresets.TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(matcher, buyer) :+ AddrWithBalance(issuer.toAddress, assets = Map(asset -> 2L)),
-      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 0, 2L))
+      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 0, 2L, 100000L))
     ) { d =>
       val grpcApi = getGrpcApi(d)
 

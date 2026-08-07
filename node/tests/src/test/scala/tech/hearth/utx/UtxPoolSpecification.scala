@@ -341,7 +341,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
         val gen = for {
           headTransaction <- transfer(sender, senderBalance / 2)
           vipTransaction <- transfer(sender, senderBalance / 2)
-            .suchThat(TransactionsOrdering.InUTXPool(Set.empty).compare(_, headTransaction) < 0)
+            .suchThat(TransactionsOrdering.InUTXPool(Set.empty, bcu).compare(_, headTransaction) < 0)
         } yield (headTransaction, vipTransaction)
 
         forAll(gen, Gen.choose(0, 1).label("allowSkipChecks")) { case ((headTransaction, vipTransaction), allowSkipChecks) =>

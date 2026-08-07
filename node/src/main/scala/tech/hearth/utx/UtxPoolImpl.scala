@@ -53,7 +53,7 @@ case class UtxPoolImpl(
   // Context
   private val cleanupScheduler: SchedulerService =
     Schedulers.singleThread("utx-pool-cleanup", executionModel = ExecutionModel.AlwaysAsyncExecution)
-  private val inUTXPoolOrdering = TransactionsOrdering.InUTXPool(utxSettings.fastLaneAddresses)
+  private val inUTXPoolOrdering = TransactionsOrdering.InUTXPool(utxSettings.fastLaneAddresses, blockchain)
 
   // State
   val priorityPool         = new UtxPriorityPool

@@ -43,8 +43,8 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
   val secondTokenQuantity: Long     = 6000000000L
 
   val genesisAssets: Seq[GenesisAssetSettings] = Seq(
-    GenesisAssetSettings(firstTokenAsset.id, Base16.encode(firstTxParticipant.publicKey()), "firstToken", 2, firstTokenQuantity),
-    GenesisAssetSettings(secondTokenAsset.id, Base16.encode(secondTxParticipant.publicKey()), "secondToken", 6, secondTokenQuantity)
+    GenesisAssetSettings(firstTokenAsset.id, Base16.encode(firstTxParticipant.publicKey()), "firstToken", 2, firstTokenQuantity, 100000L),
+    GenesisAssetSettings(secondTokenAsset.id, Base16.encode(secondTxParticipant.publicKey()), "secondToken", 6, secondTokenQuantity, 100000L)
   )
 
   val tokenBalances: Seq[AddrWithBalance] = Seq(
