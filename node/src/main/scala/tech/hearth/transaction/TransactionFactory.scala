@@ -60,8 +60,8 @@ object TransactionFactory {
       overrides = Json.obj(
         "senderPublicKey"        -> PublicKey(signingKey.publicKey()).toString,
         "generationPeriodStart"  -> periodStart,
-        "endorserPublicKey"      -> commitment.endorserPublicKey.base58,
-        "commitmentSignature"    -> commitment.commitmentSignature.base58,
+        "endorserPublicKey"      -> commitment.endorserPublicKey.base16,
+        "commitmentSignature"    -> commitment.commitmentSignature.base16,
         "vrfPublicKey"           -> commitment.vrfPublicKey.toString,
         "vrfCommitmentSignature" -> commitment.vrfCommitmentSignature.toString
       )

@@ -2,7 +2,7 @@ package tech.hearth.transaction
 
 import com.google.common.collect.Interners
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.transaction.assets.exchange.AssetPair
 import play.api.libs.json.*
 import pureconfig.ConfigReader
@@ -21,10 +21,10 @@ object Asset {
     private val interner                = Interners.newWeakInterner[IssuedAsset]()
     def apply(id: ByteStr): IssuedAsset = interner.intern(new IssuedAsset(id))
     def fromString[T](str: String, onSuccess: IssuedAsset => T, onFailure: String => T): T =
-      Base58.tryDecodeWithLimit(str) match {
+      Base16.tryDecodeWithLimit(str) match {
         case Success(arr) if arr.length != AssetIdLength => onFailure(s"Invalid validation. Size of asset id $str not equal $AssetIdLength bytes")
         case Success(arr)                                => onSuccess(IssuedAsset(ByteStr(arr)))
-        case _                                           => onFailure("Expected base58-encoded assetId")
+        case _                                           => onFailure("Expected base16-encoded assetId")
       }
   }
 
@@ -34,7 +34,7 @@ object Asset {
 
   implicit val assetReads: Reads[IssuedAsset] = Reads {
     case JsString(str) => IssuedAsset.fromString(str, JsSuccess(_), JsError(_))
-    case _             => JsError("Expected base58-encoded assetId")
+    case _             => JsError("Expected base16-encoded assetId")
   }
   implicit val assetWrites: Writes[IssuedAsset] = Writes { asset =>
     JsString(asset.id.toString)
@@ -55,7 +55,7 @@ object Asset {
     ConfigReader[String].emap(s => AssetPair.extractAssetId(s).fold(ex => Left(CannotConvert(s, "Asset", ex.getMessage)), Right(_)))
 
   def fromString(maybeStr: Option[String]): Asset = {
-    maybeStr.map(x => IssuedAsset(ByteStr.decodeBase58(x).get)).getOrElse(Waves)
+    maybeStr.map(x => IssuedAsset(ByteStr.decodeBase16(x).get)).getOrElse(Waves)
   }
 
   def fromCompatId(maybeBStr: Option[ByteStr]): Asset = {
@@ -73,7 +73,7 @@ object Asset {
       case IssuedAsset(id) => Some(id)
     }
 
-    def maybeBase58Repr: Option[String] = ai match {
+    def maybeBase16Repr: Option[String] = ai match {
       case Waves           => None
       case IssuedAsset(id) => Some(id.toString)
     }
@@ -88,6 +88,6 @@ object Asset {
     case json: JsString =>
       if (json.value.isEmpty || (allowWavesStr && json.value == WavesName)) JsSuccess(Waves) else assetReads.reads(json)
     case JsNull => JsSuccess(Waves)
-    case _      => JsError("Expected base58-encoded assetId or null")
+    case _      => JsError("Expected base16-encoded assetId or null")
   }
 }

@@ -172,7 +172,7 @@ paths:
       parameters:
         - name: publicKey
           in: path
-          description: Public key base58 encoded
+          description: Public key hex encoded
           required: true
           schema:
             type: string
@@ -219,7 +219,7 @@ paths:
       parameters:
         - name: address
           in: query
-          description: Addresses base58 encoded
+          description: Addresses bech32 encoded
           required: true
           style: form
           explode: true
@@ -241,7 +241,7 @@ paths:
         - name: asset
           in: query
           description: >-
-            Base58 encoded asset ID. Not defined for WAVES asset
+            Hex encoded asset ID. Not defined for WAVES asset
           schema:
             $ref: '#/components/schemas/AssetId'
       responses:
@@ -273,7 +273,7 @@ paths:
               properties:
                 addresses:
                   type: array
-                  description: Addresses base58 encoded
+                  description: Addresses bech32 encoded
                   items:
                     type: string
                     pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
@@ -1471,7 +1471,7 @@ paths:
       parameters:
         - name: id
           in: query
-          description: Transaction IDs base58 encoded
+          description: Transaction IDs hex encoded
           required: true
           style: form
           explode: true
@@ -1816,7 +1816,7 @@ paths:
       parameters:
         - name: signerAddress
           in: path
-          description: Wallet address base58 encoded
+          description: Wallet address bech32 encoded
           required: true
           schema:
             type: string
@@ -1967,7 +1967,7 @@ paths:
       summary: Seed of specified length
       description: >-
         Generate random seed of a given length in bytes. The returned value is
-        base58 encoded
+        hex encoded
       operationId: generateSeedByLength
       parameters:
         - name: length
@@ -2241,7 +2241,7 @@ paths:
       tags:
         - utils
       summary: Seed
-      description: Generate random seed. The returned value is base58 encoded
+      description: Generate random seed. The returned value is hex encoded
       operationId: generateSeed
       responses:
         '200':
@@ -2520,7 +2520,7 @@ paths:
       parameters:
         - name: id
           in: query
-          description: Asset ID base58 encoded
+          description: Asset ID hex encoded
           required: true
           style: form
           explode: true
@@ -2655,7 +2655,7 @@ paths:
                   format: int64
                 description: map of assetId <-> balance
                 example:
-                  2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY: 15
+                  18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71: 15
                   3PPqZ623dAfbmxmnpTjwV6yD5GA5s3PJiUG: 25
             application/json;large-significand-format=string:
               schema:
@@ -2664,7 +2664,7 @@ paths:
                   type: string
                 description: map of assetId <-> balance
                 example:
-                  2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY: "15"
+                  18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71: "15"
                   3PPqZ623dAfbmxmnpTjwV6yD5GA5s3PJiUG: "25"
   '/assets/{assetId}/distribution/{height}/limit/{limit}':
     get:
@@ -2782,7 +2782,7 @@ paths:
       parameters:
         - name: id
           in: path
-          description: Lease ID base58 encoded
+          description: Lease ID hex encoded
           required: true
           schema:
             type: string
@@ -2803,7 +2803,7 @@ paths:
       parameters:
         - name: id
           in: query
-          description: Lease ID base58 encoded
+          description: Lease ID hex encoded
           required: true
           style: form
           explode: true
@@ -2811,7 +2811,7 @@ paths:
             type: array
             items:
               type: string
-              pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+              pattern: '^[0-9a-fA-F]{64}$'
             minItems: 1
             maxItems: 1000
       responses:
@@ -2836,10 +2836,10 @@ paths:
               properties:
                 ids:
                   type: array
-                  description: Lease IDs base58 encoded
+                  description: Lease IDs hex encoded
                   items:
                     type: string
-                    pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+                    pattern: '^[0-9a-fA-F]{64}$'
                   minItems: 1
                   maxItems: 1000
           application/x-www-form-urlencoded:
@@ -2848,10 +2848,10 @@ paths:
               properties:
                 id:
                   type: array
-                  description: Lease IDs base58 encoded
+                  description: Lease IDs hex encoded
                   items:
                     type: string
-                    pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+                    pattern: '^[0-9a-fA-F]{64}$'
             encoding:
               id:
                 style: form
@@ -3469,8 +3469,8 @@ components:
       example: 1610000
     Hash:
       type: string
-      pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
-      example: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+      pattern: '^[0-9a-fA-F]{64}$'
+      example: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
     Signature:
       type: string
     AmountString:
@@ -3525,13 +3525,13 @@ components:
         - $ref: '#/components/schemas/Alias'
     PublicKey:
       type: string
-      example: 2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY
+      example: 18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71
     BlsPublicKey:
       type: string
-      example: 6CagLT3FjEcaNHPYCaG2dcfEfzDj6ynVeZbxbLHkHdfzvbfBmBMkkatTYcBXD9cHMU
+      example: 8dbf77df79479e11e99011f5ebc66b0d160ceddf2fcecfade325f07e96213f0d5d47a9af5a7ce3314f532e6aa03a33db
     BlsSignature:
       type: string
-      example: oJUBPLXnqejpwkkifzBbyQp63mPwypYq9GV7eAYqQGAvsE2LxU6csrrwLWgK1HdW28Ygku7vfkcMW1TCDCFymVXoqi7SpCwWGp3P6gegHusSPBsuVQQiQ5BWTYpUpSJjiBL
+      example: 866931dd65be36cdea5240c2c4fe7dd75956c3e060845b83661bdb2d62b7a09e896e0bb3900172f2d5c018cb426d94d6001c75cc1d868994d5a78db41c60d2c4fe40dd19ef2d8b684111ad6586e33817dec91fc492d2687c3c943d08dc16c89b
     GeneratorIndex:
       type: integer
       format: int32
@@ -3637,7 +3637,7 @@ components:
             format: int64
           description: map of assetId <-> balance
           example:
-            2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY: 15
+            18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71: 15
             3PPqZ623dAfbmxmnpTjwV6yD5GA5s3PJiUG: 25
     AssetDistributionLSF:
       required:
@@ -3655,7 +3655,7 @@ components:
             type: string
           description: map of assetId <-> balance
           example:
-            2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY: "15"
+            18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71: "15"
             3PPqZ623dAfbmxmnpTjwV6yD5GA5s3PJiUG: "25"
     AssetDetailsBase:
       type: object
@@ -4116,14 +4116,14 @@ components:
             $ref: '#/components/schemas/BlockEndorsement'
       example:
         valid: [ 2 ]
-        aggregatedEndorsement: 25D5M96CYmdiuragjjJNGY9thrZL5sgUVjHrfamoi9B7XMUU7e7qFHejX49Qe4FdQxYkrb8v4f6MhgAEj6D3YbEB7xxAfLbA4HqwvuQeKTrZoMnLTcNfujQ8QGbsyqMT28Cn
+        aggregatedEndorsement: b496a5e4f205d0ed07e4cfba6699bf8c699ffe12da83e9e857d11b7c51d48a3b7e085491890f99e2b280556609b0520714cea1ea7c9a6107acada28aa472f734bc87380dd4b3ebf34da44bbb9804a200791b84a0bb65e69b3b9959b3ca37beef
         finalizedHeight: 1609990
         conflict:
           - endorserIndex: 0
-            finalizedId: 2Sf5yJ4AAuMRaVr6vQUyGPE7mkFLaBbkz3quLoB2dseBJdneGDPqioiFsDKcXVVpDK6LXMA1RTY8WfWio1MPXt8c
+            finalizedId: 48246f0c05535b315d2d5805486469783153597001165739294802745f1b6161234c242c6e582b317373646b2a517a450b0e517d0b61345b59087b6306496e75
             finalizedHeight: 1
-            endorsedId: 2Sf5yJ4AAuMRaVr6vQUyGPE7mkFLaBbkz3quLoB2dseBJdneGDPqioiFsDKcXVVpDK6LXMA1RTY8WfWio1MPXt8c
-            signature: oGETTvn8Mggi1cULSEEDGuDG7rPeY1tEE11Vc4FwR3f5fPwVLGTWo6M5XFTtwqSabNpWjzh4FNuoGssDVK1Y23mdiCKYCkt2D6mvnWDfrLpM3JUxP7yRGrv4LfzfCTXnJxF
+            endorsedId: 48246f0c05535b315d2d5805486469783153597001165739294802745f1b6161234c242c6e582b317373646b2a517a450b0e517d0b61345b59087b6306496e75
+            signature: 864c89789ec7803f43fcfd57148fa2c6f72e21c98baea9106832c56f6efdeef9893a074d402df77af9c545b8c710642b10dd498288eeca9aab1f8e9fbd0f930bf2248e93eb601b838bce440a7ecc39df610fc77765aec9ae731c380c3e25dbd0
     Block:
       allOf:
         - $ref: '#/components/schemas/BlockHeader'
@@ -5686,8 +5686,8 @@ components:
         accounts:
           '3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k':
             assetBalances:
-              'DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p': '141592653'
-              '34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ': 5897932
+              'b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1': '141592653'
+              '1e9407135276a12595fdc861a8825f107fdf3a4f29bbfc9a463f5afd364f9f91': 5897932
             regularBalance: '3846264338327'
     RideExprRequest:
       type: object
@@ -5713,7 +5713,7 @@ components:
                 $ref: '#/components/schemas/RideFunctionCallArg'
         id:
           type: [ string, 'null' ]
-          example: "C8AgSFP8y91XUTpGtEQAQyjsSemxoY61ocGM852DFKF6"
+          example: "a54691252218f4f4ff80dee9757475177d2a8a3f0ae41f252736a69f82af68c9"
         fee:
           type: [ number, 'null' ]
           example: 500000
@@ -5725,7 +5725,7 @@ components:
           example: "3Mds6m8XZf4biC72NRkFx2kyoBdC9UvYRUR"
         senderPublicKey:
           type: [ string, 'null' ]
-          example: "3T9fL3XpeaHYbumohePPUmeuUqhyEeyzifi9vKouV8QoNtAT6kYV1oPAe9e2KCVquPcyXJpr2QwUiQKEUQPGZnc6"
+          example: "7a958cf0437733423c6daf70ffd7f5ef16726d1c63c67b1422f8c18cd1bc1455aa18d6c6344861586d1b448e7d8cf037c6ad2af204b863976c2a8728044d5c37"
         payment:
           type: array
           items:
@@ -5998,28 +5998,28 @@ components:
     address:
       name: address
       in: path
-      description: Address base58 encoded
+      description: Address bech32 encoded
       required: true
       schema:
         $ref: '#/components/schemas/Address'
     assetId:
       name: assetId
       in: path
-      description: Asset ID base58 encoded
+      description: Asset ID hex encoded
       required: true
       schema:
         $ref: '#/components/schemas/AssetId'
     blockId:
       name: id
       in: path
-      description: Block ID base58 encoded
+      description: Block ID hex encoded
       required: true
       schema:
         $ref: '#/components/schemas/BlockId'
     txId:
       name: id
       in: path
-      description: Transaction ID base58 encoded
+      description: Transaction ID hex encoded
       required: true
       schema:
         $ref: '#/components/schemas/TransactionId'
@@ -6032,7 +6032,7 @@ components:
         totalFee: '100000'
         reference: 'qwertyuikmn56khjkKHKJHK787'
         generator: '3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k'
-        generatorPublicKey: '2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY'
+        generatorPublicKey: '18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71'
         signature: 'string'
         id: 'string'
         nxt-consensus:
@@ -6050,14 +6050,14 @@ components:
         transactionsRoot: 'some_string_should_be_here'
         transactions:
           - type: 4
-            id: '72nXQAzvDVPPyAJfwouTzThH3p2gZDiBSQa9d6LizWPh'
+            id: '599b2d39e702664df2d50d88c0b05783c69286c9ed6cac43c1d030e55bcf46d0'
             fee: '100000'
             feeAssetId: null
             timestamp: 1665987445497
             version: 2
             sender: '3PGS9W5aZ4kdBFJJ9jxmgjLW8qfqu1b3Y66'
-            senderPublicKey: 'EAtFj2ycPFH6hzAadJ9UDbo6UGTbo4fenFbGiSDVYPU6'
-            proof: [ '3n8tCEh9dxqvGrc3wuaKpoYX6mpXHfEeY7GFeAKpxZP7yJpqRiiSsyHoD9uCELnNoYBamnnrvY46WzKMVfSRVWGE' ]
+            senderPublicKey: 'c3b01c3a53a3441f6f7773022a4f7d7f381eb684223ceae98b8cdedf895b6113'
+            proof: [ '8af51e15d703f09113e539ec83b22d4394adaabf24d7914fe9da10425bcb3a4337a74ac9e6651892bc1dccae6b38079ef9800d9b0ac29375ff030c3c23d34a87' ]
             recipient: '3PDXpDCRkGz3jNMozjpbbrJeJZhKJHkoqjj'
             assetId: null
             feeAsset: null
@@ -6065,7 +6065,7 @@ components:
             attachment: 'Bf6'
             applicationStatus: 'succeeded'
           - type: 4
-            id: '72nXQAzvDVPPyAJfwouTzThH3p2gZDiBSQa9d6LizWPh'
+            id: '599b2d39e702664df2d50d88c0b05783c69286c9ed6cac43c1d030e55bcf46d0'
             fee: '100000'
             feeAssetId: null
             timestamp: 1665987445497
@@ -6082,7 +6082,7 @@ components:
         totalFee: '100000'
         reference: 'qwertyuikmn56khjkKHKJHK787'
         generator: '3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k'
-        generatorPublicKey: '2eEUvypDSivnzPiLrbYEW39SM8yMZ1aq4eJuiKfs4sEY'
+        generatorPublicKey: '18656ba6d7862cb11d995afe20bf8761edee05ec28aa29bfbcf31ebd19dede71'
         signature: 'string'
         id: 'string'
         nxt-consensus:
@@ -6117,54 +6117,54 @@ components:
     largeSignificandTransaction:
       value:
         type: 7
-        id: AapJSJ9pEt47ukwkxZbGMic7EbxQHYKGgAwk5ZiMe51A
+        id: 8e62d4ff5d7f8dfe9664cb2c01da3bab114e7d265bdddddfa3b57eba41bb7d41
         fee: '300000'
         feeAssetId: null
         timestamp: 1666095438770
         version: 3
         chainId: 87
         sender: 3PEjHv3JGjcWNpYEEkif2w8NXV4kbhnoGgu
-        senderPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+        senderPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
         proofs:
-          - 2ichUyTM9mE6bb2ashHuXYsWKSkmT5NhrdCXGjsb5oGqinNdhLRpnACT6cMgfcJ2YHpF83DxR75B2obtGpcqPCo6
+          - 55e7948f71888e7c95bd2090d71e72096672045d6d592a5f9f1df4d7e8765a77eddc2cb1c3b22cabe7463b8ffe938a1ed9522f238036b92f05e53ef8577c6c8d
         order1:
           version: 3
-          id: 8uESHKHj4fW172WxBRA7dc539QnCJaMxCMGmSqGQW6yY
+          id: 756333daee1b6717b4be4a3c9a5cd13e4a23b1c46c803f364d67f2a7662f325b
           sender: 3PHgpEFhejacrSyBnppXUpcxGDrsyMDPDnh
-          senderPublicKey: 9D2R1PJBqfKjJifgeCxWp4wJNqBpudXfWmvH7tnKmdzq
-          matcherPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+          senderPublicKey: 79f2105727d3aae9025af3fd9583bef9f18efc7074f49205c75f1db4fc19450a
+          matcherPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
           assetPair:
-            amountAsset: 34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ
-            priceAsset: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+            amountAsset: 1e9407135276a12595fdc861a8825f107fdf3a4f29bbfc9a463f5afd364f9f91
+            priceAsset: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
           orderType: buy
           amount: '943757509'
           price: '101770000'
           timestamp: 1666095437000
           expiration: 1666095737000
           matcherFee: '90343223'
-          signature: 2GxNHyECiPH33GMgdbrv6qostUCfUS4x7Pz4zMbGY4iyyT1k6r93MuQXoX5BMCugxCoQqGKFjGzmacRykqg5jyx3
+          signature: 3fc690a2b6e96855a22d770ee5daf827e16cb1409a10c0a7b546baa99b2aafbf5f5886a984155aea305229ab847e0c5105b376b4023240ee375bbfe1b9620208
           proofs:
-            - 2GxNHyECiPH33GMgdbrv6qostUCfUS4x7Pz4zMbGY4iyyT1k6r93MuQXoX5BMCugxCoQqGKFjGzmacRykqg5jyx3
-          matcherFeeAssetId: Atqv59EYzjFGuitKVnMRk6H8FukjoV3ktPorbEys25on
+            - 3fc690a2b6e96855a22d770ee5daf827e16cb1409a10c0a7b546baa99b2aafbf5f5886a984155aea305229ab847e0c5105b376b4023240ee375bbfe1b9620208
+          matcherFeeAssetId: 93011caba9c76e2557ce669e71b6bdaa6bf83ce8580b2aeed9a04ebb3cdc14b1
         order2:
           version: 3
-          id: BBZhCLSYv9PUURhcRM3LGEe8RqHKSrRdzqhDYBinsfdz
+          id: 9749a4baca22143f6cb2f2e5fdbc8b66af6d761c4e406c55ca2f48f10a9c41f9
           sender: 3PESY4gY6hTeSx5ZetVQn5WjaREmE4PC3Gn
-          senderPublicKey: A65kmHQ2kN5hENWF4KwNdsGKVpNXNAVhxV3hdw9Dp282
-          matcherPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+          senderPublicKey: 8706765d5253b5eff0e9175cba5db7a0c3390847039be348cb9b73b49d683553
+          matcherPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
           assetPair:
-            amountAsset: 34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ
-            priceAsset: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+            amountAsset: 1e9407135276a12595fdc861a8825f107fdf3a4f29bbfc9a463f5afd364f9f91
+            priceAsset: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
           orderType: sell
           amount: '5703128855'
           price: '101765000'
           timestamp: 1666095438000
           expiration: 1666311438000
           matcherFee: '2754928000'
-          signature: 5NqXiSKHamcjLuxUBqRGNwdCgMH6LH8aSqpdnkGEioQHG57yoDPZgo8tU6Uqeeohwajxc3zSJfKPyipi2ZgWRh5F
+          signature: dae62ea0976b8025f76237723560d228543d9aea45ad2eeae952d7ca5d8fc80365af12ace3d593f916bba2cb7600d938be1c73680d34a892a27f7b3462638e06
           proofs:
-            - 5NqXiSKHamcjLuxUBqRGNwdCgMH6LH8aSqpdnkGEioQHG57yoDPZgo8tU6Uqeeohwajxc3zSJfKPyipi2ZgWRh5F
-          matcherFeeAssetId: Atqv59EYzjFGuitKVnMRk6H8FukjoV3ktPorbEys25on
+            - dae62ea0976b8025f76237723560d228543d9aea45ad2eeae952d7ca5d8fc80365af12ace3d593f916bba2cb7600d938be1c73680d34a892a27f7b3462638e06
+          matcherFeeAssetId: 93011caba9c76e2557ce669e71b6bdaa6bf83ce8580b2aeed9a04ebb3cdc14b1
         amount: '943757509'
         price: '101770000'
         buyMatcherFee: '90343223'
@@ -6176,54 +6176,54 @@ components:
     largeSignificandTransactionInList:
       value:
         - type: 7
-          id: AapJSJ9pEt47ukwkxZbGMic7EbxQHYKGgAwk5ZiMe51A
+          id: 8e62d4ff5d7f8dfe9664cb2c01da3bab114e7d265bdddddfa3b57eba41bb7d41
           fee: '300000'
           feeAssetId: null
           timestamp: 1666095438770
           version: 3
           chainId: 87
           sender: 3PEjHv3JGjcWNpYEEkif2w8NXV4kbhnoGgu
-          senderPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+          senderPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
           proofs:
-            - 2ichUyTM9mE6bb2ashHuXYsWKSkmT5NhrdCXGjsb5oGqinNdhLRpnACT6cMgfcJ2YHpF83DxR75B2obtGpcqPCo6
+            - 55e7948f71888e7c95bd2090d71e72096672045d6d592a5f9f1df4d7e8765a77eddc2cb1c3b22cabe7463b8ffe938a1ed9522f238036b92f05e53ef8577c6c8d
           order1:
             version: 3
-            id: 8uESHKHj4fW172WxBRA7dc539QnCJaMxCMGmSqGQW6yY
+            id: 756333daee1b6717b4be4a3c9a5cd13e4a23b1c46c803f364d67f2a7662f325b
             sender: 3PHgpEFhejacrSyBnppXUpcxGDrsyMDPDnh
-            senderPublicKey: 9D2R1PJBqfKjJifgeCxWp4wJNqBpudXfWmvH7tnKmdzq
-            matcherPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+            senderPublicKey: 79f2105727d3aae9025af3fd9583bef9f18efc7074f49205c75f1db4fc19450a
+            matcherPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
             assetPair:
-              amountAsset: 34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ
-              priceAsset: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+              amountAsset: 1e9407135276a12595fdc861a8825f107fdf3a4f29bbfc9a463f5afd364f9f91
+              priceAsset: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
             orderType: buy
             amount: '943757509'
             price: '101770000'
             timestamp: 1666095437000
             expiration: 1666095737000
             matcherFee: '90343223'
-            signature: 2GxNHyECiPH33GMgdbrv6qostUCfUS4x7Pz4zMbGY4iyyT1k6r93MuQXoX5BMCugxCoQqGKFjGzmacRykqg5jyx3
+            signature: 3fc690a2b6e96855a22d770ee5daf827e16cb1409a10c0a7b546baa99b2aafbf5f5886a984155aea305229ab847e0c5105b376b4023240ee375bbfe1b9620208
             proofs:
-              - 2GxNHyECiPH33GMgdbrv6qostUCfUS4x7Pz4zMbGY4iyyT1k6r93MuQXoX5BMCugxCoQqGKFjGzmacRykqg5jyx3
-            matcherFeeAssetId: Atqv59EYzjFGuitKVnMRk6H8FukjoV3ktPorbEys25on
+              - 3fc690a2b6e96855a22d770ee5daf827e16cb1409a10c0a7b546baa99b2aafbf5f5886a984155aea305229ab847e0c5105b376b4023240ee375bbfe1b9620208
+            matcherFeeAssetId: 93011caba9c76e2557ce669e71b6bdaa6bf83ce8580b2aeed9a04ebb3cdc14b1
           order2:
             version: 3
-            id: BBZhCLSYv9PUURhcRM3LGEe8RqHKSrRdzqhDYBinsfdz
+            id: 9749a4baca22143f6cb2f2e5fdbc8b66af6d761c4e406c55ca2f48f10a9c41f9
             sender: 3PESY4gY6hTeSx5ZetVQn5WjaREmE4PC3Gn
-            senderPublicKey: A65kmHQ2kN5hENWF4KwNdsGKVpNXNAVhxV3hdw9Dp282
-            matcherPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+            senderPublicKey: 8706765d5253b5eff0e9175cba5db7a0c3390847039be348cb9b73b49d683553
+            matcherPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
             assetPair:
-              amountAsset: 34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ
-              priceAsset: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+              amountAsset: 1e9407135276a12595fdc861a8825f107fdf3a4f29bbfc9a463f5afd364f9f91
+              priceAsset: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
             orderType: sell
             amount: '5703128855'
             price: '101765000'
             timestamp: 1666095438000
             expiration: 1666311438000
             matcherFee: '2754928000'
-            signature: 5NqXiSKHamcjLuxUBqRGNwdCgMH6LH8aSqpdnkGEioQHG57yoDPZgo8tU6Uqeeohwajxc3zSJfKPyipi2ZgWRh5F
+            signature: dae62ea0976b8025f76237723560d228543d9aea45ad2eeae952d7ca5d8fc80365af12ace3d593f916bba2cb7600d938be1c73680d34a892a27f7b3462638e06
             proofs:
-              - 5NqXiSKHamcjLuxUBqRGNwdCgMH6LH8aSqpdnkGEioQHG57yoDPZgo8tU6Uqeeohwajxc3zSJfKPyipi2ZgWRh5F
-            matcherFeeAssetId: Atqv59EYzjFGuitKVnMRk6H8FukjoV3ktPorbEys25on
+              - dae62ea0976b8025f76237723560d228543d9aea45ad2eeae952d7ca5d8fc80365af12ace3d593f916bba2cb7600d938be1c73680d34a892a27f7b3462638e06
+            matcherFeeAssetId: 93011caba9c76e2557ce669e71b6bdaa6bf83ce8580b2aeed9a04ebb3cdc14b1
           amount: '943757509'
           price: '101770000'
           buyMatcherFee: '90343223'
@@ -6235,54 +6235,54 @@ components:
     largeSignificandTransactionInListInList:
       value:
         - - type: 7
-            id: AapJSJ9pEt47ukwkxZbGMic7EbxQHYKGgAwk5ZiMe51A
+            id: 8e62d4ff5d7f8dfe9664cb2c01da3bab114e7d265bdddddfa3b57eba41bb7d41
             fee: '300000'
             feeAssetId: null
             timestamp: 1666095438770
             version: 3
             chainId: 87
             sender: 3PEjHv3JGjcWNpYEEkif2w8NXV4kbhnoGgu
-            senderPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+            senderPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
             proofs:
-              - 2ichUyTM9mE6bb2ashHuXYsWKSkmT5NhrdCXGjsb5oGqinNdhLRpnACT6cMgfcJ2YHpF83DxR75B2obtGpcqPCo6
+              - 55e7948f71888e7c95bd2090d71e72096672045d6d592a5f9f1df4d7e8765a77eddc2cb1c3b22cabe7463b8ffe938a1ed9522f238036b92f05e53ef8577c6c8d
             order1:
               version: 3
-              id: 8uESHKHj4fW172WxBRA7dc539QnCJaMxCMGmSqGQW6yY
+              id: 756333daee1b6717b4be4a3c9a5cd13e4a23b1c46c803f364d67f2a7662f325b
               sender: 3PHgpEFhejacrSyBnppXUpcxGDrsyMDPDnh
-              senderPublicKey: 9D2R1PJBqfKjJifgeCxWp4wJNqBpudXfWmvH7tnKmdzq
-              matcherPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+              senderPublicKey: 79f2105727d3aae9025af3fd9583bef9f18efc7074f49205c75f1db4fc19450a
+              matcherPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
               assetPair:
-                amountAsset: 34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ
-                priceAsset: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+                amountAsset: 1e9407135276a12595fdc861a8825f107fdf3a4f29bbfc9a463f5afd364f9f91
+                priceAsset: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
               orderType: buy
               amount: '943757509'
               price: '101770000'
               timestamp: 1666095437000
               expiration: 1666095737000
               matcherFee: '90343223'
-              signature: 2GxNHyECiPH33GMgdbrv6qostUCfUS4x7Pz4zMbGY4iyyT1k6r93MuQXoX5BMCugxCoQqGKFjGzmacRykqg5jyx3
+              signature: 3fc690a2b6e96855a22d770ee5daf827e16cb1409a10c0a7b546baa99b2aafbf5f5886a984155aea305229ab847e0c5105b376b4023240ee375bbfe1b9620208
               proofs:
-                - 2GxNHyECiPH33GMgdbrv6qostUCfUS4x7Pz4zMbGY4iyyT1k6r93MuQXoX5BMCugxCoQqGKFjGzmacRykqg5jyx3
-              matcherFeeAssetId: Atqv59EYzjFGuitKVnMRk6H8FukjoV3ktPorbEys25on
+                - 3fc690a2b6e96855a22d770ee5daf827e16cb1409a10c0a7b546baa99b2aafbf5f5886a984155aea305229ab847e0c5105b376b4023240ee375bbfe1b9620208
+              matcherFeeAssetId: 93011caba9c76e2557ce669e71b6bdaa6bf83ce8580b2aeed9a04ebb3cdc14b1
             order2:
               version: 3
-              id: BBZhCLSYv9PUURhcRM3LGEe8RqHKSrRdzqhDYBinsfdz
+              id: 9749a4baca22143f6cb2f2e5fdbc8b66af6d761c4e406c55ca2f48f10a9c41f9
               sender: 3PESY4gY6hTeSx5ZetVQn5WjaREmE4PC3Gn
-              senderPublicKey: A65kmHQ2kN5hENWF4KwNdsGKVpNXNAVhxV3hdw9Dp282
-              matcherPublicKey: 9cpfKN9suPNvfeUNphzxXMjcnn974eme8ZhWUjaktzU5
+              senderPublicKey: 8706765d5253b5eff0e9175cba5db7a0c3390847039be348cb9b73b49d683553
+              matcherPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
               assetPair:
-                amountAsset: 34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ
-                priceAsset: DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p
+                amountAsset: 1e9407135276a12595fdc861a8825f107fdf3a4f29bbfc9a463f5afd364f9f91
+                priceAsset: b62629c304f5ce5391a40e4b75242f648c51b1fadfaf5429bd48d21d2ab2aad1
               orderType: sell
               amount: '5703128855'
               price: '101765000'
               timestamp: 1666095438000
               expiration: 1666311438000
               matcherFee: '2754928000'
-              signature: 5NqXiSKHamcjLuxUBqRGNwdCgMH6LH8aSqpdnkGEioQHG57yoDPZgo8tU6Uqeeohwajxc3zSJfKPyipi2ZgWRh5F
+              signature: dae62ea0976b8025f76237723560d228543d9aea45ad2eeae952d7ca5d8fc80365af12ace3d593f916bba2cb7600d938be1c73680d34a892a27f7b3462638e06
               proofs:
-                - 5NqXiSKHamcjLuxUBqRGNwdCgMH6LH8aSqpdnkGEioQHG57yoDPZgo8tU6Uqeeohwajxc3zSJfKPyipi2ZgWRh5F
-              matcherFeeAssetId: Atqv59EYzjFGuitKVnMRk6H8FukjoV3ktPorbEys25on
+                - dae62ea0976b8025f76237723560d228543d9aea45ad2eeae952d7ca5d8fc80365af12ace3d593f916bba2cb7600d938be1c73680d34a892a27f7b3462638e06
+              matcherFeeAssetId: 93011caba9c76e2557ce669e71b6bdaa6bf83ce8580b2aeed9a04ebb3cdc14b1
             amount: '943757509'
             price: '101770000'
             buyMatcherFee: '90343223'

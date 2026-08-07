@@ -4,7 +4,7 @@ import com.google.common.io.ByteStreams
 import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.explicitGet
-import tech.hearth.common.utils.{Base58, Base64, FastBase58}
+import tech.hearth.common.utils.{Base16, Base64}
 import tech.hearth.crypto.bls.{BlsKeyPair, BlsSignature}
 import tech.hearth.crypto.{P256Curve, Sha256}
 import tech.hearth.lang.ValidationError
@@ -110,17 +110,17 @@ object UtilApp {
         opt[String]("in-format")
           .abbr("fi")
           .action((f, c) => c.copy(inFormat = f))
-          .text("Input data format (plain/base58/base64)")
+          .text("Input data format (plain/base16/base64)")
           .validate {
-            case "base64" | "base58" | "plain" => success
+            case "base64" | "base16" | "plain" => success
             case fs                            => failure(s"Invalid format: $fs")
           },
         opt[String]("out-format")
           .abbr("fo")
           .action((f, c) => c.copy(outFormat = f))
-          .text("Output data format (plain/base58/base64)")
+          .text("Output data format (plain/base16/base64)")
           .validate {
-            case "base64" | "base58" | "plain" => success
+            case "base64" | "base16" | "plain" => success
             case fs                            => failure(s"Invalid format: $fs")
           },
         opt[String]('c', "config")
@@ -140,7 +140,7 @@ object UtilApp {
             opt[String]('k', "private-key")
               .text("Private key for signing")
               .required()
-              .action((s, c) => c.copy(signOptions = SigningKey.fromSeed(Base58.decode(s))))
+              .action((s, c) => c.copy(signOptions = SigningKey.fromSeed(Base16.decode(s))))
           )
           .text("Sign bytes with provided private key")
           .action((_, c) => c.copy(mode = Mode.SignBytes)),
@@ -149,11 +149,11 @@ object UtilApp {
             opt[String]('k', "public-key")
               .text("Public key for verification")
               .required()
-              .action((s, c) => c.copy(verifyOptions = c.verifyOptions.copy(publicKey = PublicKey(Base58.decode(s))))),
+              .action((s, c) => c.copy(verifyOptions = c.verifyOptions.copy(publicKey = PublicKey(Base16.decode(s))))),
             opt[String]('s', "signature")
               .text("Signature to verify")
               .required()
-              .action((s, c) => c.copy(verifyOptions = c.verifyOptions.copy(signature = ByteStr.decodeBase58(s).get))),
+              .action((s, c) => c.copy(verifyOptions = c.verifyOptions.copy(signature = ByteStr.decodeBase16(s).get))),
             opt[Boolean]("check-weak-pk")
               .abbr("cwpk")
               .text("Check for weak public key")
@@ -196,7 +196,7 @@ object UtilApp {
             opt[String]("private-key")
               .abbr("sk")
               .text("Private key")
-              .action((a, c) => c.copy(signOptions = SigningKey.fromSeed(Base58.decode(a))))
+              .action((a, c) => c.copy(signOptions = SigningKey.fromSeed(Base16.decode(a))))
           )
       ),
       cmd("smoke").action((_, c) => c.copy(mode = Mode.SmokeTest, inputData = Input.Str(""))),
@@ -322,7 +322,7 @@ object UtilApp {
     private def encode(v: Array[Byte], format: String) = format match {
       case "plain"  => v
       case "base64" => Base64.encode(v).getBytes(StandardCharsets.US_ASCII)
-      case "base58" => Base58.encode(v).getBytes(StandardCharsets.US_ASCII)
+      case "base16" => Base16.encode(v).getBytes(StandardCharsets.US_ASCII)
       case _        => sys.error(s"Invalid format $format")
     }
 
@@ -330,7 +330,7 @@ object UtilApp {
       lazy val strWithoutSpaces = new String(encodedBytes).replaceAll("\\s+", "")
       inFormat match {
         case "plain"  => encodedBytes
-        case "base58" => FastBase58.decode(strWithoutSpaces)
+        case "base16" => Base16.decode(strWithoutSpaces)
         case "base64" => Base64.decode(strWithoutSpaces)
       }
     }

@@ -1,6 +1,6 @@
 package tech.hearth
 
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.crypto.secureHash
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.crypto.SigningKey
@@ -15,8 +15,8 @@ import scala.util.{Failure, Success}
 package object it {
   def keyPairFromSeed(seed: Array[Byte]): SigningKey = SigningKey.fromSeed(secureHash(seed))
 
-  def keyPairFromSeed(base58Seed: String): Either[GenericError, SigningKey] = Base58.tryDecodeWithLimit(base58Seed) match {
+  def keyPairFromSeed(hexSeed: String): Either[GenericError, SigningKey] = Base16.tryDecodeWithLimit(hexSeed) match {
     case Success(bytes) => Right(keyPairFromSeed(bytes))
-    case Failure(e)     => Left(GenericError(s"Unable to get a private key from the seed '$base58Seed': ${e.getMessage}"))
+    case Failure(e)     => Left(GenericError(s"Unable to get a private key from the seed '$hexSeed': ${e.getMessage}"))
   }
 }

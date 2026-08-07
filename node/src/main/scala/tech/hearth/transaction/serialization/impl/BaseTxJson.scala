@@ -9,7 +9,7 @@ object BaseTxJson {
       "type"       -> tx.tpe.id,
       "id"         -> tx.id().toString,
       "fee"        -> tx.assetFee._2,
-      "feeAssetId" -> tx.assetFee._1.maybeBase58Repr,
+      "feeAssetId" -> tx.assetFee._1.maybeBase16Repr,
       "timestamp"  -> tx.timestamp,
       "chainId"    -> tx.chainId
     ) ++ (tx match {

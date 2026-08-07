@@ -24,7 +24,7 @@ package object http {
   implicit val byteStrFormat: Format[ByteStr] = Format(
     Reads {
       case JsString(str) =>
-        ByteStr.decodeBase58(str) match {
+        ByteStr.decodeBase16(str) match {
           case Success(x) => JsSuccess(x)
           case Failure(e) => JsError(e.getMessage)
         }
@@ -45,7 +45,7 @@ package object http {
         xs.foldLeft[JsResult[Proofs]](JsSuccess(Proofs.empty)) {
           case (r: JsError, _) => r
           case (JsSuccess(r, _), JsString(rawProof)) =>
-            ByteStr.decodeBase58(rawProof) match {
+            ByteStr.decodeBase16(rawProof) match {
               case Failure(e) => JsError(e.toString)
               case Success(x) => JsSuccess(Proofs(r.proofs :+ x))
             }

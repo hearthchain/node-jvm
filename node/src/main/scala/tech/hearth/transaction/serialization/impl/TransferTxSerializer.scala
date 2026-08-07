@@ -9,8 +9,8 @@ object TransferTxSerializer {
     import tx.*
     BaseTxJson.toJson(tx) ++ Json.obj(
       "recipient"  -> recipient.toBech32,
-      "assetId"    -> assetId.maybeBase58Repr,
-      "feeAsset"   -> feeAssetId.maybeBase58Repr, // legacy v0.11.1 compat
+      "assetId"    -> assetId.maybeBase16Repr,
+      "feeAsset"   -> feeAssetId.maybeBase16Repr, // legacy v0.11.1 compat
       "amount"     -> amount.value,
       "attachment" -> attachment
     )

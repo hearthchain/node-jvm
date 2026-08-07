@@ -231,11 +231,17 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     val buy = Order(
       Order.V1,
       OrderAuthentication.OrderProofs(
-        PublicKey.fromBase58String("BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ").explicitGet(),
-        Proofs(ByteStr.decodeBase58("2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs").get)
+        PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet(),
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"
+            )
+            .get
+        )
       ),
-      PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+      PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.BUY,
       TxExchangeAmount.unsafeFrom(2),
       TxOrderPrice.unsafeFrom(6000000000L),
@@ -247,11 +253,17 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     val sell = Order(
       Order.V1,
       OrderAuthentication.OrderProofs(
-        PublicKey.fromBase58String("7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV").explicitGet(),
-        Proofs(ByteStr.decodeBase58("2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq").get)
+        PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet(),
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"
+            )
+            .get
+        )
       ),
-      PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+      PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.SELL,
       TxExchangeAmount.unsafeFrom(3),
       TxOrderPrice.unsafeFrom(5000000000L),
@@ -270,7 +282,13 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         1,
         1,
         1526992336241L,
-        Proofs(ByteStr.decodeBase58("5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+            )
+            .get
+        )
       )
       .explicitGet()
 
@@ -280,43 +298,43 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "type":3,
          "id":"${tx.id()}",
          "sender":"${tx.sender.toAddress}",
-         "senderPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
+         "senderPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
          "chainId":${tx.chainId},
-         "proofs":["5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa"],
+         "proofs":["db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"],
          "order1":{
             "version": 1,
             "id":"${buy.id()}",
             "sender":"${buy.sender.toAddress}",
-            "senderPublicKey":"BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "senderPublicKey":"a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e",
+            "matcherPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
+            "assetPair":{"amountAsset":null,"priceAsset":"7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100"},
             "orderType":"buy",
             "price":6000000000,
             "amount":2,
             "timestamp":1526992336241,
             "expiration":1529584336241,
             "matcherFee":1,
-            "signature":"2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs",
-            "proofs":["2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs"]
+            "signature":"01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984",
+            "proofs":["01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"]
          },
          "order2":{
             "version": 1,
             "id":"${sell.id()}",
             "sender":"${sell.sender.toAddress}",
-            "senderPublicKey":"7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "senderPublicKey":"5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60",
+            "matcherPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
+            "assetPair":{"amountAsset":null,"priceAsset":"7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100"},
             "orderType":"sell",
             "price":5000000000,
             "amount":3,
             "timestamp":1526992336241,
             "expiration":1529584336241,
             "matcherFee":2,
-            "signature":"2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq",
-            "proofs":["2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq"]
+            "signature":"46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388",
+            "proofs":["46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"]
          },
          "price":5000000000,
          "amount":2,
@@ -333,11 +351,17 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     val buy = Order(
       Order.V2,
       OrderAuthentication.OrderProofs(
-        PublicKey.fromBase58String("BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ").explicitGet(),
-        Proofs(ByteStr.decodeBase58("2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs").get)
+        PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet(),
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"
+            )
+            .get
+        )
       ),
-      PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+      PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.BUY,
       TxExchangeAmount.unsafeFrom(2),
       TxOrderPrice.unsafeFrom(6000000000L),
@@ -349,11 +373,17 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     val sell = Order(
       Order.V1,
       OrderAuthentication.OrderProofs(
-        PublicKey.fromBase58String("7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV").explicitGet(),
-        Proofs(ByteStr.decodeBase58("2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq").get)
+        PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet(),
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"
+            )
+            .get
+        )
       ),
-      PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+      PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.SELL,
       TxExchangeAmount.unsafeFrom(3),
       TxOrderPrice.unsafeFrom(5000000000L),
@@ -372,7 +402,15 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         1,
         1,
         1526992336241L,
-        Proofs(Seq(ByteStr.decodeBase58("5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa").get))
+        Proofs(
+          Seq(
+            ByteStr
+              .decodeBase16(
+                "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+              )
+              .get
+          )
+        )
       )
       .explicitGet()
 
@@ -381,43 +419,43 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "type":3,
          "id":"${tx.id()}",
          "sender":"${tx.sender.toAddress}",
-         "senderPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
+         "senderPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
          "chainId":${tx.chainId},
-         "proofs":["5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa"],
+         "proofs":["db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"],
          "order1":{
             "version": 2,
             "id":"${buy.id()}",
             "sender":"${buy.sender.toAddress}",
-            "senderPublicKey":"BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "senderPublicKey":"a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e",
+            "matcherPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
+            "assetPair":{"amountAsset":null,"priceAsset":"7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100"},
             "orderType":"buy",
             "price":6000000000,
             "amount":2,
             "timestamp":1526992336241,
             "expiration":1529584336241,
             "matcherFee":1,
-            "signature":"2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs",
-            "proofs":["2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs"]
+            "signature":"01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984",
+            "proofs":["01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"]
          },
          "order2":{
             "version": 1,
             "id":"${sell.id()}",
             "sender":"${sell.sender.toAddress}",
-            "senderPublicKey":"7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "senderPublicKey":"5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60",
+            "matcherPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
+            "assetPair":{"amountAsset":null,"priceAsset":"7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100"},
             "orderType":"sell",
             "price":5000000000,
             "amount":3,
             "timestamp":1526992336241,
             "expiration":1529584336241,
             "matcherFee":2,
-            "signature":"2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq",
-            "proofs":["2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq"]
+            "signature":"46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388",
+            "proofs":["46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"]
          },
          "price":5000000000,
          "amount":2,
@@ -434,28 +472,40 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     val buy = Order(
       Order.V3,
       OrderAuthentication.OrderProofs(
-        PublicKey.fromBase58String("BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ").explicitGet(),
-        Proofs(ByteStr.decodeBase58("2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs").get)
+        PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet(),
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"
+            )
+            .get
+        )
       ),
-      PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+      PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.BUY,
       TxExchangeAmount.unsafeFrom(2),
       TxOrderPrice.unsafeFrom(6000000000L),
       1526992336241L,
       1529584336241L,
       TxMatcherFee.unsafeFrom(1),
-      extractAssetId("9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get
+      extractAssetId("7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get
     )
 
     val sell = Order(
       Order.V1,
       OrderAuthentication.OrderProofs(
-        PublicKey.fromBase58String("7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV").explicitGet(),
-        Proofs(ByteStr.decodeBase58("2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq").get)
+        PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet(),
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"
+            )
+            .get
+        )
       ),
-      PublicKey.fromBase58String("Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy").get,
+      PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
+      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.SELL,
       TxExchangeAmount.unsafeFrom(3),
       TxOrderPrice.unsafeFrom(5000000000L),
@@ -474,7 +524,15 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         1,
         1,
         1526992336241L,
-        Proofs(Seq(ByteStr.decodeBase58("5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa").get))
+        Proofs(
+          Seq(
+            ByteStr
+              .decodeBase16(
+                "db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"
+              )
+              .get
+          )
+        )
       )
       .explicitGet()
 
@@ -483,44 +541,44 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "type":3,
          "id":"${tx.id()}",
          "sender":"${tx.sender.toAddress}",
-         "senderPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
+         "senderPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
          "chainId":${tx.chainId},
-         "proofs":["5NxNhjMrrH5EWjSFnVnPbanpThic6fnNL48APVAkwq19y2FpQp4tNSqoAZgboC2ykUfqQs9suwBQj6wERmsWWNqa"],
+         "proofs":["db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"],
          "order1":{
             "version": 3,
             "id":"${buy.id()}",
             "sender":"${buy.sender.toAddress}",
-            "senderPublicKey":"BqeJY8CP3PeUDaByz57iRekVUGtLxoow4XxPvXfHynaZ",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "senderPublicKey":"a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e",
+            "matcherPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
+            "assetPair":{"amountAsset":null,"priceAsset":"7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100"},
             "orderType":"buy",
             "price":6000000000,
             "amount":2,
             "timestamp":1526992336241,
             "expiration":1529584336241,
             "matcherFee":1,
-            "matcherFeeAssetId":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy",
-            "signature":"2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs",
-            "proofs":["2bkuGwECMFGyFqgoHV4q7GRRWBqYmBFWpYRkzgYANR4nN2twgrNaouRiZBqiK2RJzuo9NooB9iRiuZ4hypBbUQs"]
+            "matcherFeeAssetId":"7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100",
+            "signature":"01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984",
+            "proofs":["01610f3c35b77ded70b072052e695bba9f64573ec4fc18da1176c92e1b2ee52d2b247c91760d381fca3fae148d323088613c06df1d495524fb5ad25d3e4a3984"]
          },
          "order2":{
             "version": 1,
             "id":"${sell.id()}",
             "sender":"${sell.sender.toAddress}",
-            "senderPublicKey":"7E9Za8v8aT6EyU1sX91CVK7tWUeAetnNYDxzKZsyjyKV",
-            "matcherPublicKey":"Fvk5DXmfyWVZqQVBowUBMwYtRAHDtdyZNNeRrwSjt6KP",
-            "assetPair":{"amountAsset":null,"priceAsset":"9ZDWzK53XT5bixkmMwTJi2YzgxCqn5dUajXFcT2HcFDy"},
+            "senderPublicKey":"5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60",
+            "matcherPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
+            "assetPair":{"amountAsset":null,"priceAsset":"7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100"},
             "orderType":"sell",
             "price":5000000000,
             "amount":3,
             "timestamp":1526992336241,
             "expiration":1529584336241,
             "matcherFee":2,
-            "signature":"2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq",
-            "proofs":["2R6JfmNjEnbXAA6nt8YuCzSf1effDS4Wkz8owpCD9BdCNn864SnambTuwgLRYzzeP5CAsKHEviYKAJ2157vdr5Zq"]
+            "signature":"46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388",
+            "proofs":["46cae51857cc0e12b61ec90473197d9b61c8dcbbf8023808b7c59398858088404b6e3148e1d479b49e22d6b7333ad3fe20fba572547b195a9ee343aa49e62388"]
          },
          "price":5000000000,
          "amount":2,

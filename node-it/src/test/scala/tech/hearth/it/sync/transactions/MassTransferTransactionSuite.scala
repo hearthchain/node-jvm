@@ -206,12 +206,15 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
         // TODO: minimum-fee validation isn't implemented yet (FeeValidation.getMinFee is computed but never checked
         // by TransactionDiffer/CommonValidation); restore this case once fee rules are designed and enforced.
         // (request(fee = 99999), "Fee .* does not exceed minimal value"),
-        // utils.byteArrayFromString base58-decodes the attachment before the length check ever runs; an ASCII 'a'
-        // repeated this many times trips its own generic parse-length gate first (see TransferTransactionSuite),
-        // so use a raw byte value that base58-encodes shorter to actually reach the attachment-specific check.
+        // utils.byteArrayFromString hex-decodes the attachment before the length check ever runs. Hex encodes
+        // exactly 2 chars per byte with no compression, and MaxAttachmentStringSize is sized from the same
+        // 140-byte bound as MaxAttachmentSize, so any attachment over MaxAttachmentSize is also over the generic
+        // string-length limit - the attachment-specific "Invalid attachment. Length ... exceeds maximum" check is
+        // unreachable via this endpoint under hex and is exercised directly in node/tests instead
+        // (MassTransferTransactionSpecification).
         (
           request(attachment = Array.fill(MaxAttachmentSize + 1)(1: Byte)),
-          "Invalid attachment. Length \\d+ bytes exceeds maximum of \\d+ bytes."
+          "Can't parse '.*' as base16 encoded byte array"
         )
       )
 

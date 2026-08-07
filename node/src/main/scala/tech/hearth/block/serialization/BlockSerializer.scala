@@ -32,14 +32,14 @@ object BlockHeaderSerializer {
       case Some(fv) =>
         val builder = Json.newBuilder
         if (fv.valid.nonEmpty) builder += "endorserIndexes" -> GeneratorIndex.toInts(fv.valid)
-        fv.aggregatedEndorsement.foreach(s => builder += "aggregatedEndorsementSignature" -> s.base58)
+        fv.aggregatedEndorsement.foreach(s => builder += "aggregatedEndorsementSignature" -> s.base16)
         if (fv.finalizedHeight > Height(0)) builder += "finalizedHeight" -> fv.finalizedHeight
         if (fv.conflict.nonEmpty) builder += "conflictEndorsements" -> fv.conflict.map { c =>
           Json.obj(
             "endorserIndex"    -> c.endorserIndex.toInt,
             "finalizedBlockId" -> c.finalizedId.toString,
             "finalizedHeight"  -> c.finalizedHeight.toInt,
-            "signature"        -> c.signature.base58
+            "signature"        -> c.signature.base16
           )
         }
 

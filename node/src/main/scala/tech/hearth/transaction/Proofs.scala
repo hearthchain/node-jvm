@@ -2,28 +2,26 @@ package tech.hearth.transaction
 
 import com.google.common.primitives.Bytes
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.lang.ValidationError
 import tech.hearth.serialization.Deser
 import tech.hearth.transaction.TxValidationError.{GenericError, ToBigProof, TooManyProofs, UsupportedProofVersion}
-import tech.hearth.utils.base58Length
 import monix.eval.Coeval
 
 import scala.util.Try
 
 case class Proofs(proofs: Seq[ByteStr]) {
   val bytes: Coeval[Array[Byte]]  = Coeval.evalOnce(Bytes.concat(Array(Proofs.Version), Deser.serializeArrays(proofs.map(_.arr))))
-  val base58: Coeval[Seq[String]] = Coeval.evalOnce(proofs.map(p => Base58.encode(p.arr)))
+  val base16: Coeval[Seq[String]] = Coeval.evalOnce(proofs.map(p => Base16.encode(p.arr)))
   def toSignature: ByteStr        = proofs.headOption.getOrElse(ByteStr.empty)
   override def toString: String   = s"Proofs(${proofs.mkString(", ")})"
   def add(proof: ByteStr): Proofs = Proofs(proofs :+ proof)
 }
 
 object Proofs {
-  val Version: Byte           = 1: Byte
-  val MaxProofs: Int          = 8
-  val MaxProofSize: Int       = 64
-  val MaxProofStringSize: Int = base58Length(MaxProofSize)
+  val Version: Byte     = 1: Byte
+  val MaxProofs: Int    = 8
+  val MaxProofSize: Int = 64
 
   lazy val empty = new Proofs(Nil)
 

@@ -16,8 +16,8 @@ object NodeConfigs {
     * at runtime.
     */
   object GenesisAssets {
-    val TestAsset: IssuedAsset    = IssuedAsset(ByteStr.decodeBase58("9PgUiAftSxvtUGiefVGm2wyVDt5XRqxmHNoaNwEMGDJK").get)
-    val TestNftAsset: IssuedAsset = IssuedAsset(ByteStr.decodeBase58("AVNrpFeW7pzgthvuingmJE7SpWBXaGpHkHYEQzco87ij").get)
+    val TestAsset: IssuedAsset    = IssuedAsset(ByteStr.decodeBase16("7cace92d77062883e346c71dbf4db00179896879a271c90b1335fa0421605754").get)
+    val TestNftAsset: IssuedAsset = IssuedAsset(ByteStr.decodeBase16("8cfe2930adce25be213f05b9e62dcf9e66d189eb9fa964e8603864d7a710fde4").get)
   }
 
   private val NonConflictingNodes = Set(1, 4, 6, 7)

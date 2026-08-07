@@ -5,7 +5,7 @@ import tech.hearth.account.PublicKey
 import tech.hearth.api.http.ApiError.WrongJson
 import tech.hearth.api.http.requests.TransferRequest
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto
 import tech.hearth.it.NodeConfigs.GenesisAssets
@@ -139,7 +139,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
         "sender"     -> sender.address,
         "recipient"  -> secondAddress,
         "amount"     -> transferAmount,
-        "attachment" -> Base58.encode("falafel".getBytes("UTF-8"))
+        "attachment" -> Base16.encode("falafel".getBytes("UTF-8"))
       )
     )
   }
@@ -150,7 +150,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
         "type"       -> MassTransferTransaction.typeId,
         "sender"     -> sender.address,
         "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, 1.waves), Transfer(thirdAddress, 2.waves))),
-        "attachment" -> Base58.encode("masspay".getBytes("UTF-8"))
+        "attachment" -> Base16.encode("masspay".getBytes("UTF-8"))
       )
     )
   }
@@ -184,11 +184,11 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     assert(signedRequestResponse.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
     val signedRequestJson = Json.parse(signedRequestResponse.getResponseBody)
     val signedRequest     = signedRequestJson.as[TransferRequest]
-    assert(PublicKey.fromBase58String(signedRequest.senderPublicKey).explicitGet() == PublicKey(firstAddress.publicKey()))
+    assert(PublicKey.fromBase16String(signedRequest.senderPublicKey).explicitGet() == PublicKey(firstAddress.publicKey()))
     assert(signedRequest.recipient == secondAddress)
     assert(signedRequest.fee == minFee)
     assert(signedRequest.amount == transferAmount)
-    val signature = Base58.tryDecodeWithLimit((signedRequestJson \ "proofs")(0).as[String]).get
+    val signature = Base16.tryDecodeWithLimit((signedRequestJson \ "proofs")(0).as[String]).get
     val tx        = signedRequest.toTx.explicitGet()
     val keyPair   = sender.keyPair
     assert(crypto.verify(ByteStr(signature), tx.bodyBytes(), PublicKey(keyPair.publicKey())))

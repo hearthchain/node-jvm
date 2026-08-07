@@ -6,7 +6,7 @@ import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.api.common.AddressPortfolio
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
-import tech.hearth.common.utils.{Base58, Base64}
+import tech.hearth.common.utils.{Base16, Base64}
 import tech.hearth.database.*
 import tech.hearth.database.protobuf.StaticAssetInfo
 import tech.hearth.settings.Constants
@@ -137,7 +137,7 @@ object Explorer extends ScorexLogging {
           }
 
         case "B" =>
-          val maybeBlockId = Base58.tryDecodeWithLimit(argument(1, "block id")).toOption.map(ByteStr.apply)
+          val maybeBlockId = Base16.tryDecodeWithLimit(argument(1, "block id")).toOption.map(ByteStr.apply)
           if (maybeBlockId.isDefined) {
             val kBlockHeight     = Keys.heightOf(maybeBlockId.get)
             val blockHeightBytes = rdb.db.get(kBlockHeight.keyBytes)
@@ -163,17 +163,17 @@ object Explorer extends ScorexLogging {
             (currentVf.height, currentVf.volume, currentVf.fee) +: getPrevVfs(currentVf.prevHeight, Seq.empty).reverse
           }
 
-          val orderId = Base58.tryDecodeWithLimit(argument(1, "order id")).toOption.map(ByteStr.apply)
+          val orderId = Base16.tryDecodeWithLimit(argument(1, "order id")).toOption.map(ByteStr.apply)
           if (orderId.isDefined) {
             val kVolumeAndFee = Keys.filledVolumeAndFeeAt(orderId.get, Height(blockchainHeight))
             val bytes1        = rdb.db.get(kVolumeAndFee.keyBytes)
             val v             = kVolumeAndFee.parse(bytes1)
-            log.info(s"OrderId = ${Base58.encode(orderId.get.arr)}: Volume = ${v.volume}, Fee = ${v.fee}")
+            log.info(s"OrderId = ${Base16.encode(orderId.get.arr)}: Volume = ${v.volume}, Fee = ${v.fee}")
 
             val vfHistory  = loadVfHistory(orderId.get)
             val heights    = vfHistory.map(_._1)
             val heightsStr = heights.mkString("[", ", ", "]")
-            log.info(s"OrderId = ${Base58.encode(orderId.get.arr)}: History = $heightsStr")
+            log.info(s"OrderId = ${Base16.encode(orderId.get.arr)}: History = $heightsStr")
             vfHistory.foreach { case (h, volume, fee) =>
               log.info(s"\t h = $h: Volume = $volume, Fee = $fee")
             }
@@ -213,7 +213,7 @@ object Explorer extends ScorexLogging {
 
         case "AA" =>
           val address   = Address.fromString(argument(1, "address")).explicitGet()
-          val asset     = IssuedAsset(ByteStr.decodeBase58(argument(2, "asset")).get)
+          val asset     = IssuedAsset(ByteStr.decodeBase16(argument(2, "asset")).get)
           val ai        = Keys.addressId(address)
           val addressId = ai.parse(rdb.db.get(ai.keyBytes)).get
           log.info(s"Address ID = $addressId")
@@ -303,7 +303,7 @@ object Explorer extends ScorexLogging {
               var counter = 0
               while (counter < PrefixLength && prevAssetId(counter) == thisAssetId(counter)) counter += 1
               if (counter == PrefixLength) {
-                log.info(s"${Base58.encode(prevAssetId)} ~ ${Base58.encode(thisAssetId)}")
+                log.info(s"${Base16.encode(prevAssetId)} ~ ${Base16.encode(thisAssetId)}")
               }
             }
             prevAssetId = thisAssetId
@@ -351,7 +351,7 @@ object Explorer extends ScorexLogging {
           log.info(s"TxMeta column family: ${new String(rdb.txMetaHandle.handle.getName)}/${rdb.txMetaHandle.handle.getID}")
           val id = argument(1, "id")
           log.info(s"Load meta for $id")
-          val meta = rdb.db.get(Keys.transactionMetaById(TransactionId(ByteStr.decodeBase58(id).get), rdb.txMetaHandle))
+          val meta = rdb.db.get(Keys.transactionMetaById(TransactionId(ByteStr.decodeBase16(id).get), rdb.txMetaHandle))
           log.info(s"Meta: $meta")
         case "ABHC" =>
           log.info("Looking for asset balance history corruptions")

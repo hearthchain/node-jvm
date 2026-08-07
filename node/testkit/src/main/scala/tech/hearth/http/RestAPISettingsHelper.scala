@@ -2,7 +2,7 @@ package tech.hearth.http
 
 import com.typesafe.config.ConfigFactory
 import tech.hearth.api.http.`X-Api-Key`
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.crypto
 import tech.hearth.settings.*
 import pureconfig.ConfigSource
@@ -18,7 +18,7 @@ trait RestAPISettingsHelper {
   lazy val MaxAssetIdsPerRequest     = 100
 
   lazy val restAPISettings = {
-    val keyHash = Base58.encode(crypto.secureHash(apiKey.getBytes("UTF-8")))
+    val keyHash = Base16.encode(crypto.secureHash(apiKey.getBytes("UTF-8")))
     val config = ConfigFactory
       .parseString(
         s"""waves.rest-api {

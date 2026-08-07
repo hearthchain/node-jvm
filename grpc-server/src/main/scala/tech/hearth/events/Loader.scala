@@ -3,7 +3,7 @@ package tech.hearth.events
 import tech.hearth.api.common.CommonBlocksApi
 import tech.hearth.api.grpc.*
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.database.{DBExt, DBResource}
 import tech.hearth.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
 import tech.hearth.events.protobuf.BlockchainUpdated.Append.Body
@@ -30,7 +30,7 @@ class Loader(db: RocksDB, blocksApi: CommonBlocksApi, target: Option[(Int, ByteS
     for ((h, id) <- target if h == fromHeight.toInt + buffer.size - 1; u <- buffer.lastOption) {
       require(
         u.id.toByteArray.sameElements(id.arr),
-        s"Stored update ${Base58.encode(u.id.toByteArray)} at ${u.height} does not match target $id at $h"
+        s"Stored update ${Base16.encode(u.id.toByteArray)} at ${u.height} does not match target $id at $h"
       )
     }
 

@@ -249,7 +249,7 @@ object NarrowTransactionGenerator extends ConfigReaders {
 
   def apply(settings: Settings, accounts: Seq[SigningKey]): NarrowTransactionGenerator = {
     val leaseRecipient = GeneratorSettings.toKeyPair("lease recipient")
-    val tradeAssetId   = settings.tradeAssetId.map(id => ByteStr.decodeBase58(id).get)
+    val tradeAssetId   = settings.tradeAssetId.map(id => ByteStr.decodeBase16(id).get)
 
     val preconditions = Preconditions(leaseRecipient, tradeAssetId)
 

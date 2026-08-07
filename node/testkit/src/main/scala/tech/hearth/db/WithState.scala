@@ -482,7 +482,7 @@ object WithState {
       ByteStr(signer.publicKey()).toString,
       // Derived the same way TxHelpers.commitToGeneration derives them, so that a test re-committing this signer
       // registers the very keys the genesis already committed for it
-      TxHelpers.blsKeyOf(signer).publicKey.base58,
+      TxHelpers.blsKeyOf(signer).publicKey.base16,
       ByteStr(TxHelpers.vrfKeyOf(signer).publicKey()).toString
     )
 

@@ -8,14 +8,14 @@ import tech.hearth.state.{GeneratorSet, StateSnapshot}
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.assets.exchange.Order
 import tech.hearth.transaction.validation.TxValidator
-import tech.hearth.utils.{EthEncoding, base58Length}
+import tech.hearth.utils.{EthEncoding, base16Length}
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.{Interval, NonNegative, Positive}
 import play.api.libs.json.*
 
 package object transaction {
   val AssetIdLength: Int       = tech.hearth.crypto.DigestLength
-  val AssetIdStringLength: Int = base58Length(AssetIdLength)
+  val AssetIdStringLength: Int = base16Length(AssetIdLength)
 
   case class DiscardedBlock(block: Block, hitSource: ByteStr, snapshot: Option[BlockSnapshot], generatorSet: GeneratorSet)
   type DiscardedBlocks       = Seq[DiscardedBlock]

@@ -12,25 +12,31 @@ class LeaseCancelTransactionSpecification extends PropSpec {
   property("JSON format validation for LeaseCancelTransactionV1") {
     val js = Json.parse("""{
                        "type": 5,
-                       "id": "ATVDhiQV5dqSVGf3kobpHrE2GWgESSD4Hz6saUKq5ggt",
+                       "id": "8c8230d18bfec2e1f6fe56baf1866c90850e42d259b66c25390c5447639675a5",
                        "sender": "thrth1ryd2f987gg464uf4q5jte5rcmc2xgq6kr3qe39",
-                       "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                       "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
                        "fee": 1000000,
                        "feeAssetId": null,
                        "timestamp": 1526646300260,
-                       "proofs": ["4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3"],
-                       "leaseId": "EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY",
+                       "proofs": ["ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280"],
+                       "leaseId": "c905697322ae74647ff72b38bf23de8c9db40276abb2195676c78a260edcec0f",
                        "chainId": 84
                        }
     """)
 
     val tx = LeaseCancelTransaction
       .create(
-        PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
-        ByteStr.decodeBase58("EXhjYjy8a1dURbttrGzfcft7cddDnPnoa3vqaBLCTFVY").get,
+        PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
+        ByteStr.decodeBase16("c905697322ae74647ff72b38bf23de8c9db40276abb2195676c78a260edcec0f").get,
         1000000,
         1526646300260L,
-        Proofs(ByteStr.decodeBase58("4T76AXcksn2ixhyMNu4m9UyY54M3HDTw5E2HqUsGV4phogs2vpgBcN5oncu4sbW4U3KU197yfHMxrc3kZ7e6zHG3").get)
+        Proofs(
+          ByteStr
+            .decodeBase16(
+              "ac901cf6aa3d09e9a623652baff0eb6128e58c1d57a23f4c254f7f6035d4a5a6e0c1431fff68288d039fb83c07af40fe25e21f1fd98df9d8a67a7d0cf042e280"
+            )
+            .get
+        )
       )
       .explicitGet()
 
@@ -40,27 +46,35 @@ class LeaseCancelTransactionSpecification extends PropSpec {
   property("JSON format validation for LeaseCancelTransactionV2") {
     val js = Json.parse("""{
                         "type": 5,
-                        "id": "CcE4JEuKTfrqbEURF7jQyryxWrG1Tr8niEU2C7SA5Pow",
+                        "id": "ac76a5defa40183479e67eb5f23ba63d7c64a96ce86f69abdc0955fe4fe64a8a",
                         "sender": "thrth1ryd2f987gg464uf4q5jte5rcmc2xgq6kr3qe39",
-                        "senderPublicKey": "FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z",
+                        "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
                         "fee": 1000000,
                         "feeAssetId":null,
                         "timestamp": 1526646300260,
                         "proofs": [
-                        "3h5SQLbCzaLoTHUeoCjXUHB6qhNUfHZjQQVsWTRAgTGMEdK5aeULMVUfDq63J56kkHJiviYTDT92bLGc8ELrUgvi"
+                        "86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f"
                         ],
-                        "leaseId": "DJWkQxRyJNqWhq9qSQpK2D4tsrct6eZbjSv3AH4PSha6",
+                        "leaseId": "b6c8c0ec67cb74ea16339e5cba54e274310234597b193fa49035e1013b205dc7",
                         "chainId": 84
                        }
     """)
 
     val tx = LeaseCancelTransaction
       .create(
-        PublicKey.fromBase58String("FM5ojNqW7e9cZ9zhPYGkpSP1Pcd8Z3e3MNKYVS5pGJ8Z").explicitGet(),
-        ByteStr.decodeBase58("DJWkQxRyJNqWhq9qSQpK2D4tsrct6eZbjSv3AH4PSha6").get,
+        PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
+        ByteStr.decodeBase16("b6c8c0ec67cb74ea16339e5cba54e274310234597b193fa49035e1013b205dc7").get,
         1000000,
         1526646300260L,
-        Proofs(Seq(ByteStr.decodeBase58("3h5SQLbCzaLoTHUeoCjXUHB6qhNUfHZjQQVsWTRAgTGMEdK5aeULMVUfDq63J56kkHJiviYTDT92bLGc8ELrUgvi").get))
+        Proofs(
+          Seq(
+            ByteStr
+              .decodeBase16(
+                "86982ec3897bc1d6461c58bca6378a584fd3fb1186f125b1a89f87c2dc77316c5536054de029d14fb2d512582e4b988a5dbfb3a47acb779cec925bc625b5598f"
+              )
+              .get
+          )
+        )
       )
       .explicitGet()
 

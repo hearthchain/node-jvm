@@ -3,7 +3,7 @@ package tech.hearth
 import com.google.common.primitives.UnsignedBytes
 import com.google.protobuf.ByteString
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import play.api.libs.json.*
 
 import java.nio.charset.StandardCharsets
@@ -13,14 +13,8 @@ import scala.util.{Failure, Success}
 
 package object utils {
 
-  private val BytesMaxValue  = 256
-  private val Base58MaxValue = 58
-
-  private val BytesLog = math.log(BytesMaxValue)
-  private val BaseLog  = math.log(Base58MaxValue)
-
   def base64Length(byteArrayLength: Int): Int = math.ceil(byteArrayLength * 4 / 3.0).toInt
-  def base58Length(byteArrayLength: Int): Int = math.ceil(BytesLog / BaseLog * byteArrayLength).toInt
+  def base16Length(byteArrayLength: Int): Int = byteArrayLength * 2
 
   def forceStopApplication(reason: ApplicationStopReason = Default): Unit =
     System.exit(reason.code)
@@ -54,9 +48,9 @@ package object utils {
   }
 
   def byteArrayFromString[T](v: String, onSuccess: Array[Byte] => T, onFailure: String => T): T =
-    Base58.tryDecodeWithLimit(v) match {
+    Base16.tryDecodeWithLimit(v) match {
       case Success(bytes) => onSuccess(bytes)
-      case Failure(_)     => onFailure(s"Can't parse '$v' as base58 encoded byte array")
+      case Failure(_)     => onFailure(s"Can't parse '$v' as base16 encoded byte array")
     }
 
   val arrayReads: Reads[Array[Byte]] = Reads {

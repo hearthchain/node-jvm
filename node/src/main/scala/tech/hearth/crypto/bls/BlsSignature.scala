@@ -11,7 +11,7 @@ object BlsSignature {
   extension (self: BlsSignature) {
     def byteStr: ByteStr = self
     def arr: Array[Byte] = byteStr.arr
-    def base58: String   = byteStr.toString
+    def base16: String   = byteStr.toString
 
     def verifyBasic(message: Array[Byte], blsPk: BlsPublicKey): Either[String, Unit] =
       BlsUtils.verifyBasic(byteStr.arr, message, blsPk.arr)

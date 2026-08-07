@@ -26,8 +26,16 @@ package object appender {
 
   // Invalid blocks, that are already in blockchain
   private val exceptions = List(
-    Height(812608) -> ByteStr.decodeBase58("2GNCYVy7k3kEPXzz12saMtRDeXFKr8cymVsG8Yxx3sZZ75eHj9csfXnGHuuJe7XawbcwjKdifUrV1uMq4ZNCWPf1").get,
-    Height(813207) -> ByteStr.decodeBase58("5uZoDnRKeWZV9Thu2nvJVZ5dBvPB7k2gvpzFD618FMXCbBVBMN2rRyvKBZBhAGnGdgeh2LXEeSr9bJqruJxngsE7").get
+    Height(812608) -> ByteStr
+      .decodeBase16(
+        "3f4482ea46ec5204d6ada52a81cdc6996f18063a82b2035ef71822634d4b3a4b36405f55ef022039e3aa08fbbb0013f984aa87fd6ca42b0e6a053388b2f8458c"
+      )
+      .get,
+    Height(813207) -> ByteStr
+      .decodeBase16(
+        "f5660118bd9a1b25134d4089d84252877c162659483d6f106c2024fd368da8505e75e45fe9c771f21f54e1a6b135277be43185163268035877f1dd65c3a79288"
+      )
+      .get
   )
 
   private def responseToSnapshot(block: Block, height: Height)(s: BlockSnapshotResponse): BlockSnapshot =

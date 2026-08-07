@@ -14,7 +14,7 @@ class StateHashSpec extends FreeSpec {
     val stateHash    = new StateHashBuilder
     val address      = Address.fromBytes(Array.fill(20)(1.toByte)).explicitGet()
     val address1     = Address.fromBytes(Array.fill(20)(2.toByte)).explicitGet()
-    val assetId      = IssuedAsset(ByteStr.decodeBase58("9ekQuYn92natMnMq8KqeGK3Nn7cpKd3BvPEGgD6fFyyz").get)
+    val assetId      = IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get)
     val wavesAccount = TxHelpers.defaultSigner
     val blsAccount   = TxHelpers.defaultBlsKey
     val vrfKey       = TxHelpers.defaultVrfKey

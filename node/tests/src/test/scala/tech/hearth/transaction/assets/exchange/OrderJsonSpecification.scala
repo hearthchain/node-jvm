@@ -2,7 +2,7 @@ package tech.hearth.transaction.assets.exchange
 
 import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base58
+import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.PropSpec
 import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
@@ -24,10 +24,10 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
     val json = Json.parse(s"""
         {
           "senderPublicKey": "$pubKeyStr",
-          "matcherPublicKey": "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ",
+          "matcherPublicKey": "ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f",
           "assetPair": {
-            "amountAsset": "29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b",
-            "priceAsset": "GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44"
+            "amountAsset": "111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4",
+            "priceAsset": "e26db8e38198582a39819b608f824af3829700d6a8d4eacdf564047bc4fbb091"
           },
           "orderType": "buy",
           "amount": 1,
@@ -35,7 +35,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
           "price": 3,
           "timestamp": 0,
           "expiration": 0,
-          "signature": "signature"
+          "signature": "aabbcc"
         } """)
 
     json.validate[Order] match {
@@ -43,25 +43,25 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
         fail("Error: " + e.toString())
       case JsSuccess(o, _) =>
         o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
-        o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
-        o.assetPair.amountAsset.compatId.get shouldBe ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get
-        o.assetPair.priceAsset.compatId.get shouldBe ByteStr.decodeBase58("GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44").get
+        o.matcherPublicKey shouldBe PublicKey(Base16.tryDecodeWithLimit("ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f").get)
+        o.assetPair.amountAsset.compatId.get shouldBe ByteStr.decodeBase16("111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4").get
+        o.assetPair.priceAsset.compatId.get shouldBe ByteStr.decodeBase16("e26db8e38198582a39819b608f824af3829700d6a8d4eacdf564047bc4fbb091").get
         o.price.value shouldBe 3
         o.amount.value shouldBe 1
         o.matcherFee.value shouldBe 2
         o.timestamp shouldBe 0
         o.expiration shouldBe 0
-        o.signature shouldBe ByteStr(Base58.decode("signature"))
+        o.signature shouldBe ByteStr(Base16.decode("aabbcc"))
     }
 
     val jsonOV3 = Json.parse(s"""
         {
           "version": 3,
           "senderPublicKey": "$pubKeyStr",
-          "matcherPublicKey": "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ",
+          "matcherPublicKey": "ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f",
           "assetPair": {
-            "amountAsset": "29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b",
-            "priceAsset": "GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44"
+            "amountAsset": "111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4",
+            "priceAsset": "e26db8e38198582a39819b608f824af3829700d6a8d4eacdf564047bc4fbb091"
           },
           "orderType": "buy",
           "amount": 1,
@@ -69,8 +69,8 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
           "price": 3,
           "timestamp": 0,
           "expiration": 0,
-          "signature": "signature",
-          "matcherFeeAssetId": "29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b"
+          "signature": "aabbcc",
+          "matcherFeeAssetId": "111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4"
         } """)
 
     jsonOV3.validate[Order] match {
@@ -78,26 +78,26 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
         fail("Error: " + e.toString())
       case JsSuccess(o, _) =>
         o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
-        o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
-        o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
-        o.assetPair.priceAsset shouldBe IssuedAsset(ByteStr.decodeBase58("GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44").get)
+        o.matcherPublicKey shouldBe PublicKey(Base16.tryDecodeWithLimit("ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f").get)
+        o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase16("111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4").get)
+        o.assetPair.priceAsset shouldBe IssuedAsset(ByteStr.decodeBase16("e26db8e38198582a39819b608f824af3829700d6a8d4eacdf564047bc4fbb091").get)
         o.price.value shouldBe 3
         o.amount.value shouldBe 1
         o.matcherFee.value shouldBe 2
         o.timestamp shouldBe 0
         o.expiration shouldBe 0
-        o.signature shouldBe ByteStr(Base58.decode("signature"))
-        o.matcherFeeAssetId shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
+        o.signature shouldBe ByteStr(Base16.decode("aabbcc"))
+        o.matcherFeeAssetId shouldBe IssuedAsset(ByteStr.decodeBase16("111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4").get)
     }
 
     val jsonOV4 = Json.parse(s"""
         {
           "version": 4,
           "senderPublicKey": "$pubKeyStr",
-          "matcherPublicKey": "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ",
+          "matcherPublicKey": "ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f",
           "assetPair": {
-            "amountAsset": "29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b",
-            "priceAsset": "GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44"
+            "amountAsset": "111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4",
+            "priceAsset": "e26db8e38198582a39819b608f824af3829700d6a8d4eacdf564047bc4fbb091"
           },
           "orderType": "buy",
           "amount": 1,
@@ -105,8 +105,8 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
           "price": 3,
           "timestamp": 4,
           "expiration": 5,
-          "signature": "signature",
-          "matcherFeeAssetId": "29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b"
+          "signature": "aabbcc",
+          "matcherFeeAssetId": "111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4"
         } """)
 
     jsonOV4.validate[Order] match {
@@ -115,18 +115,18 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
       case JsSuccess(o, _) =>
         // Pinned against the fixed sender above, so a change in how an order id is computed shows up here. Rebaselined
         // when that sender changed: the id is a function of it, and the old key could not be kept
-        o.id().toString shouldBe "HanJfjSFt7JWuHZj7Y1dzN4A2MYwdxM7az3pE4mUSYRP"
+        o.id().toString shouldBe "f662623495d2a0f036d3a4f6773b6167e3c2cdd150556b425984757654936d3a"
         o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
-        o.matcherPublicKey shouldBe PublicKey(Base58.tryDecodeWithLimit("DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ").get)
-        o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
-        o.assetPair.priceAsset shouldBe IssuedAsset(ByteStr.decodeBase58("GEtBMkg419zhDiYRXKwn2uPcabyXKqUqj4w3Gcs1dq44").get)
+        o.matcherPublicKey shouldBe PublicKey(Base16.tryDecodeWithLimit("ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f").get)
+        o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase16("111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4").get)
+        o.assetPair.priceAsset shouldBe IssuedAsset(ByteStr.decodeBase16("e26db8e38198582a39819b608f824af3829700d6a8d4eacdf564047bc4fbb091").get)
         o.price.value shouldBe 3
         o.amount.value shouldBe 1
         o.matcherFee.value shouldBe 2
         o.timestamp shouldBe 4
         o.expiration shouldBe 5
-        o.signature shouldBe ByteStr(Base58.decode("signature"))
-        o.matcherFeeAssetId shouldBe IssuedAsset(ByteStr.decodeBase58("29ot86P3HoUZXH1FCoyvff7aeZ3Kt7GqPwBWXncjRF2b").get)
+        o.signature shouldBe ByteStr(Base16.decode("aabbcc"))
+        o.matcherFeeAssetId shouldBe IssuedAsset(ByteStr.decodeBase16("111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4").get)
     }
 
   }
@@ -142,7 +142,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
           "price": 3,
           "timestamp": 0,
           "expiration": 0,
-          "signature": "signature"
+          "signature": "aabbcc"
         } """)
 
     json.validate[Order] match {
@@ -154,27 +154,27 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
     }
   }
 
-  val base58Str = "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ"
+  val hexStr = "ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f"
   val json: JsValue = Json.parse(s"""
     {
-      "sender": "$base58Str",
+      "sender": "$hexStr",
       "wrong_sender": "0abcd",
       "wrong_long": "12e",
-      "publicKey": "$base58Str",
+      "publicKey": "$hexStr",
       "wrong_publicKey": "0abcd"
     }
     """)
 
-  property("Json Reads Base58") {
+  property("Json Reads Base16") {
     val sender = (json \ "sender").as[Option[Array[Byte]]]
-    sender.get shouldBe Base58.tryDecodeWithLimit(base58Str).get
+    sender.get shouldBe Base16.tryDecodeWithLimit(hexStr).get
 
     (json \ "wrong_sender").validate[Array[Byte]] shouldBe a[JsError]
   }
 
   property("Json Reads PublicKey") {
     val publicKey = (json \ "publicKey").as[PublicKey]
-    publicKey shouldBe PublicKey(Base58.tryDecodeWithLimit(base58Str).get)
+    publicKey shouldBe PublicKey(Base16.tryDecodeWithLimit(hexStr).get)
 
     (json \ "wrong_publicKey").validate[PublicKey] match {
       case e: JsError =>
@@ -202,7 +202,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
       s"""
         {
           "senderPublicKey": "$pubKeyStr",
-          "matcherPublicKey": "DZUxn4pC7QdYrRqacmaAJghatvnn1Kh1mkE2scZoLuGJ",
+          "matcherPublicKey": "ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f",
            "assetPair": {
              "amountAsset": "",
              "priceAsset": $priceAsset
@@ -213,7 +213,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
           "price": 3,
           "timestamp": 0,
           "expiration": 0,
-          "signature": "signature"
+          "signature": "aabbcc"
         } """
 
     val jsons = Seq(""" "" """, "null", """ "WAVES" """).map { x =>
