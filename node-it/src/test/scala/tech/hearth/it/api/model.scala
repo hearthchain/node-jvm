@@ -72,19 +72,11 @@ object DecompiledScript {
 case class FullAssetInfo(
     assetId: String,
     balance: Long,
-    reissuable: Boolean,
-    minSponsoredAssetFee: Option[Long],
-    sponsorBalance: Option[Long],
     quantity: Long,
     issueTransaction: Option[Transaction]
 )
 object FullAssetInfo {
   implicit val fullAssetInfoFormat: Format[FullAssetInfo] = Json.format
-}
-
-case class NFTAssetInfo(assetId: String, reissuable: Boolean, quantity: Long, decimals: Byte)
-object NFTAssetInfo {
-  implicit val nftAssetInfo: Format[NFTAssetInfo] = Json.format
 }
 
 case class FullAssetsInfo(address: String, balances: List[FullAssetInfo])
@@ -101,18 +93,14 @@ case class AssetInfo(
     assetId: String,
     issueHeight: Int,
     issueTimestamp: Long,
-    issuer: String,
     name: String,
     description: String,
     decimals: Int,
-    reissuable: Boolean,
     quantity: Long,
-    originTransactionId: String,
-    minSponsoredAssetFee: Option[Long],
+    sequenceInBlock: Int,
+    minAssetFee: Long,
     scriptDetails: Option[ScriptAssetInfo]
-) {
-  def isNFT: Boolean = decimals == 0 && quantity == 1 && !reissuable
-}
+)
 object AssetInfo {
   implicit val AssetInfoFormat: Format[AssetInfo] = Json.format
 }

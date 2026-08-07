@@ -10,6 +10,7 @@ import tech.hearth.protobuf.snapshot.{TransactionStatus, TransactionStateSnapsho
 import tech.hearth.protobuf.{Amount, PBSnapshots}
 import tech.hearth.state.*
 import tech.hearth.test.*
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxHelpers
 import org.bouncycastle.util.encoders.Hex
 
@@ -220,5 +221,21 @@ class TxStateSnapshotHashSpec extends PropSpec {
         raw shouldEqual expectedResult
       }
     }
+  }
+
+  // minAssetFee has no representation in TransactionStateSnapshot (only PredefinedSnapshot ever sets it, never a
+  // transaction diff - see PBSnapshots.fromProtobuf), so it can't be exercised through the table above; it must
+  // still change the hash, or two configs/nodes that disagree only on an asset's minAssetFee would be undetectable.
+  property("minAssetFee changes the resulting hash") {
+    val asset        = IssuedAsset(ByteStr(fastHash(Ints.toByteArray(0xaa22aa44))))
+    val withoutFee   = StateSnapshot()
+    val withFee      = StateSnapshot(minAssetFees = Map(asset -> MinAssetFee.unsafeFrom(100000L)))
+    val withOtherFee = StateSnapshot(minAssetFees = Map(asset -> MinAssetFee.unsafeFrom(200000L)))
+
+    def hashOf(s: StateSnapshot): ByteStr =
+      TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
+
+    hashOf(withFee) should not equal hashOf(withoutFee)
+    hashOf(withFee) should not equal hashOf(withOtherFee)
   }
 }

@@ -33,7 +33,6 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     val quantity      = sender.assetsDetails(assetId).quantity
     val currentHeight = sender.height
     sender.assetsDetails(assetId, amountsAsStrings = true).quantity shouldBe quantity
-    sender.nftList(firstAddress, 1, amountsAsStrings = true)
 
     sender.waitForHeight(currentHeight + 1)
     val assetDistribution = sender.getWithCustomHeader(

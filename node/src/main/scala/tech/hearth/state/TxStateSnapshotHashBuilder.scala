@@ -70,6 +70,10 @@ object TxStateSnapshotHashBuilder {
       changedKeys += asset.id.arr ++ volume.volume.toByteArray
     }
 
+    snapshot.minAssetFees.foreach { case (asset, minFee) =>
+      changedKeys += asset.id.arr ++ Longs.toByteArray(minFee.value)
+    }
+
     snapshot.nextCommittedGenerators.foreach { gc =>
       changedKeys += gc.sender.arr ++ gc.endorserPublicKey.arr ++ gc.vrfPublicKey.arr
     }

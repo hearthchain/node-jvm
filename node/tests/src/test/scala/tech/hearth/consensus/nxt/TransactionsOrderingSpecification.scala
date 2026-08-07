@@ -154,6 +154,24 @@ class TransactionsOrderingSpecification extends PropSpec {
     sorted shouldBe correctSeq
   }
 
+  property("TransactionsOrdering.InUTXPool does not throw when the waves-equivalent fee overflows Long") {
+    val asset  = IssuedAsset(ByteStr.fill(32)(2))
+    val minFee = 1L
+    val blockchainWithAsset = new EmptyBlockchain {
+      override def assetDescription(id: IssuedAsset): Option[AssetDescription] =
+        if (id == asset) Some(AssetDescription(ByteString.EMPTY, ByteString.EMPTY, 0, BigInt(1), 0, Height(1), MinAssetFee.unsafeFrom(minFee)))
+        else None
+    }
+
+    // fee (Long.MaxValue) * FeeUnit (100000) / minFee (1) vastly exceeds Long range - must saturate, not throw
+    val overflowingFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, Long.MaxValue, asset, ByteStr.empty, 1)
+    val wavesFeeTx       = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, 124L, Waves, ByteStr.empty, 2)
+    val ordering         = TransactionsOrdering.InUTXPool(Set.empty, blockchainWithAsset)
+
+    noException should be thrownBy ordering.compare(overflowingFeeTx, wavesFeeTx)
+    Seq(wavesFeeTx, overflowingFeeTx).sorted(using ordering) shouldBe Seq(overflowingFeeTx, wavesFeeTx)
+  }
+
   property("TransactionsOrdering.InBlock should sort txs by decreasing block timestamp") {
     val correctSeq = Seq(
       TxHelpers.transfer(

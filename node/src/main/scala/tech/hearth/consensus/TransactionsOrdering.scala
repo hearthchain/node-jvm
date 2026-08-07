@@ -55,7 +55,10 @@ object TransactionsOrdering {
         // defensive fallback only - a tx admitted into the pool already passed feePortfolios, so the asset
         // necessarily exists and has a minAssetFee; None here would mean the asset vanished after admission
         blockchain.assetDescription(asset).fold(0L) { info =>
-          (BigInt(fee) * FeeValidation.FeeUnit / info.minAssetFee.value).bigInteger.longValueExact()
+          // fee is attacker-chosen and only bounded below (by minAssetFee), so the waves-equivalent can exceed
+          // Long range - this is purely a sort key, so saturate instead of throwing on overflow
+          val normalized = BigInt(fee) * FeeValidation.FeeUnit / info.minAssetFee.value
+          if (normalized.isValidLong) normalized.toLong else Long.MaxValue
         }
     }
   }
