@@ -5,7 +5,6 @@ import tech.hearth.account.Address
 import tech.hearth.api.grpc.{BlockRangeRequest, BlockRequest, BlockWithHeight, BlocksApiGrpcImpl}
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto.DigestLength
 import tech.hearth.db.WithDomain
@@ -109,7 +108,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     withDomain(
       DomainPresets.TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(issuer.toAddress, assets = Map(asset -> 1L)),
-      assets = Seq(GenesisAssetSettings(asset.id, Base16.encode(issuer.publicKey()), "asset", 0, 1L, 100000L))
+      assets = Seq(GenesisAssetSettings(asset.id, "asset", 0, 1L, 100000L))
     ) { d =>
       val grpcApi = getGrpcApi(d)
 

@@ -1,6 +1,5 @@
 package tech.hearth
 
-import com.google.protobuf.ByteString
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
@@ -22,8 +21,8 @@ object TestValues {
   val minAssetFee: MinAssetFee = MinAssetFee.unsafeFrom(fee)
 
   val assetDescription: AssetDescription = AssetDescription(
-    ByteString.EMPTY,
-    ByteString.EMPTY,
+    "",
+    "",
     0,
     BigInt(1),
     0,

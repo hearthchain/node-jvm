@@ -1,6 +1,5 @@
 package tech.hearth.http
 
-import com.google.protobuf.ByteString
 import tech.hearth.{TestValues, TestWallet}
 import tech.hearth.api.http.ApiError.{AssetIdNotSpecified, AssetsDoesNotExist, InvalidIds, TooBigArrayAllocation}
 import tech.hearth.api.http.RouteTimeout
@@ -65,34 +64,31 @@ class AssetsRouteSpec
     }
 
   /** Assets are declared in the genesis snapshot: nothing issues one any more. What an issue transaction used to
-    * decide is now settings - name, description, decimals, quantity, reissuable - and what it used to imply follows
-    * from the declaration itself: the origin transaction id is the asset id, the issue height is the genesis one, and
-    * the sequence in block is the asset's position in the declared list. A genesis asset is never an NFT.
+    * decide is now settings - name, description, decimals, quantity - and what it used to imply follows from the
+    * declaration itself: the issue height is the genesis one, and the sequence in block is the asset's position in
+    * the declared list.
     */
   private val assetIssuer = TxHelpers.signer(700)
 
   private def genesisAsset(
       index: Int,
       quantity: Long = 100,
-      reissuable: Boolean = true,
       decimals: Int = 0,
       minFee: Long = TestValues.fee
   ): GenesisAssetSettings =
     GenesisAssetSettings(
       id = ByteStr.fill(AssetIdLength)(index.toByte),
-      issuer = ByteStr(assetIssuer.publicKey()).toString,
       name = "test",
       decimals = decimals,
       quantity = quantity,
       minFee = minFee,
-      description = "description",
-      reissuable = reissuable
+      description = "description"
     )
 
   private def descriptionOf(asset: GenesisAssetSettings, sequenceInBlock: Int): AssetDescription =
     AssetDescription(
-      name = ByteString.copyFromUtf8(asset.name),
-      description = ByteString.copyFromUtf8(asset.description),
+      name = asset.name,
+      description = asset.description,
       decimals = asset.decimals,
       totalVolume = asset.quantity,
       sequenceInBlock,
@@ -206,8 +202,7 @@ class AssetsRouteSpec
   }
 
   routePath(s"/details/{id}") in {
-    // The version dimension is gone with the issue transaction; what a declaration still varies is reissuable
-    val assets = Seq(genesisAsset(1, reissuable = false), genesisAsset(2, reissuable = true))
+    val assets = Seq(genesisAsset(1), genesisAsset(2))
     routeTest(
       balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.waves, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
       assets = assets
@@ -334,8 +329,8 @@ class AssetsRouteSpec
   private def checkResponse(desc: AssetDescription, assetId: String, response: JsObject): Unit = {
     (response \ "assetId").as[String] shouldBe assetId
     (response \ "issueTimestamp").as[Long] shouldBe 0L
-    (response \ "name").as[String] shouldBe desc.name.toStringUtf8
-    (response \ "description").as[String] shouldBe desc.description.toStringUtf8
+    (response \ "name").as[String] shouldBe desc.name
+    (response \ "description").as[String] shouldBe desc.description
     (response \ "decimals").as[Int] shouldBe desc.decimals
     (response \ "quantity").as[BigDecimal] shouldBe desc.totalVolume
     (response \ "sequenceInBlock").as[Int] shouldBe desc.sequenceInBlock

@@ -29,8 +29,8 @@ class AssetsApiGrpcImpl(assetsApi: CommonAssetsApi)(implicit sc: Scheduler) exte
   private def assetInfoResponse(d: AssetDescription): AssetInfoResponse =
     AssetInfoResponse(
       ByteString.EMPTY, // wire-compat only: AssetDescription no longer carries an issuer
-      d.name.toStringUtf8,
-      d.description.toStringUtf8,
+      d.name,
+      d.description,
       d.decimals,
       reissuable = false, // wire-compat only: no Reissue transaction exists any more
       d.totalVolume.longValue,

@@ -58,7 +58,6 @@ class TransactionsRouteSpec
       .withGenesisAssets(
         GenesisAssetSettings(
           id = tradedAsset.id,
-          issuer = ByteStr(tradedAssetIssuer.publicKey()).toString,
           name = "test",
           decimals = 8,
           quantity = tradedAssetQuantity,

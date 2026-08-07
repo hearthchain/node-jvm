@@ -274,7 +274,7 @@ object SnapshotBlockchain {
           static.name,
           static.description,
           static.decimals,
-          volume.get.volume,
+          volume.get,
           assetNum,
           Height(height),
           minFee.get

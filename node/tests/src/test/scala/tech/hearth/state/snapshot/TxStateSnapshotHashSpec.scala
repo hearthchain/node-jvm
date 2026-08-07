@@ -1,6 +1,7 @@
 package tech.hearth.state.snapshot
 
 import com.google.common.primitives.Ints
+import com.google.protobuf.ByteString
 import com.google.protobuf.ByteString.copyFrom as bs
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base64
@@ -71,13 +72,14 @@ class TxStateSnapshotHashSpec extends PropSpec {
     )
   )
 
-  // AssetVolume.reissuable is wire-compat only (nothing reissues an asset any more, see PBSnapshots.toProtobuf) -
-  // always false on the wire, and every asset now carries a name/description pair from the moment it's issued
+  // AssetVolume.reissuable and NewAsset.issuer_public_key/nft are wire-compat only (nothing reissues an asset,
+  // checks who issued it, or classifies it as an NFT any more, see PBSnapshots.toProtobuf) - always
+  // empty/false on the wire, and every asset now carries a name/description pair from the moment it's issued
   // (an asset can no longer exist with no name at all, unlike under the old separate-rename-transaction model).
   private val newAsset = TSS(
     assetStatics = Seq(
-      TSS.NewAsset(assetId1, hashInt(0x88aadd55), nft = true),
-      TSS.NewAsset(assetId2, hashInt(0x88aadd55), decimals = 8)
+      TSS.NewAsset(assetId1, ByteString.EMPTY, nft = false),
+      TSS.NewAsset(assetId2, ByteString.EMPTY, decimals = 8)
     ),
     assetVolumes = Seq(
       TSS.AssetVolume(assetId2, false, bs((BigInt(Long.MaxValue) * 10).toByteArray)),
@@ -174,34 +176,34 @@ class TxStateSnapshotHashSpec extends PropSpec {
     (
       "new asset",
       newAsset,
-      "KkYKIF5mn4IKZ9CIbYdHjPBDoqx4XMevVdwxzhB1OUvTUKJbEiDcYGFqY9MotHTpDpskoycN/Mt62bZfPxIC4fpU0ZTBniABKkYKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEiDcYGFqY9MotHTpDpskoycN/Mt62bZfPxIC4fpU0ZTBnhgIMi0KIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOGgkE//////////YyJQogXmafggpn0Ihth0eM8EOirHhcx69V3DHOEHU5S9NQolsaAQE6IgogXmafggpn0Ihth0eM8EOirHhcx69V3DHOEHU5S9NQols6IgogeJ3AESPVNg9wgq/UtGq4v+i1Fgu/tSbAQ+X8eDpPiU4=",
+      "KiIKIF5mn4IKZ9CIbYdHjPBDoqx4XMevVdwxzhB1OUvTUKJbKiQKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOGAgyLQogeJ3AESPVNg9wgq/UtGq4v+i1Fgu/tSbAQ+X8eDpPiU4aCQT/////////9jIlCiBeZp+CCmfQiG2HR4zwQ6KseFzHr1XcMc4QdTlL01CiWxoBAToiCiBeZp+CCmfQiG2HR4zwQ6KseFzHr1XcMc4QdTlL01CiWzoiCiB4ncARI9U2D3CCr9S0ari/6LUWC7+1JsBD5fx4Ok+JTg==",
       ByteStr.empty,
       "ad08b2cdcf276172198ac60568a1e207ab9e6247c6eedd353b12f9bcd7ef6426",
-      "ded0377ebaf08e335d39fb9a8770863ad7befa1bdf18a8c69806a0929a18ae39"
+      "46aff309589a8ca05a593adb61a65ca1b093360445f9411595d0239c8b6c9a41"
     ),
     (
       "elided transaction",
       elidedTransaction,
       "cAI=",
       ByteStr(fastHash(Ints.toByteArray(0xaabbef40))),
-      "ded0377ebaf08e335d39fb9a8770863ad7befa1bdf18a8c69806a0929a18ae39",
-      "81b56c1df6a5698b70fe5e75cca5743b443ac83816d28c61a1e556987807db91"
+      "46aff309589a8ca05a593adb61a65ca1b093360445f9411595d0239c8b6c9a41",
+      "dbbd7dd99509c00d1494b17387be2f989cefea1503322044cecf9eb4a35056a9"
     ),
     (
       "with generation commitment",
       withCommitment,
       "enYKIIxJnPpE5E9nuRR/Rrv2KwS91GygJLoMXMoZy9YvXiPIEjDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaIIxJnPpE5E9nuRR/Rrv2KwS91GygJLoMXMoZy9YvXiPI",
       ByteStr.empty,
-      "81b56c1df6a5698b70fe5e75cca5743b443ac83816d28c61a1e556987807db91",
-      "dee8a09d0981309b680165cd97a667bf4622b6c9c9694097aa858b76bc38aa05"
+      "dbbd7dd99509c00d1494b17387be2f989cefea1503322044cecf9eb4a35056a9",
+      "9117eac44911daf6f916441b560ccfa8d4b0649159a3754b6785f20cf49382e3"
     ),
     (
       "all together",
       all,
-      "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",
+      "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",
       ByteStr(fastHash(Ints.toByteArray(0xaabbef50))),
-      "dee8a09d0981309b680165cd97a667bf4622b6c9c9694097aa858b76bc38aa05",
-      "6a48343b54034ae61f04aaa21de49bb3e8bce37f7a36b11c785db8e5a4394a38"
+      "9117eac44911daf6f916441b560ccfa8d4b0649159a3754b6785f20cf49382e3",
+      "ca30dbcbc2d6c8b93aa17ec9e8053176595014da98a716dfc6fc9c6241b0d2ad"
     )
   )
 

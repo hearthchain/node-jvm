@@ -106,7 +106,6 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
     val issuedAsset = IssuedAsset(ByteStr.fill(32)(7))
     val assetSettings = GenesisAssetSettings(
       id = issuedAsset.id,
-      issuer = ByteStr(issuer.publicKey()).toString,
       name = "Genesis",
       decimals = 0,
       quantity = 100,
@@ -237,7 +236,6 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
       val issuedAsset = IssuedAsset(ByteStr.fill(32)(9))
       val assetSettings = GenesisAssetSettings(
         id = issuedAsset.id,
-        issuer = ByteStr(richAccount.publicKey()).toString,
         name = "IA01",
         decimals = 2,
         quantity = 10000,

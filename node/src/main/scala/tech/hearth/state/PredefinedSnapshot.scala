@@ -2,7 +2,6 @@ package tech.hearth.state
 
 import cats.syntax.either.*
 import cats.syntax.traverse.*
-import com.google.protobuf.ByteString
 import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
@@ -14,6 +13,7 @@ import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.{Asset, CommitToGenerationTransaction, TxDecimals}
 
+import java.nio.charset.StandardCharsets
 import scala.collection.immutable.VectorMap
 
 /** A predefined chunk of state, applied outside of transaction processing before the block at
@@ -61,7 +61,6 @@ object PredefinedSnapshot {
       _ <- checkNoDuplicates(settings.assets.map(_.id.toString), "asset id")
       assets <- settings.assets.toList.traverse { a =>
         for {
-          issuer <- PublicKey.fromBase16String(a.issuer).leftMap(e => GenericError(s"Predefined snapshot asset ${a.id}: invalid issuer: $e"))
           _ <- Either.cond(a.quantity > 0, (), GenericError(s"Predefined snapshot asset ${a.id}: quantity must be greater than 0, got ${a.quantity}"))
           decimalsError = GenericError(s"Predefined snapshot asset ${a.id}: ${TxDecimals.errMsg}, got ${a.decimals}")
           _ <- Either.cond(a.decimals.isValidByte, (), decimalsError)
@@ -71,16 +70,24 @@ object PredefinedSnapshot {
             (),
             GenericError(s"Predefined snapshot asset ${a.id}: an asset with this id already exists")
           )
-          isNft       = a.quantity == 1 && a.decimals == 0 && !a.reissuable
+          _ <- validateUtf8(a.name, "name", a.id)
+          _ <- validateUtf8(a.description, "description", a.id)
           minFeeError = GenericError(s"Predefined snapshot asset ${a.id}: minFee must be positive, got ${a.minFee}")
           minFee <- MinAssetFee.from(a.minFee).leftMap(_ => minFeeError)
         } yield IssuedAsset(a.id) -> NewAssetInfo(
-          AssetStaticInfo(a.id, issuer, a.decimals, nft = isNft, ByteString.copyFromUtf8(a.name), ByteString.copyFromUtf8(a.description)),
-          AssetVolumeInfo(BigInt(a.quantity)),
+          AssetStaticInfo(a.id, a.decimals, a.name, a.description),
+          BigInt(a.quantity),
           minFee
         )
       }
     } yield assets
+
+  private def validateUtf8(s: String, field: String, assetId: ByteStr): Either[ValidationError, Unit] =
+    Either.cond(
+      StandardCharsets.UTF_8.newEncoder().canEncode(s),
+      (),
+      GenericError(s"Predefined snapshot asset $assetId: $field is not valid UTF-8")
+    )
 
   private def minAssetFeeChanges(
       settings: Seq[MinAssetFeeSettings],
@@ -170,9 +177,9 @@ object PredefinedSnapshot {
       case (_, (asset, info)) =>
         val issued = distributed.getOrElse(asset, BigInt(0))
         Either.cond(
-          issued == info.volume.volume,
+          issued == info.volume,
           (),
-          GenericError(s"Predefined snapshot asset ${asset.id}: quantity ${info.volume.volume} does not match the distributed amount $issued")
+          GenericError(s"Predefined snapshot asset ${asset.id}: quantity ${info.volume} does not match the distributed amount $issued")
         )
     }
   }

@@ -51,7 +51,7 @@ class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
   property("MassTransfer fails on non-issued asset") {
     val recipient = TxHelpers.address(2)
     val asset     = IssuedAsset(ByteStr.fill(32)(1))
-    val assets    = Seq(GenesisAssetSettings(asset.id, ByteStr.fill(32)(3).toString, "AAAA", 8, 100000000, TestValues.fee))
+    val assets    = Seq(GenesisAssetSettings(asset.id, "AAAA", 8, 100000000, TestValues.fee))
     val transfer =
       TxHelpers.massTransfer(master, Seq(recipient -> 100000L), asset)
 
@@ -72,7 +72,7 @@ class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
   property("MassTransfer fee in an asset at or above its minAssetFee is accepted, below is rejected") {
     val feeAsset = IssuedAsset(ByteStr.fill(32)(2))
     val minFee   = 1000L
-    val assets   = Seq(GenesisAssetSettings(feeAsset.id, ByteStr(master.publicKey()).toString, "Fee", 0, 10000L, minFee))
+    val assets   = Seq(GenesisAssetSettings(feeAsset.id, "Fee", 0, 10000L, minFee))
     val balances = Seq(
       AddrWithBalance(TxHelpers.defaultSigner.toAddress),
       AddrWithBalance(master.toAddress, TestValues.bigMoney, Map(feeAsset -> 10000L))

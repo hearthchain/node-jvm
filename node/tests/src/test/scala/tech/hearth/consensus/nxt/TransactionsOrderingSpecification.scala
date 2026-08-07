@@ -1,6 +1,5 @@
 package tech.hearth.consensus.nxt
 
-import com.google.protobuf.ByteString
 import tech.hearth.common.state.ByteStr
 import tech.hearth.consensus.TransactionsOrdering
 import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
@@ -139,7 +138,7 @@ class TransactionsOrderingSpecification extends PropSpec {
     val minFee = 1000L
     val blockchainWithAsset = new EmptyBlockchain {
       override def assetDescription(id: IssuedAsset): Option[AssetDescription] =
-        if (id == asset) Some(AssetDescription(ByteString.EMPTY, ByteString.EMPTY, 0, BigInt(1), 0, Height(1), MinAssetFee.unsafeFrom(minFee)))
+        if (id == asset) Some(AssetDescription("", "", 0, BigInt(1), 0, Height(1), MinAssetFee.unsafeFrom(minFee)))
         else None
     }
 
@@ -159,7 +158,7 @@ class TransactionsOrderingSpecification extends PropSpec {
     val minFee = 1L
     val blockchainWithAsset = new EmptyBlockchain {
       override def assetDescription(id: IssuedAsset): Option[AssetDescription] =
-        if (id == asset) Some(AssetDescription(ByteString.EMPTY, ByteString.EMPTY, 0, BigInt(1), 0, Height(1), MinAssetFee.unsafeFrom(minFee)))
+        if (id == asset) Some(AssetDescription("", "", 0, BigInt(1), 0, Height(1), MinAssetFee.unsafeFrom(minFee)))
         else None
     }
 

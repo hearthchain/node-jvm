@@ -438,7 +438,6 @@ class BlocksApiRouteSpec
       assets = Seq(
         GenesisAssetSettings(
           id = priceAsset.id,
-          issuer = ByteStr(issuer.publicKey()).toString,
           name = "Price",
           decimals = 2,
           quantity = 1000L,

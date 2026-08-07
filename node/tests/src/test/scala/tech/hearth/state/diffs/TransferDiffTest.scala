@@ -45,7 +45,7 @@ class TransferDiffTest extends PropSpec with WithDomain {
   property("fee in an asset at or above its minAssetFee is accepted, below is rejected") {
     val asset  = IssuedAsset(ByteStr.fill(32)(9))
     val minFee = 1000L
-    val assets = Seq(GenesisAssetSettings(asset.id, ByteStr(master.publicKey()).toString, "Fee", 0, 10000L, minFee))
+    val assets = Seq(GenesisAssetSettings(asset.id, "Fee", 0, 10000L, minFee))
     val balances = Seq(
       AddrWithBalance(TxHelpers.defaultSigner.toAddress),
       AddrWithBalance(master.toAddress, TestValues.bigMoney, Map(asset -> 10000L))

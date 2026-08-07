@@ -463,9 +463,7 @@ class RocksDBWriter(
 
       for ((asset, (assetStatic, assetNum)) <- snapshot.assetStatics) {
         val pbAssetStatic = StaticAssetInfo(
-          assetStatic.issuer.toByteString,
           assetStatic.decimals,
-          assetStatic.nft,
           assetNum,
           height,
           asset.id.toByteString,

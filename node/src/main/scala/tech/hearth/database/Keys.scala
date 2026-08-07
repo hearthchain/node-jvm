@@ -63,7 +63,7 @@ object Keys {
     Key(AssetBalanceHistory, hBytes(asset.id.arr ++ addressId.toByteArray, height), readBalanceNode, writeBalanceNode)
 
   def assetVolumeDetailsHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(AssetVolumeDetailsHistory, asset.id.arr)
-  def assetVolumeDetails(asset: IssuedAsset)(height: Height): Key[AssetVolumeInfo] =
+  def assetVolumeDetails(asset: IssuedAsset)(height: Height): Key[BigInt] =
     Key(AssetVolumeDetails, hBytes(asset.id.arr, height), readAssetVolumeDetails, writeAssetVolumeDetails)
 
   def assetMinFeeHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(AssetMinFeeHistory, asset.id.arr)

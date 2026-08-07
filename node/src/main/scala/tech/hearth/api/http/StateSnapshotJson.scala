@@ -30,7 +30,7 @@ object StateSnapshotJson {
       s.balances.map { case ((address, asset), balance) => BalanceJson(address, asset, balance) }.toSeq,
       s.leaseBalances.map { case (address, lease) => LeaseBalanceJson(address, lease.in, lease.out) }.toSeq,
       s.assetStatics.map(_._2._1).toSeq,
-      s.assetVolumes.map { case (id, info) => AssetVolumeJson(id, info.volume) }.toSeq,
+      s.assetVolumes.map { case (id, volume) => AssetVolumeJson(id, volume) }.toSeq,
       s.newLeases.map { case (id, info) =>
         NewLeaseJson(id, info.sender, info.recipientAddress, info.amount.value, info.sourceId, info.height)
       }.toSeq,

@@ -193,7 +193,6 @@ class RollbackSpec extends FreeSpec with WithDomain {
         assets = Seq(
           GenesisAssetSettings(
             id = issuedAsset.id,
-            issuer = ByteStr(sender.publicKey()).toString,
             name = "Rollback",
             decimals = 2,
             quantity = assetAmount,

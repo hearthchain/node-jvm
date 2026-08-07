@@ -1,6 +1,5 @@
 package tech.hearth.events
 
-import com.google.protobuf.ByteString
 import tech.hearth.common.state.ByteStr
 import tech.hearth.events.StateUpdate.AssetStateUpdate
 import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
@@ -10,8 +9,8 @@ class AssetStateUpdateSpec extends FreeSpec {
   "AssetStateUpdate" - {
     "round-trips minAssetFee through the repurposed sponsorship wire field" in {
       val description = AssetDescription(
-        ByteString.copyFromUtf8("name"),
-        ByteString.copyFromUtf8("description"),
+        "name",
+        "description",
         2,
         BigInt(1000),
         1,

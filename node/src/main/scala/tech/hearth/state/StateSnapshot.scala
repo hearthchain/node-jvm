@@ -16,7 +16,7 @@ case class StateSnapshot(
     balances: VectorMap[(Address, Asset), Long] = VectorMap(), // VectorMap is used to preserve the order of NFTs for a given address
     leaseBalances: Map[Address, LeaseBalance] = Map(),
     assetStatics: Map[IssuedAsset, (AssetStaticInfo, Int)] = Map(),
-    assetVolumes: Map[IssuedAsset, AssetVolumeInfo] = Map(),
+    assetVolumes: Map[IssuedAsset, BigInt] = Map(),
     minAssetFees: Map[IssuedAsset, MinAssetFee] = Map(),
     newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
     cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
@@ -130,7 +130,7 @@ object StateSnapshot {
 
   // an asset's volume is fixed forever at issuance - a predefined snapshot can only mint a brand-new asset id,
   // never touch an existing one - so there is no "merge with an existing volume" case to handle here
-  private def assetVolumes(issuedAssets: Seq[(IssuedAsset, NewAssetInfo)]): Map[IssuedAsset, AssetVolumeInfo] =
+  private def assetVolumes(issuedAssets: Seq[(IssuedAsset, NewAssetInfo)]): Map[IssuedAsset, BigInt] =
     issuedAssets.view.map { case (id, nai) => id -> nai.volume }.toMap
 
   private def minAssetFees(

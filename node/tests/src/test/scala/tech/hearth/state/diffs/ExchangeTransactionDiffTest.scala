@@ -41,17 +41,14 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
   private def iasset(n: Int): IssuedAsset = IssuedAsset(ByteStr(Array.fill(32)(n.toByte)))
 
   // A hardcoded id names an asset that no transaction ever issues, so the genesis snapshot has to issue it - otherwise
-  // the real append path rejects the trade with "Assets should be issued before they can be traded". The issuer is only
-  // recorded in the asset's static info, so any 32-byte public key does.
-  private val assetIssuer = ByteStr.fill(32)(3).toString
-
+  // the real append path rejects the trade with "Assets should be issued before they can be traded".
   private val AssetQuantity = 100_000_000_00L
 
   /** Note that `decimals` is not cosmetic: an order's price is normalized by the difference between the decimals of the
     * two assets of its pair, so the properties below that pin normalized prices depend on it.
     */
   private def genesisAsset(asset: IssuedAsset, quantity: Long, decimals: Int = 8): GenesisAssetSettings =
-    GenesisAssetSettings(asset.id, assetIssuer, s"asset-${asset.id.arr.head}", decimals, quantity, TestValues.fee)
+    GenesisAssetSettings(asset.id, s"asset-${asset.id.arr.head}", decimals, quantity, TestValues.fee)
 
   /** Declares `assets` in the genesis snapshot, splitting each one's quantity evenly between `holders`.
     *

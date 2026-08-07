@@ -280,8 +280,8 @@ object AssetsApiRoute {
           // Nothing issues an asset via a transaction any more (see CLAUDE.md's Transaction JSON notes), so there's
           // no real issue timestamp to report; kept as a field for API compatibility, always 0.
           "issueTimestamp"  -> JsNumber(0),
-          "name"            -> JsString(description.name.toStringUtf8),
-          "description"     -> JsString(description.description.toStringUtf8),
+          "name"            -> JsString(description.name),
+          "description"     -> JsString(description.description),
           "decimals"        -> JsNumber(description.decimals),
           "quantity"        -> JsNumber(BigDecimal(description.totalVolume)),
           "sequenceInBlock" -> JsNumber(description.sequenceInBlock),

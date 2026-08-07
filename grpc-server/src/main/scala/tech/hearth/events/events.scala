@@ -158,8 +158,8 @@ object StateUpdate {
       // fee floor left once sponsorship itself was removed.
       def detailsFromPB(v: PBAssetDetails): AssetDescription = {
         AssetDescription(
-          ByteString.copyFromUtf8(v.name),
-          ByteString.copyFromUtf8(v.description),
+          v.name,
+          v.description,
           v.decimals,
           BigInt(v.safeVolume.toByteArray),
           v.sequenceInBlock,
@@ -181,8 +181,8 @@ object StateUpdate {
           assetId = self.assetId.toByteString,
           issuer = ByteString.EMPTY,
           decimals = v.decimals,
-          name = v.name.toStringUtf8,
-          description = v.description.toStringUtf8,
+          name = v.name,
+          description = v.description,
           reissuable = false,
           volume = v.totalVolume.longValue,
           nft = false,
@@ -377,7 +377,7 @@ object StateUpdate {
     txsStateUpdates
       .flatMap(st => st.assets.map(_.assetId) ++ st.balances.flatMap(_.asset.compatId))
       .distinct
-      .flatMap(id => blockchain.assetDescription(IssuedAsset(id)).map(ad => AssetInfo(id, ad.decimals, ad.name.toStringUtf8)))
+      .flatMap(id => blockchain.assetDescription(IssuedAsset(id)).map(ad => AssetInfo(id, ad.decimals, ad.name)))
 
   def container(
       blockchainBeforeWithReward: Blockchain,

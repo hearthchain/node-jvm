@@ -16,6 +16,7 @@ import tech.hearth.transaction.Transaction
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import tech.hearth.crypto.SigningKey
 
+import java.nio.charset.StandardCharsets
 import scala.collection.mutable
 
 object TxStateSnapshotHashBuilder {
@@ -59,15 +60,13 @@ object TxStateSnapshotHashBuilder {
 
     snapshot.assetStatics.foreach { case (asset, (assetInfo, _)) =>
       changedKeys += asset.id.arr ++
-        assetInfo.issuer.arr ++
         Array(assetInfo.decimals.toByte) ++
-        booleanToBytes(assetInfo.nft) ++
-        assetInfo.name.toByteArray ++
-        assetInfo.description.toByteArray
+        assetInfo.name.getBytes(StandardCharsets.UTF_8) ++
+        assetInfo.description.getBytes(StandardCharsets.UTF_8)
     }
 
     snapshot.assetVolumes.foreach { case (asset, volume) =>
-      changedKeys += asset.id.arr ++ volume.volume.toByteArray
+      changedKeys += asset.id.arr ++ volume.toByteArray
     }
 
     snapshot.minAssetFees.foreach { case (asset, minFee) =>

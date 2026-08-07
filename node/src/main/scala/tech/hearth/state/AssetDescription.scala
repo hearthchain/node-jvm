@@ -1,10 +1,8 @@
 package tech.hearth.state
 
-import com.google.protobuf.ByteString
-
 case class AssetDescription(
-    name: ByteString,
-    description: ByteString,
+    name: String,
+    description: String,
     decimals: Int,
     totalVolume: BigInt,
     sequenceInBlock: Int,

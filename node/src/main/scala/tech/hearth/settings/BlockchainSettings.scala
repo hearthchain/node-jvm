@@ -129,17 +129,17 @@ object FunctionalitySettings {
 
 /** An asset issued by a predefined snapshot. Since there is no issue transaction to derive it from, the id is
   * specified explicitly. `minFee` is mandatory: every issued asset must carry a non-zero minimum fee floor for
-  * paying transaction fees in it (see MinAssetFee), there is no "sponsorship disabled" state any more.
+  * paying transaction fees in it (see MinAssetFee), there is no "sponsorship disabled" state any more. There is no
+  * issuer either: nothing ever checks who issued an asset any more (no Reissue/Burn/SponsorFee to gate by it), so
+  * it isn't tracked.
   */
 case class GenesisAssetSettings(
     id: ByteStr,
-    issuer: String,
     name: String,
     decimals: Int,
     quantity: Long,
     minFee: Long,
-    description: String = "",
-    reissuable: Boolean = false
+    description: String = ""
 )
 
 object GenesisAssetSettings {

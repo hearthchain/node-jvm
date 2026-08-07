@@ -33,7 +33,6 @@ import tech.hearth.crypto.{Crypto, SigningKey, VrfKey}
 
 class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues {
   private val assetId = ByteStr(Array.fill[Byte](32)(7))
-  private val issuer  = TxHelpers.signer(1)
 
   // BlsKeyPair.fromSeed yields a zero key (a point at infinity) for a seed shorter than 32 bytes
   private def blsKeyPair(i: Int): BlsKeyPair = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(i)))
@@ -54,16 +53,14 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       )
     )
 
-  private def assetSettings(quantity: Long, reissuable: Boolean = false, minFee: Long = TestValues.fee): GenesisAssetSettings =
+  private def assetSettings(quantity: Long, minFee: Long = TestValues.fee): GenesisAssetSettings =
     GenesisAssetSettings(
       id = assetId,
-      issuer = ByteStr(issuer.publicKey()).toString,
       name = "Genesis",
       decimals = 2,
       quantity = quantity,
       minFee = minFee,
-      description = "Issued in the genesis block",
-      reissuable = reissuable
+      description = "Issued in the genesis block"
     )
 
   "the genesis block" - {
@@ -195,7 +192,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       val asset    = IssuedAsset(assetId)
 
       snapshot.assetStatics.keySet shouldBe Set(asset)
-      snapshot.assetVolumes(asset).volume shouldBe BigInt(1000)
+      snapshot.assetVolumes(asset) shouldBe BigInt(1000)
       snapshot.balances.get((address(1), asset: tech.hearth.transaction.Asset)) shouldBe Some(1000L)
     }
 

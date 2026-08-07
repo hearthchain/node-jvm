@@ -212,13 +212,13 @@ package object database {
     ndo.toByteArray
   }
 
-  def readAssetVolumeDetails(data: Array[Byte]): AssetVolumeInfo = {
+  def readAssetVolumeDetails(data: Array[Byte]): BigInt = {
     val pbad = pb.AssetVolumeDetails.parseFrom(data)
-    AssetVolumeInfo(BigInt(pbad.totalVolume.toByteArray))
+    BigInt(pbad.totalVolume.toByteArray)
   }
 
-  def writeAssetVolumeDetails(volumeInfo: AssetVolumeInfo): Array[Byte] =
-    pb.AssetVolumeDetails(ByteString.copyFrom(volumeInfo.volume.toByteArray)).toByteArray
+  def writeAssetVolumeDetails(volume: BigInt): Array[Byte] =
+    pb.AssetVolumeDetails(ByteString.copyFrom(volume.toByteArray)).toByteArray
 
   def writeBlockMeta(data: pb.BlockMeta): Array[Byte] = data.toByteArray
 
@@ -658,7 +658,7 @@ package object database {
       pbStaticInfo.name,
       pbStaticInfo.description,
       pbStaticInfo.decimals,
-      volumeInfo.volume,
+      volumeInfo,
       pbStaticInfo.sequenceInBlock,
       Height(pbStaticInfo.height),
       minFee
