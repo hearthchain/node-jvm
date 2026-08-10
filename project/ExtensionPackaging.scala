@@ -72,7 +72,7 @@ object ExtensionPackaging extends AutoPlugin {
       Debian / normalizedName := s"${name.value}${network.value.packageSuffix}",
       Debian / packageName := s"${name.value}${network.value.packageSuffix}",
       libraryDependencies ++= Dependencies.logDeps,
-      run / javaOptions ++= extensionClasses.value.zipWithIndex.map { case (extension, index) => s"-Dwaves.extensions.$index=$extension" }
+      run / javaOptions ++= extensionClasses.value.zipWithIndex.map { case (extension, index) => s"-Dhearth.extensions.$index=$extension" }
     )
 
   // A copy of com.typesafe.sbt.packager.linux.LinuxPlugin.getUniversalFolderMappings

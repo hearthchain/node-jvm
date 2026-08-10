@@ -1,5 +1,6 @@
 package tech.hearth.http
 
+import tech.hearth.history.withFlatReward
 import tech.hearth.{TestValues, TestWallet}
 import tech.hearth.account.PublicKey
 import tech.hearth.api.BlockMeta
@@ -20,7 +21,7 @@ import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.state.diffs.ENOUGH_AMT
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.{Order, OrderType}
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.utils.{SharedSchedulerMixin, SystemTime}
@@ -448,8 +449,8 @@ class BlocksApiRouteSpec
       val attachment = ByteStr.fill(32)(1)
       val exchange =
         TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, Waves, priceAsset, version = Order.V4, attachment = Some(attachment)),
-          TxHelpers.order(OrderType.SELL, Waves, priceAsset, version = Order.V4, sender = issuer)
+          TxHelpers.order(OrderType.BUY, Hearth, priceAsset, version = Order.V4, attachment = Some(attachment)),
+          TxHelpers.order(OrderType.SELL, Hearth, priceAsset, version = Order.V4, sender = issuer)
         )
 
       val exchangeBlock = d.appendBlock(exchange)
@@ -497,7 +498,7 @@ class BlocksApiRouteSpec
         settings.blockchainSettings.copy(
           functionalitySettings = settings.blockchainSettings.functionalitySettings
             .copy(daoAddress = Some(daoAddress.toString)),
-          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
+          rewardsSettings = withFlatReward(settings.blockchainSettings.rewardsSettings, BlockRewardCalculator.FullRewardInit + 1.hearth)
         )
       )
 
@@ -510,7 +511,7 @@ class BlocksApiRouteSpec
       // height - `rewardSharesAt` pins both the distribution and the capped-reward activation heights at 1, so the
       // regimes this used to walk through (whole reward to the miner, then a third to the DAO) cannot be reached.
       val daoShare    = BlockRewardCalculator.MaxAddressReward
-      val minerShare  = d.blockchain.settings.rewardsSettings.initial - daoShare
+      val minerShare  = d.blockchain.settings.rewardsSettings.initialReward - daoShare
       val everyHeight = Map(miner.toString -> minerShare, daoAddress.toString -> daoShare)
 
       val heightToResult = (2 to 5).map(_ -> everyHeight).toMap
@@ -591,7 +592,7 @@ class BlocksApiRouteSpec
     val settings = DomainPresets.ConsensusImprovements
       .configure(fs => fs.copy(blockRewardBoostPeriod = 10, daoAddress = Some(daoAddress.toString)))
 
-    withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.waves)), generators = Seq(miner)) { d =>
+    withDomain(settings, Seq(AddrWithBalance(miner.toAddress, 100_000.hearth)), generators = Seq(miner)) { d =>
       val route = new BlocksApiRoute(d.settings.restAPISettings, d.blocksApi, SystemTime, new RouteTimeout(60.seconds)(using sharedScheduler)).route
 
       def checkRewardAndShares(height: Int, expectedReward: Long, expectedMinerShare: Long, expectedDaoShare: Long)(implicit
@@ -621,7 +622,7 @@ class BlocksApiRouteSpec
       // and only the DAO takes a share now that XTN buy-back is gone
       (1 to 14).foreach(_ => d.appendKeyBlock(miner))
       d.blockchain.height shouldBe 15
-      (2 to 15).foreach(h => checkRewardAndShares(h, 6.waves, 4.waves, 2.waves))
+      (2 to 15).foreach(h => checkRewardAndShares(h, 6.hearth, 4.hearth, 2.hearth))
     }
   }
 }

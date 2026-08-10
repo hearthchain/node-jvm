@@ -7,10 +7,10 @@ JAVA_OPTS="-XX:+ExitOnOutOfMemoryError
   -Dlogback.stdout.level=${WAVES_LOG_LEVEL}
   -Dlogback.file.directory=${WVLOG}
   -Dlogback.file.level=TRACE
-  -Dwaves.config.directory=/etc/waves
-  -Dwaves.defaults.blockchain.type=${WAVES_NETWORK}
-  -Dwaves.directory=${WVDATA}
-  -Dwaves.rest-api.bind-address=0.0.0.0
+  -Dhearth.config.directory=/etc/waves
+  -Dhearth.defaults.blockchain.type=${WAVES_NETWORK}
+  -Dhearth.directory=${WVDATA}
+  -Dhearth.rest-api.bind-address=0.0.0.0
   ${JAVA_OPTS}"
 
 if [ "$WAVES_LOG_JAVA_OPTS" = "true" ] ; then
@@ -18,11 +18,11 @@ if [ "$WAVES_LOG_JAVA_OPTS" = "true" ] ; then
 fi
 
 if [ -n "$WAVES_WALLET_SEED" ] ; then
-  JAVA_OPTS="-Dwaves.wallet.seed=${WAVES_WALLET_SEED} ${JAVA_OPTS}"
+  JAVA_OPTS="-Dhearth.wallet.seed=${WAVES_WALLET_SEED} ${JAVA_OPTS}"
 fi
 
 if [ -n "$WAVES_WALLET_PASSWORD" ] ; then
-  JAVA_OPTS="-Dwaves.wallet.password=${WAVES_WALLET_PASSWORD} ${JAVA_OPTS}"
+  JAVA_OPTS="-Dhearth.wallet.password=${WAVES_WALLET_PASSWORD} ${JAVA_OPTS}"
 fi
 
 if [ $# -eq 0 ] && [ -f /etc/waves/waves.conf ] ; then

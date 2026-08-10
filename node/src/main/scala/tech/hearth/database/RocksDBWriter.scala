@@ -7,7 +7,7 @@ import com.google.common.primitives.Ints
 import com.google.common.util.concurrent.MoreExecutors
 import com.typesafe.scalalogging.Logger
 import tech.hearth.account.{Address, PublicKey}
-import tech.hearth.api.common.WavesBalanceIterator
+import tech.hearth.api.common.HearthBalanceIterator
 import tech.hearth.block.Block.BlockId
 import tech.hearth.block.BlockSnapshot
 import tech.hearth.common.state.ByteStr
@@ -20,8 +20,8 @@ import tech.hearth.protobuf.block.PBBlocks
 import tech.hearth.protobuf.{PBSnapshots, toByteString, toPublicKey}
 import tech.hearth.settings.{BlockchainSettings, DBSettings}
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
-import tech.hearth.transaction.CommitToGenerationTransaction.DepositInWavelets
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
+import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
 import tech.hearth.transaction.assets.*
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
@@ -190,8 +190,8 @@ class RocksDBWriter(
       req._2 match {
         case asset @ IssuedAsset(_) =>
           writableDB.get(Keys.assetBalance(addressId, asset))
-        case Waves =>
-          writableDB.get(Keys.wavesBalance(addressId))
+        case Hearth =>
+          writableDB.get(Keys.hearthBalance(addressId))
       }
     }
 
@@ -203,7 +203,7 @@ class RocksDBWriter(
     val reqWithKeys = req.flatMap { case (address, asset) =>
       addrToId.get(address).map { aid =>
         (address, asset) -> (asset match {
-          case Waves                    => Keys.wavesBalance(aid)
+          case Hearth                   => Keys.hearthBalance(aid)
           case issuedAsset: IssuedAsset => Keys.assetBalance(aid, issuedAsset)
         })
       }
@@ -221,7 +221,7 @@ class RocksDBWriter(
     }.toMap
   }
 
-  protected override def loadWavesBalances(req: Seq[(Address, Asset)]): Map[(Address, Asset), CurrentBalance] = readOnly { ro =>
+  protected override def loadHearthBalances(req: Seq[(Address, Asset)]): Map[(Address, Asset), CurrentBalance] = readOnly { ro =>
     val addrToId = addressIds(req.map(_._1))
     val addrIds  = addrToId.collect { case (_, Some(aid)) => aid }.toSeq
 
@@ -229,7 +229,7 @@ class RocksDBWriter(
       .zip(
         ro.multiGet(
           addrIds.view.map { addrId =>
-            Keys.wavesBalance(addrId)
+            Keys.hearthBalance(addrId)
           }.toVector,
           16
         )
@@ -288,8 +288,8 @@ class RocksDBWriter(
     stateFeatures ++ settings.functionalitySettings.preActivatedFeatures.view.mapValues(Height(_))
   }
 
-  override def wavesAmount(height: Int): BigInt =
-    loadBlockMeta(Height(height)).fold(settings.initialBalance)(_.totalWavesAmount)
+  override def hearthAmount(height: Int): BigInt =
+    loadBlockMeta(Height(height)).fold(settings.initialBalance)(_.totalHearthAmount)
 
   override def blockReward(height: Int): Option[Long] =
     if (height == 1) None
@@ -308,15 +308,15 @@ class RocksDBWriter(
       balances: Map[(AddressId, Asset), (CurrentBalance, BalanceNode)],
       rw: RW
   ): Unit = {
-    var changedWavesBalances = List.empty[AddressId]
-    val changedAssetBalances = MultimapBuilder.hashKeys().hashSetValues().build[IssuedAsset, java.lang.Long]()
+    var changedHearthBalances = List.empty[AddressId]
+    val changedAssetBalances  = MultimapBuilder.hashKeys().hashSetValues().build[IssuedAsset, java.lang.Long]()
 
     for (((addressId, asset), (currentBalance, balanceNode)) <- balances) {
       asset match {
-        case Waves =>
-          changedWavesBalances = addressId :: changedWavesBalances
-          rw.put(Keys.wavesBalance(addressId), currentBalance)
-          rw.put(Keys.wavesBalanceAt(addressId, currentBalance.height), balanceNode)
+        case Hearth =>
+          changedHearthBalances = addressId :: changedHearthBalances
+          rw.put(Keys.hearthBalance(addressId), currentBalance)
+          rw.put(Keys.hearthBalanceAt(addressId, currentBalance.height), balanceNode)
         case a: IssuedAsset =>
           changedAssetBalances.put(a, addressId.toLong)
           rw.put(Keys.assetBalance(addressId, a), currentBalance)
@@ -324,7 +324,7 @@ class RocksDBWriter(
       }
     }
 
-    rw.put(Keys.changedWavesBalances(Height(height)), changedWavesBalances)
+    rw.put(Keys.changedHearthBalances(Height(height)), changedHearthBalances)
     changedAssetBalances.asMap().forEach { (asset, addresses) =>
       rw.put(Keys.changedBalances(Height(height), asset), addresses.asScala.map(id => AddressId(id.toLong)).toSeq)
     }
@@ -639,7 +639,7 @@ class RocksDBWriter(
 
           rdb.db.withOptions { (ro, wo) =>
             rdb.db.readWriteWithOptions(ro, wo.setLowPri(true)) { rw =>
-              batchCleanupWavesBalances(
+              batchCleanupHearthBalances(
                 fromInclusive = firstDirtyHeight,
                 toExclusive = toHeightExclusive,
                 rw = rw
@@ -661,14 +661,14 @@ class RocksDBWriter(
       })
     }
 
-  private def batchCleanupWavesBalances(fromInclusive: Height, toExclusive: Height, rw: RW): Unit = {
+  private def batchCleanupHearthBalances(fromInclusive: Height, toExclusive: Height, rw: RW): Unit = {
     val lastUpdateAt = mutable.LongMap.empty[Height]
 
     val updateAt     = new ArrayBuffer[(AddressId, Height)]() // AddressId -> First height of update in this range
     val updateAtKeys = new ArrayBuffer[Key[BalanceNode]]()
 
-    val changedKeyPrefix = KeyTag.ChangedWavesBalances.prefixBytes
-    val changedFromKey   = Keys.changedWavesBalances(fromInclusive) // fromInclusive doesn't affect the parsing result
+    val changedKeyPrefix = KeyTag.ChangedHearthBalances.prefixBytes
+    val changedFromKey   = Keys.changedHearthBalances(fromInclusive) // fromInclusive doesn't affect the parsing result
     rw.iterateOverWithSeek(changedKeyPrefix, changedFromKey.keyBytes) { e =>
       val currHeight = Height(Ints.fromByteArray(e.getKey.drop(changedKeyPrefix.length)))
       val continue   = currHeight < toExclusive
@@ -677,7 +677,7 @@ class RocksDBWriter(
           lastUpdateAt.updateWith(addressId.toLong) { orig =>
             if (orig.isEmpty) {
               updateAt.addOne(addressId -> currHeight)
-              updateAtKeys.addOne(Keys.wavesBalanceAt(addressId, currHeight))
+              updateAtKeys.addOne(Keys.hearthBalanceAt(addressId, currHeight))
             }
             Some(currHeight)
           }
@@ -704,12 +704,12 @@ class RocksDBWriter(
         val lastDeleteHeight = lastUpdateAt(addressId.toLong)
         if (firstDeleteHeight != lastDeleteHeight)
           rw.deleteRange(
-            Keys.wavesBalanceAt(addressId, firstDeleteHeight),
-            Keys.wavesBalanceAt(addressId, lastDeleteHeight) // Deletes exclusively
+            Keys.hearthBalanceAt(addressId, firstDeleteHeight),
+            Keys.hearthBalanceAt(addressId, lastDeleteHeight) // Deletes exclusively
           )
       }
 
-    rw.deleteRange(Keys.changedWavesBalances(fromInclusive), Keys.changedWavesBalances(toExclusive))
+    rw.deleteRange(Keys.changedHearthBalances(fromInclusive), Keys.changedHearthBalances(toExclusive))
   }
 
   private def batchCleanupAssetBalances(fromInclusive: Height, toExclusive: Height, rw: RW): Unit = {
@@ -804,8 +804,8 @@ class RocksDBWriter(
           for ((addressId, address) <- changedAddresses) {
             rw.delete(Keys.changedDataKeys(currentHeight, addressId))
 
-            balancesToInvalidate += (address -> Waves)
-            rollbackBalanceHistory(rw, Keys.wavesBalance(addressId), Keys.wavesBalanceAt(addressId, _), currentHeight)
+            balancesToInvalidate += (address -> Hearth)
+            rollbackBalanceHistory(rw, Keys.hearthBalance(addressId), Keys.hearthBalanceAt(addressId, _), currentHeight)
 
             rollbackLeaseBalance(rw, addressId, currentHeight)
 
@@ -886,7 +886,7 @@ class RocksDBWriter(
 
           rw.delete(Keys.blockMetaAt(currentHeight))
           rw.delete(Keys.changedAddresses(currentHeight))
-          rw.delete(Keys.changedWavesBalances(currentHeight))
+          rw.delete(Keys.changedHearthBalances(currentHeight))
           rw.delete(Keys.heightOf(discardedMeta.id))
           blockHeightsToInvalidate.addOne(discardedMeta.id)
           rw.delete(Keys.blockStateHash(currentHeight))
@@ -1044,10 +1044,10 @@ class RocksDBWriter(
     .recordStats()
     .build[(Height, AddressId), LeaseBalanceNode]()
 
-  override def balanceAtHeight(address: Address, height: Int, assetId: Asset = Waves): Option[(Int, Long)] = readOnly { db =>
+  override def balanceAtHeight(address: Address, height: Int, assetId: Asset = Hearth): Option[(Int, Long)] = readOnly { db =>
     db.get(Keys.addressId(address)).flatMap { aid =>
       val key = assetId match {
-        case Waves              => Keys.wavesBalanceAt(aid, Height(height))
+        case Hearth             => Keys.hearthBalanceAt(aid, Height(height))
         case asset: IssuedAsset => Keys.assetBalanceAt(aid, asset, Height(height))
       }
       Using(db.newIterator) { iter =>
@@ -1070,7 +1070,7 @@ class RocksDBWriter(
     } yield r
 
     addressId(address).fold(Seq(BalanceSnapshot(Height(1), 0, 0, 0, 0))) { addressId =>
-      val lastBalance      = balancesCache.get((address, Asset.Waves))
+      val lastBalance      = balancesCache.get((address, Asset.Hearth))
       val lastLeaseBalance = leaseBalanceCache.get(address)
 
       @tailrec
@@ -1078,7 +1078,7 @@ class RocksDBWriter(
         if (hh < Height(from) || hh <= Height(0))
           acc :+ hh
         else {
-          val bn     = balanceAtHeightCache.get((hh, addressId), () => db.get(Keys.wavesBalanceAt(addressId, hh)))
+          val bn     = balanceAtHeightCache.get((hh, addressId), () => db.get(Keys.hearthBalanceAt(addressId, hh)))
           val newAcc = if (hh > toHeight) acc else acc :+ hh
           collectBalanceHistory(newAcc, bn.prevHeight)
         }
@@ -1105,7 +1105,7 @@ class RocksDBWriter(
       val lbh  = slice(clbh, Height(from), toHeight)
       for {
         (wh, lh, dh) <- merge3(wbh, lbh, slidedDepositHeights)
-        wb = balanceAtHeightCache.get((wh, addressId), () => db.get(Keys.wavesBalanceAt(addressId, wh)))
+        wb = balanceAtHeightCache.get((wh, addressId), () => db.get(Keys.hearthBalanceAt(addressId, wh)))
         lb = leaseBalanceAtHeightCache.get((lh, addressId), () => db.get(Keys.leaseBalanceAt(addressId, lh)))
         d  = collectedDeposits.depositSize.getOrElse(dh, 0L)
       } yield {
@@ -1137,7 +1137,7 @@ class RocksDBWriter(
       val sortedDiffHeights = depositDiffHeights.toList.sortBy { case (h, _) => h }
       val (_, changedHeights, depositSize) = sortedDiffHeights.foldLeft((0L, List.empty[Height], Map.empty[Height, Long])) {
         case ((currentDeposit, changedHeights, depositSize), (depositHeight, diffN)) =>
-          val updatedDeposit = currentDeposit + diffN * DepositInWavelets
+          val updatedDeposit = currentDeposit + diffN * DepositInEmbers
           (updatedDeposit, depositHeight :: changedHeights, depositSize.updated(depositHeight, updatedDeposit))
       }
 
@@ -1244,7 +1244,7 @@ class RocksDBWriter(
   // TODO: maybe add length constraint
   def loadBalanceHistory(address: Address): Seq[(Int, Long)] = writableDB.withResource { dbResource =>
     dbResource.get(Keys.addressId(address)).fold(Seq.empty[(Int, Long)]) { aid =>
-      new WavesBalanceIterator(aid, dbResource).asScala.toSeq
+      new HearthBalanceIterator(aid, dbResource).asScala.toSeq
     }
   }
 

@@ -25,7 +25,7 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
   `sbt node-it/docker`'s dependency on `buildTarballsForDocker`, which itself works fine — only the final
   `docker build` step needs the workaround, so letting `sbt node-it/docker` fail once first to produce fresh
   tarballs before the manual `buildx build` is a reasonable way to sequence it).
-- node-it test suites run with `-Dwaves.it.max-parallel-suites=N` to cap Docker resource usage (each suite starts
+- node-it test suites run with `-Dhearth.it.max-parallel-suites=N` to cap Docker resource usage (each suite starts
   its own set of containers); pass this as a JVM property on the `sbt` command line, not inside the sbt shell.
   Per-suite failures are deterministic (confirmed identical across parallelism 3 and 6 on the same code), so lowering
   parallelism only helps with wall-clock/resource pressure, not with distinguishing real failures from flakiness.
@@ -176,8 +176,169 @@ generation deposit. Both the carry and the total fee are persisted per block in 
 each a repeated `Amount`) and tracked per microblock in `NgState.BlockData`. Read them with
 `Blockchain.carryFee(refId): Either[String, BlockFee]`.
 
-`api.BlockMeta.totalFeeInWaves` and the REST `totalFee` field remain WAVES-only, derived from the WAVES entry of
+`api.BlockMeta.totalFeeInHearth` and the REST `totalFee` field remain HRTH-only, derived from the HRTH entry of
 `total_fee`.
+
+## HRTH emission curve
+
+`BlockRewardCalculator.fullRewardAt` no longer returns a flat, voted constant (see hearth-tokenomics-spec S2): the
+block reward continuously decays, `R(h) = R0 * 2^(-h/Hhalf)`, where `h` counts blocks since the first rewarded
+height and `Hhalf` is the reward half-life in blocks. `h = height - 2`: the genesis block (height 1) earns no
+reward (`mkInitialSnapshot` skips it outright, "crediting Hearth is only supported at genesis" via predefined
+snapshots instead - see "Predefined snapshots"), so height 2 is `h = 0`. `fullRewardAt` returns `0L` for `h < 0`
+rather than calling into the curve, since `EmissionCurve.rewardAt`/`powFixed` themselves reject a negative `h`.
+
+### Why fixed-point `BigInt`, not `Math.pow`
+
+`EmissionCurve` (`state/EmissionCurve.scala`) computes the curve as pure fixed-point integer arithmetic - no
+`Double`, no `Math.pow`/`math.log`, no transcendental function call at runtime. This repo's name (`node-jvm`)
+implies a non-JVM client is expected eventually, and IEEE-754 floating point only guarantees `Math.pow`/`Math.log`
+accurate *within an error bound*, not bit-identical across implementations: HotSpot's `Math.*` are JIT intrinsics,
+not required to match another language's libm. `BigInt` add/multiply/shift have no such freedom - the result is
+exact and identical in any language with correct arbitrary-precision integers, so the curve is reproducible
+bit-for-bit by a future non-JVM implementation as long as it runs the same algorithm against the same pinned
+constants (below). `consensus.FairPoSCalculator.calculateDelay` already calls `math.log` for the PoS block-delay
+calculation and carries this same latent cross-language risk - undocumented before now, not fixed here, out of
+scope for this change, but worth knowing about before a second client implementation ships.
+
+The representation is `Q(EmissionCurve.FixedPointBits)` fixed point, `FixedPointBits = 128`: a value `v` is stored
+as `round(v * 2^128)`. `RewardsSettings.decayRatioFixed` is `2^(-1/Hhalf)` in this format, derived **offline, once**,
+at arbitrary precision (not computed by any client at startup - an `Nth` root is exactly the kind of transcendental
+this design avoids at runtime) and pinned as a literal, the same pattern `GenesisSettings.stateHash`/`blockId` use
+for genesis (see "Genesis commitments") - derive once, pin, never recompute. `RewardsSettings.initialReward` (`R0`)
+is likewise pre-derived: `R0 = floor(cEmit * ln(2) / Hhalf)`, `cEmit` being the network's total forged emission
+(hearth-tokenomics-spec S2.1: `Cmax = Pgen + Cemit`, 95% forged / 5% genesis premine).
+
+At runtime, `EmissionCurve.rewardAt(h, R0, decayRatioFixed)` computes `ratio^h` via fixed-point binary
+exponentiation (`powFixed`: `O(log h)` multiplications, each `fixedMul(a, b) = (a * b) >> 128`, exact `BigInt`
+multiply then a floor right-shift - unambiguous since every operand here is non-negative, so "floor" and "truncate
+toward zero" coincide and there's no cross-language rounding-mode question), then floors
+`R0 * ratio^h` back down by one more `>> 128`. Flooring at every block is what makes the hard cap hold *by
+construction*: the running sum of rewards always stays strictly below `cEmit` (the curve's asymptote), so there is
+no separate runtime clamp. `RewardsSettings` does still `require(decayRatioFixed <= 1 << FixedPointBits, ...)`
+(`BlockchainSettings.scala`) - a ratio `> 1.0` would make the reward *grow* instead of decay, silently breaking
+that invariant for a hand-misconfigured CUSTOM network; exactly `1.0` (a flat, non-decaying reward) is allowed and
+is exactly how test fixtures get a controllable flat reward (below).
+
+### Cross-language test vectors
+
+The Go node (a separate, in-progress fork of `gowaves`) will need its own `EmissionCurve` port, and it has to
+match this one bit-for-bit - that's the entire point of avoiding floating point above. The two implementations
+don't share a build-time or runtime dependency: there is no library either one loads the curve logic from. Instead,
+a sibling repo, `hearth-specs` (`emission-curve/` directory), holds the one canonical generator
+(`derive.py`, Python stdlib `decimal`, arbitrary precision - the source of every constant in the table below) and
+its checked-in output (`vectors.json`: per-network constants, `rewardAt` vectors including the full-precision
+MAINNET year table, `powFixed` identities, and rejection cases for a negative height and an out-of-range ratio).
+Each client hardcodes (transcribes) the same literal vectors into its own test suite - `EmissionCurveTest` here is
+the Scala transcription - the same convention `hearth-chain`'s five crypto implementations already use for RFC
+9381/9180 test vectors: no shared file loaded at test time, just independently-transcribed literals that all trace
+back to one generator. `EmissionCurve.rewardAt`/`powFixed` are public specifically so a vectors-based test can call
+them directly, the way `EmissionCurveTest` does. If a formula or a network's parameters (half-life, `cEmit`) ever
+change, `hearth-specs/emission-curve/derive.py` is the first thing to update - regenerate `vectors.json` there,
+then re-transcribe into this repo (and whichever others carry a copy), never the reverse.
+
+### Per-network constants
+
+| | MAINNET | TESTNET | STAGENET |
+|---|---|---|---|
+| `halfLifeBlocks` | 5,256,000 (10yr @ 60s blocks) | 1,440 (~1 day) | 100 (~1.7hr) |
+| `cEmit` (embers) | 9,500,000,000,000,000 | 9,500,000,000,000,000 | 9,500,000,000,000,000 |
+| `initialReward` (R0, embers) | 1,252,834,515 | 4,572,845,982,860 | 65,848,982,153,194 |
+| `decayRatioFixed` (Q128) | 340282322045415694657836056900309514630 | 340118610667410880413344550167336787510 | 337931864918735857425456001828432707560 |
+
+`cEmit` is `95,000,000 * Constants.UnitsInHearth` on every network (95% of the 100M-HRTH cap, matching
+`Constants.TotalHearth`). Only `halfLifeBlocks` differs by design: MAINNET carries the spec's real 10-year figure
+(`R0 ≈ 12.52834515 HRTH`, and the curve's year-1/2/4/8/12/20/40 rewards match the spec's own illustrative table to
+the precision it's given - `EmissionCurveTest`'s golden vectors pin the exact ember counts). TESTNET/STAGENET get
+deliberately short half-lives purely so the decay is observable on a running chain within a practical time, instead
+of only in a unit test that calls `EmissionCurve.rewardAt` directly at an arbitrary height - not economically
+meaningful, so their `initialReward` is correspondingly huge (the same `cEmit` compressed into a far shorter
+half-life). All three networks' `initialReward`/`decayRatioFixed` are transcribed, not hand-derived here: the
+canonical generator (`derive.py`, Python stdlib `decimal`, arbitrary precision) and its checked-in output
+(`vectors.json`) live in the sibling `hearth-specs` repo's `emission-curve/` directory - see "Cross-language test
+vectors" below. Re-run that generator to audit or change any of these literals; there is no in-repo tool for it
+(unlike `GenesisBlockGenerator` for genesis commitments, which is local because nothing outside this repo needs to
+agree with it).
+
+### Hard cap, not the global constant
+
+`BlockchainSettings.hardCap` (`= initialBalance + rewardsSettings.cEmit`) is this **network's own** supply ceiling,
+deliberately not `Constants.TotalHearth * Constants.UnitsInHearth`: MAINNET/TESTNET's premine (5%, below) plus `cEmit`
+(95%) sum to exactly that constant, but STAGENET's predefined snapshot premines the *entire* `Constants.TotalHearth`
+at genesis *and* still carries a `cEmit` of 95M on top (STAGENET is an internal-only devnet, premined in full for
+fast bring-up rather than following the 5%/95% split - see `PredefinedSnapshotSettings.STAGENET`'s comment), so its
+real ceiling is `Constants.TotalHearth * Constants.UnitsInHearth + cEmit`. `RewardApiRoute`'s `remainingToCap` field
+(`hardCap - totalHearthAmount`) reads this per-network value for exactly that reason - reading the global constant
+instead makes STAGENET's remaining-to-cap go negative.
+
+### Genesis premine
+
+`PredefinedSnapshotSettings.MAINNET`/`TESTNET`'s genesis balances credit exactly 5% of the cap (`Pgen`), split
+3% fallen-chains burn claim / 1% DAO treasury / 1% team (vested), per hearth-tokenomics-spec S2.1 - not the ~100%
+premine these lists held before this change. The DAO-treasury address is the same one
+`FunctionalitySettings.MAINNET`/`TESTNET.daoAddress` already commits to for the block-reward DAO split (below); the
+burn-claim and team addresses are freshly generated placeholders (`Address.fromPublicKey` over an arbitrary 32-byte
+value, encoded per-network via `Address.toBech32(hrp)` - see `Address.MAINNET_HRP`/`TESTNET_HRP`), following the
+same **TODO: replace before launch** convention already used for `daoAddress`. STAGENET keeps its pre-existing
+single-address, full-premine genesis balance unchanged (see "Hard cap" above for why that's fine).
+
+### The miner/DAO split is unchanged, just fed a decaying input
+
+`BlockRewardCalculator.rewardSharesAt` - the tiered miner/DAO split (nothing to the DAO below
+`GuaranteedMinerReward` = 2 HRTH, half of the excess up to `FullRewardInit` = 6 HRTH, a flat `MaxAddressReward` = 2
+HRTH above that) - was left as-is: it now receives `fullRewardAt`'s decaying value instead of a flat one, so a
+network's DAO share shrinks and eventually stops (once the curve decays below `GuaranteedMinerReward`) over the
+decades, without any change to the split logic itself. `Blockchain.blockRewardBoost` (used by
+`RewardApiRoute.currentReward = reward * blockchain.blockRewardBoost(...)`) is unrelated, pre-existing, and still
+hardcoded to `1` everywhere - not a multiplier the curve interacts with.
+
+### `RewardApiRoute` JSON
+
+The reward-voting fields this route used to report (`minIncrement`, `term`, `nextCheck`, `votingIntervalStart`,
+`votingInterval`, `votingThreshold`, `votes`/`RewardVotes`) are gone, matching reward voting itself being
+unimplemented (see "Node Tests" below) - replaced by `cEmit`, `halfLifeBlocks` (display/documentation only, not
+consensus-relevant - the consensus-relevant value is `decayRatioFixed`) and `remainingToCap`. `currentReward`/
+`totalHearthAmount`/`daoAddress` are unchanged. `CustomJson.fieldNamesToTranslate` (the `large-significand-format:
+string` allow-list) drops the now-gone `minIncrement` and adds `cEmit`/`remainingToCap` - both routinely exceed
+`2^53`, JS's safe-integer bound (`cEmit` alone is `9.5e15 > 9.007e15`), so they need the same string-encoding
+escape hatch `totalHearthAmount` already had.
+
+### Test fixtures: a controllable flat reward
+
+Most existing tests want a small, exactly predictable reward to assert on, not to exercise the curve itself (that's
+`EmissionCurveTest`'s job). `history.DefaultRewardsSettings` (`node/testkit`) pins `decayRatioFixed` to exactly
+`1 << FixedPointBits` (ratio `1.0`), under which `EmissionCurve.rewardAt` returns `initialReward` unchanged at every
+height - `fixedMul(oneFixed, oneFixed) == oneFixed`, so the flatness is exact, not approximate.
+`history.withFlatReward(rewardsSettings, reward)` is the drop-in replacement for the old, pre-curve
+`rewardsSettings.copy(initial = reward)` pattern tests used throughout to pin a specific value (e.g. to walk
+`rewardSharesAt`'s DAO-share tiers). Before this change, `RewardsSettings.MAINNET`/`TESTNET`/`STAGENET` were all the
+same flat 6-HRTH value, so nothing needed its own test-only flat setting; now that the three networks genuinely
+differ, anything that used to lean on that coincidence needs `DefaultRewardsSettings`/`withFlatReward` instead.
+
+This bit `test.DomainPresets.SettingsFromDefaultConfig` specifically: it loads
+`HearthSettings.fromRootConfig(loadConfig(None))` - the packaged default config, whose network type resolves to
+TESTNET - so every `DomainPresets.*` value (`RideV6`, `ConsensusImprovements`, etc.) silently inherited TESTNET's
+new huge, fast-decaying reward instead of a stable one, until pinned to `DefaultRewardsSettings` there too. Only
+one test actually failed at runtime from
+this (`RewardApiRouteSpec`'s boosted-reward check, which asserts an exact `6.hearth` reward), because most tests
+don't assert on an absolute reward-derived balance - but the exposure was systemic across most of `node-tests`, not
+limited to the one test that happened to catch it.
+
+### CUSTOM-network config files
+
+MAINNET/TESTNET/STAGENET never parse a `rewards {}` HOCON block at all - `BlockchainSettings.fromRootConfig`'s
+`ConfigReader` pattern-matches the network type and returns the hardcoded `RewardsSettings.MAINNET`/`TESTNET`/
+`STAGENET` Scala object directly. Only `type = CUSTOM` actually reads `rewards` from config, via
+`RewardsSettings derives ConfigReader` - so every packaged template a CUSTOM network's config might inherit needed
+migrating to the new `c-emit`/`initial-reward`/`decay-ratio-fixed`/`half-life-blocks` keys, not just the three
+hardcoded networks:
+`node/src/main/resources/custom-defaults.conf`, `network-defaults.conf`'s `devnet` alias (itself `type = CUSTOM`),
+`docker/private/hearth.custom.conf`, and `node-it/src/test/resources/template.conf`. Left unmigrated, loading any of
+them fails config parsing outright (`KeyNotFound(c-emit, ...)` etc.), not just at some later, already-documented
+"placeholder genesis hash" checkpoint. All four were given the same flat reward as `DefaultRewardsSettings`
+(`decay-ratio-fixed = "340282366920938463463374607431768211456"`, i.e. `2^128`, quoted since it is a ~39-digit
+decimal string, not a native HOCON number) to preserve their previous constant-reward behavior exactly, since
+these are templates/dev fixtures rather than a network with real tokenomics.
 
 ## Transaction JSON
 
@@ -262,7 +423,7 @@ features that produced them.
 `transactions`/`initial-balance` one, though the balances/generators/assets themselves now live in the height-1 entry
 of a `predefined-snapshots` array alongside `genesis`, not inside `genesis` itself (see "Predefined snapshots" below).
 Every miner-eligible node in `nodes.conf` (node01-node09; node10 stays a plain account) is both a funded account and a
-committed generator: its `waves.miner.accounts` entry's `signing-key` is the same hex seed as its own account (so the
+committed generator: its `hearth.miner.accounts` entry's `signing-key` is the same hex seed as its own account (so the
 address that mines is also a regular funded address), with independently generated `vrf-key`/`bls-key` alongside it.
 `predefined-snapshots`' height-1 `assets` (`NodeConfigs.GenesisAssets`) are fully distributed between the
 "firstKeyPair"/"secondKeyPair" fixture accounts (`IntegrationSuiteWithThreeAddresses`), not to any node.
@@ -330,7 +491,7 @@ block v4/v5 fields, block-size-by-bytes limiting) are all unconditional now, so 
 activation" for one of them no longer has a meaningful "before" state and needs its assertions collapsed to just the
 always-on behavior (see `BlockSizeConstraintsSuite`, `BlocksApiSuite`).
 
-A generator account's `waves.miner.accounts` entry now requires all three of `signing-key`/`vrf-key`/`bls-key` (a
+A generator account's `hearth.miner.accounts` entry now requires all three of `signing-key`/`vrf-key`/`bls-key` (a
 hex-encoded seed each) when not using a mnemonic; `GeneratorKeys.fromSettings` throws `bls-key is required when
 mnemonic is not provided` at node startup (another node-log-only crash) if a suite's hand-built account config only
 sets the first two, which several still did since bls-key postdates when they were written.
@@ -362,10 +523,10 @@ and the existing, purely-local `createKeyPair()` (no node round-trip at all, for
 distinct public key and never needs the node to hold or use its private key). `createAddressServerSide()` is *not*
 enough for a `CommitToGenerationTransaction` specifically, despite registering the address in the node's wallet:
 `TransactionFactory.signCommitToGeneration` signs with `GeneratorKeys.signingKey(address)`, sourced only from
-`waves.miner.accounts` (see "Keys"), never from the wallet — an address the node only knows about through its wallet
-fails `/transactions/sign` with `$address is not one of this node's generators, see waves.miner.accounts`. A node-it
+`hearth.miner.accounts` (see "Keys"), never from the wallet — an address the node only knows about through its wallet
+fails `/transactions/sign` with `$address is not one of this node's generators, see hearth.miner.accounts`. A node-it
 suite that needs a *second or third* generator identity on a single node (e.g. to test multiple committed generators
-without spinning up that many containers) needs new fixture support for provisioning extra `waves.miner.accounts`
+without spinning up that many containers) needs new fixture support for provisioning extra `hearth.miner.accounts`
 entries with known seeds, which doesn't exist yet; `OneNodeFinalizationTestSuite`/`TwoNodesFinalizationTestSuite` hit
 exactly this and can't pass until it's built.
 
@@ -416,12 +577,12 @@ rotted the same way: whole feature areas the migration removed (RIDE compiler/ev
 `Issue`/`Reissue`/`Burn`/`CreateAlias`/`Data`/`SponsorFee`/`InvokeScript`/`Ethereum`/`SetScript`, `account.KeyPair`/
 `SeedKeyPair`, `TxVersion`) were still referenced throughout. The fix pattern was the same as everywhere else in this
 migration: delete whole files/benchmarks whose entire subject is a removed feature (nothing to salvage - the RIDE
-evaluator benchmarks under `lang/v1/`, `WavesEnvironmentBenchmark`, `SmartGenerator`/`MultisigTransactionGenerator`/
+evaluator benchmarks under `lang/v1/`, `HearthEnvironmentBenchmark`, `SmartGenerator`/`MultisigTransactionGenerator`/
 `OracleTransactionGenerator` and the `Mode.MULTISIG`/`ORACLE`/`SWARM` cases that drove them), and migrate what's
 still meaningful to the current APIs (`account.KeyPair` → `tech.hearth.crypto.SigningKey`,
-`MassTransferTransaction.create`/`TxHelpers.buy`/`.sell`/`.exchange` current signatures, `Keys.wavesBalance`/
-`wavesBalanceAt` in place of the removed `Keys.data`/`dataAt` data-entry storage `RocksDBSeekForPrevBenchmark`
-benchmarked, `PoSCalculator.hit`/`FairPoSCalculator.calculateDelay` in place of the removed `WavesEnvironment
+`MassTransferTransaction.create`/`TxHelpers.buy`/`.sell`/`.exchange` current signatures, `Keys.hearthBalance`/
+`hearthBalanceAt` in place of the removed `Keys.data`/`dataAt` data-entry storage `RocksDBSeekForPrevBenchmark`
+benchmarked, `PoSCalculator.hit`/`FairPoSCalculator.calculateDelay` in place of the removed `HearthEnvironment
 .calculateDelay` wrapper). `node-generator`'s two standalone dev utilities under `utils/generator/`
 (`BlockchainGeneratorApp`, `MinerChallengeSimulator`) needed a real fix too, not deletion: `MinerImpl`'s constructor
 dropped its explicit miner-accounts parameter (derived from `MinerSettings` via `GeneratorKeys` instead) and its
@@ -435,9 +596,9 @@ asset id on the target chain) since there is no way to mint a fresh one any more
 
 Fixed since the previous pass:
 
-- `activation.FeatureActivationTestSuite`/`PreActivatedFeaturesTestSuite` — both set `waves.features.supported`,
+- `activation.FeatureActivationTestSuite`/`PreActivatedFeaturesTestSuite` — both set `hearth.features.supported`,
   a dead config path; the miner's actual vote list (and what `ActivationApiRoute` reports) comes from
-  `waves.miner.supported-features` (`MinerSettings.supportedFeatures`), which neither suite ever set, so the node
+  `hearth.miner.supported-features` (`MinerSettings.supportedFeatures`), which neither suite ever set, so the node
   never voted and status fell through to `Implemented` instead of `Voted`. Fixed both suites' config key; all 7 tests
   across the two suites pass now.
 - `sync.transactions.SignAndBroadcastApiSuite`, "/transactions/sign should handle erroneous input" — not a
@@ -471,7 +632,7 @@ selection, and stale pre-`tech.hearth` migration assumptions):
   `sync.AmountAsStringSuite` (fixed via the `AssetsApiRoute.jsonDetails` `issueTimestamp` fix, see "Transaction JSON")
   — all low-balance-miner or stale-assumption fixes, no node bugs found.
 - `sync.lightnode.LightNodeMiningSuite` — two stacked bugs: (1) `fullNode.transfer(..., fullNode.balance(...).balance
-  - 1.waves)` tried to spend the 100 WAVES committed-generator deposit along with the rest of the regular balance
+  - 1.hearth)` tried to spend the 100 HRTH committed-generator deposit along with the rest of the regular balance
   (see "Balance snapshots" above; fixed by reading `.balanceDetails(...).available` instead); (2) once that no longer
   crashed the transfer, the test still failed on its core assertion — its `buildNonConflicting()`-based node
   selection always assigns node01 as the "full" node and node04 as the "light" one, but node04's genesis balance is
@@ -557,12 +718,12 @@ ordering, that part was a red herring.
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
 `WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with the full configured
-supply (`Constants.TotalWaves * Constants.UnitsInWave`), matching `withGenerateSubscription`'s existing convention.
+supply (`Constants.TotalHearth * Constants.UnitsInHearth`), matching `withGenerateSubscription`'s existing convention.
 A test whose miner must start at a *specific* small balance (not the full supply) needs an explicit `balances` entry
 naming that account — the auto-fund only backs off when the caller already named the address, same dedup-keep-first
 rule as `node/testkit`'s `withDomain`. A committed generator can never be funded with a literal 0 either way: genesis
 validation requires each committed generator's starting balance to cover `CommitToGenerationTransaction
-.DepositInWavelets`, so a test wanting a small, exact miner balance funds it at genesis with that deposit (or the
+.DepositInEmbers`, so a test wanting a small, exact miner balance funds it at genesis with that deposit (or the
 test's own intended total) rather than via a later transfer.
 
 Genesis (height 1) never produces a `BlockchainUpdated` event of its own — the update stream starts at height 2, the
@@ -694,11 +855,11 @@ before predefined snapshots existed. A CUSTOM network's `predefined-snapshots` H
 (and MAINNET/TESTNET/STAGENET each have a hardcoded height-1 entry), but nothing checks a height-1 entry is actually
 among its elements; settings built directly in code (tests, tools) routinely have none at all.
 
-Only the height-1 (genesis) entry may credit `waves`; `PredefinedSnapshot.build` rejects a later entry that does
-("crediting Waves is only supported at genesis"). Waves supply growth beyond genesis is tracked as block rewards only
-(`Blockchain.wavesAmount`/`BlockMeta.totalWavesAmount` compute purely from `previous + reward - penalties`, never from
-a snapshot's own balances), so a later entry silently crediting Waves would desync the reported supply from the real
-one. A predefined snapshot beyond genesis is for minting new assets, not new Waves.
+Only the height-1 (genesis) entry may credit `hearth`; `PredefinedSnapshot.build` rejects a later entry that does
+("crediting Hearth is only supported at genesis"). Hearth supply growth beyond genesis is tracked as block rewards only
+(`Blockchain.hearthAmount`/`BlockMeta.totalHearthAmount` compute purely from `previous + reward - penalties`, never from
+a snapshot's own balances), so a later entry silently crediting Hearth would desync the reported supply from the real
+one. A predefined snapshot beyond genesis is for minting new assets, not new Hearth.
 
 The committed-generator funding check (`Generator X balance ... is less than required for generation`) has to
 resolve against the *resulting* blockchain view (`SnapshotBlockchain(blockchain, snapshot).balance(...)`), not the
@@ -726,7 +887,7 @@ block still matches).
 By default, blocks are mined by defaultSigner, and when no generators are committed, defaultSigner is added as the committed generator.
 Other generators may be explicitly added.
 
-Committed generators pay `CommitToGenerationTransaction.DepositInWavelets` (100 WAVES). `withDomain` funds every
+Committed generators pay `CommitToGenerationTransaction.DepositInEmbers` (100 HRTH). `withDomain` funds every
 generator it commits that the caller did not name — the genesis snapshot is rejected with `Generator X balance 0 is
 less than required for generation` otherwise — but only up to that default: a generator that *spends* in the test still
 needs an explicit balance covering the deposit *on top of* what it spends. An explicit entry always wins, since genesis
@@ -743,7 +904,7 @@ starts with `ENOUGH_AMT` and nothing else. Pass balances through the argument, a
 total matters, since it is only auto-funded when the caller does not mention it.
 
 A fee is charged before what the same transaction earns is credited, so having it *net* is not enough: an exchange
-matcher that starts at zero fails with `negative waves balance: before=0, after=-fee` even though the matcher fees it
+matcher that starts at zero fails with `negative hearth balance: before=0, after=-fee` even though the matcher fees it
 collects would more than cover it. Fund whoever pays a fee for the fee itself.
 
 As implemented today, a commitment is mandatory with no exceptions. A block's VRF proof is only ever verified against a
@@ -777,7 +938,7 @@ about them — accounts, commitments, funding, tick sequences — already fixed:
 `BlockChallengerImpl` takes a `GeneratorKeys` — the node's own generator keys, exactly as `BlockEndorser` does. It used
 to take a bare `Seq[(SigningKey, VrfKey)]` that both `Application` and the testkit's `Domain` filled with `Seq.empty`,
 so no challenge was ever produced anywhere; a test that wants one now only has to name accounts in
-`waves.miner.accounts`.
+`hearth.miner.accounts`.
 
 A challenger is a generator like any other, and two things follow that are easy to miss:
 
@@ -842,7 +1003,7 @@ which is why they tolerate plain `TestBlock.create` blocks. It overrides the ref
 those need `withDomain`/`Domain.appendBlock`, which is where `BlockchainUpdaterImpl` validates references anyway.
 
 Blocks the domain builds are timestamped from the genesis block onwards, so the genesis timestamp has to be a plausible
-one: `history.DefaultWavesSettings` puts it at 0, which lands every block in 1970 while `TxHelpers` stamps transactions
+one: `history.DefaultHearthSettings` puts it at 0, which lands every block in 1970 while `TxHelpers` stamps transactions
 with the current time, past `maxTransactionTimeForwardOffset`. `DomainPresets` starts the chain an hour ago instead,
 which is why `withDomain`'s default settings work and that one does not.
 
@@ -880,7 +1041,7 @@ with the stop reason's code (38 for `UnsupportedFeature`), with no test output.
 ### Wiring a state up by hand
 
 When a test builds a `RocksDBWriter` and a `BlockchainUpdaterImpl` separately, give both the same `blockchainSettings`.
-The updater builds the genesis snapshot from *its own* settings, so handing it `WavesSettings.fromRootConfig(...)` while
+The updater builds the genesis snapshot from *its own* settings, so handing it `HearthSettings.fromRootConfig(...)` while
 the writer got the test's genesis makes it apply the packaged config's balances, which fails on their base58 addresses
 (`Genesis balance 3My3…: invalid recipient`).
 

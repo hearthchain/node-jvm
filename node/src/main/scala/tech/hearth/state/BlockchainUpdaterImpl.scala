@@ -14,12 +14,12 @@ import tech.hearth.features.BlockchainFeatures
 import tech.hearth.lang.ValidationError
 import tech.hearth.metrics.*
 import tech.hearth.mining.{Miner, MiningConstraint, MiningConstraints}
-import tech.hearth.settings.{BlockchainSettings, WavesSettings}
+import tech.hearth.settings.{BlockchainSettings, HearthSettings}
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.{Applied, Ignored}
 import tech.hearth.state.TxMeta.Status
 import tech.hearth.state.diffs.BlockDiffer
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.{BlockAppendError, GenericError, MicroBlockAppendError}
 import tech.hearth.utils.{ApplicationStopReason, ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
 import kamon.Kamon
@@ -31,7 +31,7 @@ import scala.collection.immutable.VectorMap
 
 class BlockchainUpdaterImpl(
     val rocksdb: RocksDBWriter,
-    wavesSettings: WavesSettings,
+    hearthSettings: HearthSettings,
     time: Time,
     blockchainUpdateTriggers: BlockchainUpdateTriggers,
     miner: Miner = Miner.StrictDisabledMiner,
@@ -44,7 +44,7 @@ class BlockchainUpdaterImpl(
     with ScorexLogging {
 
   import tech.hearth.state.BlockchainUpdaterImpl.*
-  import wavesSettings.blockchainSettings.functionalitySettings
+  import hearthSettings.blockchainSettings.functionalitySettings
 
   private def inLock[R](l: Lock, f: => R): R = {
     l.lock()
@@ -56,8 +56,8 @@ class BlockchainUpdaterImpl(
   private def writeLock[B](f: => B): B = inLock(lock.writeLock(), f)
   private def readLock[B](f: => B): B  = inLock(lock.readLock(), f)
 
-  private lazy val maxBlockReadinessAge = wavesSettings.minerSettings.intervalAfterLastBlockThenGenerationIsAllowed.toMillis
-  private val maxSyncRollbackLength     = wavesSettings.synchronizationSettings.maxRollback
+  private lazy val maxBlockReadinessAge = hearthSettings.minerSettings.intervalAfterLastBlockThenGenerationIsAllowed.toMillis
+  private val maxSyncRollbackLength     = hearthSettings.synchronizationSettings.maxRollback
 
   @volatile
   private var ngState: Option[NgState] = Option.empty
@@ -95,7 +95,7 @@ class BlockchainUpdaterImpl(
       val (_, _, totalFee) = ng.bestLiquidSnapshotAndFees
       val b                = ng.bestLiquidBlock
       val vrf              = hitSource(height)
-      BlockMeta.fromBlock(b, height, totalFee.wavesAmount, ng.reward, vrf)
+      BlockMeta.fromBlock(b, height, totalFee.hearthAmount, ng.reward, vrf)
     })
 
   @noinline
@@ -103,7 +103,7 @@ class BlockchainUpdaterImpl(
 
   override def bestLiquidSnapshotAndFees: Option[(StateSnapshot, BlockFee, BlockFee)] = readLock(ngState.map(_.bestLiquidSnapshotAndFees))
 
-  override val settings: BlockchainSettings = wavesSettings.blockchainSettings
+  override val settings: BlockchainSettings = hearthSettings.blockchainSettings
 
   override def isLastBlockId(id: ByteStr): Boolean = readLock {
     ngState.fold(rocksdb.lastBlockId.contains(id))(_.contains(id))
@@ -140,7 +140,7 @@ class BlockchainUpdaterImpl(
       if (unimplementedActivated.nonEmpty) {
         log.error(s"UNIMPLEMENTED ${displayFeatures(unimplementedActivated)} ACTIVATED ON BLOCKCHAIN")
         log.error("PLEASE, UPDATE THE NODE IMMEDIATELY")
-        if (wavesSettings.autoShutdownOnUnsupportedFeature) {
+        if (hearthSettings.autoShutdownOnUnsupportedFeature) {
           log.error("FOR THIS REASON THE NODE WAS STOPPED AUTOMATICALLY")
           onFatalStop(UnsupportedFeature)
         } else log.error("OTHERWISE THE NODE WILL END UP ON A FORK")
@@ -153,7 +153,7 @@ class BlockchainUpdaterImpl(
   }
 
   def computeNextReward: Option[Long] =
-    Option.when(height > 0)(settings.rewardsSettings.initial)
+    Option.when(height > 0)(BlockRewardCalculator.fullRewardAt(Height(height + 1), this))
 
   /** Referenced blockchain for mining or appending new block that references the latest block in blockchain or a microblock
     * @return
@@ -195,7 +195,7 @@ class BlockchainUpdaterImpl(
       val notImplementedFeatures: Set[Short] = rocksdb.activatedFeaturesAt(height).diff(BlockchainFeatures.implemented)
 
       Either
-        .raiseWhen(wavesSettings.autoShutdownOnUnsupportedFeature && notImplementedFeatures.nonEmpty)(
+        .raiseWhen(hearthSettings.autoShutdownOnUnsupportedFeature && notImplementedFeatures.nonEmpty)(
           GenericError(s"UNIMPLEMENTED ${displayFeatures(notImplementedFeatures)} ACTIVATED ON BLOCKCHAIN, UPDATE THE NODE IMMEDIATELY")
         )
         .flatMap[ValidationError, BlockApplyResult](_ =>
@@ -379,7 +379,8 @@ class BlockchainUpdaterImpl(
 
                 restTotalConstraint = updatedTotalConstraint
                 if (
-                  (block.header.timestamp > time.correctedTime() - wavesSettings.minerSettings.intervalAfterLastBlockThenGenerationIsAllowed.toMillis)
+                  (block.header.timestamp > time
+                    .correctedTime() - hearthSettings.minerSettings.intervalAfterLastBlockThenGenerationIsAllowed.toMillis)
                   || (newHeight.toInt % 100 == 0)
                 ) {
                   currentFinalizedHeight.foreach { h =>
@@ -462,7 +463,7 @@ class BlockchainUpdaterImpl(
           ngState = None
           val liquidBlockData = maybeNg.map { ng =>
             val block = ng.bestLiquidBlock
-            val snapshot = if (wavesSettings.enableLightMode && block.transactionData.nonEmpty) {
+            val snapshot = if (hearthSettings.enableLightMode && block.transactionData.nonEmpty) {
               Some(
                 BlockSnapshot(
                   block.id(),
@@ -595,22 +596,22 @@ class BlockchainUpdaterImpl(
     }
   }
 
-  override def wavesAmount(height: Int): BigInt = readLock {
+  override def hearthAmount(height: Int): BigInt = readLock {
     ngState match {
       case Some(ng) if this.height == height =>
         if (height == 1) {
-          ng.bestLiquidSnapshot.balances.collect { case ((_, Asset.Waves), b) => b }.sum + ng.reward.getOrElse(0L)
+          ng.bestLiquidSnapshot.balances.collect { case ((_, Asset.Hearth), b) => b }.sum + ng.reward.getOrElse(0L)
         } else {
           val parentConflictEndorsements = rocksdb.lastBlockHeader.flatMap(_.header.finalizationVoting).fold(0)(_.conflict.size)
-          val prevWavesAmount            = rocksdb.wavesAmount(height - 1)
+          val prevHearthAmount           = rocksdb.hearthAmount(height - 1)
           val ngReward                   = BigInt(ng.reward.getOrElse(0L))
           val rewardBoost                = this.blockRewardBoost(Height(height))
-          prevWavesAmount +
+          prevHearthAmount +
             ngReward * rewardBoost -
-            parentConflictEndorsements * CommitToGenerationTransaction.DepositInWavelets
+            parentConflictEndorsements * CommitToGenerationTransaction.DepositInEmbers
         }
       case _ =>
-        rocksdb.wavesAmount(height)
+        rocksdb.hearthAmount(height)
     }
   }
 
@@ -697,7 +698,7 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.filledVolumeAndFee(orderId)
   }
 
-  override def balanceAtHeight(address: Address, h: Int, assetId: Asset = Waves): Option[(Int, Long)] = readLock {
+  override def balanceAtHeight(address: Address, h: Int, assetId: Asset = Hearth): Option[(Int, Long)] = readLock {
     snapshotBlockchain.balanceAtHeight(address, h, assetId)
   }
 
@@ -730,8 +731,8 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.balances(req)
   }
 
-  override def wavesBalances(addresses: Seq[Address]): Map[Address, Long] = readLock {
-    snapshotBlockchain.wavesBalances(addresses)
+  override def hearthBalances(addresses: Seq[Address]): Map[Address, Long] = readLock {
+    snapshotBlockchain.hearthBalances(addresses)
   }
 
   override def effectiveBalanceBanHeights(address: Address): Seq[Int] = readLock {

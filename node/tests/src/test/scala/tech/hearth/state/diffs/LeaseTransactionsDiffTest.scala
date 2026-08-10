@@ -9,7 +9,7 @@ import tech.hearth.settings.TestFunctionalitySettings
 import tech.hearth.state.*
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.TxHelpers
@@ -28,7 +28,7 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
 
   def total(l: LeaseBalance): Long = l.in - l.out
 
-  property("can lease/cancel lease preserving waves invariant") {
+  property("can lease/cancel lease preserving hearth invariant") {
     val sender        = TxHelpers.signer(2)
     val recipient     = TxHelpers.signer(3)
     val miner         = TestBlock.defaultSigner.toAddress
@@ -39,8 +39,8 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     } {
       assertDiffAndState(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(lease)), balances = senderBalance) { case (snapshot, b) =>
         snapshot.balances shouldBe VectorMap(
-          (sender.toAddress, Waves) -> (ENOUGH_AMT - lease.fee.value),
-          (miner, Waves)            -> (BlockDiffer.CurrentBlockFeePart(lease.fee.value) + b.settings.rewardsSettings.initial)
+          (sender.toAddress, Hearth) -> (ENOUGH_AMT - lease.fee.value),
+          (miner, Hearth)            -> (BlockDiffer.CurrentBlockFeePart(lease.fee.value) + b.settings.rewardsSettings.initialReward)
         )
         snapshot.leaseBalances shouldBe Map(
           sender.toAddress    -> LeaseBalance(0, lease.amount.value),
@@ -51,9 +51,9 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
         snapshot.balances shouldBe VectorMap(
           // The whole fee of the lease block: 40% credited there, the 60% carry credited here - plus 40% of this
           // block's own fee, and the reward
-          (miner, Waves) ->
-            (lease.fee.value + BlockDiffer.CurrentBlockFeePart(leaseCancel.fee.value) + b.settings.rewardsSettings.initial),
-          (sender.toAddress, Waves) -> (ENOUGH_AMT - lease.fee.value - leaseCancel.fee.value)
+          (miner, Hearth) ->
+            (lease.fee.value + BlockDiffer.CurrentBlockFeePart(leaseCancel.fee.value) + b.settings.rewardsSettings.initialReward),
+          (sender.toAddress, Hearth) -> (ENOUGH_AMT - lease.fee.value - leaseCancel.fee.value)
         )
         snapshot.leaseBalances shouldBe Map(
           sender.toAddress    -> LeaseBalance.empty,
@@ -84,7 +84,7 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
       )
     } yield {
       // ensure recipient has enough effective balance
-      val transfer = TxHelpers.transfer(master, recipient.toAddress, 20.waves, timestamp = ts)
+      val transfer = TxHelpers.transfer(master, recipient.toAddress, 20.hearth, timestamp = ts)
 
       (transfer, lease, leaseCancel, leaseCancel2)
     }
@@ -173,7 +173,7 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
       val recipient = TxHelpers.signer(2)
 
       val fee    = 400000L
-      val amount = 1000.waves
+      val amount = 1000.hearth
 
       val genesis = Seq(AddrWithBalance(master.toAddress, fee + amount))
 
@@ -205,7 +205,7 @@ class LeaseTransactionsDiffTest extends PropSpec with WithDomain {
     }
   }
 
-  private val totalBalance = 1000.waves
+  private val totalBalance = 1000.hearth
   private val scenario: (Seq[AddrWithBalance], LeaseTransaction) = {
     val sender    = TxHelpers.signer(1)
     val recipient = TxHelpers.signer(2)

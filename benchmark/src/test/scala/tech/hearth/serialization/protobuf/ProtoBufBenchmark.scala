@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.protobuf.transaction.PBTransactions
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Proofs
 import tech.hearth.transaction.transfer.MassTransferTransaction
 import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
@@ -36,7 +36,7 @@ class ProtoBufBenchmark {
       MassTransferTransaction
         .create(
           sender,
-          Waves,
+          Hearth,
           transfers,
           200000,
           1518091313964L,
@@ -72,7 +72,7 @@ class ProtoBufBenchmark {
       MassTransferTransaction
         .create(
           sender,
-          Waves,
+          Hearth,
           transfers,
           200000,
           1518091313964L,

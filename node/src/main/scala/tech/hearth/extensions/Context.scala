@@ -4,7 +4,7 @@ import tech.hearth.api.common.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.events.UtxEvent
 import tech.hearth.lang.ValidationError
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.Blockchain
 import tech.hearth.transaction.smart.script.trace.TracedResult
 import tech.hearth.transaction.{DiscardedBlocks, Transaction}
@@ -15,7 +15,7 @@ import monix.eval.Task
 import monix.reactive.Observable
 
 trait Context {
-  def settings: WavesSettings
+  def settings: HearthSettings
   def blockchain: Blockchain
   def rollbackTo(blockId: ByteStr): Task[Either[ValidationError, DiscardedBlocks]]
   def time: Time

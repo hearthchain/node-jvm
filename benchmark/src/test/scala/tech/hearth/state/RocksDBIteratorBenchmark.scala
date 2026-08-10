@@ -3,7 +3,7 @@ package tech.hearth.state
 import com.google.common.primitives.Ints
 import com.typesafe.config.ConfigFactory
 import tech.hearth.database.RDB
-import tech.hearth.settings.{WavesSettings, loadConfig}
+import tech.hearth.settings.{HearthSettings, loadConfig}
 import tech.hearth.state.RocksDBIteratorBenchmark.*
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -53,12 +53,12 @@ object RocksDBIteratorBenchmark {
 
   @State(Scope.Benchmark)
   class BaseSt {
-    private val wavesSettings: WavesSettings =
-      WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    private val hearthSettings: HearthSettings =
+      HearthSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
 
     val rdb: RDB = {
       val dir = Files.createTempDirectory("state-synthetic").toAbsolutePath.toString
-      RDB.open(wavesSettings.dbSettings.copy(directory = dir))
+      RDB.open(hearthSettings.dbSettings.copy(directory = dir))
     }
 
     val keysPrefix            = "keysPrefix" // Must have 10 or more bytes, see RDB.newColumnFamilyOptions

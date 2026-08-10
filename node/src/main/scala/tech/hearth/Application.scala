@@ -24,7 +24,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.metrics.Metrics
 import tech.hearth.mining.{BlockChallengerImpl, GeneratorKeys, Miner, MinerDebugInfo, MinerImpl}
 import tech.hearth.network.*
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.appender.{BlockAppender, ExtensionAppender, MicroblockAppender}
 import tech.hearth.state.{BlockEndorser, BlockRewardCalculator, Blockchain, CompleteBlockchainUpdater, EndorsementStorage, Height, TxMeta}
 import tech.hearth.transaction.TxValidationError.GenericError
@@ -61,7 +61,7 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success, Try}
 
-class Application(val actorSystem: ActorSystem, val settings: WavesSettings, configRoot: ConfigObject, time: Time) extends ScorexLogging {
+class Application(val actorSystem: ActorSystem, val settings: HearthSettings, configRoot: ConfigObject, time: Time) extends ScorexLogging {
   app =>
 
   import Application.*
@@ -143,7 +143,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
     val pos = PoSSelector(blockchainUpdater, settings.synchronizationSettings.maxBaseTarget)
 
     val endorsementStorage = EndorsementStorage.InMemory((blockId, height) => blockchainUpdater.blockId(height.toInt).contains(blockId))
-    // The accounts this node generates with, from waves.miner.accounts. The endorser and the REST API need them
+    // The accounts this node generates with, from hearth.miner.accounts. The endorser and the REST API need them
     // whether or not mining is enabled here, so they are not the miner's to own.
     val generatorKeys = GeneratorKeys.fromSettings(settings.minerSettings)
     val blockEndorser =
@@ -240,7 +240,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
 
     // Extensions start
     val extensionContext: Context = new Context {
-      override def settings: WavesSettings                                                      = app.settings
+      override def settings: HearthSettings                                                     = app.settings
       override def blockchain: Blockchain                                                       = app.blockchainUpdater
       override def rollbackTo(blockId: ByteStr): Task[Either[ValidationError, DiscardedBlocks]] = rollbackTask(blockId, returnTxsToUtx = false)
       override def time: Time                                                                   = app.time
@@ -561,20 +561,20 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
 }
 
 object Application extends ScorexLogging {
-  def loadApplicationConfig(external: Option[File] = None): WavesSettings = {
+  def loadApplicationConfig(external: Option[File] = None): HearthSettings = {
     import tech.hearth.settings.*
 
     val maybeExternalConfig = Try(external.map(f => ConfigFactory.parseFile(f.getAbsoluteFile, ConfigParseOptions.defaults().setAllowMissing(false))))
     val config              = loadConfig(maybeExternalConfig.getOrElse(None))
 
     // DO NOT LOG BEFORE THIS LINE, THIS PROPERTY IS USED IN logback.xml
-    System.setProperty("waves.directory", config.getString("waves.directory"))
-    if (config.hasPath("waves.config.directory")) System.setProperty("waves.config.directory", config.getString("waves.config.directory"))
+    System.setProperty("hearth.directory", config.getString("hearth.directory"))
+    if (config.hasPath("hearth.config.directory")) System.setProperty("hearth.config.directory", config.getString("hearth.config.directory"))
 
     maybeExternalConfig match {
       case Success(None) =>
-        val currentBlockchainType = Try(ConfigFactory.defaultOverrides().getString("waves.blockchain.type"))
-          .orElse(Try(ConfigFactory.defaultOverrides().getString("waves.defaults.blockchain.type")))
+        val currentBlockchainType = Try(ConfigFactory.defaultOverrides().getString("hearth.blockchain.type"))
+          .orElse(Try(ConfigFactory.defaultOverrides().getString("hearth.defaults.blockchain.type")))
           .map(_.toUpperCase)
           .getOrElse("TESTNET")
 
@@ -585,7 +585,7 @@ object Application extends ScorexLogging {
       case _ => // Pass
     }
 
-    val settings = WavesSettings.fromRootConfig(config)
+    val settings = HearthSettings.fromRootConfig(config)
 
     // Initialize global var with actual address scheme
     AddressScheme.current = new AddressScheme {
@@ -607,7 +607,7 @@ object Application extends ScorexLogging {
 
     val DisabledHash = "H6nsiifwYKYEx6YzYD7woP1XCn72RVvx6tC1zjjLXqsu"
     if (settings.restAPISettings.enable && settings.restAPISettings.apiKeyHash == DisabledHash) {
-      log.error(s"Usage of the default api key hash ($DisabledHash) is prohibited, please change it in the waves.conf")
+      log.error(s"Usage of the default api key hash ($DisabledHash) is prohibited, please change it in the hearth.conf")
       forceStopApplication(Misconfiguration)
     }
 

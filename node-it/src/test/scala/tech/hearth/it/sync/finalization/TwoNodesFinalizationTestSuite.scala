@@ -22,8 +22,8 @@ class TwoNodesFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLo
   // were the actual cause of this suite's block pace being roughly 2.5x the configured min-block-time.
   override protected def nodeConfigs: Seq[Config] =
     Seq(Miners.last, Miners(Miners.size - 2)).map(
-      _.overrides("waves.blockchain.custom.functionality.min-block-time = 10s")
-        .overrides("waves.blockchain.custom.functionality.generation-period-length = 20")
+      _.overrides("hearth.blockchain.custom.functionality.min-block-time = 10s")
+        .overrides("hearth.blockchain.custom.functionality.generation-period-length = 20")
         .quorum(1)
     )
 
@@ -87,7 +87,7 @@ class TwoNodesFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLo
         )
 
       // We need at least one transaction, otherwise there won't be a microblock, thus no voting, no finalization
-      node1.transfer(miner1Acc, miner2Addr, 1.waves, waitForTx = true)
+      node1.transfer(miner1Acc, miner2Addr, 1.hearth, waitForTx = true)
 
       val updatedFinalizedHeight = node1.finalizedHeight
       if (updatedFinalizedHeight < finalizedHeight1)

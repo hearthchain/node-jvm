@@ -609,13 +609,13 @@ package object database {
   }
 
   def toVanillaTransaction(tx: pb.TransactionData.Transaction): Transaction = tx match {
-    case tx: TD.WavesTransaction => PBTransactions.vanilla(tx.value).explicitGet()
-    case _                       => throw new IllegalArgumentException("Illegal transaction data")
+    case tx: TD.HearthTransaction => PBTransactions.vanilla(tx.value).explicitGet()
+    case _                        => throw new IllegalArgumentException("Illegal transaction data")
   }
 
   def writeTransaction(v: (TxMeta, Transaction)): Array[Byte] = {
     val (m, tx) = v
-    val ptx     = TD.WavesTransaction(PBTransactions.protobuf(tx))
+    val ptx     = TD.HearthTransaction(PBTransactions.protobuf(tx))
     pb.TransactionData(ptx, m.status.protobuf, m.spentComplexity).toByteArray
   }
 

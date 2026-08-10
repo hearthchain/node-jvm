@@ -14,7 +14,7 @@ class BlockchainUpdaterMicroblockBadSignaturesTest extends PropSpec, WithDomain 
   private val s = TxHelpers.signer(200)
 
   property("bad total resulting block signature") {
-    withDomain(balances = Seq(s -> 100.waves)) { d =>
+    withDomain(balances = Seq(s -> 100.hearth)) { d =>
       d.appendBlockE(TxHelpers.transfer(s)) should beRight
       val mb = d.createMicroBlock()(TxHelpers.transfer(s))
       d.appendMicroBlockE(mb.copy(wholeBlockSignature = randomSig)) should produce("InvalidSignature")
@@ -22,7 +22,7 @@ class BlockchainUpdaterMicroblockBadSignaturesTest extends PropSpec, WithDomain 
   }
 
   property("bad microBlock signature") {
-    withDomain(balances = Seq(s -> 100.waves)) { d =>
+    withDomain(balances = Seq(s -> 100.hearth)) { d =>
       d.appendBlockE(TxHelpers.transfer(s)) should beRight
       val mb = d.createMicroBlock()(TxHelpers.transfer(s))
       d.appendMicroBlockE(mb.copy(signature = randomSig)) should produce("InvalidSignature")
@@ -30,7 +30,7 @@ class BlockchainUpdaterMicroblockBadSignaturesTest extends PropSpec, WithDomain 
   }
 
   property("other sender") {
-    withDomain(balances = Seq(s -> 100.waves)) { d =>
+    withDomain(balances = Seq(s -> 100.hearth)) { d =>
       d.appendBlockE(TxHelpers.transfer(s)) should beRight
       val mb = d.createMicroBlock(signer = Some(s))(TxHelpers.transfer(s))
       d.appendMicroBlockE(mb) should produce("another account")

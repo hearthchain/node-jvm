@@ -4,7 +4,7 @@ import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.crypto.SignatureLength
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals}
 import tech.hearth.transaction.{Asset, Proofs, TxExchangeAmount, TxMatcherFee, TxOrderPrice}
 import tech.hearth.utils.byteStrFormat
@@ -130,8 +130,8 @@ object OrderJson {
   val assetReads: Reads[Asset] = Asset.assetReads(true)
 
   implicit val assetPairReads: Reads[AssetPair] = {
-    val r = (JsPath \ "amountAsset").readWithDefault[Asset](Waves)(using assetReads) and
-      (JsPath \ "priceAsset").readWithDefault[Asset](Waves)(using assetReads)
+    val r = (JsPath \ "amountAsset").readWithDefault[Asset](Hearth)(using assetReads) and
+      (JsPath \ "priceAsset").readWithDefault[Asset](Hearth)(using assetReads)
     r(AssetPair(_, _))
   }
 
@@ -192,7 +192,7 @@ object OrderJson {
       (JsPath \ "signature").readNullable[Array[Byte]] and
       (JsPath \ "proofs").readNullable[Array[Array[Byte]]] and
       (JsPath \ "version").read[Byte] and
-      (JsPath \ "matcherFeeAssetId").readNullable[Asset].map(_.getOrElse(Waves)) and
+      (JsPath \ "matcherFeeAssetId").readNullable[Asset].map(_.getOrElse(Hearth)) and
       (JsPath \ "priceMode")
         .readWithDefault[OrderPriceMode](OrderPriceMode.Default) and
       (JsPath \ "attachment").readNullable[ByteStr]

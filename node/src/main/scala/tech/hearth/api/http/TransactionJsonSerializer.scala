@@ -9,7 +9,7 @@ import tech.hearth.api.http.TransactionJsonSerializer.*
 import tech.hearth.api.http.TransactionsApiRoute.{ApplicationStatus, LeaseStatus, TxMetaEnriched}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.state.{Blockchain, Height, LeaseDetails, TransactionId, TxMeta}
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.MassTransferTransaction
 import tech.hearth.transaction.{Asset, Transaction}
@@ -21,7 +21,7 @@ final case class TransactionJsonSerializer(blockchain: Blockchain) {
   val assetSerializer: JsonSerializer[Asset] =
     (value: Asset, gen: JsonGenerator, _) => {
       value match {
-        case Waves           => gen.writeNull()
+        case Hearth          => gen.writeNull()
         case IssuedAsset(id) => gen.writeString(id.toString)
       }
     }

@@ -19,7 +19,7 @@ import tech.hearth.state.utils.TestRocksDB
 import tech.hearth.state.*
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxHelpers.defaultAddress
 import tech.hearth.transaction.smart.script.trace.TracedResult
 import tech.hearth.transaction.{BlockchainUpdater, Transaction, TxHelpers}
@@ -59,7 +59,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     TestHelpers.deleteRecursively(path)
   }
 
-  protected def withRocksDBWriter[A](ws: WavesSettings)(test: RocksDBWriter => A): A = {
+  protected def withRocksDBWriter[A](ws: HearthSettings)(test: RocksDBWriter => A): A = {
     try {
       val (_, rdw) = TestStorageFactory(
         ws,
@@ -81,7 +81,7 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
   def withRocksDBWriter[A](fs: FunctionalitySettings)(test: RocksDBWriter => A): A =
     withRocksDBWriter(TestRocksDB.createTestBlockchainSettings(fs))(test)
 
-  protected def withTestState[A](ws: WavesSettings)(test: (BlockchainUpdaterImpl, RocksDBWriter) => A): A = {
+  protected def withTestState[A](ws: HearthSettings)(test: (BlockchainUpdaterImpl, RocksDBWriter) => A): A = {
     try {
       val (bcu, rdw) = TestStorageFactory(
         ws,
@@ -359,8 +359,8 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
   def assertBalanceInvariant(snapshot: StateSnapshot, db: RocksDBWriter, rewardAndFee: Long = 0): Unit = {
     snapshot.balances.toSeq
       .map {
-        case ((`defaultAddress`, Waves), balance) => Waves -> (balance - db.balance(defaultAddress, Waves) - rewardAndFee)
-        case ((address, asset), balance)          => asset -> (balance - db.balance(address, asset))
+        case ((`defaultAddress`, Hearth), balance) => Hearth -> (balance - db.balance(defaultAddress, Hearth) - rewardAndFee)
+        case ((address, asset), balance)           => asset  -> (balance - db.balance(address, asset))
       }
       .groupMap(_._1)(_._2)
       .foreach { case (_, balances) => balances.sum shouldBe 0 }
@@ -395,11 +395,11 @@ trait WithDomain extends WithState {
   suite: Suite =>
   val DomainPresets = tech.hearth.test.DomainPresets
 
-  def domainSettingsWithFS(fs: FunctionalitySettings): WavesSettings =
+  def domainSettingsWithFS(fs: FunctionalitySettings): HearthSettings =
     DomainPresets.domainSettingsWithFS(fs)
 
   def withDomain[A](
-      settings: WavesSettings = DomainPresets.SettingsFromDefaultConfig,
+      settings: HearthSettings = DomainPresets.SettingsFromDefaultConfig,
       balances: Seq[AddrWithBalance] = Seq.empty,
       wrapDB: RocksDB => RocksDB = identity,
       wrapBU: CompleteBlockchainUpdater => CompleteBlockchainUpdater = identity,
@@ -566,6 +566,6 @@ object WithState {
     )
   }
 
-  def createGenesisBlock(settings: WavesSettings): Block =
+  def createGenesisBlock(settings: HearthSettings): Block =
     Block.genesis(settings.blockchainSettings).explicitGet()
 }

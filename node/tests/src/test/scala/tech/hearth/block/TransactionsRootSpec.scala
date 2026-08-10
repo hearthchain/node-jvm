@@ -6,7 +6,7 @@ import tech.hearth.common.merkle.Merkle.*
 import tech.hearth.crypto.Blake2b256
 import tech.hearth.protobuf.transaction.PBTransactions
 import tech.hearth.test.FreeSpec
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Transaction
 import tech.hearth.transaction.transfer.TransferTransaction
 import org.scalacheck.Gen
@@ -21,7 +21,7 @@ class TransactionsRootSpec extends FreeSpec with OptionValues with BlockGen {
       sender    <- accountGen
       recipient <- accountGen
       txsLength <- Gen.choose(1, 1000)
-      txs       <- Gen.listOfN(txsLength, versionedTransferGeneratorP(sender, recipient.toAddress, Waves, Waves))
+      txs       <- Gen.listOfN(txsLength, versionedTransferGeneratorP(sender, recipient.toAddress, Hearth, Hearth))
     } yield (signer, txs)
 
   val validProofsScenario: Gen[(List[Transaction], Int)] =
@@ -91,7 +91,7 @@ class TransactionsRootSpec extends FreeSpec with OptionValues with BlockGen {
       (signer, txs)    <- commonGen
       anotherSender    <- accountGen
       anotherRecipient <- accountGen
-      tx               <- versionedTransferGeneratorP(anotherSender, anotherRecipient.toAddress, Waves, Waves)
+      tx               <- versionedTransferGeneratorP(anotherSender, anotherRecipient.toAddress, Hearth, Hearth)
       block            <- versionedBlockGen(txs, signer)
     } yield (block, tx)
 

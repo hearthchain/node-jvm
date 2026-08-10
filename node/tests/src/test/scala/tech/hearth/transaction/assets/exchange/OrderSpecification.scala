@@ -6,7 +6,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.protobuf.transaction.PBOrders
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.OrderAuthentication.OrderProofs
 import tech.hearth.transaction.{Asset, AssetIdLength, Proofs, TxExchangeAmount, TxHelpers, TxMatcherFee, TxOrderPrice, ValidationMatcher}
 import org.scalatest.*
@@ -59,7 +59,7 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
     val matcherFee     = 2
 
     versions.foreach { version =>
-      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Waves
+      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Hearth
 
       val buyOrder =
         TxHelpers
@@ -89,7 +89,7 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
     val matcherFee     = 2
 
     versions.foreach { version =>
-      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Waves
+      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Hearth
 
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, 0, price, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, -1, price, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
@@ -134,7 +134,7 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
     val expirationTime = 2000
 
     versions.foreach { version =>
-      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Waves
+      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Hearth
 
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, 0, matcherFeeAsset) should beLeft
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, price, time, expirationTime, -1, matcherFeeAsset) should beLeft
@@ -179,7 +179,7 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
     val matcherFee     = 2
 
     versions.foreach { version =>
-      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Waves
+      val matcherFeeAsset = if (version == 3) IssuedAsset(ByteStr.fill(32)(3)) else Hearth
 
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, 0, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
       TxHelpers.buy(version, sender, PublicKey(matcher.publicKey), pair, amount, -1, time, expirationTime, matcherFee, matcherFeeAsset) should beLeft
@@ -270,8 +270,8 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
   property("AssetPair test") {
     forAll(assetIdGen, assetIdGen) { (assetA, assetB) =>
       whenever(assetA != assetB) {
-        val assetAId: Asset = assetA.fold[Asset](Waves)(arr => IssuedAsset(arr))
-        val assetBId: Asset = assetB.fold[Asset](Waves)(arr => IssuedAsset(arr))
+        val assetAId: Asset = assetA.fold[Asset](Hearth)(arr => IssuedAsset(arr))
+        val assetBId: Asset = assetB.fold[Asset](Hearth)(arr => IssuedAsset(arr))
 
         val pair = AssetPair(assetAId, assetBId)
 
@@ -287,7 +287,7 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
           version.toByte,
           TxHelpers.defaultSigner,
           PublicKey(TxHelpers.secondSigner.publicKey),
-          AssetPair(Waves, IssuedAsset(ByteStr.fill(AssetIdLength)(1))),
+          AssetPair(Hearth, IssuedAsset(ByteStr.fill(AssetIdLength)(1))),
           100,
           100,
           100,
@@ -317,7 +317,7 @@ class OrderSpecification extends PropSpec with ValidationMatcher with NTPTime {
         Order.V4,
         TxHelpers.defaultSigner,
         PublicKey(TxHelpers.secondSigner.publicKey),
-        AssetPair(Waves, IssuedAsset(ByteStr.fill(AssetIdLength)(1))),
+        AssetPair(Hearth, IssuedAsset(ByteStr.fill(AssetIdLength)(1))),
         100,
         100,
         100,

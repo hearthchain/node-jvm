@@ -9,7 +9,7 @@ import com.google.common.primitives.{Ints, UnsignedBytes}
 import com.typesafe.config.ConfigFactory
 import tech.hearth.common.state.ByteStr
 import tech.hearth.database.RDB
-import tech.hearth.settings.{WavesSettings, loadConfig}
+import tech.hearth.settings.{HearthSettings, loadConfig}
 import tech.hearth.state.RocksDBWriteBatchBenchmark.*
 import org.eclipse.collections.api.block.HashingStrategy
 import org.eclipse.collections.api.tuple.Pair
@@ -66,12 +66,12 @@ object RocksDBWriteBatchBenchmark {
 
   @State(Scope.Benchmark)
   class BaseSt {
-    private val wavesSettings: WavesSettings =
-      WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    private val hearthSettings: HearthSettings =
+      HearthSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
 
     val rdb: RDB = {
       val dir = Files.createTempDirectory("state-synthetic").toAbsolutePath.toString
-      RDB.open(wavesSettings.dbSettings.copy(directory = dir))
+      RDB.open(hearthSettings.dbSettings.copy(directory = dir))
     }
 
     private val minIdx      = 1

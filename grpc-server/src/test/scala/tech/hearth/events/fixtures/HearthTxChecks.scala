@@ -9,7 +9,7 @@ import tech.hearth.events.protobuf.StateUpdate.{BalanceUpdate, LeaseUpdate, Leas
 import tech.hearth.protobuf.order.Order
 import tech.hearth.protobuf.transaction.*
 import tech.hearth.protobuf.transaction.Transaction.Data
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
@@ -20,14 +20,14 @@ import org.scalatest.OptionValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.matchers.{MatchResult, Matcher}
 
-object WavesTxChecks extends Matchers with OptionValues {
+object HearthTxChecks extends Matchers with OptionValues {
   import PBAmounts.*
 
   def checkBaseTx(actualId: ByteString, actual: SignedTransaction, expected: TransactionBase)(implicit pos: Position): Unit = {
     ByteStr(actualId.toByteArray) shouldEqual expected.id()
     actual.wavesTransaction match {
       case Some(value) =>
-        val assetId = if (value.getFee.assetId.isEmpty) Waves else value.getFee.assetId
+        val assetId = if (value.getFee.assetId.isEmpty) Hearth else value.getFee.assetId
         value.timestamp shouldEqual expected.timestamp
         assetId shouldEqual expected.assetFee._1
         value.fee.value.amount shouldEqual expected.assetFee._2

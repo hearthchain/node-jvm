@@ -2,7 +2,7 @@ package tech.hearth.it.api
 
 import tech.hearth.account.{Address, AddressScheme, PublicKey}
 import tech.hearth.api.http.DebugMessage.*
-import tech.hearth.api.http.RewardApiRoute.{RewardStatus, RewardVotes}
+import tech.hearth.api.http.RewardApiRoute.RewardStatus
 import tech.hearth.api.http.requests.TransferRequest
 import tech.hearth.api.http.{ConnectReq, DebugMessage, RollbackParams, `X-Api-Key`}
 import tech.hearth.common.state.ByteStr
@@ -53,7 +53,6 @@ import scala.util.{Failure, Success}
 
 object AsyncHttpApi extends Assertions {
 
-  given Reads[RewardVotes]  = Json.reads
   given Reads[RewardStatus] = Json.reads
 
   private val counter = AtomicInt(1)
@@ -389,7 +388,7 @@ object AsyncHttpApi extends Assertions {
       )
 
     def payment(sourceAddress: String, recipient: String, amount: Long, fee: Long): Future[Transaction] =
-      postJson("/waves/payment", PaymentRequest(amount, fee, sourceAddress, recipient)).as[Transaction]
+      postJson("/hearth/payment", PaymentRequest(amount, fee, sourceAddress, recipient)).as[Transaction]
 
     def lease(sender: SigningKey, recipient: String, amount: Long, fee: Long): Future[Transaction] =
       signedBroadcast(
@@ -653,7 +652,7 @@ object AsyncHttpApi extends Assertions {
       executeRequest
     }
 
-    def debugStateAt(height: Height): Future[Map[String, Long]] = getWithApiKey(s"/debug/stateWaves/$height").as[Map[String, Long]]
+    def debugStateAt(height: Height): Future[Map[String, Long]] = getWithApiKey(s"/debug/stateHearth/$height").as[Map[String, Long]]
 
     def debugBalanceHistory(address: String, amountsAsStrings: Boolean = false): Future[Seq[BalanceHistory]] = {
       get(s"/debug/balances/history/$address", withApiKey = true, amountsAsStrings = amountsAsStrings)

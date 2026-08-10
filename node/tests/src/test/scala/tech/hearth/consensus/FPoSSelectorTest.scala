@@ -10,7 +10,7 @@ import tech.hearth.database.{RDB, TestStorageFactory}
 import tech.hearth.db.{DBCacheSettings, WithState}
 import tech.hearth.events.BlockchainUpdateTriggers
 import tech.hearth.lagonaki.mocks.TestBlock
-import tech.hearth.settings.{WavesSettings, *}
+import tech.hearth.settings.{HearthSettings, *}
 import tech.hearth.state.*
 import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.test.*
@@ -289,7 +289,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
     val (accounts, genesisBalances, genesisGenerators, blocks) = gen(ntpTime).sample.get
 
     // The generators carry VRF keys of their own rather than the ones TxHelpers derives, so the genesis settings are
-    // built directly instead of going through WavesSettings.withGenesisGenerators
+    // built directly instead of going through HearthSettings.withGenesisGenerators
     val writerSettings = {
       val base = TestSettings.Default.withFunctionalitySettings(
         TestFunctionalitySettings.Stub
@@ -307,7 +307,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       )
     }
     val defaultWriter = TestStorageFactory(writerSettings, rdb, SystemTime, BlockchainUpdateTriggers.noop)._2
-    val settings0     = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    val settings0     = HearthSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
     // The updater builds the genesis snapshot from its own settings, so it has to see the same genesis as the writer -
     // otherwise it applies the packaged config's balances, whose base58 addresses no longer parse.
     val settings = settings0.copy(

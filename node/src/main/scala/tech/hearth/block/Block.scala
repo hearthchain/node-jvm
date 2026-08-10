@@ -254,7 +254,7 @@ object Block {
   val MaxTransactionsPerBlockVer3: Int     = 6000
   val MaxFeaturesInBlock: Int              = 64
   val BaseTargetLength: Int                = 8
-  // A hearth Ecvrf proof is Gamma(32) || c(16) || s(32); Waves' was 96
+  // A hearth Ecvrf proof is Gamma(32) || c(16) || s(32); Hearth' was 96
   val GenerationVRFSignatureLength: Int = 80
   val BlockIdLength: Int                = DigestLength
   val TransactionSizeLength             = 4

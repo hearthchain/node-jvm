@@ -88,7 +88,7 @@ inConfig(Universal)(
   Seq(
     maintainer  := "com.wavesplatform",
     packageName := s"hearth-jvm-${version.value}",
-    mappings += (baseDirectory.value / s"waves-sample.conf" -> "doc/waves.conf.sample"),
+    mappings += (baseDirectory.value / s"hearth-sample.conf" -> "doc/hearth.conf.sample"),
     javaOptions ++= Seq(
       // -J prefix is required by the bash script
       "-J-server",
@@ -126,9 +126,9 @@ linuxPackageMappings := linuxPackageMappings.value.map { lpm =>
       val dest = (Debian / target).value / path
       IO.write(
         dest,
-        s"""-J-Dwaves.defaults.blockchain.type=${network.value}
-           |-J-Dwaves.defaults.directory=/var/lib/${(Linux / packageName).value}
-           |-J-Dwaves.defaults.config.directory=/etc/${(Linux / packageName).value}
+        s"""-J-Dhearth.defaults.blockchain.type=${network.value}
+           |-J-Dhearth.defaults.directory=/var/lib/${(Linux / packageName).value}
+           |-J-Dhearth.defaults.config.directory=/etc/${(Linux / packageName).value}
            |""".stripMargin
       )
       IO.append(dest, IO.readBytes(file))

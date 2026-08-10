@@ -4,7 +4,7 @@ import tech.hearth.it.NTPTime
 import tech.hearth.it.NodeConfigs.GenesisAssets
 import tech.hearth.it.api.SyncGrpcApi.*
 import tech.hearth.it.sync.matcherFee
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.assets.exchange.{Order, OrderType}
 import io.grpc.Status.Code
@@ -35,7 +35,7 @@ class ExchangeTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
       val expirationTimestamp = ts + Order.MaxLiveTime / 2
       val buy = TxHelpers.order(
         OrderType.BUY,
-        Waves,
+        Hearth,
         GenesisAssets.TestAsset,
         sender = buyer,
         matcher = matcher,
@@ -48,7 +48,7 @@ class ExchangeTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
       )
       val sell = TxHelpers.order(
         OrderType.SELL,
-        Waves,
+        Hearth,
         GenesisAssets.TestAsset,
         sender = seller,
         matcher = matcher,
@@ -59,15 +59,15 @@ class ExchangeTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
         expiration = expirationTimestamp,
         version = o2ver
       )
-      val buyerWavesBalanceBefore  = sender.wavesBalance(buyerAddress).available
-      val sellerWavesBalanceBefore = sender.wavesBalance(sellerAddress).available
-      val buyerAssetBalanceBefore  = sender.assetsBalance(buyerAddress, Seq(exchAssetId)).getOrElse(exchAssetId, 0L)
-      val sellerAssetBalanceBefore = sender.assetsBalance(sellerAddress, Seq(exchAssetId)).getOrElse(exchAssetId, 0L)
+      val buyerHearthBalanceBefore  = sender.hearthBalance(buyerAddress).available
+      val sellerHearthBalanceBefore = sender.hearthBalance(sellerAddress).available
+      val buyerAssetBalanceBefore   = sender.assetsBalance(buyerAddress, Seq(exchAssetId)).getOrElse(exchAssetId, 0L)
+      val sellerAssetBalanceBefore  = sender.assetsBalance(sellerAddress, Seq(exchAssetId)).getOrElse(exchAssetId, 0L)
 
       sender.exchange(matcher, buy, sell, amount, price, matcherFee, matcherFee, matcherFee, ts, waitForTx = true)
 
-      sender.wavesBalance(buyerAddress).available shouldBe buyerWavesBalanceBefore + amount - matcherFee
-      sender.wavesBalance(sellerAddress).available shouldBe sellerWavesBalanceBefore - amount - matcherFee
+      sender.hearthBalance(buyerAddress).available shouldBe buyerHearthBalanceBefore + amount - matcherFee
+      sender.hearthBalance(sellerAddress).available shouldBe sellerHearthBalanceBefore - amount - matcherFee
       sender.assetsBalance(buyerAddress, Seq(exchAssetId))(exchAssetId) shouldBe buyerAssetBalanceBefore - priceAssetSpending
       sender.assetsBalance(sellerAddress, Seq(exchAssetId))(exchAssetId) shouldBe sellerAssetBalanceBefore + priceAssetSpending
     }
@@ -83,7 +83,7 @@ class ExchangeTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
       val expirationTimestamp = ts + Order.MaxLiveTime / 2
       val price               = 2 * Order.PriceConstant
       val amount              = 1
-      val pair                = tech.hearth.transaction.assets.exchange.AssetPair.createAssetPair("WAVES", neverIssuedAssetId).get
+      val pair                = tech.hearth.transaction.assets.exchange.AssetPair.createAssetPair("HRTH", neverIssuedAssetId).get
       val buy = TxHelpers.order(
         OrderType.BUY,
         pair.amountAsset,

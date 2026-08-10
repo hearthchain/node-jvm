@@ -15,7 +15,7 @@ class TransactionSpecification extends PropSpec {
         val sender    = SigningKey.fromSeed(senderSeed)
         val recipient = SigningKey.fromSeed(recipientSeed)
 
-        val tx = createWavesTransfer(sender, recipient.toAddress, amount, fee, time).explicitGet()
+        val tx = createHearthTransfer(sender, recipient.toAddress, amount, fee, time).explicitGet()
 
         tx.timestamp shouldEqual time
         tx.amount.value shouldEqual amount
@@ -30,7 +30,7 @@ class TransactionSpecification extends PropSpec {
       (senderSeed: Array[Byte], recipientSeed: Array[Byte], time: Long, amount: Long, fee: Long) =>
         val sender    = SigningKey.fromSeed(senderSeed)
         val recipient = SigningKey.fromSeed(recipientSeed)
-        val tx        = createWavesTransfer(sender, recipient.toAddress, amount, fee, time).explicitGet()
+        val tx        = createHearthTransfer(sender, recipient.toAddress, amount, fee, time).explicitGet()
         val txAfter   = PBTransactionSerializer.parseBytes(tx.bytes()).get.asInstanceOf[TransferTransaction]
 
         txAfter.getClass.shouldBe(tx.getClass)

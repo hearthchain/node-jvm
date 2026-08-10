@@ -8,7 +8,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.db.{WithDomain, WithState}
 import tech.hearth.history.Domain
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.{GenerationPeriod, GeneratorIndex, Height, diffs}
 import tech.hearth.transaction.{CommitToGenerationTransaction, TxHelpers}
 import monix.execution.Scheduler.global
@@ -30,7 +30,7 @@ import scala.concurrent.duration.*
   */
 class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
   private val generationPeriodLength = 3
-  private val defaultSettings: WavesSettings = {
+  private val defaultSettings: HearthSettings = {
     val orig = DomainPresets.DeterministicFinality
     orig.copy(
       blockchainSettings = orig.blockchainSettings.copy(
@@ -44,7 +44,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
   private val Seq(validGenerator, conflictingGenerator, miner)             = generators
   private val Seq(validGeneratorAddr, conflictingGeneratorAddr, minerAddr) = generators.map(_.toAddress.toString)
 
-  private val depositAndFee = CommitToGenerationTransaction.DepositInWavelets + commitToGenerationFee
+  private val depositAndFee = CommitToGenerationTransaction.DepositInEmbers + commitToGenerationFee
   private val initBalance   = diffs.ENOUGH_AMT + depositAndFee
 
   private val defaultInitBalances: Seq[WithState.AddrWithBalance] = generators.map(x => AddrWithBalance(x.toAddress, initBalance))
@@ -71,7 +71,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
       val genesisCommitted = Json.obj(
         "address"       -> minerAddr,
         "transactionId" -> JsNull,
-        "balance"       -> (initBalance - CommitToGenerationTransaction.DepositInWavelets)
+        "balance"       -> (initBalance - CommitToGenerationTransaction.DepositInEmbers)
       )
       d.checkAt(2) { jsonBodyIs(genesisCommitted) }
       d.checkAt() { jsonBodyIs(genesisCommitted) }

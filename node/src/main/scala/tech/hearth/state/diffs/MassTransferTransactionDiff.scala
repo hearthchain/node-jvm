@@ -6,7 +6,7 @@ import cats.syntax.traverse.*
 import tech.hearth.account.Address
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.{GenericError, Validation}
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
@@ -47,7 +47,7 @@ object MassTransferTransactionDiff {
         .flatMap { completePortfolio =>
           val assetIssued =
             tx.assetId match {
-              case Waves                  => true
+              case Hearth                 => true
               case asset @ IssuedAsset(_) => blockchain.assetDescription(asset).isDefined
             }
           Either

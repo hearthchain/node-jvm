@@ -13,12 +13,12 @@ class TransferTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
 
   val issuedAssetId: String = GenesisAssets.TestAsset.id.toString
 
-  test("asset transfer changes sender's and recipient's asset balance by transfer amount and waves by fee") {
+  test("asset transfer changes sender's and recipient's asset balance by transfer amount and hearth by fee") {
     val issuedAssetId    = GenesisAssets.TestAsset.id.toString
-    val firstBalance     = sender.wavesBalance(firstAddress).available
-    val firstEffBalance  = sender.wavesBalance(firstAddress).effective
-    val secondBalance    = sender.wavesBalance(secondAddress).available
-    val secondEffBalance = sender.wavesBalance(secondAddress).effective
+    val firstBalance     = sender.hearthBalance(firstAddress).available
+    val firstEffBalance  = sender.hearthBalance(firstAddress).effective
+    val secondBalance    = sender.hearthBalance(secondAddress).available
+    val secondEffBalance = sender.hearthBalance(secondAddress).effective
     // The fixture asset is shared across this loop's iterations (and other tests), so balances accumulate
     // rather than starting from a fresh issuance each time; assert deltas, not absolute totals.
     val firstAssetBefore  = sender.assetsBalance(firstAddress, Seq(issuedAssetId)).getOrElse(issuedAssetId, 0L)
@@ -33,36 +33,36 @@ class TransferTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
       waitForTx = true
     )
 
-    sender.wavesBalance(firstAddress).available shouldBe firstBalance - minFee
-    sender.wavesBalance(firstAddress).effective shouldBe firstEffBalance - minFee
-    sender.wavesBalance(secondAddress).available shouldBe secondBalance
-    sender.wavesBalance(secondAddress).effective shouldBe secondEffBalance
+    sender.hearthBalance(firstAddress).available shouldBe firstBalance - minFee
+    sender.hearthBalance(firstAddress).effective shouldBe firstEffBalance - minFee
+    sender.hearthBalance(secondAddress).available shouldBe secondBalance
+    sender.hearthBalance(secondAddress).effective shouldBe secondEffBalance
 
     sender.assetsBalance(firstAddress, Seq(issuedAssetId)).getOrElse(issuedAssetId, 0L) shouldBe firstAssetBefore - someAssetAmount
     sender.assetsBalance(secondAddress, Seq(issuedAssetId)).getOrElse(issuedAssetId, 0L) shouldBe secondAssetBefore + someAssetAmount
   }
 
-  test("waves transfer changes waves balances and eff.b. by transfer amount and fee") {
-    val firstBalance     = sender.wavesBalance(firstAddress).available
-    val firstEffBalance  = sender.wavesBalance(firstAddress).effective
-    val secondBalance    = sender.wavesBalance(secondAddress).available
-    val secondEffBalance = sender.wavesBalance(secondAddress).effective
+  test("hearth transfer changes hearth balances and eff.b. by transfer amount and fee") {
+    val firstBalance     = sender.hearthBalance(firstAddress).available
+    val firstEffBalance  = sender.hearthBalance(firstAddress).effective
+    val secondBalance    = sender.hearthBalance(secondAddress).available
+    val secondEffBalance = sender.hearthBalance(secondAddress).effective
 
     sender.broadcastTransfer(firstAcc, Recipient().withPublicKeyHash(secondAddress), transferAmount, minFee, waitForTx = true)
 
-    sender.wavesBalance(firstAddress).available shouldBe firstBalance - transferAmount - minFee
-    sender.wavesBalance(firstAddress).effective shouldBe firstEffBalance - transferAmount - minFee
-    sender.wavesBalance(secondAddress).available shouldBe secondBalance + transferAmount
-    sender.wavesBalance(secondAddress).effective shouldBe secondEffBalance + transferAmount
+    sender.hearthBalance(firstAddress).available shouldBe firstBalance - transferAmount - minFee
+    sender.hearthBalance(firstAddress).effective shouldBe firstEffBalance - transferAmount - minFee
+    sender.hearthBalance(secondAddress).available shouldBe secondBalance + transferAmount
+    sender.hearthBalance(secondAddress).effective shouldBe secondEffBalance + transferAmount
   }
 
-  test("invalid signed waves transfer should not be in UTX or blockchain") {
+  test("invalid signed hearth transfer should not be in UTX or blockchain") {
     val invalidTimestampFromFuture = ntpTime.correctedTime() + 91.minutes.toMillis
     val invalidTimestampFromPast   = ntpTime.correctedTime() - 121.minutes.toMillis
-    val firstBalance               = sender.wavesBalance(firstAddress).available
-    val firstEffBalance            = sender.wavesBalance(firstAddress).effective
-    val secondBalance              = sender.wavesBalance(secondAddress).available
-    val secondEffBalance           = sender.wavesBalance(secondAddress).effective
+    val firstBalance               = sender.hearthBalance(firstAddress).available
+    val firstEffBalance            = sender.hearthBalance(firstAddress).effective
+    val secondBalance              = sender.hearthBalance(secondAddress).available
+    val secondEffBalance           = sender.hearthBalance(secondAddress).effective
 
     assertGrpcError(
       sender.broadcastTransfer(
@@ -97,17 +97,17 @@ class TransferTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
     //   Code.INVALID_ARGUMENT
     // )
 
-    sender.wavesBalance(firstAddress).available shouldBe firstBalance
-    sender.wavesBalance(firstAddress).effective shouldBe firstEffBalance
-    sender.wavesBalance(secondAddress).available shouldBe secondBalance
-    sender.wavesBalance(secondAddress).effective shouldBe secondEffBalance
+    sender.hearthBalance(firstAddress).available shouldBe firstBalance
+    sender.hearthBalance(firstAddress).effective shouldBe firstEffBalance
+    sender.hearthBalance(secondAddress).available shouldBe secondBalance
+    sender.hearthBalance(secondAddress).effective shouldBe secondEffBalance
   }
 
-  test("can not make transfer without having enough waves balance") {
-    val firstBalance     = sender.wavesBalance(firstAddress).available
-    val firstEffBalance  = sender.wavesBalance(firstAddress).effective
-    val secondBalance    = sender.wavesBalance(secondAddress).available
-    val secondEffBalance = sender.wavesBalance(secondAddress).effective
+  test("can not make transfer without having enough hearth balance") {
+    val firstBalance     = sender.hearthBalance(firstAddress).available
+    val firstEffBalance  = sender.hearthBalance(firstAddress).effective
+    val secondBalance    = sender.hearthBalance(secondAddress).available
+    val secondEffBalance = sender.hearthBalance(secondAddress).effective
 
     assertGrpcError(
       sender.broadcastTransfer(firstAcc, Recipient().withPublicKeyHash(secondAddress), firstBalance, minFee, waitForTx = true),
@@ -115,10 +115,10 @@ class TransferTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
       Code.INVALID_ARGUMENT
     )
 
-    sender.wavesBalance(firstAddress).available shouldBe firstBalance
-    sender.wavesBalance(firstAddress).effective shouldBe firstEffBalance
-    sender.wavesBalance(secondAddress).available shouldBe secondBalance
-    sender.wavesBalance(secondAddress).effective shouldBe secondEffBalance
+    sender.hearthBalance(firstAddress).available shouldBe firstBalance
+    sender.hearthBalance(firstAddress).effective shouldBe firstEffBalance
+    sender.hearthBalance(secondAddress).available shouldBe secondBalance
+    sender.hearthBalance(secondAddress).effective shouldBe secondEffBalance
   }
 
   test("can not make assets transfer without having enough assets balance") {

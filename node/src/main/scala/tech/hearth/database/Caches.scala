@@ -14,7 +14,7 @@ import tech.hearth.protobuf.toByteStr
 import tech.hearth.protobuf.transaction.PBAmounts
 import tech.hearth.settings.DBSettings
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.{Asset, CommitToGenerationTransaction, DiscardedBlocks, Transaction}
 import tech.hearth.utils.ObservedLoadingCache
 import monix.reactive.Observer
@@ -109,14 +109,14 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
   def loadCacheData(addresses: Set[Address], orders: Set[ByteStr]): Unit = {
     addressIdCache.getAll(addresses.asJava)
-    balancesCache.getAll(addresses.map(_ -> Waves).asJava)
+    balancesCache.getAll(addresses.map(_ -> Hearth).asJava)
     leaseBalanceCache.getAll(addresses.asJava)
     volumeAndFeeCache.getAll(orders.asJava)
   }
 
-  override def wavesBalances(addresses: Seq[Address]): Map[Address, Long] =
+  override def hearthBalances(addresses: Seq[Address]): Map[Address, Long] =
     balancesCache
-      .getAll(addresses.map(_ -> Waves).asJava)
+      .getAll(addresses.map(_ -> Hearth).asJava)
       .asScala
       .view
       .map { case ((address, _), balance) =>
@@ -125,7 +125,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       .toMap
   protected def loadBalance(req: (Address, Asset)): CurrentBalance
   protected def loadBalances(req: Seq[(Address, Asset)]): Map[(Address, Asset), CurrentBalance]
-  protected def loadWavesBalances(req: Seq[(Address, Asset)]): Map[(Address, Asset), CurrentBalance]
+  protected def loadHearthBalances(req: Seq[(Address, Asset)]): Map[(Address, Asset), CurrentBalance]
 
   private val assetDescriptionCache: LoadingCache[IssuedAsset, Option[AssetDescription]] = cache(dbSettings.maxCacheSize, loadAssetDescription)
   protected def loadAssetDescription(asset: IssuedAsset): Option[AssetDescription]
@@ -241,9 +241,9 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       voting      <- parentBlock.header.finalizationVoting
     } yield voting.conflict.size
 
-    val totalWavesAmount = current.meta.fold(settings.initialBalance)(_.totalWavesAmount) +
+    val totalHearthAmount = current.meta.fold(settings.initialBalance)(_.totalHearthAmount) +
       reward.getOrElse(0L) * this.blockRewardBoost(newHeight) -
-      conflictEndorsersInPrevBlock.getOrElse(0) * CommitToGenerationTransaction.DepositInWavelets
+      conflictEndorsersInPrevBlock.getOrElse(0) * CommitToGenerationTransaction.DepositInEmbers
 
     val newMeta = PBBlockMeta(
       Some(PBBlocks.protobuf(block.header)),
@@ -257,7 +257,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       reward.getOrElse(0),
       ByteString.copyFrom(hitSource.arr),
       ByteString.copyFrom(newScore.toByteArray),
-      totalWavesAmount
+      totalHearthAmount
     )
     current = CurrentBlockInfo(newHeight, Some(newMeta), block.transactionData)
     currentFinalizedHeight = Some(newFinalizedHeight)
@@ -366,7 +366,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
     val stateHash = new StateHashBuilder
     for (((address, asset), (amount, _)) <- updatedBalanceNodes) asset match {
-      case Waves              => stateHash.addWavesBalance(address, amount.balance)
+      case Hearth             => stateHash.addHearthBalance(address, amount.balance)
       case asset: IssuedAsset => stateHash.addAssetBalance(address, asset, amount.balance)
     }
     for ((address, lease) <- leaseBalances) stateHash.addLeaseBalance(address, lease.in, lease.out)

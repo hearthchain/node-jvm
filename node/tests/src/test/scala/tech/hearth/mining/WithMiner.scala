@@ -5,7 +5,7 @@ import tech.hearth.consensus.PoSSelector
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.appender.BlockAppender
 import tech.hearth.state.{BlockEndorser, Blockchain, EndorsementStorage, NG, appender}
 import tech.hearth.transaction.{BlockchainUpdater, TxHelpers}
@@ -24,7 +24,7 @@ trait WithMiner extends WithDomain { suite: Suite =>
   def withMiner(
       blockchain: Blockchain & BlockchainUpdater & NG,
       time: Time,
-      settings: WavesSettings,
+      settings: HearthSettings,
       verify: Boolean = true,
       timeDrift: Long = appender.MaxTimeDrift
   )(
@@ -67,7 +67,7 @@ trait WithMiner extends WithDomain { suite: Suite =>
     *   then reported `No delay` for every address.
     */
   def withDomainAndMiner(
-      settings: WavesSettings,
+      settings: HearthSettings,
       balances: Seq[AddrWithBalance] = Seq(),
       minerAccounts: Seq[Int] = Seq.empty,
       verify: Boolean = true,

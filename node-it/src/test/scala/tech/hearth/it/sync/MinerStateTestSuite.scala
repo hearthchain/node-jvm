@@ -13,7 +13,7 @@ class MinerStateTestSuite extends BaseFunSuite {
 
   override protected def nodeConfigs: Seq[Config] = Configs
 
-  private val transferAmount = 1000.waves
+  private val transferAmount = 1000.hearth
 
   private def last = nodes.last
 
@@ -74,7 +74,7 @@ class MinerStateTestSuite extends BaseFunSuite {
 object MinerStateTestSuite {
   import tech.hearth.it.NodeConfigs.*
   private val minerConfig = ConfigFactory.parseString(s"""
-                                                         |waves {
+                                                         |hearth {
                                                          |  synchronization.synchronization-timeout = 10s
                                                          |  blockchain.custom.functionality {
                                                          |    pre-activated-features.1 = 0

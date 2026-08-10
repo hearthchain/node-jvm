@@ -14,7 +14,7 @@ import tech.hearth.protobuf.utils.PBUtils
 import tech.hearth.state.{GeneratorIndex, GenesisBlockHeight, Height}
 import tech.hearth.test.*
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.transfer.*
 import tech.hearth.crypto.{Crypto, SigningKey}
 
@@ -36,9 +36,9 @@ class MicroBlockSpecification extends FunSuite {
         from = sender,
         to = gen.toAddress,
         amount = 5,
-        asset = Waves,
+        asset = Hearth,
         fee = 2,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = ts + 1
       )
@@ -50,7 +50,7 @@ class MicroBlockSpecification extends FunSuite {
         amount = 5,
         asset = assetId,
         fee = 2,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = ts + 2
       )
@@ -209,9 +209,9 @@ class MicroBlockSpecification extends FunSuite {
         from = sender,
         to = gen.toAddress,
         amount = 5,
-        asset = Waves,
+        asset = Hearth,
         fee = 1000,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = System.currentTimeMillis()
       )

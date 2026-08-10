@@ -3,7 +3,7 @@ package tech.hearth.history
 import tech.hearth.database.{DBExt, Keys, RDB, RocksDBWriter}
 import tech.hearth.events.BlockchainUpdateTriggers
 import tech.hearth.mining.Miner
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.{BlockchainUpdaterImpl, Height}
 import tech.hearth.utils.{ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
 import org.rocksdb.RocksDB
@@ -12,7 +12,7 @@ object StorageFactory extends ScorexLogging {
   private val StorageVersion = 2
 
   def apply(
-      settings: WavesSettings,
+      settings: HearthSettings,
       rdb: RDB,
       time: Time,
       blockchainUpdateTriggers: BlockchainUpdateTriggers,

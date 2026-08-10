@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
 import scala.concurrent.Future
 
 class GRPCServerExtension(context: ExtensionContext) extends Extension with ScorexLogging {
-  private val settings = ConfigSource.fromConfig(context.settings.config).at("waves.grpc").loadOrThrow[GRPCSettings]
+  private val settings = ConfigSource.fromConfig(context.settings.config).at("hearth.grpc").loadOrThrow[GRPCSettings]
   private val executor =
     Executors.newFixedThreadPool(settings.workerThreads, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("grpc-server-worker-%d").build())
   private implicit val apiScheduler: Scheduler = Scheduler(executor)

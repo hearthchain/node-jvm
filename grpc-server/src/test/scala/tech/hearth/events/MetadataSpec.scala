@@ -9,7 +9,7 @@ import tech.hearth.protobuf.*
 import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.RideV6
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.OrderType
 import tech.hearth.transaction.TxHelpers
 
@@ -24,18 +24,18 @@ class MetadataSpec extends FreeSpec with WithBUDomain {
     withDomainAndRepo(
       RideV6,
       balances = Seq(
-        AddrWithBalance(issuer.toAddress, 100.waves, Map(asset -> 1000L)),
-        AddrWithBalance(matcher.toAddress, 100.waves),
-        AddrWithBalance(leased.toAddress, 100.waves)
+        AddrWithBalance(issuer.toAddress, 100.hearth, Map(asset -> 1000L)),
+        AddrWithBalance(matcher.toAddress, 100.hearth),
+        AddrWithBalance(leased.toAddress, 100.hearth)
       ),
       assets = Seq(GenesisAssetSettings(asset.id, "asset", 8, 1000L, 100000L))
     ) { (d, r) =>
-      val transfer = TxHelpers.transfer(issuer, matcher.toAddress, 1.waves)
-      val lease    = TxHelpers.lease(issuer, leased.toAddress, 1.waves)
+      val transfer = TxHelpers.transfer(issuer, matcher.toAddress, 1.hearth)
+      val lease    = TxHelpers.lease(issuer, leased.toAddress, 1.hearth)
 
-      val order1   = TxHelpers.order(OrderType.SELL, asset, Waves, amount = 100L, price = 1.waves, sender = issuer, matcher = matcher)
-      val order2   = TxHelpers.order(OrderType.BUY, asset, Waves, amount = 100L, price = 1.waves, sender = matcher, matcher = matcher)
-      val exchange = TxHelpers.exchange(order1, order2, matcher, amount = 100L, price = 1.waves)
+      val order1   = TxHelpers.order(OrderType.SELL, asset, Hearth, amount = 100L, price = 1.hearth, sender = issuer, matcher = matcher)
+      val order2   = TxHelpers.order(OrderType.BUY, asset, Hearth, amount = 100L, price = 1.hearth, sender = matcher, matcher = matcher)
+      val exchange = TxHelpers.exchange(order1, order2, matcher, amount = 100L, price = 1.hearth)
 
       val massTransfer = TxHelpers.massTransfer(issuer, Seq(matcher.toAddress -> 1L, leased.toAddress -> 1L), asset = asset)
 

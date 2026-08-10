@@ -7,7 +7,7 @@ import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.api.{TransactionInfo, TransactionStatus}
 import tech.hearth.it.sync.*
 import tech.hearth.it.transactions.BaseTransactionSuite
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.{ProvenTransaction, Transaction, TxHelpers}
 import play.api.libs.json.*
 
@@ -79,9 +79,9 @@ class TransactionsStatusSuite extends BaseTransactionSuite with NTPTime {
         from = miner.keyPair,
         to = secondKeyPair.toAddress,
         amount = amount,
-        asset = Waves,
+        asset = Hearth,
         fee = minFee,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = ntpTime.correctedTime()
       )

@@ -7,11 +7,12 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.consensus.PoSSelector
 import tech.hearth.database.{RDB, TestStorageFactory}
 import tech.hearth.db.DBCacheSettings
+import tech.hearth.history.DefaultRewardsSettings
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.settings.*
 import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.state.{BlockEndorser, Blockchain, BlockchainUpdaterImpl, EndorsementStorage, NG}
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.{BlockchainUpdater, Transaction, TxHelpers}
 import tech.hearth.utx.UtxPoolImpl
 import tech.hearth.{TransactionGen, WithNewDBForEachTest}
@@ -43,7 +44,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     withEnv(Seq.empty) { case Env(_, account, miner, blockchain) =>
       val generateBlock = generateBlockTask(miner)(account)
       val oldBalance    = blockchain.balance(account.toAddress)
-      val newBalance    = oldBalance + 2 * settings.blockchainSettings.rewardsSettings.initial
+      val newBalance    = oldBalance + 2 * settings.blockchainSettings.rewardsSettings.initialReward
       for {
         _ <- generateBlock
         _ <- generateBlock
@@ -59,7 +60,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       case Env(_, account, miner, blockchain) =>
         val generateBlock = generateBlockTask(miner)(account)
         val oldBalance    = blockchain.balance(account.toAddress)
-        val newBalance    = oldBalance + settings.blockchainSettings.rewardsSettings.initial
+        val newBalance    = oldBalance + settings.blockchainSettings.rewardsSettings.initialReward
 
         generateBlock.map { _ =>
           blockchain.balance(account.toAddress) should be(newBalance)
@@ -75,20 +76,20 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       val tx1 = TxHelpers.transfer(
         from = account,
         to = recipient1,
-        amount = 10 * Constants.UnitsInWave,
-        asset = Waves,
+        amount = 10 * Constants.UnitsInHearth,
+        asset = Hearth,
         fee = 400000,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = ts
       )
       val tx2 = TxHelpers.transfer(
         from = account,
         to = recipient2,
-        amount = 5 * Constants.UnitsInWave,
-        asset = Waves,
+        amount = 5 * Constants.UnitsInHearth,
+        asset = Hearth,
         fee = 400000,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = ts
       )
@@ -100,10 +101,10 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
       TxHelpers.transfer(
         from = account,
         to = recipient1,
-        amount = 10 * Constants.UnitsInWave,
-        asset = Waves,
+        amount = 10 * Constants.UnitsInHearth,
+        asset = Hearth,
         fee = 400000,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = ts
       )
@@ -112,7 +113,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     withEnv(bps, txs) { case Env(_, account, miner, blockchain) =>
       val generateBlock = generateBlockTask(miner)(account)
       val oldBalance    = blockchain.balance(account.toAddress)
-      val newBalance    = oldBalance + settings.blockchainSettings.rewardsSettings.initial - 10 * Constants.UnitsInWave
+      val newBalance    = oldBalance + settings.blockchainSettings.rewardsSettings.initialReward - 10 * Constants.UnitsInHearth
 
       generateBlock.map { _ =>
         blockchain.balance(account.toAddress) should be(newBalance)
@@ -127,7 +128,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
     }
   }
 
-  private def withEnv(bps: Seq[BlockProducer], txs: Seq[TransactionProducer] = Seq(), settings: WavesSettings = MiningWithRewardSuite.settings)(
+  private def withEnv(bps: Seq[BlockProducer], txs: Seq[TransactionProducer] = Seq(), settings: HearthSettings = MiningWithRewardSuite.settings)(
       f: Env => Task[Assertion]
   ): Task[Assertion] = {
     // The account has to exist before the state does: it is credited by the genesis snapshot, which is built from
@@ -201,7 +202,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
   private def forgeBlock(miner: MinerImpl)(account: SigningKey): Either[String, ForgeAttemptResult.Success] =
     miner.forgeBlock(account, TxHelpers.vrfKeyOf(account)).toEither
 
-  private def resources(settings: WavesSettings): Resource[Task, (BlockchainUpdaterImpl, RDB)] =
+  private def resources(settings: HearthSettings): Resource[Task, (BlockchainUpdaterImpl, RDB)] =
     Resource
       .make {
         val (bcu, rdbWriter) = TestStorageFactory(settings, db, ntpTime, ignoreBlockchainUpdateTriggers)
@@ -227,12 +228,12 @@ object MiningWithRewardSuite {
     * blocks below are stamped from the current time. No DAO address is set, so the whole block reward goes to the
     * miner - which is what the balance expectations are about.
     */
-  val settings: WavesSettings = {
+  val settings: HearthSettings = {
     val base = DomainPresets.TransactionStateSnapshot
     base
       .copy(
         minerSettings = base.minerSettings.copy(quorum = 0, intervalAfterLastBlockThenGenerationIsAllowed = 1 hour),
-        blockchainSettings = base.blockchainSettings.copy(rewardsSettings = RewardsSettings.TESTNET)
+        blockchainSettings = base.blockchainSettings.copy(rewardsSettings = DefaultRewardsSettings)
       )
       .configure(_.copy(daoAddress = None))
   }

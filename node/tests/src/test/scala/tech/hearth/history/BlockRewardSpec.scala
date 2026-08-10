@@ -4,15 +4,16 @@ import cats.syntax.option.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.{Constants, FunctionalitySettings, RewardsSettings, WavesSettings}
+import tech.hearth.settings.{Constants, FunctionalitySettings, HearthSettings}
 import tech.hearth.state.BlockRewardCalculator
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 
-/** The block reward is a constant: `BlockRewardCalculator.fullRewardAt` returns `rewardsSettings.initial` at every
-  * height, and a block header carries no reward vote, so nothing can change it. What is left to test is how a block's
-  * reward and the fees it collects are shared out - between the miner and the DAO address, and between the block that
+/** `BlockRewardCalculator.fullRewardAt` follows the emission curve (see `EmissionCurveTest`) in general, but every
+  * settings object in this file pins it flat via `withFlatReward` (zero decay across the handful of blocks each test
+  * mines), so it behaves exactly like the constant it used to be. What is left to test here is how a block's reward
+  * and the fees it collects are shared out - between the miner and the DAO address, and between the block that
   * collects a fee and the one that references it.
   *
   * Gone with the vote: the properties that drove a chain through a voting window and watched the reward move, and the
@@ -21,16 +22,16 @@ import tech.hearth.transaction.TxHelpers
   */
 class BlockRewardSpec extends FreeSpec with WithDomain {
 
-  private val InitialReward       = 6 * Constants.UnitsInWave
-  private val InitialMinerBalance = 10000 * Constants.UnitsInWave
+  private val InitialReward       = 6 * Constants.UnitsInHearth
+  private val InitialMinerBalance = 10000 * Constants.UnitsInHearth
   private val OneTotalFee         = 100000
   private val OneCarryFee         = (OneTotalFee * 0.6).toLong
   private val OneFee              = (OneTotalFee * 0.4).toLong
 
-  private val rewardSettings: WavesSettings = MicroblocksActivatedAt0WavesSettings.copy(
+  private val rewardSettings: HearthSettings = MicroblocksActivatedAt0HearthSettings.copy(
     blockchainSettings = DefaultBlockchainSettings.copy(
       functionalitySettings = FunctionalitySettings(featureCheckBlocksPeriod = 10, blocksForFeatureActivation = 1),
-      rewardsSettings = RewardsSettings(10, 5, InitialReward, 1 * Constants.UnitsInWave, 4)
+      rewardsSettings = withFlatReward(DefaultBlockchainSettings.rewardsSettings, InitialReward)
     )
   )
 
@@ -41,14 +42,14 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
   private val miner2        = TxHelpers.signer(104)
 
   private val genesisBalances: Seq[AddrWithBalance] = Seq(
-    AddrWithBalance(sourceAddress.toAddress, (Constants.TotalWaves - 60000) * Constants.UnitsInWave),
-    AddrWithBalance(issuer.toAddress, 40000 * Constants.UnitsInWave),
+    AddrWithBalance(sourceAddress.toAddress, (Constants.TotalHearth - 60000) * Constants.UnitsInHearth),
+    AddrWithBalance(issuer.toAddress, 40000 * Constants.UnitsInHearth),
     AddrWithBalance(miner1.toAddress, InitialMinerBalance),
     AddrWithBalance(miner2.toAddress, InitialMinerBalance)
   )
 
   private def feePayingTransfer =
-    TxHelpers.transfer(issuer, sourceAddress.toAddress, 10 * Constants.UnitsInWave, Waves, OneTotalFee, Waves, ByteStr.empty)
+    TxHelpers.transfer(issuer, sourceAddress.toAddress, 10 * Constants.UnitsInHearth, Hearth, OneTotalFee, Hearth, ByteStr.empty)
 
   "Miner receives reward and fees" - {
     "40% of a fee in the block that collects it, the carry in the block that references it" in
@@ -56,15 +57,15 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         d.appendBlock(d.createBlock(Seq(feePayingTransfer), generator = miner1))
 
         d.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee
-        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe OneTotalFee.some
-        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(OneCarryFee)
+        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInHearth) shouldBe OneTotalFee.some
+        d.carryFee(d.lastBlockId).map(_.hearthAmount) shouldBe Right(OneCarryFee)
 
         // The next block collects no fee of its own, so all it gets on top of its reward is the carry
         d.appendBlock(d.createBlock(Nil, generator = miner2))
 
         d.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward + OneCarryFee
-        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe 0L.some
-        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(0L)
+        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInHearth) shouldBe 0L.some
+        d.carryFee(d.lastBlockId).map(_.hearthAmount) shouldBe Right(0L)
       }
 
     "a fee collected by a micro block is carried like any other" in
@@ -73,13 +74,13 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         d.appendMicroBlockBy(miner2)(feePayingTransfer)
 
         d.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee
-        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe OneTotalFee.some
-        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(OneCarryFee)
+        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInHearth) shouldBe OneTotalFee.some
+        d.carryFee(d.lastBlockId).map(_.hearthAmount) shouldBe Right(OneCarryFee)
 
         d.appendBlock(d.createBlock(Nil, generator = miner1))
 
         d.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward + OneCarryFee
-        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(0L)
+        d.carryFee(d.lastBlockId).map(_.hearthAmount) shouldBe Right(0L)
       }
 
     "when received better liquid block" in
@@ -98,19 +99,19 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
         d.appendMicroBlockBy(miner1)(feePayingTransfer)
 
         d.balance(miner1.toAddress) shouldBe InitialMinerBalance + InitialReward + OneFee
-        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(OneCarryFee)
+        d.carryFee(d.lastBlockId).map(_.hearthAmount) shouldBe Right(OneCarryFee)
 
         d.appendBlockE(better) should beRight
 
         d.balance(miner1.toAddress) shouldBe InitialMinerBalance
         d.balance(miner2.toAddress) shouldBe InitialMinerBalance + InitialReward
-        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInWaves) shouldBe 0L.some
-        d.carryFee(d.lastBlockId).map(_.wavesAmount) shouldBe Right(0L)
+        d.blockchainUpdater.liquidBlockMeta.map(_.totalFeeInHearth) shouldBe 0L.some
+        d.carryFee(d.lastBlockId).map(_.hearthAmount) shouldBe Right(0L)
       }
 
     "when all blocks without fees" in
       withDomain(rewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
-        val initialWavesAmount = BigInt(Constants.TotalWaves) * BigInt(Constants.UnitsInWave)
+        val initialHearthAmount = BigInt(Constants.TotalHearth) * BigInt(Constants.UnitsInHearth)
 
         (1 to 6).foreach { i =>
           val miner = if (i % 2 == 0) miner2 else miner1
@@ -118,7 +119,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
 
           // Every block mints the same reward, so the supply grows by it and the miner that produced the block holds it
           d.blockchain.height shouldBe i + 1
-          d.blockchain.wavesAmount(i + 1) shouldBe initialWavesAmount + BigInt(InitialReward) * i
+          d.blockchain.hearthAmount(i + 1) shouldBe initialHearthAmount + BigInt(InitialReward) * i
           d.balance(miner1.toAddress) shouldBe InitialMinerBalance + ((i + 1) / 2) * InitialReward
           d.balance(miner2.toAddress) shouldBe InitialMinerBalance + (i / 2) * InitialReward
         }
@@ -136,7 +137,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       val base       = DomainPresets.ConsensusImprovements
       val settings = base.copy(blockchainSettings =
         base.blockchainSettings.copy(
-          rewardsSettings = base.blockchainSettings.rewardsSettings.copy(initial = fullBlockReward),
+          rewardsSettings = withFlatReward(base.blockchainSettings.rewardsSettings, fullBlockReward),
           functionalitySettings = base.blockchainSettings.functionalitySettings
             .copy(daoAddress = Some(daoAddress.toString).filter(_ => withDaoAddress))
         )
@@ -164,26 +165,26 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
       }
     }
 
-    "the dao address gets 2 WAVES when the full block reward is at least 6 WAVES" in
-      Seq(6.waves, 7.waves).foreach(daoShareOf(_, withDaoAddress = true))
+    "the dao address gets 2 HRTH when the full block reward is at least 6 HRTH" in
+      Seq(6.hearth, 7.hearth).foreach(daoShareOf(_, withDaoAddress = true))
 
     "the dao address gets half of what is above the guaranteed miner reward below that" in
-      Seq(2.waves, 3.waves).foreach(daoShareOf(_, withDaoAddress = true))
+      Seq(2.hearth, 3.hearth).foreach(daoShareOf(_, withDaoAddress = true))
 
     "the miner gets the full block reward when it is below the guaranteed miner reward" in
-      Seq(1.waves).foreach(daoShareOf(_, withDaoAddress = true))
+      Seq(1.hearth).foreach(daoShareOf(_, withDaoAddress = true))
 
     "the miner gets the full block reward when no dao address is defined" in
-      Seq(1.waves, 2.waves, 3.waves, 6.waves, 7.waves).foreach(daoShareOf(_, withDaoAddress = false))
+      Seq(1.hearth, 2.hearth, 3.hearth, 6.hearth, 7.hearth).foreach(daoShareOf(_, withDaoAddress = false))
   }
 
   "Rolling back returns the reward shares of the blocks that were dropped" in {
     val daoAddress = TxHelpers.address(1)
-    val fullReward = BlockRewardCalculator.FullRewardInit + 1.waves
+    val fullReward = BlockRewardCalculator.FullRewardInit + 1.hearth
     val base       = DomainPresets.ConsensusImprovements
     val settings = base.copy(blockchainSettings =
       base.blockchainSettings.copy(
-        rewardsSettings = base.blockchainSettings.rewardsSettings.copy(initial = fullReward),
+        rewardsSettings = withFlatReward(base.blockchainSettings.rewardsSettings, fullReward),
         functionalitySettings = base.blockchainSettings.functionalitySettings.copy(daoAddress = Some(daoAddress.toString))
       )
     )

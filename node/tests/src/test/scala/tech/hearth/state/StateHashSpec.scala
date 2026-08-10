@@ -11,20 +11,20 @@ import tech.hearth.transaction.TxHelpers
 
 class StateHashSpec extends FreeSpec {
   "state hash" - {
-    val stateHash    = new StateHashBuilder
-    val address      = Address.fromBytes(Array.fill(20)(1.toByte)).explicitGet()
-    val address1     = Address.fromBytes(Array.fill(20)(2.toByte)).explicitGet()
-    val assetId      = IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get)
-    val wavesAccount = TxHelpers.defaultSigner
-    val blsAccount   = TxHelpers.defaultBlsKey
-    val vrfKey       = TxHelpers.defaultVrfKey
+    val stateHash     = new StateHashBuilder
+    val address       = Address.fromBytes(Array.fill(20)(1.toByte)).explicitGet()
+    val address1      = Address.fromBytes(Array.fill(20)(2.toByte)).explicitGet()
+    val assetId       = IssuedAsset(ByteStr.decodeBase16("808912576b218e0e1d400e485dfca793c177ddfdbeccc776715710b4114ffcf9").get)
+    val hearthAccount = TxHelpers.defaultSigner
+    val blsAccount    = TxHelpers.defaultBlsKey
+    val vrfKey        = TxHelpers.defaultVrfKey
 
     stateHash.addLeaseBalance(address, 10000L, 10000L)
     stateHash.addLeaseStatus(assetId.id, isActive = true)
     stateHash.addAssetBalance(address, assetId, 2000)
     stateHash.addAssetBalance(address1, assetId, 2000)
-    stateHash.addWavesBalance(address, 1000)
-    stateHash.addNextCommittedGenerator(GenerationCommitment(PublicKey(wavesAccount.publicKey), blsAccount.publicKey, ByteStr(vrfKey.publicKey())))
+    stateHash.addHearthBalance(address, 1000)
+    stateHash.addNextCommittedGenerator(GenerationCommitment(PublicKey(hearthAccount.publicKey), blsAccount.publicKey, ByteStr(vrfKey.publicKey())))
     stateHash.addCommittedGeneratorBalances(Seq(3000))
     val result = stateHash.result()
 
@@ -52,8 +52,8 @@ class StateHashSpec extends FreeSpec {
         )
       }
 
-      "waves balance" in {
-        sect(WavesBalance) shouldBe hash(
+      "hearth balance" in {
+        sect(HearthBalance) shouldBe hash(
           address.toBytes,
           Longs.toByteArray(1000)
         )
@@ -68,7 +68,7 @@ class StateHashSpec extends FreeSpec {
 
       "next generator" in {
         sect(NextCommittedGenerators) shouldBe hash(
-          wavesAccount.publicKey,
+          hearthAccount.publicKey,
           blsAccount.publicKey.byteStr.arr,
           vrfKey.publicKey()
         )
@@ -84,7 +84,7 @@ class StateHashSpec extends FreeSpec {
     "total" in {
       val allHashes = StateHash.Section.values.map(id => result.hashes.getOrElse(id, StateHashBuilder.EmptySectionHash))
       allHashes shouldBe Seq(
-        WavesBalance,
+        HearthBalance,
         AssetBalance,
         LeaseBalance,
         LeaseStatus,
@@ -92,9 +92,9 @@ class StateHashSpec extends FreeSpec {
         CommittedGeneratorBalances
       ).map(sect)
 
-      val testPrevHash = sect(Section.WavesBalance)
+      val testPrevHash = sect(Section.HearthBalance)
       result.createStateHash(testPrevHash).totalHash shouldBe hash((testPrevHash.arr +: allHashes.map(_.arr))*)
-      result.copy(hashes = result.hashes - Section.WavesBalance).createStateHash(ByteStr.empty).totalHash shouldBe hash(
+      result.copy(hashes = result.hashes - Section.HearthBalance).createStateHash(ByteStr.empty).totalHash shouldBe hash(
         (StateHashBuilder.EmptySectionHash.arr +: allHashes.tail.map(_.arr))*
       )
     }

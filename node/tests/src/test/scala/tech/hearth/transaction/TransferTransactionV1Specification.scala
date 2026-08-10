@@ -3,7 +3,7 @@ package tech.hearth.transaction
 import tech.hearth.account.{AddressScheme, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Proofs
 import tech.hearth.transaction.transfer.*
 import play.api.libs.json.Json
@@ -33,9 +33,9 @@ class TransferTransactionV1Specification extends PropSpec {
     val tx = TransferTransaction(
       PublicKey(ByteStr.decodeBase16("6fbfed5c2d3ef24b6765cd294500600915a4f5b634f526f6f68a70f5b5dc3a26").get),
       recipient,
-      Waves,
+      Hearth,
       TxPositiveAmount.unsafeFrom(1900000),
-      Waves,
+      Hearth,
       TxPositiveAmount.unsafeFrom(100000),
       ByteStr.decodeBase16("66616c6166656c").get,
       1526552510868L,
@@ -58,7 +58,7 @@ class TransferTransactionV1Specification extends PropSpec {
     for {
       (_, sender, recipient, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, Hearth, amount, Hearth, feeAmount, attachment, timestamp, Proofs.empty)
       .map(_.signWith(sender)) should produce(
       "insufficient fee"
     )

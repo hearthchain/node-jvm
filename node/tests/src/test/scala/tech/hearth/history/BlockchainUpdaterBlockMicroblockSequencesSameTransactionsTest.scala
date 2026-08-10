@@ -2,7 +2,7 @@ package tech.hearth.history
 
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.diffs.*
 import tech.hearth.test.*
 import tech.hearth.transaction.*
@@ -18,13 +18,13 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
     * deposit, so that what it holds beyond that is exactly what it has earned. The reward is zeroed for the same
     * reason: these properties are about fees.
     */
-  private val settings: WavesSettings = {
-    val bs = MicroblocksActivatedAt0WavesSettings.blockchainSettings
-    MicroblocksActivatedAt0WavesSettings.copy(blockchainSettings = bs.copy(rewardsSettings = bs.rewardsSettings.copy(initial = 0)))
+  private val settings: HearthSettings = {
+    val bs = MicroblocksActivatedAt0HearthSettings.blockchainSettings
+    MicroblocksActivatedAt0HearthSettings.copy(blockchainSettings = bs.copy(rewardsSettings = withFlatReward(bs.rewardsSettings, 0)))
   }
 
   private def minerDeposit(miner: SigningKey): AddrWithBalance =
-    AddrWithBalance(miner.toAddress, CommitToGenerationTransaction.DepositInWavelets)
+    AddrWithBalance(miner.toAddress, CommitToGenerationTransaction.DepositInEmbers)
 
   /** Appends the sequence the sizes describe, as blocks and the micro blocks extending them. Built one at a time
     * through the domain, because each block's proof and state hash depend on the state the previous one left.
@@ -62,7 +62,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       ts     <- positiveIntGen
       fee    <- smallFeeGen
       amt    <- smallFeeGen
-      payment: TransferTransaction = createWavesTransfer(master, master.toAddress, amt, fee, ts).explicitGet()
+      payment: TransferTransaction = createHearthTransfer(master, master.toAddress, amt, fee, ts).explicitGet()
     } yield (master, miner, payment, ts)
     scenario(
       preconditionsAndPayments,
@@ -75,7 +75,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       domain.appendBlockAt(ts, miner)()
 
       // 40% of the fee credited in the block the micro extends, the 60% carry in the one after it
-      domain.balance(miner.toAddress) shouldBe (CommitToGenerationTransaction.DepositInWavelets + payment.fee.value)
+      domain.balance(miner.toAddress) shouldBe (CommitToGenerationTransaction.DepositInEmbers + payment.fee.value)
       domain.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment.fee.value)
     }
   }
@@ -91,7 +91,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
         fee    <- smallFeeGen
         amt    <- smallFeeGen
         microBlockTxs = (1 to txCount * microBlockCount)
-          .map(step => createWavesTransfer(master, master.toAddress, amt, fee, ts + step).explicitGet())
+          .map(step => createHearthTransfer(master, master.toAddress, amt, fee, ts + step).explicitGet())
           .grouped(microBlockCount)
           .toSeq
       } yield (master, miner, microBlockTxs, ts)
@@ -115,7 +115,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       to   <- Gen.oneOf(accs)
       fee  <- smallFeeGen
       amt  <- smallFeeGen
-    } yield createWavesTransfer(from, to.toAddress, amt, fee, ts).explicitGet()
+    } yield createHearthTransfer(from, to.toAddress, amt, fee, ts).explicitGet()
 
   def randomPayments(accs: Seq[SigningKey], ts: Long, amt: Int): Gen[Seq[TransferTransaction]] =
     if (amt == 0)
@@ -126,7 +126,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
         t <- randomPayments(accs, ts + 1, amt - 1)
       } yield h +: t
 
-  val TOTAL_WAVES = ENOUGH_AMT
+  val TOTAL_HRTH = ENOUGH_AMT
 
   def accsAndGenesis(): Gen[(Seq[SigningKey], SigningKey, Seq[AddrWithBalance], Int)] =
     for {
@@ -138,7 +138,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       ts      <- positiveIntGen
     } yield {
       val accs = Seq(alice, bob, charlie, dave)
-      (accs, miner, accs.map(acc => AddrWithBalance(acc.toAddress, TOTAL_WAVES / 4)), ts)
+      (accs, miner, accs.map(acc => AddrWithBalance(acc.toAddress, TOTAL_HRTH / 4)), ts)
     }
 
   def g(totalTxs: Int, totalScenarios: Int): Gen[(Seq[AddrWithBalance], SigningKey, Seq[TransferTransaction], Seq[BlockAndMicroblockSizes], Int)] =

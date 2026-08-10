@@ -14,7 +14,7 @@ import tech.hearth.database.{
   writeBalanceNode,
   writeCurrentBalance
 }
-import tech.hearth.settings.{WavesSettings, loadConfig}
+import tech.hearth.settings.{HearthSettings, loadConfig}
 import tech.hearth.state.RocksDBSeekForPrevBenchmark.*
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -55,20 +55,20 @@ object RocksDBSeekForPrevBenchmark {
 
   @State(Scope.Benchmark)
   class BaseSt {
-    private val wavesSettings: WavesSettings =
-      WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    private val hearthSettings: HearthSettings =
+      HearthSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
 
     val rdb: RDB = {
       val dir = Files.createTempDirectory("state-synthetic").toAbsolutePath.toString
-      RDB.open(wavesSettings.dbSettings.copy(directory = dir))
+      RDB.open(hearthSettings.dbSettings.copy(directory = dir))
     }
 
     val addressId: AddressId = AddressId(1L)
 
-    val currentBalanceKey: Array[Byte]        = Keys.wavesBalance(addressId).keyBytes
-    val balanceNodeKey: Height => Array[Byte] = h => Keys.wavesBalanceAt(addressId, h).keyBytes
+    val currentBalanceKey: Array[Byte]        = Keys.hearthBalance(addressId).keyBytes
+    val balanceNodeKey: Height => Array[Byte] = h => Keys.hearthBalanceAt(addressId, h).keyBytes
     val balanceNodeKeyPrefix: Array[Byte] =
-      Shorts.toByteArray(KeyTag.WavesBalanceHistory.ordinal.toShort) ++ addressId.toByteArray
+      Shorts.toByteArray(KeyTag.HearthBalanceHistory.ordinal.toShort) ++ addressId.toByteArray
 
     val readOptions: ReadOptions = new ReadOptions()
 

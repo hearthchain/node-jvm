@@ -21,7 +21,7 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
   // genesis - unreachable within any practical test timeout. This suite's whole point is to commit for and then
   // reach that next period, so it needs a short one instead.
   override val nodeConfigs: Seq[Config] = Seq(
-    BiggestMiner.quorum(0).overrides("waves.blockchain.custom.functionality.generation-period-length = 20")
+    BiggestMiner.quorum(0).overrides("hearth.blockchain.custom.functionality.generation-period-length = 20")
   )
 
   private def node            = dockerNodes().last
@@ -30,7 +30,7 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
 
   "finalization activated and works" in {
     // A second committed generator on the same single node can't be signed via /transactions/sign - that only ever
-    // signs with a generator this node itself holds keys for (waves.miner.accounts), which a fresh address never is
+    // signs with a generator this node itself holds keys for (hearth.miner.accounts), which a fresh address never is
     // (see CLAUDE.md's node-it fixtures notes on createAddressServerSide()). Built and signed locally instead, with
     // VRF/BLS keys derived from its own SigningKey the same way TxHelpers.commitToGeneration does everywhere else.
     // Genesis-funded already (it's node02's own account, whose container this suite never starts) so the commit's
@@ -93,7 +93,7 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
 
     // We need at least one transaction, otherwise there won't be a microblock, thus no voting, no finalization
     // Finalization happened in a microblock
-    node.waitForHeight(Height(node.waitForTransaction(node.transfer(miner1Acc, miner3Addr, 1.waves, waitForTx = true).id).height + 1))
+    node.waitForHeight(Height(node.waitForTransaction(node.transfer(miner1Acc, miner3Addr, 1.hearth, waitForTx = true).id).height + 1))
     val fs = node.finalityStatus
     if (fs.height > waitingFinalizedHeight + 2)
       fail(

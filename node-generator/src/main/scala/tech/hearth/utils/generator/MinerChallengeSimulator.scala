@@ -66,8 +66,8 @@ object MinerChallengeSimulator {
       genesis,
       RewardsSettings.MAINNET
     )
-    val wavesSettings = {
-      val settings = WavesSettings.fromRootConfig(loadConfig(Some(nodeConfFile).map(readConfFile)))
+    val hearthSettings = {
+      val settings = HearthSettings.fromRootConfig(loadConfig(Some(nodeConfFile).map(readConfFile)))
       settings.copy(blockchainSettings = blockchainSettings, minerSettings = settings.minerSettings.copy(quorum = 0))
     }
 
@@ -81,7 +81,7 @@ object MinerChallengeSimulator {
     val challengingMiner = miners(challengingMinerIdx)
 
     var originalBlockchain =
-      BlockchainObjects.createOriginal(wavesSettings, genSettings.timestamp.getOrElse(System.currentTimeMillis()))
+      BlockchainObjects.createOriginal(hearthSettings, genSettings.timestamp.getOrElse(System.currentTimeMillis()))
     var challengingBlockchain: Option[BlockchainObjects] = None
 
     while (!Thread.currentThread().isInterrupted && !quit) synchronized {
@@ -101,8 +101,8 @@ object MinerChallengeSimulator {
       if (originalBlockchain.blockchain.height == forkHeight + 1 && challengingBlockchain.isEmpty) {
         originalBlockchain.blockchain.shutdown()
         originalBlockchain.rdb.close()
-        challengingBlockchain = Some(BlockchainObjects.createChallenging(wavesSettings, challengingMiner, maliciousMiner))
-        originalBlockchain = BlockchainObjects.createOriginal(wavesSettings, prevTime.time)
+        challengingBlockchain = Some(BlockchainObjects.createChallenging(hearthSettings, challengingMiner, maliciousMiner))
+        originalBlockchain = BlockchainObjects.createOriginal(hearthSettings, prevTime.time)
       }
     }
   }
@@ -155,40 +155,40 @@ object MinerChallengeSimulator {
   }
 
   object BlockchainObjects {
-    def createOriginal(wavesSettings: WavesSettings, startTime: Long): BlockchainObjects = {
-      val rdb      = RDB.open(wavesSettings.dbSettings)
+    def createOriginal(hearthSettings: HearthSettings, startTime: Long): BlockchainObjects = {
+      val rdb      = RDB.open(hearthSettings.dbSettings)
       val fakeTime = createFakeTime(startTime)
       val (blockchainUpdater, _) =
-        StorageFactory(wavesSettings, rdb, fakeTime, BlockchainUpdateTriggers.noop)
-      tech.hearth.checkGenesis(wavesSettings, blockchainUpdater, Miner.StrictDisabledMiner)
+        StorageFactory(hearthSettings, rdb, fakeTime, BlockchainUpdateTriggers.noop)
+      tech.hearth.checkGenesis(hearthSettings, blockchainUpdater, Miner.StrictDisabledMiner)
       sys.addShutdownHook(synchronized {
         blockchainUpdater.shutdown()
         rdb.close()
       })
-      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, wavesSettings)
+      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, hearthSettings)
       BlockchainObjects(blockchainUpdater, rdb, miner, appender, fakeTime, false)
     }
 
     def createChallenging(
-        wavesSettings: WavesSettings,
+        hearthSettings: HearthSettings,
         challengingMiner: (SigningKey, VrfKey),
         maliciousMiner: (SigningKey, VrfKey)
     ): BlockchainObjects = {
-      val correctBlockchainDbDir = wavesSettings.dbSettings.directory + "/../challenged"
-      FileUtils.copyDirectory(new File(wavesSettings.dbSettings.directory), new File(correctBlockchainDbDir))
-      val dbSettings         = wavesSettings.dbSettings.copy(directory = correctBlockchainDbDir)
-      val fixedWavesSettings = wavesSettings.copy(dbSettings = dbSettings)
-      val rdb                = RDB.open(dbSettings)
+      val correctBlockchainDbDir = hearthSettings.dbSettings.directory + "/../challenged"
+      FileUtils.copyDirectory(new File(hearthSettings.dbSettings.directory), new File(correctBlockchainDbDir))
+      val dbSettings          = hearthSettings.dbSettings.copy(directory = correctBlockchainDbDir)
+      val fixedHearthSettings = hearthSettings.copy(dbSettings = dbSettings)
+      val rdb                 = RDB.open(dbSettings)
       val rocksDBWriter = RocksDBWriter(
         rdb,
-        fixedWavesSettings.blockchainSettings,
-        fixedWavesSettings.dbSettings,
+        fixedHearthSettings.blockchainSettings,
+        fixedHearthSettings.dbSettings,
         isLightMode = false
       )
       val fakeTime = createFakeTime(rocksDBWriter.lastBlockTimestamp.get)
       val blockchainUpdater = new BlockchainUpdaterImpl(
         rocksDBWriter,
-        fixedWavesSettings,
+        fixedHearthSettings,
         fakeTime,
         BlockchainUpdateTriggers.noop
       ) {
@@ -209,20 +209,20 @@ object MinerChallengeSimulator {
         }
       }
 
-      tech.hearth.checkGenesis(fixedWavesSettings, blockchainUpdater, Miner.StrictDisabledMiner)
+      tech.hearth.checkGenesis(fixedHearthSettings, blockchainUpdater, Miner.StrictDisabledMiner)
       sys.addShutdownHook(synchronized {
         blockchainUpdater.shutdown()
         rdb.close()
       })
 
-      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, wavesSettings)
+      val (miner, appender) = createMinerAndAppender(blockchainUpdater, fakeTime, hearthSettings)
       BlockchainObjects(blockchainUpdater, rdb, miner, appender, fakeTime, true)
     }
 
     private def createMinerAndAppender(
         blockchain: BlockchainUpdaterImpl,
         fakeTime: Time,
-        wavesSettings: WavesSettings
+        hearthSettings: HearthSettings
     ): (
         MinerImpl,
         (
@@ -230,13 +230,14 @@ object MinerChallengeSimulator {
             Option[tech.hearth.network.BlockSnapshotResponse]
         ) => monix.eval.Task[Either[tech.hearth.lang.ValidationError, tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult]]
     ) = {
-      val utx = new UtxPoolImpl(fakeTime, blockchain, wavesSettings.utxSettings, wavesSettings.maxTxErrorLogSize, wavesSettings.minerSettings.enable)
+      val utx =
+        new UtxPoolImpl(fakeTime, blockchain, hearthSettings.utxSettings, hearthSettings.maxTxErrorLogSize, hearthSettings.minerSettings.enable)
       val posSelector = PoSSelector(blockchain, None)
       val utxEvents   = ConcurrentSubject.publish[UtxEvent](using scheduler)
       val miner = new MinerImpl(
         new DefaultChannelGroup("", null),
         blockchain,
-        wavesSettings.minerSettings,
+        hearthSettings.minerSettings,
         fakeTime,
         utx,
         BlockEndorser.Disabled,

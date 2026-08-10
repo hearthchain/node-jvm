@@ -5,53 +5,65 @@ import cats.syntax.traverse.*
 import com.typesafe.config.Config
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
-import tech.hearth.state.{GenesisBlockHeight, Height}
+import tech.hearth.state.{EmissionCurve, GenesisBlockHeight, Height}
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
 
 import scala.concurrent.duration.*
 
+/** HRTH's block reward decay curve (hearth-tokenomics-spec S2): `R(h) = initialReward * 2^(-h/halfLifeBlocks)`,
+  * `h` counting blocks since the first rewarded height. `decayRatioFixed` is `2^(-1/halfLifeBlocks)` pre-derived
+  * offline, once, at arbitrary precision, and pinned as a `Q(EmissionCurve.FixedPointBits)` fixed-point integer -
+  * exactly like a network's genesis `stateHash`/`blockId` are pinned rather than recomputed (see
+  * [[GenesisSettings]]). This is what makes the curve reproducible bit-for-bit by any client implementation, not
+  * only this one: nobody derives an irrational root or calls a transcendental function at runtime, every
+  * implementation only ever does fixed-point integer multiply-and-shift against the same literal. `initialReward`
+  * (R0) is likewise pre-derived (`cEmit * ln(2) / halfLifeBlocks`, floored to the nearest ember) rather than
+  * computed at startup. `halfLifeBlocks` itself is not consensus-relevant - it is carried only for display
+  * (`RewardApiRoute`) and as documentation of how the two derived constants above were produced.
+  */
 case class RewardsSettings(
-    term: Int,
-    termAfterCappedRewardFeature: Int,
-    initial: Long,
-    minIncrement: Long,
-    votingInterval: Int
+    cEmit: Long,
+    initialReward: Long,
+    decayRatioFixed: BigInt,
+    halfLifeBlocks: Long
 ) derives ConfigReader {
-  require(initial >= 0, "initial must be greater than or equal to 0")
-  require(minIncrement > 0, "min-increment must be greater than 0")
-  require(term > 0, "term must be greater than 0")
-  require(votingInterval > 0, "voting-interval must be greater than 0")
-  require(votingInterval <= term, s"voting-interval must be less than or equal to term($term)")
-  require(termAfterCappedRewardFeature > 0, "term-after-capped-reward-feature must be greater than 0")
+  require(cEmit > 0, "c-emit must be greater than 0")
+  require(initialReward >= 0, "initial-reward must be greater than or equal to 0")
+  require(decayRatioFixed > 0, "decay-ratio-fixed must be greater than 0")
+  // The hard cap holds by construction only because every block's reward is <= the previous one (see EmissionCurve):
+  // a ratio > 1.0 would make the reward grow over time, silently breaking that invariant for a misconfigured custom
+  // network. Exactly 1.0 (flat, no decay) is allowed - node/testkit's DefaultRewardsSettings/withFlatReward rely on it.
   require(
-    votingInterval <= termAfterCappedRewardFeature,
-    s"voting-interval must be less than or equal to term-after-capped-reward-feature($termAfterCappedRewardFeature)"
+    decayRatioFixed <= (BigInt(1) << EmissionCurve.FixedPointBits),
+    "decay-ratio-fixed must represent a ratio <= 1 (2^FixedPointBits)"
   )
-
-  def nearestTermEnd(activatedAt: Height, height: Height, modifyTerm: Boolean): Height = {
-    require(height >= activatedAt)
-    val diff         = height - activatedAt + 1
-    val modifiedTerm = if (modifyTerm) termAfterCappedRewardFeature else term
-    val mul          = math.ceil(diff.toDouble / modifiedTerm).toInt
-    activatedAt + mul * modifiedTerm - 1
-  }
-
-  def votingWindow(activatedAt: Int, height: Int, modifyTerm: Boolean): Range = {
-    val end   = nearestTermEnd(Height(activatedAt), Height(height), modifyTerm)
-    val start = end - votingInterval + 1
-    if (Height(height) >= start) Range.inclusive(start.toInt, height)
-    else Range(0, 0)
-  }
+  require(halfLifeBlocks > 0, "half-life-blocks must be greater than 0")
 }
 
 object RewardsSettings {
-  val MAINNET, TESTNET, STAGENET = apply(
-    100000,
-    50000,
-    6 * Constants.UnitsInWave,
-    50000000,
-    10000
+  // 10-year half-life, 60s blocks (525,600 blocks/year): halfLifeBlocks = 5,256,000.
+  val MAINNET: RewardsSettings = apply(
+    cEmit = 95_000_000L * Constants.UnitsInHearth,
+    initialReward = 1252834515L,
+    decayRatioFixed = BigInt("340282322045415694657836056900309514630"),
+    halfLifeBlocks = 5_256_000L
+  )
+
+  // Same cEmit as MAINNET, but a short half-life so the decay curve is actually observable on a running chain
+  // instead of only in unit tests. Not economically meaningful, purely for testing observability.
+  val TESTNET: RewardsSettings = apply(
+    cEmit = 95_000_000L * Constants.UnitsInHearth,
+    initialReward = 4572845982860L,
+    decayRatioFixed = BigInt("340118610667410880413344550167336787510"),
+    halfLifeBlocks = 1_440L
+  )
+
+  val STAGENET: RewardsSettings = apply(
+    cEmit = 95_000_000L * Constants.UnitsInHearth,
+    initialReward = 65848982153194L,
+    decayRatioFixed = BigInt("337931864918735857425456001828432707560"),
+    halfLifeBlocks = 100L
   )
 }
 
@@ -160,7 +172,7 @@ case class MinAssetFeeSettings(assetId: ByteStr, minFee: Long) derives ConfigRea
 case class GenesisGeneratorSettings(publicKey: String, endorserPublicKey: String, vrfPublicKey: String) derives ConfigReader
 
 /** Balances credited by a predefined snapshot. Every asset referenced here must be listed in the same [[PredefinedSnapshotSettings.assets]]. */
-case class GenesisBalanceSettings(recipient: String, waves: Long = 0L, assets: Map[String, Long] = Map.empty)
+case class GenesisBalanceSettings(recipient: String, hearth: Long = 0L, assets: Map[String, Long] = Map.empty)
 
 object GenesisBalanceSettings {
   // This given is required for default args to work, see FunctionalitySettings.
@@ -169,7 +181,7 @@ object GenesisBalanceSettings {
 
 /** A chunk of state applied outside of transaction processing, before the block at [[height]] applies its own
   * transactions. Since there is no issue transaction any more, this is the only way to mint a new asset; it can also
-  * credit asset balances and commit generators. Only the height-1 (genesis) entry may credit Waves - Waves supply
+  * credit asset balances and commit generators. Only the height-1 (genesis) entry may credit Hearth - Hearth supply
   * growth beyond genesis is tracked as block rewards only. Height-keyed and applied unconditionally for every block
   * at that height - not tied to feature activation in code, though a network's config typically lines a snapshot's
   * height up with a feature activation height as a matter of convention. The height-1 entry is the genesis snapshot.
@@ -186,41 +198,43 @@ object PredefinedSnapshotSettings {
   // This given is required for default args to work, see FunctionalitySettings.
   given ConfigReader[PredefinedSnapshotSettings] = deriveReader
 
+  // Genesis premine is 5% of the hard cap (hearth-tokenomics-spec S2.1: Cmax = Pgen + Cemit, Pgen = 0.05 Cmax); the
+  // other 95% (RewardsSettings.MAINNET.cEmit) is earned by forging, not distributed at genesis. Illustrative split
+  // of the 5%: fallen-chains burn claim 3%, DAO treasury 1%, team (vested) 1% - the DAO address is the same one
+  // FunctionalitySettings.MAINNET commits to for consensus (daoAddress), the burn-claim/team addresses are
+  // placeholders in the same vein (TODO: replace both with the real addresses before launch).
   val MAINNET: Seq[PredefinedSnapshotSettings] = Seq(
     PredefinedSnapshotSettings(
       height = GenesisBlockHeight.toInt,
       balances = List(
-        GenesisBalanceSettings("3PAWwWa6GbwcJaFzwqXQN5KQm7H96Y7SHTQ", Constants.UnitsInWave * Constants.TotalWaves - 5 * Constants.UnitsInWave),
-        GenesisBalanceSettings("3P8JdJGYc7vaLu4UXUZc1iRLdzrkGtdCyJM", Constants.UnitsInWave),
-        GenesisBalanceSettings("3PAGPDPqnGkyhcihyjMHe9v36Y4hkAh9yDy", Constants.UnitsInWave),
-        GenesisBalanceSettings("3P9o3ZYwtHkaU1KxsKkFjJqJKS3dLHLC9oF", Constants.UnitsInWave),
-        GenesisBalanceSettings("3PJaDyprvekvPXPuAtxrapacuDJopgJRaU3", Constants.UnitsInWave),
-        GenesisBalanceSettings("3PBWXDFUc86N2EQxKJmW8eFco65xTyMZx6J", Constants.UnitsInWave)
+        GenesisBalanceSettings("hrth1h3s3jrkjgd3f3c705tpczxxmrkxehg6v74gye7", 3_000_000L * Constants.UnitsInHearth), // burn-claim, 3%
+        GenesisBalanceSettings("hrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehuhszwk", 1_000_000L * Constants.UnitsInHearth), // DAO treasury, 1%
+        GenesisBalanceSettings("hrth1e5ecq68dxwl7r5gdslt23u5c0c875fjc5f9qu7", 1_000_000L * Constants.UnitsInHearth)  // team (vested), 1%
       )
     )
   )
 
+  // Same 5%/95% split as MAINNET (see above); short half-life instead (RewardsSettings.TESTNET) so the decay curve
+  // is actually observable on a running testnet.
   val TESTNET: Seq[PredefinedSnapshotSettings] = Seq(
     PredefinedSnapshotSettings(
       height = GenesisBlockHeight.toInt,
       balances = List(
-        GenesisBalanceSettings("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8", (Constants.UnitsInWave * Constants.TotalWaves * 0.04).toLong),
-        GenesisBalanceSettings("3NBVqYXrapgJP9atQccdBPAgJPwHDKkh6A8", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-        GenesisBalanceSettings("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-        GenesisBalanceSettings("3NCBMxgdghg4tUhEEffSXy11L6hUi6fcBpd", (Constants.UnitsInWave * Constants.TotalWaves * 0.02).toLong),
-        GenesisBalanceSettings(
-          "3N18z4B8kyyQ96PhN5eyhCAbg4j49CgwZJx",
-          (Constants.UnitsInWave * Constants.TotalWaves - Constants.UnitsInWave * Constants.TotalWaves * 0.1).toLong
-        )
+        GenesisBalanceSettings("thrth1x0welf80ljp2psdstmfywkhqmj9s7q5hjgzpvj", 3_000_000L * Constants.UnitsInHearth), // burn-claim, 3%
+        GenesisBalanceSettings("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn", 1_000_000L * Constants.UnitsInHearth), // DAO treasury, 1%
+        GenesisBalanceSettings("thrth1wpm9trpt4fm4ucmmq556f6j6arzxg7c4n9rgsj", 1_000_000L * Constants.UnitsInHearth)  // team (vested), 1%
       )
     )
   )
 
+  // Deliberately not following the 5%/95% split above: an internal-only devnet, premined in full for the fastest
+  // possible bring-up, with an even shorter half-life (RewardsSettings.STAGENET) than TESTNET. Not economically
+  // meaningful, so its total supply is not held to the hard cap the way MAINNET/TESTNET's genesis balances are.
   val STAGENET: Seq[PredefinedSnapshotSettings] = Seq(
     PredefinedSnapshotSettings(
       height = GenesisBlockHeight.toInt,
       balances = List(
-        GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInWave * Constants.TotalWaves)
+        GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInHearth * Constants.TotalHearth)
       )
     )
   )
@@ -279,8 +293,15 @@ case class BlockchainSettings(
   lazy val genesisSnapshot: PredefinedSnapshotSettings =
     predefinedSnapshots.find(_.height == GenesisBlockHeight.toInt).getOrElse(PredefinedSnapshotSettings(GenesisBlockHeight.toInt))
 
-  /** Total amount of Waves declared in the genesis (height 1) predefined snapshot. */
-  lazy val initialBalance: Long = genesisSnapshot.balances.map(_.waves).foldLeft(0L)(Math.addExact)
+  /** Total amount of Hearth declared in the genesis (height 1) predefined snapshot. */
+  lazy val initialBalance: Long = genesisSnapshot.balances.map(_.hearth).foldLeft(0L)(Math.addExact)
+
+  /** This network's own supply ceiling: genesis premine plus everything the emission curve still has left to mint
+    * (`hearth-tokenomics-spec` S2.1: `Cmax = Pgen + Cemit`). Derived from this network's own settings rather than
+    * the global `Constants.TotalHearth`, so it holds for every network including STAGENET, whose premine/emission
+    * deliberately don't sum to `Constants.TotalHearth` (see `PredefinedSnapshotSettings.STAGENET`).
+    */
+  lazy val hardCap: Long = Math.addExact(initialBalance, rewardsSettings.cEmit)
 }
 
 private[settings] object BlockchainType {
@@ -291,7 +312,7 @@ private[settings] object BlockchainType {
 
 object BlockchainSettings {
   def fromRootConfig(config: Config): BlockchainSettings =
-    ConfigSource.fromConfig(config).at("waves.blockchain").loadOrThrow[BlockchainSettings]
+    ConfigSource.fromConfig(config).at("hearth.blockchain").loadOrThrow[BlockchainSettings]
 
   given ConfigReader[BlockchainSettings] = ConfigReader.fromCursor(cur =>
     for {

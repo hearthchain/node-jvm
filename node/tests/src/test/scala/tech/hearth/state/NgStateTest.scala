@@ -9,7 +9,7 @@ import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.TxHelpers
 
 class NgStateTest extends PropSpec {
-  private def wavesFee(amount: Long): BlockFee = BlockFee(Portfolio.waves(amount)).explicitGet()
+  private def hearthFee(amount: Long): BlockFee = BlockFee(Portfolio.hearth(amount)).explicitGet()
 
   // NgState is not validated against any state here, so the base block just needs some transaction in it
   private def preconditionsAndPayments(amt: Int): (TransferTransaction, Seq[TransferTransaction]) = {
@@ -87,13 +87,13 @@ class NgStateTest extends PropSpec {
     val (block, microBlocks) = chainBaseAndMicro(randomSig, baseTx, payments.map(t => Seq(t)))
 
     var ng = mkNgState(block)
-    microBlocks.foreach(m => ng = ng.append(m, StateSnapshot.empty, wavesFee(1), BlockFee.empty, 0L, ByteStr.empty, None, Seq.empty))
+    microBlocks.foreach(m => ng = ng.append(m, StateSnapshot.empty, hearthFee(1), BlockFee.empty, 0L, ByteStr.empty, None, Seq.empty))
 
     ng.liquidBlockOf(block.id()).map(_.data.carryFee) shouldBe Some(BlockFee.empty)
     microBlocks.zipWithIndex.foreach { case (m, i) =>
       val u = ng.liquidBlockOf(m.totalBlockId).map(_.data.carryFee)
-      u shouldBe Some(wavesFee(i + 1L))
+      u shouldBe Some(hearthFee(i + 1L))
     }
-    ng.carryFee shouldBe wavesFee(microBlocks.size.toLong)
+    ng.carryFee shouldBe hearthFee(microBlocks.size.toLong)
   }
 }

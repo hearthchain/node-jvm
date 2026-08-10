@@ -289,8 +289,8 @@ object Exporter extends ScorexLogging {
     import builder.*
 
     OParser.sequence(
-      programName("waves export"),
-      head("Waves Blockchain Exporter", Version.VersionString),
+      programName("hearth export"),
+      head("Hearth Blockchain Exporter", Version.VersionString),
       opt[File]('c', "config")
         .text("Node config file path")
         .action((f, c) => c.copy(configFileName = Some(f))),

@@ -6,7 +6,7 @@ import tech.hearth.finalization.BaseFinalizationSpec
 import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.state.{GeneratorIndex, Height, Portfolio}
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.CommitToGenerationTransaction.DepositInWavelets
+import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
 import tech.hearth.transaction.TxHelpers
 
 class ConflictEndorserRecommitmentSuite extends BaseFinalizationSpec {
@@ -47,7 +47,7 @@ class ConflictEndorserRecommitmentSuite extends BaseFinalizationSpec {
     val block4WithCommitments = d.createBlock(block4Txs, generator = validGenerator, strictTime = true)
     d.appender.appendBlock(block4WithCommitments)
 
-    val balanceAfter4 = ENOUGH_AMT - 2 * TestValues.commitToGenerationFee - DepositInWavelets
+    val balanceAfter4 = ENOUGH_AMT - 2 * TestValues.commitToGenerationFee - DepositInEmbers
 
     log.debug("Append block 5 of new period")
     d.appender.appendBlock(d.createBlock(generator = validGenerator, strictTime = true))
@@ -56,18 +56,18 @@ class ConflictEndorserRecommitmentSuite extends BaseFinalizationSpec {
       d.blockchain.committedGenerators(d.blockchain.currentGenerationPeriod.value).map(_._1) should contain theSameElementsInOrderAs generatorAddrs
     }
 
-    d.blockchain.wavesPortfolio(conflictGeneratorAddr) shouldBe Portfolio(balance = balanceAfter4, generationDeposit = DepositInWavelets)
+    d.blockchain.hearthPortfolio(conflictGeneratorAddr) shouldBe Portfolio(balance = balanceAfter4, generationDeposit = DepositInEmbers)
     d.blockchain.balanceAtHeight(conflictGeneratorAddr, d.blockchain.height).value shouldBe (4, balanceAfter4)
 
     withClue(s"checkGeneratingBalance: ") {
-      d.blockchain.generatingBalance(conflictGeneratorAddr) shouldBe balanceAfter4 - DepositInWavelets
+      d.blockchain.generatingBalance(conflictGeneratorAddr) shouldBe balanceAfter4 - DepositInEmbers
     }
 
     withClue(s"checkGeneratorBalanceFromApi: ") {
       d.generatorsApi
         .generators(Height(d.blockchain.height))
         .collectFirst { case x if x.address == conflictGeneratorAddr => x.balance }
-        .value shouldBe Some(balanceAfter4 - DepositInWavelets)
+        .value shouldBe Some(balanceAfter4 - DepositInEmbers)
     }
 
     d.blockchain.balanceSnapshots(conflictGeneratorAddr, from = 2, to = None) should contain theSameElementsInOrderAs Seq(

@@ -8,7 +8,7 @@ import tech.hearth.generator.config.ConfigReaders
 import tech.hearth.generator.utils.Universe
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.*
@@ -60,9 +60,9 @@ class NarrowTransactionGenerator(
                   .create(
                     PublicKey(sender.publicKey()),
                     recipient,
-                    Waves,
+                    Hearth,
                     Random.nextInt(100),
-                    Waves,
+                    Hearth,
                     500000L,
                     createAttachment(),
                     timestamp,
@@ -80,7 +80,7 @@ class NarrowTransactionGenerator(
               matcher <- randomFrom(accounts)
               seller  <- randomFrom(accounts)
               buyer   <- randomFrom(accounts)
-              pair  = AssetPair(Waves, IssuedAsset(assetId))
+              pair  = AssetPair(Hearth, IssuedAsset(assetId))
               delta = random.nextLong(10000)
               sellOrder <- TxHelpers
                 .sell(
@@ -159,7 +159,7 @@ class NarrowTransactionGenerator(
                 MassTransferTransaction
                   .create(
                     PublicKey(sender.publicKey()),
-                    Waves,
+                    Hearth,
                     transfers.toList,
                     100000L + 50000L * transferCount + 400000L,
                     timestamp,

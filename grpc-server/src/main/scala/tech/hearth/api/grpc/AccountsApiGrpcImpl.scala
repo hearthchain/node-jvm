@@ -13,7 +13,7 @@ import monix.reactive.Observable
 
 class AccountsApiGrpcImpl(commonApi: CommonAccountsApi)(implicit sc: Scheduler) extends AccountsApiGrpc.AccountsApi {
 
-  private def loadWavesBalance(address: Address): BalanceResponse = {
+  private def loadHearthBalance(address: Address): BalanceResponse = {
     commonApi
       .balanceDetails(address)
       .fold(
@@ -37,16 +37,16 @@ class AccountsApiGrpcImpl(commonApi: CommonAccountsApi)(implicit sc: Scheduler) 
 
   override def getBalances(request: BalancesRequest, responseObserver: StreamObserver[BalanceResponse]): Unit = responseObserver.interceptErrors {
     val addressOption: Option[Address] = if (request.address.isEmpty) None else Some(request.address.toAddress)
-    val assetIds: Seq[Asset]           = request.assets.map(id => if (id.isEmpty) Asset.Waves else Asset.IssuedAsset(id.toByteStr))
+    val assetIds: Seq[Asset]           = request.assets.map(id => if (id.isEmpty) Asset.Hearth else Asset.IssuedAsset(id.toByteStr))
 
     val responseStream = (addressOption, assetIds) match {
       case (Some(address), Seq()) =>
-        Observable(loadWavesBalance(address)) ++ commonApi.portfolio(address).concatMapIterable(identity).map(assetBalanceResponse)
+        Observable(loadHearthBalance(address)) ++ commonApi.portfolio(address).concatMapIterable(identity).map(assetBalanceResponse)
       case (Some(address), nonEmptyList) =>
         Observable
           .fromIterable(nonEmptyList)
           .map {
-            case Asset.Waves           => loadWavesBalance(address)
+            case Asset.Hearth          => loadHearthBalance(address)
             case ia: Asset.IssuedAsset => assetBalanceResponse(ia -> commonApi.assetBalance(address, ia))
           }
       case (None, Seq(_)) => // todo: asset distribution

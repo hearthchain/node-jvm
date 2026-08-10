@@ -153,8 +153,8 @@ object BlockDiffer {
         daoAddress
       )
       (
-        Portfolio.waves(blockRewardShares.miner),
-        daoAddress.fold(Map[Address, Portfolio]())(addr => Map(addr -> Portfolio.waves(blockRewardShares.daoAddress)).filter(_._2.balance > 0))
+        Portfolio.hearth(blockRewardShares.miner),
+        daoAddress.fold(Map[Address, Portfolio]())(addr => Map(addr -> Portfolio.hearth(blockRewardShares.daoAddress)).filter(_._2.balance > 0))
       )
     }
 
@@ -275,7 +275,7 @@ object BlockDiffer {
           case None => Left(s"Invalid endorsement index in $endorsement, valid: [0; ${committed.size}]")
           case Some(cg) =>
             val orig    = r.getOrElse(cg.address, Portfolio.empty)
-            val updated = orig.combine(Portfolio.waves(-CommitToGenerationTransaction.DepositInWavelets))
+            val updated = orig.combine(Portfolio.hearth(-CommitToGenerationTransaction.DepositInEmbers))
             updated.map(r.updated(cg.address, _))
         }
     }

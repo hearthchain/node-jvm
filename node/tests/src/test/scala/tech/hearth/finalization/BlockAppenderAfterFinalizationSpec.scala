@@ -194,14 +194,14 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
           // Two deposits: committed in genesis (below) as well as for the period it mines in - the first block of a
           // period is checked against the committed set of the parent's period, so a generator that only commits for
           // the period it starts cannot produce that block.
-          2 * CommitToGenerationTransaction.DepositInWavelets + 1.waves
+          2 * CommitToGenerationTransaction.DepositInEmbers + 1.hearth
         ),
         // committedGenerator2 mines the first block of the new period, so PoSSelector needs to resolve its VRF key
         // at the parent height, which is still in the genesis period - it must be committed on both sides.
         generators = committedGenerators
       ) { d =>
         log.debug(s"Append block 2 with leasing")
-        val leasingTxn = TxHelpers.lease(committedGenerator1, committedGenerator2Addr, amount = 20_000.waves)
+        val leasingTxn = TxHelpers.lease(committedGenerator1, committedGenerator2Addr, amount = 20_000.hearth)
         d.appender.appendBlock(
           d.createBlock(
             txs = Seq(leasingTxn),
@@ -299,7 +299,7 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
       }
     }.run()
 
-    "spent all WAVES" in withDomain(
+    "spent all HRTH" in withDomain(
       defaultSettings,
       AddrWithBalance.enoughBalances(committedGenerator1)
     ) { d =>
@@ -319,8 +319,8 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
           TxHelpers.transfer(
             from = committedGenerator1,
             to = notCommittedGeneratorAddr,
-            amount = d.blockchain.balance(committedGenerator1Addr) - CommitToGenerationTransaction.DepositInWavelets - 1.waves,
-            fee = 1.waves
+            amount = d.blockchain.balance(committedGenerator1Addr) - CommitToGenerationTransaction.DepositInEmbers - 1.hearth,
+            fee = 1.hearth
           )
         )
       )
@@ -352,8 +352,8 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
           TxHelpers.transfer(
             from = committedGenerator1,
             to = notCommittedGeneratorAddr,
-            amount = d.blockchain.balance(committedGenerator1Addr) - CommitToGenerationTransaction.DepositInWavelets - 1.waves,
-            fee = 1.waves
+            amount = d.blockchain.balance(committedGenerator1Addr) - CommitToGenerationTransaction.DepositInEmbers - 1.hearth,
+            fee = 1.hearth
           )
         )
       )

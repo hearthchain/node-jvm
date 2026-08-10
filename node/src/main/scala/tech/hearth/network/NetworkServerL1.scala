@@ -1,6 +1,6 @@
 package tech.hearth.network
 
-import tech.hearth.settings.{Constants, WavesSettings}
+import tech.hearth.settings.{Constants, HearthSettings}
 import tech.hearth.transaction.LastBlockInfo
 import io.netty.channel.Channel
 import io.netty.channel.group.ChannelGroup
@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 object NetworkServerL1 {
 
   def apply(
-      settings: WavesSettings,
+      settings: HearthSettings,
       lastBlockInfos: Observable[LastBlockInfo],
       historyReplier: HistoryReplier,
       peerDatabase: PeerDatabase,

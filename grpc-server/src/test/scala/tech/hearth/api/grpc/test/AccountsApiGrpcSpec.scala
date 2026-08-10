@@ -15,7 +15,7 @@ import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.state.{BlockRewardCalculator, Height}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.{CommitToGenerationTransaction, TxHelpers}
 import tech.hearth.utils.{DiffMatchers, Schedulers}
 import monix.execution.ExecutionModel.SynchronousExecution
@@ -34,7 +34,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
 
   "GetBalances should work" in {
     val assetTransferAmount   = 123
-    val wavesTransferAmount   = 456 + TestValues.fee
+    val hearthTransferAmount  = 456 + TestValues.fee
     val reverseTransferAmount = 1
     val asset                 = IssuedAsset(ByteStr.fill(32)(1))
 
@@ -46,16 +46,16 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
       val grpcApi = getGrpcApi(d)
 
       val transfer1 = TxHelpers.transfer(sender, recipient.toAddress, assetTransferAmount, asset)
-      val transfer2 = TxHelpers.transfer(sender, recipient.toAddress, wavesTransferAmount, Waves)
-      val transfer3 = TxHelpers.transfer(recipient, sender.toAddress, reverseTransferAmount, Waves)
+      val transfer2 = TxHelpers.transfer(sender, recipient.toAddress, hearthTransferAmount, Hearth)
+      val transfer3 = TxHelpers.transfer(recipient, sender.toAddress, reverseTransferAmount, Hearth)
 
       d.appendBlock(transfer1, transfer2, transfer3)
 
       d.liquidAndSolidAssert { () =>
-        val expectedWavesBalance = wavesTransferAmount - TestValues.fee - reverseTransferAmount
+        val expectedHearthBalance = hearthTransferAmount - TestValues.fee - reverseTransferAmount
         val expectedResult = List(
           BalanceResponse.of(
-            BalanceResponse.Balance.Waves(BalanceResponse.WavesBalances(expectedWavesBalance, 0, expectedWavesBalance, expectedWavesBalance))
+            BalanceResponse.Balance.Waves(BalanceResponse.WavesBalances(expectedHearthBalance, 0, expectedHearthBalance, expectedHearthBalance))
           ),
           BalanceResponse.of(BalanceResponse.Balance.Asset(Amount(ByteString.copyFrom(asset.id.arr), assetTransferAmount)))
         )
@@ -140,7 +140,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     val sender           = TxHelpers.signer(1)
     val challengedMiner  = TxHelpers.signer(2)
     val challengingMiner = TxHelpers.signer(3)
-    val deposit          = CommitToGenerationTransaction.DepositInWavelets
+    val deposit          = CommitToGenerationTransaction.DepositInEmbers
     withDomain(
       TransactionStateSnapshot,
       generators = Seq(TxHelpers.defaultSigner, challengedMiner, challengingMiner),
@@ -151,9 +151,9 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
-      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 waves)
-      val initChallengingBalance = 1200.waves
-      val initChallengedBalance  = 2000.waves
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth)
+      val initChallengingBalance = 1200.hearth
+      val initChallengedBalance  = 2000.hearth
 
       d.appendBlock(
         TxHelpers.transfer(sender, challengingMiner.toAddress, initChallengingBalance - deposit),
@@ -223,7 +223,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     BlockRewardCalculator
       .rewardSharesAt(
         Height(d.blockchain.height),
-        d.blockchain.settings.rewardsSettings.initial,
+        d.blockchain.settings.rewardsSettings.initialReward,
         d.blockchain.settings.functionalitySettings.daoAddressParsed.toOption.flatten
       )
       .miner

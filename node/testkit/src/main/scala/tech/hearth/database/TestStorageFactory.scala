@@ -2,13 +2,13 @@ package tech.hearth.database
 
 import com.google.common.util.concurrent.MoreExecutors
 import tech.hearth.events.BlockchainUpdateTriggers
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.BlockchainUpdaterImpl
 import tech.hearth.utils.Time
 
 object TestStorageFactory {
   def apply(
-      settings: WavesSettings,
+      settings: HearthSettings,
       rdb: RDB,
       time: Time,
       blockchainUpdateTriggers: BlockchainUpdateTriggers

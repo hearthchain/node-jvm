@@ -4,7 +4,7 @@ import cats.Applicative
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.{DigestLength, SignatureLength}
 import tech.hearth.lang.ValidationError
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.{GenericError, Validation}
 import tech.hearth.transaction.{Asset, AssetIdStringLength, Proofs, TxValidationError}
 import tech.hearth.utils.base16Length
@@ -38,7 +38,7 @@ package object requests {
     parseBase16ToOption(v.filter(_.nonEmpty), err, AssetIdStringLength)
       .map {
         case Some(str) => IssuedAsset(str)
-        case None      => Waves
+        case None      => Hearth
       }
 
   def toProofs(maybeSignature: Option[ByteStr], maybeProofs: Option[Proofs]): Validation[Proofs] =

@@ -2,7 +2,7 @@ package tech.hearth.history
 
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.diffs.*
 import tech.hearth.test.*
 import tech.hearth.transaction.CommitToGenerationTransaction
@@ -19,10 +19,10 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
     sender    <- accountGen
     recipient <- accountGen
     ts        <- positiveIntGen
-    somePayment: TransferTransaction = createWavesTransfer(sender, recipient.toAddress, 1, 10, ts + 1).explicitGet()
+    somePayment: TransferTransaction = createHearthTransfer(sender, recipient.toAddress, 1, 10, ts + 1).explicitGet()
     // The generator can afford this only out of what the earlier transaction's fee earned it
-    generatorPaymentOnFee: TransferTransaction = createWavesTransfer(defaultSigner, recipient.toAddress, 11, 1, ts + 2).explicitGet()
-    someOtherPayment: TransferTransaction      = createWavesTransfer(sender, recipient.toAddress, 1, 1, ts + 3).explicitGet()
+    generatorPaymentOnFee: TransferTransaction = createHearthTransfer(defaultSigner, recipient.toAddress, 11, 1, ts + 2).explicitGet()
+    someOtherPayment: TransferTransaction      = createHearthTransfer(sender, recipient.toAddress, 1, 1, ts + 3).explicitGet()
   } yield (sender, somePayment, generatorPaymentOnFee, someOtherPayment)
 
   /** The generator can pay for its own transaction and nothing more, so that what it spends beyond that is exactly what
@@ -31,12 +31,12 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
     */
   private def fundGeneratorForItsOwnFeeOnly(s: Setup): Seq[AddrWithBalance] = Seq(
     AddrWithBalance(s._1.toAddress, ENOUGH_AMT),
-    AddrWithBalance(defaultSigner.toAddress, CommitToGenerationTransaction.DepositInWavelets + s._3.fee.value)
+    AddrWithBalance(defaultSigner.toAddress, CommitToGenerationTransaction.DepositInEmbers + s._3.fee.value)
   )
 
-  private val settings: WavesSettings = {
-    val bs = MicroblocksActivatedAt0WavesSettings.blockchainSettings
-    MicroblocksActivatedAt0WavesSettings.copy(blockchainSettings = bs.copy(rewardsSettings = bs.rewardsSettings.copy(initial = 0)))
+  private val settings: HearthSettings = {
+    val bs = MicroblocksActivatedAt0HearthSettings.blockchainSettings
+    MicroblocksActivatedAt0HearthSettings.copy(blockchainSettings = bs.copy(rewardsSettings = withFlatReward(bs.rewardsSettings, 0)))
   }
 
   /* These properties used to come in pairs, for before and after `applyMinerFeeWithTransactionAfter`. There is no such
@@ -48,7 +48,7 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
       domain.appendBlockAt(somePayment.timestamp)(somePayment)
 
       val earnedSoFar = BlockDiffer.CurrentBlockFeePart(somePayment.fee.value)
-      val affordable  = createWavesTransfer(defaultSigner, somePayment.recipient, earnedSoFar, 1, somePayment.timestamp + 2).explicitGet()
+      val affordable  = createHearthTransfer(defaultSigner, somePayment.recipient, earnedSoFar, 1, somePayment.timestamp + 2).explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable) should beRight
     }
@@ -73,7 +73,7 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
 
       // The carry of the whole liquid block, micro blocks included, is credited when the next block references it
       val affordable =
-        createWavesTransfer(defaultSigner, somePayment.recipient, somePayment.fee.value, 1, somePayment.timestamp + 2).explicitGet()
+        createHearthTransfer(defaultSigner, somePayment.recipient, somePayment.fee.value, 1, somePayment.timestamp + 2).explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable, someOtherPayment) should beRight
     }

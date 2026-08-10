@@ -8,7 +8,7 @@ import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.sync.*
 import tech.hearth.it.transactions.BaseTransactionSuite
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.transfer.TransferTransaction.MaxAttachmentSize
@@ -25,9 +25,9 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
       from = sender.keyPair,
       to = sender.keyPair.toAddress,
       amount = 100L,
-      asset = Waves,
+      asset = Hearth,
       fee = minFee,
-      feeAsset = Waves,
+      feeAsset = Hearth,
       attachment = ByteStr.empty
     )
     val json = tx.json() ++ Json.obj("assetId" -> "", "feeAssetId" -> "")
@@ -50,7 +50,7 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
     sender.assetBalance(secondAddress, assetId).balance shouldBe secondAssetBalanceBefore + someAssetAmount / 2
   }
 
-  test("waves transfer changes waves balances and eff.b.") {
+  test("hearth transfer changes hearth balances and eff.b.") {
     val (firstBalance, firstEffBalance)   = miner.accountBalances(firstAddress)
     val (secondBalance, secondEffBalance) = miner.accountBalances(secondAddress)
 
@@ -62,7 +62,7 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
     miner.assertBalances(secondAddress, secondBalance + transferAmount, secondEffBalance + transferAmount)
   }
 
-  test("invalid signed waves transfer should not be in UTX or blockchain") {
+  test("invalid signed hearth transfer should not be in UTX or blockchain") {
     def invalidTx(
         timestamp: Long = System.currentTimeMillis,
         fee: Long = 100000,
@@ -71,9 +71,9 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
       val tx = TransferTransaction(
         sender = PublicKey(sender.keyPair.publicKey()),
         recipient = Address.fromString(sender.address).explicitGet(),
-        assetId = Waves,
+        assetId = Hearth,
         amount = TxPositiveAmount.unsafeFrom(1),
-        feeAssetId = Waves,
+        feeAssetId = Hearth,
         fee = TxPositiveAmount.unsafeFrom(fee),
         attachment = ByteStr(attachment),
         timestamp = timestamp,
@@ -123,7 +123,7 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
     val (secondBalance, secondEffBalance) = miner.accountBalances(secondAddress)
 
     assertBadRequestAndResponse(
-      sender.transfer(secondKeyPair, firstAddress, secondBalance + 1.waves, minFee),
+      sender.transfer(secondKeyPair, firstAddress, secondBalance + 1.hearth, minFee),
       "Attempt to transfer unavailable funds"
     )
     miner.assertBalances(secondAddress, secondBalance, secondEffBalance)

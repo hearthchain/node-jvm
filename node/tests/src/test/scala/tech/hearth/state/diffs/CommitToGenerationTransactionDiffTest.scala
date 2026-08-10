@@ -22,7 +22,7 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
     // The sender is defaultSigner, which withDomain commits as the genesis generator, so it holds a deposit from the
     // very first height - there is no state here in which it has none
     log.info("Deposit for the genesis commitment")
-    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInWavelets
+    d.blockchain.hearthPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInEmbers
 
     // Committed for the next period on top of the genesis commitment for the current one, and a generator committed for
     // both is charged for both
@@ -30,25 +30,25 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
     val currPeriodTx = TxHelpers.commitToGeneration(Height(3), sender)
     d.appendBlock(currPeriodTx)
     d.blockchain.height shouldBe 2
-    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe 2 * CommitToGenerationTransaction.DepositInWavelets
+    d.blockchain.hearthPortfolio(sender.toAddress).generationDeposit shouldBe 2 * CommitToGenerationTransaction.DepositInEmbers
 
     log.info("Deposit for one current period")
     d.appendBlock()
     d.blockchain.height shouldBe 3
-    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInWavelets
+    d.blockchain.hearthPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInEmbers
 
     log.info("Deposit for two periods")
     val nextPeriodTx = TxHelpers.commitToGeneration(Height(5), sender)
     d.appendBlock(nextPeriodTx)
-    val wavesPortfolio = d.blockchain.wavesPortfolio(sender.toAddress)
-    wavesPortfolio.generationDeposit shouldBe 2 * CommitToGenerationTransaction.DepositInWavelets
-    wavesPortfolio.spendableBalance shouldBe (wavesPortfolio.balance - wavesPortfolio.generationDeposit)
+    val hearthPortfolio = d.blockchain.hearthPortfolio(sender.toAddress)
+    hearthPortfolio.generationDeposit shouldBe 2 * CommitToGenerationTransaction.DepositInEmbers
+    hearthPortfolio.spendableBalance shouldBe (hearthPortfolio.balance - hearthPortfolio.generationDeposit)
 
     d.appendBlock()
     d.blockchain.height shouldBe 5
 
     log.info("Deposit for one period if not committed for next")
-    d.blockchain.wavesPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInWavelets
+    d.blockchain.hearthPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInEmbers
   }
 
   "Can't commit" - {
@@ -72,8 +72,8 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
       withDomain(
         DeterministicFinality,
         Seq(
-          AddrWithBalance(sender.toAddress, 1000000.waves),
-          AddrWithBalance(newGenerator.toAddress, 10000.waves)
+          AddrWithBalance(sender.toAddress, 1000000.hearth),
+          AddrWithBalance(newGenerator.toAddress, 10000.hearth)
         )
       ) { d =>
         val periodStart = Height(3001)
@@ -116,14 +116,14 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
 
     "with insufficient balance" in {
       val newGenerator = TxHelpers.signer(1005)
-      val txFee        = 1.waves
+      val txFee        = 1.hearth
       withDomain(
         DeterministicFinality,
         Seq(
-          AddrWithBalance(sender.toAddress, 1000000.waves),
+          AddrWithBalance(sender.toAddress, 1000000.hearth),
           AddrWithBalance(
             newGenerator.toAddress,
-            GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 + CommitToGenerationTransaction.DepositInWavelets + txFee - 1
+            GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 + CommitToGenerationTransaction.DepositInEmbers + txFee - 1
           )
         )
       ) { d =>

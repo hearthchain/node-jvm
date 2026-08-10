@@ -25,7 +25,7 @@ class MicroblocksFeeTestSuite extends BaseFreeSpec {
           // Not mining node sends transfer transactions to another not mining node
           // Mining nodes collect fee
           (1 to n).map { _ =>
-            notMiner.transfer(notMiner.keyPair, firstAddress, (1 + Random.nextInt(10)).waves, fee)
+            notMiner.transfer(notMiner.keyPair, firstAddress, (1 + Random.nextInt(10)).hearth, fee)
           }
         }
         .map(_ => ())
@@ -50,7 +50,7 @@ class MicroblocksFeeTestSuite extends BaseFreeSpec {
       _ <- traverse(nodes)(_.height).map(_.max)
 
       _ <- traverse(nodes)(_.waitForHeight(checkHeight - 1))
-      _ <- txRequestsGen(200, 2.waves)
+      _ <- txRequestsGen(200, 2.hearth)
       _ <- traverse(nodes)(_.waitForHeight(checkHeight + 1))
 
       balancesBefore <- notMiner.debugStateAt(checkHeight - 1)
@@ -63,12 +63,12 @@ class MicroblocksFeeTestSuite extends BaseFreeSpec {
       blockAfter    <- notMiner.blockHeaderAt(checkHeight + 1)
     } yield {
       balancesAt(blockAt.generator) shouldBe {
-        nodes.head.settings.blockchainSettings.rewardsSettings.initial +
+        nodes.head.settings.blockchainSettings.rewardsSettings.initialReward +
           balancesBefore(blockAt.generator) + blockBefore.totalFee * 6 / 10 + blockAt.totalFee * 4 / 10
       }
 
       balancesAfter(blockAfter.generator) shouldBe {
-        nodes.head.settings.blockchainSettings.rewardsSettings.initial +
+        nodes.head.settings.blockchainSettings.rewardsSettings.initialReward +
           balancesAt(blockAfter.generator) + blockAt.totalFee * 6 / 10 + blockAfter.totalFee * 4 / 10
       }
     }
@@ -78,14 +78,14 @@ class MicroblocksFeeTestSuite extends BaseFreeSpec {
 
   private val checkHeight = Height(10)
   private val minerConfig = ConfigFactory.parseString(
-    """waves {
+    """hearth {
       |  miner.quorum = 3
       |}
       """.stripMargin
   )
 
   private val notMinerConfig = ConfigFactory.parseString(
-    """waves {
+    """hearth {
       |  miner.enable = no
       |}
       """.stripMargin

@@ -9,7 +9,7 @@ import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.database
 import tech.hearth.database.{DBExt, Keys, RDB, RocksDBWriter}
-import tech.hearth.settings.{WavesSettings, loadConfig}
+import tech.hearth.settings.{HearthSettings, loadConfig}
 import tech.hearth.state.RocksDBWriterBenchmark.*
 import tech.hearth.transaction.Transaction
 import org.openjdk.jmh.annotations.*
@@ -73,22 +73,22 @@ object RocksDBWriterBenchmark {
   @State(Scope.Benchmark)
   class BaseSt {
     protected val benchSettings: Settings = Settings.fromConfig(ConfigFactory.load())
-    private val wavesSettings: WavesSettings = {
+    private val hearthSettings: HearthSettings = {
       val config = loadConfig(ConfigFactory.parseFile(new File(benchSettings.networkConfigFile)))
-      WavesSettings.fromRootConfig(config)
+      HearthSettings.fromRootConfig(config)
     }
 
     AddressScheme.current = new AddressScheme {
-      override val chainId: Byte = wavesSettings.blockchainSettings.addressSchemeCharacter.toByte
+      override val chainId: Byte = hearthSettings.blockchainSettings.addressSchemeCharacter.toByte
     }
 
     private val rawDB: RDB = {
-      val dir = new File(wavesSettings.dbSettings.directory)
-      if (!dir.isDirectory) throw new IllegalArgumentException(s"Can't find directory at '${wavesSettings.dbSettings.directory}'")
-      RDB.open(wavesSettings.dbSettings)
+      val dir = new File(hearthSettings.dbSettings.directory)
+      if (!dir.isDirectory) throw new IllegalArgumentException(s"Can't find directory at '${hearthSettings.dbSettings.directory}'")
+      RDB.open(hearthSettings.dbSettings)
     }
 
-    val db = RocksDBWriter(rawDB, wavesSettings.blockchainSettings, wavesSettings.dbSettings, wavesSettings.enableLightMode)
+    val db = RocksDBWriter(rawDB, hearthSettings.blockchainSettings, hearthSettings.dbSettings, hearthSettings.enableLightMode)
 
     def loadBlockInfoAt(height: Height): Option[(BlockMeta, Seq[(TxMeta, Transaction)])] =
       loadBlockMetaAt(height).map { meta =>
@@ -97,7 +97,7 @@ object RocksDBWriterBenchmark {
 
     def loadBlockMetaAt(height: Height): Option[BlockMeta] = rawDB.db.get(Keys.blockMetaAt(height)).flatMap(BlockMeta.fromPb)
 
-    val cba = CommonBlocksApi(wavesSettings.synchronizationSettings.maxRollback, db, loadBlockMetaAt, loadBlockInfoAt)
+    val cba = CommonBlocksApi(hearthSettings.synchronizationSettings.maxRollback, db, loadBlockMetaAt, loadBlockInfoAt)
 
     def blockById(id: ByteStr): Option[(BlockMeta, Seq[(TxMeta, Transaction)])] = cba.block(id)
 

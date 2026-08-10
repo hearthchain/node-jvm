@@ -71,8 +71,8 @@ object CommonTransactionsApi {
     override def calculateFee(tx: Transaction): Either[ValidationError, (Asset, Long, Long)] =
       FeeValidation
         .getMinFee(tx)
-        .map { case FeeDetails(asset, _, feeInAsset, feeInWaves) =>
-          (asset, feeInAsset, feeInWaves)
+        .map { case FeeDetails(asset, _, feeInAsset, feeInHearth) =>
+          (asset, feeInAsset, feeInHearth)
         }
 
     override def broadcastTransaction(tx: Transaction): Future[TracedResult[ValidationError, Boolean]] = publishTransaction(tx)

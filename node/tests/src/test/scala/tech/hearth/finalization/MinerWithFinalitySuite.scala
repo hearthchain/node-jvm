@@ -45,7 +45,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInWavelets
+            MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
@@ -102,7 +102,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInWavelets
+            MinimalEffectiveBalanceForGenerator2 + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
@@ -207,20 +207,20 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
       }
     }
 
-    // There are no tests with conflicting generators, because the miner can't be conflicting, it can only spend all WAVES
+    // There are no tests with conflicting generators, because the miner can't be conflicting, it can only spend all HRTH
 
     // The spending below empties the generator set, and generating in such a period without a commitment is the
     // intended rule that is not implemented yet - see the same note in MultipleAccountsMinerWithFinalitySuite
     "spending in" - {
       "block" ignore test { d =>
-        log.debug("Append block3 with spending all waves by miner")
+        log.debug("Append block3 with spending all hearth by miner")
         val block3 = d.createBlock(
           txs = Seq(
             TxHelpers.transfer(
               otherNodeAcc,
               thisNodeAcc.toAddress,
-              amount = d.blockchain.balance(thisNodeAcc.toAddress) - CommitToGenerationTransaction.DepositInWavelets - 1.waves,
-              fee = 1.waves
+              amount = d.blockchain.balance(thisNodeAcc.toAddress) - CommitToGenerationTransaction.DepositInEmbers - 1.hearth,
+              fee = 1.hearth
             )
           ),
           generator = otherNodeAcc,
@@ -230,15 +230,15 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
       }
 
       "microblock" ignore test { d =>
-        log.debug("Append micro block with spending all waves by miner")
+        log.debug("Append micro block with spending all hearth by miner")
         d.appender.appendBlock(d.createBlock(generator = otherNodeAcc, strictTime = true))
         d.appendMicroBlock(
           d.createMicroBlock(signer = Some(otherNodeAcc))(
             TxHelpers.transfer(
               otherNodeAcc,
               thisNodeAcc.toAddress,
-              amount = d.blockchain.balance(thisNodeAcc.toAddress) - CommitToGenerationTransaction.DepositInWavelets - 1.waves,
-              fee = 1.waves
+              amount = d.blockchain.balance(thisNodeAcc.toAddress) - CommitToGenerationTransaction.DepositInEmbers - 1.hearth,
+              fee = 1.hearth
             )
           )
         )
@@ -261,7 +261,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInWavelets
+            MinimalEffectiveBalanceForGenerator2 + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
@@ -326,7 +326,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInWavelets
+            MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
@@ -376,11 +376,11 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
 
     val generators = Seq(generator1, generator2, generator3)
     val initBalances = Seq(
-      AddrWithBalance(generator1.toAddress, 2000.waves), // this node miner
-      AddrWithBalance(generator2.toAddress, 3000.waves),
-      AddrWithBalance(generator3.toAddress, 5000.waves), // endorser
-      AddrWithBalance(otherAcc1.toAddress, 2000.waves)
-    ).map(x => x.copy(balance = x.balance + CommitToGenerationTransaction.DepositInWavelets + TestValues.commitToGenerationFee))
+      AddrWithBalance(generator1.toAddress, 2000.hearth), // this node miner
+      AddrWithBalance(generator2.toAddress, 3000.hearth),
+      AddrWithBalance(generator3.toAddress, 5000.hearth), // endorser
+      AddrWithBalance(otherAcc1.toAddress, 2000.hearth)
+    ).map(x => x.copy(balance = x.balance + CommitToGenerationTransaction.DepositInEmbers + TestValues.commitToGenerationFee))
 
     val minerScheduler    = TestScheduler()
     val appenderScheduler = TestScheduler()
@@ -462,9 +462,9 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
 
     val generators = Seq(generator1, generator2, generator3)
     val initBalances = Seq(
-      AddrWithBalance(generator1.toAddress, 5000.waves),
-      AddrWithBalance(generator2.toAddress, 2000.waves),
-      AddrWithBalance(generator3.toAddress, 3000.waves)
+      AddrWithBalance(generator1.toAddress, 5000.hearth),
+      AddrWithBalance(generator2.toAddress, 2000.hearth),
+      AddrWithBalance(generator3.toAddress, 3000.hearth)
     )
 
     val minerScheduler    = TestScheduler()

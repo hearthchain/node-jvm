@@ -8,7 +8,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.{Domain, defaultSigner}
-import tech.hearth.settings.{GenesisAssetSettings, WavesSettings}
+import tech.hearth.settings.{GenesisAssetSettings, HearthSettings}
 import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
@@ -34,7 +34,7 @@ class AssetsRouteSpec
   private val MaxAddressesPerRequest = restAPISettings.distributionAddressLimit
 
   def routeTest[A](
-      settings: WavesSettings = DomainPresets.RideV4,
+      settings: HearthSettings = DomainPresets.RideV4,
       balances: Seq[AddrWithBalance] = Seq.empty,
       assets: Seq[GenesisAssetSettings] = Seq.empty
   )(f: (Domain, Route) => A): A =
@@ -100,7 +100,7 @@ class AssetsRouteSpec
     "multiple ids" in {
       val assets = (1 to 3).map(genesisAsset(_))
       routeTest(
-        balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.waves, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
+        balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
         assets = assets
       ) { (_, route) =>
         route.anyParamTest(routePath(s"/balance/${assetIssuer.toAddress}"), "id")(assets.reverseIterator.map(_.id.toString).toSeq*) {
@@ -153,7 +153,7 @@ class AssetsRouteSpec
     routeTest(
       RideV6,
       AddrWithBalance
-        .enoughBalances(defaultSigner) :+ AddrWithBalance(assetIssuer.toAddress, 10.waves, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap),
+        .enoughBalances(defaultSigner) :+ AddrWithBalance(assetIssuer.toAddress, 10.hearth, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap),
       assets
     ) { (d, route) =>
       assets.zipWithIndex.foreach { case (asset, idx) =>
@@ -176,10 +176,10 @@ class AssetsRouteSpec
     val asset = genesisAsset(1, quantity = transfers.map(_._2).sum)
 
     routeTest(
-      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 10.waves, Map(IssuedAsset(asset.id) -> asset.quantity))),
+      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 10.hearth, Map(IssuedAsset(asset.id) -> asset.quantity))),
       assets = Seq(asset)
     ) { (d, route) =>
-      d.appendBlock(TxHelpers.massTransfer(assetIssuer, transfers, IssuedAsset(asset.id), 0.01.waves))
+      d.appendBlock(TxHelpers.massTransfer(assetIssuer, transfers, IssuedAsset(asset.id), 0.01.hearth))
       d.appendBlock()
 
       Get(routePath(s"/${asset.id}/distribution/2/limit/$MaxAddressesPerRequest")) ~> route ~> check {
@@ -204,7 +204,7 @@ class AssetsRouteSpec
   routePath(s"/details/{id}") in {
     val assets = Seq(genesisAsset(1), genesisAsset(2))
     routeTest(
-      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.waves, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
+      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
       assets = assets
     ) { (_, route) =>
       assets.zipWithIndex.foreach { case (asset, idx) =>
@@ -219,7 +219,7 @@ class AssetsRouteSpec
   routePath(s"/details - handles assets ids limit") in {
     val asset = genesisAsset(1)
     routeTest(
-      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.waves, Map(IssuedAsset(asset.id) -> asset.quantity))),
+      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, Map(IssuedAsset(asset.id) -> asset.quantity))),
       assets = Seq(asset)
     ) { (_, route) =>
       val inputLimitErrMsg = TooBigArrayAllocation(restAPISettings.assetDetailsLimit).message

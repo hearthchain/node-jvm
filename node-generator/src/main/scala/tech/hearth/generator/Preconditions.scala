@@ -4,7 +4,7 @@ import com.google.common.primitives.{Bytes, Ints}
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.explicitGet
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.lease.LeaseTransaction
 import tech.hearth.transaction.{Transaction, TxHelpers}
 import tech.hearth.utils.Time
@@ -35,7 +35,7 @@ object Preconditions {
       time: Time
   ): (UniverseHolder, List[Transaction], List[Transaction]) = {
     val transfers = accounts.map { account =>
-      TxHelpers.transfer(settings.faucet, account.toAddress, settings.balance, Waves, Fee, Waves, ByteStr.empty, time.correctedTime())
+      TxHelpers.transfer(settings.faucet, account.toAddress, settings.balance, Hearth, Fee, Hearth, ByteStr.empty, time.correctedTime())
     }.toList
 
     val leaseTxs = (1 to settings.leasesCount).map { _ =>

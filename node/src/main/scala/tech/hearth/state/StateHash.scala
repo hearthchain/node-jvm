@@ -14,7 +14,7 @@ final case class StateHash(totalHash: ByteStr, sectionHashes: Map[Section, ByteS
 
 object StateHash {
   enum Section {
-    case WavesBalance, AssetBalance, LeaseBalance, LeaseStatus, NextCommittedGenerators, CommittedGeneratorBalances
+    case HearthBalance, AssetBalance, LeaseBalance, LeaseStatus, NextCommittedGenerators, CommittedGeneratorBalances
   }
 
   private val converter = CaseFormat.UPPER_CAMEL.converterTo(CaseFormat.LOWER_CAMEL)

@@ -188,7 +188,7 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
             accounts = Seq(Domain.walletMiningAccount(0), Domain.walletMiningAccount(1), Domain.walletMiningAccount(2))
           )
         ),
-      AddrWithBalance.enoughBalances(otherNodeAcc, thisNodeAcc1, thisNodeAcc2) :+ AddrWithBalance(thisNodeAcc3.toAddress, 1000.waves - 1),
+      AddrWithBalance.enoughBalances(otherNodeAcc, thisNodeAcc1, thisNodeAcc2) :+ AddrWithBalance(thisNodeAcc3.toAddress, 1000.hearth - 1),
       generators = Seq(thisNodeAcc1, thisNodeAcc2, otherNodeAcc),
       miner = Miner.forwardTo(miner)
     ) { d =>
@@ -239,9 +239,9 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
       d.testTime.setTimeIfGreater(block4Ts - 1) // To exclude the latest microblock, see min-micro-block-age
       Seq(thisNodeAcc1, thisNodeAcc2).foreach { kp =>
         // Everything the account can spend - its generation deposit is locked, so `balance` is not it - less the fee and
-        // a waves, leaving it far below what generating takes
+        // a hearth, leaving it far below what generating takes
         val spendable = d.blockchain.balance(kp.toAddress) - d.blockchain.generationDeposit(kp.toAddress)
-        d.utxPool.putIfNew(TxHelpers.transfer(kp, amount = spendable - TestValues.fee - 1.waves)).resultE.value
+        d.utxPool.putIfNew(TxHelpers.transfer(kp, amount = spendable - TestValues.fee - 1.hearth)).resultE.value
       }
       utxEvents.onNext(())
       minerScheduler.tickNext("miner-3")

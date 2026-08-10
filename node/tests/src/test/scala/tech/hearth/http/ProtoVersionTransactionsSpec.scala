@@ -10,7 +10,7 @@ import tech.hearth.protobuf.utils.PBUtils
 import tech.hearth.settings.Constants
 import tech.hearth.test.SharedDomain
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.{AssetPair, ExchangeTransaction, Order}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
@@ -31,7 +31,7 @@ class ProtoVersionTransactionsSpec
     with OptionValues
     with SharedSchedulerMixin {
 
-  private val MinFee: Long            = (0.001 * Constants.UnitsInWave).toLong
+  private val MinFee: Long            = (0.001 * Constants.UnitsInHearth).toLong
   private val MassTransferTxFee: Long = 15000000
 
   private val now: Long           = ntpNow
@@ -59,7 +59,7 @@ class ProtoVersionTransactionsSpec
     "ExchangeTransaction" in {
       val buyer     = TxHelpers.signer(0)
       val seller    = TxHelpers.signer(1)
-      val assetPair = AssetPair(asset, Waves)
+      val assetPair = AssetPair(asset, Hearth)
 
       val buyOrder =
         TxHelpers
@@ -126,7 +126,7 @@ class ProtoVersionTransactionsSpec
       val recipient = TxHelpers.secondAddress
       val transferTxUnsigned =
         TransferTransaction
-          .create(PublicKey(account.publicKey), recipient, asset, 100L, Waves, MinFee, ByteStr(attachment), now, Proofs.empty)
+          .create(PublicKey(account.publicKey), recipient, asset, 100L, Hearth, MinFee, ByteStr(attachment), now, Proofs.empty)
           .explicitGet()
 
       val (proofs, transferTxJson) = Post(routePath("/sign"), transferTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {
@@ -154,7 +154,7 @@ class ProtoVersionTransactionsSpec
 
       val massTransferTxUnsigned =
         MassTransferTransaction
-          .create(PublicKey(account.publicKey), Waves, transfers, MassTransferTxFee, now, ByteStr(attachment), Proofs.empty)
+          .create(PublicKey(account.publicKey), Hearth, transfers, MassTransferTxFee, now, ByteStr(attachment), Proofs.empty)
           .explicitGet()
 
       val (proofs, massTransferTxJson) = Post(routePath("/sign"), massTransferTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {

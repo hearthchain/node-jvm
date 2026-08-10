@@ -8,7 +8,7 @@ import tech.hearth.crypto
 import tech.hearth.metrics.Instrumented
 import tech.hearth.test.*
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.transfer.*
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
@@ -25,9 +25,9 @@ class BlockSpecification extends PropSpec {
     assetId = IssuedAsset(ByteStr(assetBytes))
     sender                    <- accountGen
     recipient                 <- accountGen
-    paymentTransaction        <- wavesTransferGeneratorP(time, sender, recipient.toAddress)
-    transferTrancation        <- transferGeneratorP(1 + time, sender, recipient.toAddress, assetId, Waves)
-    anotherPaymentTransaction <- wavesTransferGeneratorP(2 + time, sender, recipient.toAddress)
+    paymentTransaction        <- hearthTransferGeneratorP(time, sender, recipient.toAddress)
+    transferTrancation        <- transferGeneratorP(1 + time, sender, recipient.toAddress, assetId, Hearth)
+    anotherPaymentTransaction <- hearthTransferGeneratorP(2 + time, sender, recipient.toAddress)
     transactionData = Seq(paymentTransaction, transferTrancation, anotherPaymentTransaction)
   } yield (baseTarget, reference, ByteStr(generationSignature), recipient, transactionData)
 
@@ -38,7 +38,7 @@ class BlockSpecification extends PropSpec {
       generationSignature                     <- byteArrayGen(Block.GenerationVRFSignatureLength)
       sender                                  <- accountGen
       recipient                               <- accountGen
-      paymentTransaction: TransferTransaction <- wavesTransferGeneratorP(time, sender, recipient.toAddress)
+      paymentTransaction: TransferTransaction <- hearthTransferGeneratorP(time, sender, recipient.toAddress)
     } yield Block
       .buildAndSign(
         time,

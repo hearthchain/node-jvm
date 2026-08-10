@@ -5,14 +5,14 @@ import tech.hearth.account.AddressScheme
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.api.grpc.protobuf.GetBlockUpdatesRangeRequest
 import tech.hearth.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}
 
 class BlockchainUpdatesGetBlockUpdatesRangeSpec extends BlockchainUpdatesTestBase {
   "BlockchainUpdates getBlockUpdateRange tests" - {
     "BU-172. Return correct data for transfer" in {
-      val transferTx = TxHelpers.transfer(firstTxParticipant, secondTxParticipantAddress, amount, Waves, customFee)
+      val transferTx = TxHelpers.transfer(firstTxParticipant, secondTxParticipantAddress, amount, Hearth, customFee)
       withGenerateGetBlockUpdateRange(
         GetBlockUpdatesRangeRequest.of(1, 2),
         settings = currentSettings,

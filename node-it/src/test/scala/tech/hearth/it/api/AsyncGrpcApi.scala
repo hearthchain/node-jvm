@@ -48,20 +48,20 @@ object AsyncGrpcApi {
         recipient: Recipient,
         amount: Long,
         fee: Long,
-        assetId: String = "WAVES",
-        feeAssetId: String = "WAVES",
+        assetId: String = "HRTH",
+        feeAssetId: String = "HRTH",
         attachment: ByteString = ByteString.EMPTY,
         timestamp: Long = System.currentTimeMillis
     ): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(source.publicKey()),
-        Some(Amount.of(if (feeAssetId == "WAVES") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(feeAssetId)), fee)),
+        Some(Amount.of(if (feeAssetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(feeAssetId)), fee)),
         timestamp,
         PBTransaction.Data.Transfer(
           TransferTransactionData.of(
             Some(recipient),
-            Some(Amount.of(if (assetId == "WAVES") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(assetId)), amount)),
+            Some(Amount.of(if (assetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(assetId)), amount)),
             attachment
           )
         )
@@ -84,13 +84,13 @@ object AsyncGrpcApi {
         sellMatcherFee: Long,
         fee: Long,
         timestamp: Long,
-        matcherFeeAssetId: String = "WAVES"
+        matcherFeeAssetId: String = "HRTH"
     ): Future[PBSignedTransaction] = {
 
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(matcher.publicKey()),
-        Some(Amount.of(if (matcherFeeAssetId == "WAVES") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(matcherFeeAssetId)), fee)),
+        Some(Amount.of(if (matcherFeeAssetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(matcherFeeAssetId)), fee)),
         timestamp,
         PBTransaction.Data.Exchange(
           ExchangeTransactionData.of(
@@ -151,7 +151,7 @@ object AsyncGrpcApi {
       waitFor[Int](s"height >= $expectedHeight")(_.height, h => h >= expectedHeight, 5.seconds)
     }
 
-    def wavesBalance(address: ByteString): Future[BalanceResponse.WavesBalances] = {
+    def hearthBalance(address: ByteString): Future[BalanceResponse.WavesBalances] = {
       val (obs, result) = createCallObserver[BalanceResponse]
       val req           = BalancesRequest.of(address, Seq(ByteString.EMPTY))
       accounts.getBalances(req, obs)

@@ -6,7 +6,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.protobuf.block.PBBlocks
 import tech.hearth.protobuf.utils.PBUtils
 import tech.hearth.state.{GeneratorIndex, Height}
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Transaction
 import play.api.libs.json.{JsArray, JsNumber, JsObject, Json}
 
@@ -95,7 +95,7 @@ object BlockSerializer {
     PBUtils.encodeDeterministic(PBBlocks.protobuf(block))
 
   def transactionField(transactions: Seq[Transaction]): JsObject = Json.obj(
-    "fee"          -> transactions.map(_.assetFee).collect { case (Waves, feeAmt) => feeAmt }.sum,
+    "fee"          -> transactions.map(_.assetFee).collect { case (Hearth, feeAmt) => feeAmt }.sum,
     "transactions" -> JsArray(transactions.map(_.json()))
   )
 

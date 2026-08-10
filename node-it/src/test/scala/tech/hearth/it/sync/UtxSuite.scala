@@ -7,7 +7,7 @@ import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.api.TransactionInfo
 import tech.hearth.it.keyPairFromSeed
 import tech.hearth.it.{BaseFunSuite, Node}
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Proofs
 import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.crypto.SigningKey
@@ -25,9 +25,9 @@ class UtxSuite extends BaseFunSuite {
       .create(
         PublicKey(miner.keyPair.publicKey()),
         account.toAddress,
-        Waves,
+        Hearth,
         AMOUNT,
-        Waves,
+        Hearth,
         ENOUGH_FEE,
         ByteStr.empty,
         System.currentTimeMillis(),
@@ -44,9 +44,9 @@ class UtxSuite extends BaseFunSuite {
       .create(
         PublicKey(account.publicKey()),
         miner.keyPair.toAddress,
-        Waves,
+        Hearth,
         AMOUNT - ENOUGH_FEE,
-        Waves,
+        Hearth,
         ENOUGH_FEE,
         ByteStr.empty,
         System.currentTimeMillis(),
@@ -59,9 +59,9 @@ class UtxSuite extends BaseFunSuite {
       .create(
         PublicKey(account.publicKey()),
         notMiner.keyPair.toAddress,
-        Waves,
+        Hearth,
         AMOUNT - ENOUGH_FEE,
-        Waves,
+        Hearth,
         ENOUGH_FEE,
         ByteStr.empty,
         System.currentTimeMillis(),

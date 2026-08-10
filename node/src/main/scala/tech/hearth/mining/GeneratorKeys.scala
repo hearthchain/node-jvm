@@ -10,7 +10,7 @@ import tech.hearth.crypto.{Bip39, Hex, KeyTree, SigningKey, VrfKey}
 
 /** The generator keys of this node, as a set of operations rather than as key material.
   *
-  * The accounts a node generates with come from `waves.miner.accounts`, and nothing else holds them: the wallet is for
+  * The accounts a node generates with come from `hearth.miner.accounts`, and nothing else holds them: the wallet is for
   * signing transactions and derives its accounts from a single seed, which is the reason those settings exist. Both the
   * endorser and the REST API need to act with these keys, so they take this instead - it hands out public keys and
   * signatures over data it is given, never a secret, so an API key reaches no further than the commitments this node is
@@ -43,7 +43,7 @@ trait GeneratorKeys {
 
 object GeneratorKeys {
 
-  /** The accounts as `waves.miner.accounts` describes them: either derived from a mnemonic at the given nonces, or
+  /** The accounts as `hearth.miner.accounts` describes them: either derived from a mnemonic at the given nonces, or
     * built from explicitly configured seeds. Parsed here rather than in the miner because the endorser and the REST
     * API need the same set, and a node that mines is not the only one that has it.
     */

@@ -24,9 +24,9 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
     val cooper = TxHelpers.signer(4)
 
     val fee                      = 400000
-    val masterTransferAmount     = 1000.waves
-    val aliceLeaseToBobAmount    = 500.waves
-    val masterLeaseToAliceAmount = 750.waves
+    val masterTransferAmount     = 1000.hearth
+    val aliceLeaseToBobAmount    = 500.hearth
+    val masterLeaseToAliceAmount = 750.hearth
 
     val masterTransfersToAlice = TxHelpers.transfer(master, alice.toAddress, masterTransferAmount, fee = fee)
     val aliceLeasesToBob       = TxHelpers.lease(alice, bob.toAddress, aliceLeaseToBobAmount)
@@ -60,8 +60,8 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
   property("commit to generation") {
     val settings = DomainPresets.DeterministicFinality.blockchainSettings.functionalitySettings.copy(generationPeriodLength = 3)
 
-    val notBlockedAmount = 100_000.waves
-    val initBalance      = notBlockedAmount + CommitToGenerationTransaction.DepositInWavelets + TestValues.commitToGenerationFee
+    val notBlockedAmount = 100_000.hearth
+    val initBalance      = notBlockedAmount + CommitToGenerationTransaction.DepositInEmbers + TestValues.commitToGenerationFee
 
     assertDiffEiTraced(
       Seq(TestBlock.create(Seq())), // Height 1: carries the genesis snapshot
@@ -76,9 +76,9 @@ class BalanceDiffValidationTest extends PropSpec with WithState {
   property("cannot transfer more than own-generationDeposit") {
     val settings = DomainPresets.DeterministicFinality.blockchainSettings.functionalitySettings.copy(generationPeriodLength = 3)
 
-    val notBlockedAmount = 100_000.waves
+    val notBlockedAmount = 100_000.hearth
     val initBalance =
-      notBlockedAmount + CommitToGenerationTransaction.DepositInWavelets + TestValues.commitToGenerationFee + TestValues.fee // for transfer
+      notBlockedAmount + CommitToGenerationTransaction.DepositInEmbers + TestValues.commitToGenerationFee + TestValues.fee // for transfer
 
     val transferAmount = notBlockedAmount + 1
     // The depositor must not be the account these blocks are mined by (TestBlock signs with defaultSigner): a miner

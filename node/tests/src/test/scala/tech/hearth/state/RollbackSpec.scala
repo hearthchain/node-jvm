@@ -11,7 +11,7 @@ import tech.hearth.history.defaultSigner
 import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.state.{Height, TransactionId}
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxHelpers.*
 import tech.hearth.transaction.{Transaction, TxHelpers}
 import monix.execution.Scheduler.Implicits.global
@@ -47,7 +47,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
   "NODE-1143, NODE-1144. Rollback resets" - {
     "Rollback save dropped blocks order" in {
       val sender         = TxHelpers.signer(1)
-      val initialBalance = 100.waves
+      val initialBalance = 100.hearth
       val blocksCount    = 10
       withDomain(balances = Seq(AddrWithBalance(sender.toAddress, initialBalance))) { d =>
         val genesisSignature = d.lastBlockId
@@ -100,11 +100,11 @@ class RollbackSpec extends FreeSpec with WithDomain {
       }
     }
 
-    "waves balances" in {
+    "hearth balances" in {
       val sender         = TxHelpers.signer(1)
       val recipient      = TxHelpers.signer(2)
       val txCount        = (1 to 10).toList
-      val initialBalance = 100.waves
+      val initialBalance = 100.hearth
       val fee            = 1
       withDomain(balances = Seq(AddrWithBalance(sender.toAddress, initialBalance))) { d =>
         val genesisSignature = d.lastBlockId
@@ -132,13 +132,13 @@ class RollbackSpec extends FreeSpec with WithDomain {
     "lease balances and states" in {
       val sender         = TxHelpers.signer(1)
       val recipient      = TxHelpers.signer(2)
-      val initialBalance = 100.waves
+      val initialBalance = 100.hearth
       withDomain(balances = Seq(AddrWithBalance(sender.toAddress, initialBalance))) { d =>
         d.blockchainUpdater.height shouldBe 1
         val genesisBlockId = d.lastBlockId
 
-        // Nearly everything, less a waves for the fee: it comes out of the same balance and cannot be leased away with it
-        val leaseAmount = initialBalance - 1.waves
+        // Nearly everything, less a hearth for the fee: it comes out of the same balance and cannot be leased away with it
+        val leaseAmount = initialBalance - 1.hearth
         val lt          = TxHelpers.lease(sender, recipient.toAddress, leaseAmount)
         d.appendBlock(lt)
         d.blockchainUpdater.height shouldBe 2
@@ -183,7 +183,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
     "asset balances" in {
       val sender         = TxHelpers.signer(1)
       val recipient      = TxHelpers.signer(2)
-      val initialBalance = 100.waves
+      val initialBalance = 100.hearth
       val assetAmount    = 100L
       // Nothing issues this asset, so it comes from the genesis snapshot - which has to hand out the whole quantity,
       // hence all of it to the sender
@@ -209,7 +209,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
             amount = assetAmount,
             asset = issuedAsset,
             fee = 1,
-            feeAsset = Waves
+            feeAsset = Hearth
           )
         )
 

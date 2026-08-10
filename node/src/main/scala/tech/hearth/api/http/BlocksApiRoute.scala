@@ -6,7 +6,7 @@ import tech.hearth.api.common.CommonBlocksApi
 import tech.hearth.api.http.ApiError.{BlockDoesNotExist, NotFinalized, TooBigArrayAllocation}
 import tech.hearth.settings.RestAPISettings
 import tech.hearth.state.{Height, TxMeta}
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Transaction
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.utils.Time
@@ -165,7 +165,7 @@ object BlocksApiRoute {
   }
 
   private def transactionField(transactions: Seq[(TxMeta, Transaction)]): JsObject = Json.obj(
-    "fee" -> transactions.map(_._2.assetFee).collect { case (Waves, feeAmt) => feeAmt }.sum,
+    "fee" -> transactions.map(_._2.assetFee).collect { case (Hearth, feeAmt) => feeAmt }.sum,
     "transactions" -> JsArray(transactions.map { case (tm, transaction) =>
       transaction.json() ++ TransactionJsonSerializer.applicationStatus(true, tm.status)
     })

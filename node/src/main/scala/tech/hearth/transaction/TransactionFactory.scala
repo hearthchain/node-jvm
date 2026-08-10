@@ -16,7 +16,7 @@ object TransactionFactory {
     *
     * A CommitToGeneration request is the one case that needs more than a signing key: it registers the account's own
     * generator keys, so it carries their public keys and a proof of possession for each. Those come from
-    * `waves.miner.accounts` through [[GeneratorKeys]], and so does the key it is signed with - an account commits to
+    * `hearth.miner.accounts` through [[GeneratorKeys]], and so does the key it is signed with - an account commits to
     * generating for itself, and the wallet holds neither the generator keys nor, necessarily, that account.
     */
   def parseRequestAndSign(
@@ -51,12 +51,12 @@ object TransactionFactory {
       }
       signingKey <- generatorKeys
         .signingKey(address)
-        .toRight(GenericError(s"$address is not one of this node's generators, see waves.miner.accounts"))
+        .toRight(GenericError(s"$address is not one of this node's generators, see hearth.miner.accounts"))
       periodStart <- ((request \ "generationPeriodStart").asOpt[Int] orElse generationPeriodStart)
         .toRight(GenericError("missing generation period start"))
       commitment <- generatorKeys
         .commitment(address, Height(periodStart))
-        .toRight(GenericError(s"$address is not one of this node's generators, see waves.miner.accounts"))
+        .toRight(GenericError(s"$address is not one of this node's generators, see hearth.miner.accounts"))
       overrides = Json.obj(
         "senderPublicKey"        -> PublicKey(signingKey.publicKey()).toString,
         "generationPeriodStart"  -> periodStart,
@@ -69,7 +69,7 @@ object TransactionFactory {
     } yield tx.signWith(signingKey)
 
   /** Signs with a key the caller already has. A CommitToGeneration request cannot be completed this way: its generator
-    * public keys and proofs of possession come from `waves.miner.accounts`, which a caller holding a lone signing key
+    * public keys and proofs of possession come from `hearth.miner.accounts`, which a caller holding a lone signing key
     * does not have - such a request has to carry those fields itself.
     */
   def parseRequestAndSign(request: JsObject, signer: SigningKey): Either[ValidationError, Transaction] = signWith(request, signer)

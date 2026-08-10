@@ -41,13 +41,13 @@ case class MassTransferRequest(
       _transfers <- MassTransferTransaction.parseTransfersList(transfers)
       t <- MassTransferTransaction.create(
         _sender,
-        assetId.getOrElse(Asset.Waves),
+        assetId.getOrElse(Asset.Hearth),
         _transfers,
         fee,
         timestamp,
         attachment,
         proofs,
-        feeAssetId = feeAssetId.getOrElse(Asset.Waves)
+        feeAssetId = feeAssetId.getOrElse(Asset.Hearth)
       )
     } yield t
 }

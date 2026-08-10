@@ -5,7 +5,7 @@ import cats.syntax.either.*
 import tech.hearth.account.Address
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.{GenericError, OrderValidationError}
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.assets.exchange.OrderPriceMode.AssetDecimals
@@ -100,7 +100,7 @@ object ExchangeTransactionDiff {
       Seq(
         getOrderFeePortfolio(tx.buyOrder, tx.buyMatcherFee.value),
         getOrderFeePortfolio(tx.sellOrder, tx.sellMatcherFee.value),
-        Portfolio.waves(-tx.fee.value)
+        Portfolio.hearth(-tx.fee.value)
       ).foldM(Portfolio())(_.combine(_))
 
     lazy val feeDiffE =
@@ -185,7 +185,7 @@ object ExchangeTransactionDiff {
       if (order.orderType == OrderType.SELL) matchAmount
       else {
         val spend = (BigDecimal(matchAmount) * matchPrice * BigDecimal(10).pow(priceDecimals - amountDecimals - 8)).toBigInt
-        if (order.getSpendAssetId == Waves && !(spend + order.matcherFee.value).isValidLong) {
+        if (order.getSpendAssetId == Hearth && !(spend + order.matcherFee.value).isValidLong) {
           throw new ArithmeticException("BigInteger out of long range")
         } else spend.bigInteger.longValueExact()
       }
@@ -205,7 +205,7 @@ object ExchangeTransactionDiff {
       }
     }.toEither.left.map(x => GenericError(x.getMessage))
 
-  /** Calculates fee portfolio from the order (taking into account that in OrderV3 fee can be paid in asset != Waves)
+  /** Calculates fee portfolio from the order (taking into account that in OrderV3 fee can be paid in asset != Hearth)
     */
   private[diffs] def getOrderFeePortfolio(order: Order, fee: Long): Portfolio =
     Portfolio.build(order.matcherFeeAssetId, fee)

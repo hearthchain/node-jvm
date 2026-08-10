@@ -6,7 +6,7 @@ import tech.hearth.db.WithState
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.BlockchainUpdateTriggers
 import tech.hearth.history.Domain
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.{NTPTime, TestHelpers}
 import org.scalatest.{BeforeAndAfterAll, Suite}
@@ -18,13 +18,13 @@ trait SharedDomain extends BeforeAndAfterAll with NTPTime with DBCacheSettings {
   private val path = Files.createTempDirectory(s"rocks-temp-${getClass.getSimpleName}").toAbsolutePath
   private val rdb  = RDB.open(dbSettings.copy(directory = path.toAbsolutePath.toString))
 
-  def settings: WavesSettings               = DomainPresets.DeterministicFinality
+  def settings: HearthSettings              = DomainPresets.DeterministicFinality
   def genesisBalances: Seq[AddrWithBalance] = Seq.empty
 
   // Genesis balances are part of the genesis snapshot, which is built from the settings the state is created with.
   // defaultSigner is always committed as the generator here, so it also has to be funded for its genesis deposit -
   // unless the spec's own genesisBalances already fund it.
-  protected lazy val domainSettings: WavesSettings = {
+  protected lazy val domainSettings: HearthSettings = {
     val balancesWithMiner =
       if (genesisBalances.exists(_.address == TxHelpers.defaultSigner.toAddress)) genesisBalances
       else AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: genesisBalances

@@ -4,7 +4,7 @@ import com.google.common.primitives.Bytes
 import tech.hearth.common.state.ByteStr
 import tech.hearth.serialization.Deser
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves, WavesName}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth, HearthName}
 import tech.hearth.transaction.assets.exchange.Validation.booleanOperators
 import play.api.libs.json.{JsObject, Json}
 
@@ -37,13 +37,13 @@ object AssetPair {
   }
 
   def assetIdStr(aid: Asset): String = aid match {
-    case Waves           => WavesName
+    case Hearth          => HearthName
     case IssuedAsset(id) => id.toString
   }
 
   def extractAssetId(a: String): Try[Asset] = a match {
-    case `WavesName` => Success(Waves)
-    case other       => ByteStr.decodeBase16(other).map(IssuedAsset(_))
+    case `HearthName` => Success(Hearth)
+    case other        => ByteStr.decodeBase16(other).map(IssuedAsset(_))
   }
 
   def createAssetPair(amountAsset: String, priceAsset: String): Try[AssetPair] =

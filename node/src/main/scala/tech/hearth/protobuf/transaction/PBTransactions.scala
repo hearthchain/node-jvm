@@ -9,7 +9,7 @@ import tech.hearth.protobuf.transaction.Transaction.Data
 import tech.hearth.protobuf.utils.PBImplicitConversions.*
 import tech.hearth.state.Height
 import tech.hearth.transaction as vt
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.{GenericError, NegativeAmount}
 import tech.hearth.transaction.serialization.impl.PBTransactionSerializer
 import tech.hearth.transaction.transfer.MassTransferTransaction
@@ -23,7 +23,7 @@ object PBTransactions {
       sender: tech.hearth.account.PublicKey,
       chainId: Byte = 0,
       fee: Long = 0L,
-      feeAssetId: VanillaAssetId = Waves,
+      feeAssetId: VanillaAssetId = Hearth,
       timestamp: Long = 0L,
       proofsArray: Seq[tech.hearth.common.state.ByteStr] = Nil,
       data: tech.hearth.protobuf.transaction.Transaction.Data = tech.hearth.protobuf.transaction.Transaction.Data.Empty
@@ -211,7 +211,7 @@ object PBTransactions {
             vrfCommitmentSignature = vrfCommitmentSignature.toByteString
           )
         )
-        PBTransactions.create(sender, chainId, fee.value, Waves, timestamp, proofs.proofs, data)
+        PBTransactions.create(sender, chainId, fee.value, Hearth, timestamp, proofs.proofs, data)
 
       case _ =>
         throw new IllegalArgumentException(s"Unsupported transaction: $tx")

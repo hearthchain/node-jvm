@@ -9,11 +9,11 @@ import tech.hearth.common.utils.Base16
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.defaultSigner
 import tech.hearth.protobuf.transaction.PBTransactions
-import tech.hearth.settings.{GenesisAssetSettings, WavesSettings}
+import tech.hearth.settings.{GenesisAssetSettings, HearthSettings}
 import tech.hearth.test.DomainPresets.withGenesisAssets
 import tech.hearth.state.Height
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TransactionType
 import tech.hearth.transaction.TxHelpers.defaultAddress
 import tech.hearth.transaction.assets.exchange.{Order, OrderType}
@@ -50,7 +50,7 @@ class TransactionsRouteSpec
   private val tradedAsset         = IssuedAsset(ByteStr(new Array[Byte](AssetIdLength)))
   private val tradedAssetQuantity = 100_000_000L
 
-  override def settings: WavesSettings = {
+  override def settings: HearthSettings = {
     val base = DomainPresets.DeterministicFinality.copy(restAPISettings = restAPISettings.copy(transactionsByAddressLimit = 5))
     // signer(500) is one of this node's generators, so that a CommitToGeneration can be signed for it
     base
@@ -67,8 +67,8 @@ class TransactionsRouteSpec
   }
 
   override def genesisBalances: Seq[AddrWithBalance] = Seq(
-    AddrWithBalance(richAddress, 1_000_000.waves),
-    AddrWithBalance(defaultAddress, 1_000_000.waves, assets = Map(tradedAsset -> tradedAssetQuantity))
+    AddrWithBalance(richAddress, 1_000_000.hearth),
+    AddrWithBalance(defaultAddress, 1_000_000.hearth, assets = Map(tradedAsset -> tradedAssetQuantity))
   )
 
   private val transactionsApiRoute = new TransactionsApiRoute(
@@ -91,7 +91,7 @@ class TransactionsRouteSpec
   private val invalidHexGen = choose(0, 10).map(n => "1" * (n * 2) + "zz")
 
   routePath("/calculateFee") - {
-    "waves" in {
+    "hearth" in {
       val transferTx = Json.obj(
         "type"            -> 4,
         "version"         -> 1,
@@ -115,11 +115,11 @@ class TransactionsRouteSpec
     val sender    = TxHelpers.signer(20)
     val recipient = TxHelpers.signer(21)
 
-    val lease       = TxHelpers.lease(sender, recipient.toAddress, 5.waves)
+    val lease       = TxHelpers.lease(sender, recipient.toAddress, 5.hearth)
     val leaseCancel = TxHelpers.leaseCancel(lease.id(), sender)
 
     domain.appendBlock(
-      TxHelpers.transfer(richAccount, sender.toAddress, 6.waves),
+      TxHelpers.transfer(richAccount, sender.toAddress, 6.hearth),
       lease
     )
 
@@ -133,7 +133,7 @@ class TransactionsRouteSpec
                   |  "id" : "${leaseCancel.id()}",
                   |  "sender" : "${sender.toAddress}",
                   |  "senderPublicKey" : "${PublicKey(sender.publicKey())}",
-                  |  "fee" : ${0.001.waves},
+                  |  "fee" : ${0.001.hearth},
                   |  "feeAssetId" : null,
                   |  "timestamp" : ${leaseCancel.timestamp},
                   |  "proofs" : [ "${leaseCancel.signature}" ],
@@ -145,7 +145,7 @@ class TransactionsRouteSpec
                   |    "originTransactionId" : "${lease.id()}",
                   |    "sender" : "${sender.toAddress}",
                   |    "recipient" : "${recipient.toAddress}",
-                  |    "amount" : ${5.waves},
+                  |    "amount" : ${5.hearth},
                   |    "height" : $height,
                   |    "status" : "$status",
                   |    "cancelHeight" : ${cancelHeight.getOrElse("null")},
@@ -226,7 +226,7 @@ class TransactionsRouteSpec
     }
 
     "large-significand-format" in {
-      val transferTxn           = TxHelpers.transfer(richAccount, TxHelpers.address(930), 10.waves)
+      val transferTxn           = TxHelpers.transfer(richAccount, TxHelpers.address(930), 10.hearth)
       val commitToGenerationTxn = TxHelpers.commitToGeneration(Height(3001), richAccount)
       domain.appendBlock(transferTxn, commitToGenerationTxn)
 
@@ -256,10 +256,10 @@ class TransactionsRouteSpec
       val lessor         = TxHelpers.signer(250)
       val leaseRecipient = TxHelpers.address(251)
 
-      val lease = TxHelpers.lease(lessor, leaseRecipient, 22.waves)
+      val lease = TxHelpers.lease(lessor, leaseRecipient, 22.hearth)
 
       domain.appendBlock(
-        TxHelpers.transfer(richAccount, lessor.toAddress, 25.waves),
+        TxHelpers.transfer(richAccount, lessor.toAddress, 25.hearth),
         lease
       )
 
@@ -290,7 +290,7 @@ class TransactionsRouteSpec
                                     |    "originTransactionId" : "${lease.id()}",
                                     |    "sender" : "${lessor.toAddress}",
                                     |    "recipient" : "$leaseRecipient",
-                                    |    "amount" : ${22.waves},
+                                    |    "amount" : ${22.hearth},
                                     |    "height" : $leaseHeight,
                                     |    "status" : "canceled",
                                     |    "cancelHeight" : $cancelHeight,
@@ -324,8 +324,8 @@ class TransactionsRouteSpec
 
     "working properly otherwise" in {
       val sender = TxHelpers.signer(1195)
-      val tx1    = TxHelpers.transfer(richAccount, sender.toAddress, 5.waves)
-      val tx2    = TxHelpers.transfer(sender, richAddress, 1.waves)
+      val tx1    = TxHelpers.transfer(richAccount, sender.toAddress, 5.hearth)
+      val tx2    = TxHelpers.transfer(sender, richAddress, 1.hearth)
 
       domain.appendBlock(tx1, tx2)
 
@@ -342,7 +342,7 @@ class TransactionsRouteSpec
   routePath("/unconfirmed") - {
     "returns the list of unconfirmed transactions" in {
       domain.utxPool.removeAll(domain.utxPool.all)
-      val txs = Seq.tabulate(20)(a => TxHelpers.transfer(richAccount, amount = (a + 1).waves))
+      val txs = Seq.tabulate(20)(a => TxHelpers.transfer(richAccount, amount = (a + 1).hearth))
       txs.foreach(t => domain.utxPool.putIfNew(t))
       Get(routePath("/unconfirmed")) ~> route ~> check {
         val txIds = responseAs[Seq[JsValue]].map(v => (v \ "id").as[String])
@@ -354,7 +354,7 @@ class TransactionsRouteSpec
     routePath("/unconfirmed/size") - {
       "returns the size of unconfirmed transactions" in {
         domain.utxPool.removeAll(domain.utxPool.all)
-        val txs = Seq.tabulate(20)(a => TxHelpers.transfer(richAccount, amount = (a + 1).waves))
+        val txs = Seq.tabulate(20)(a => TxHelpers.transfer(richAccount, amount = (a + 1).hearth))
         txs.foreach(t => domain.utxPool.putIfNew(t))
         Get(routePath("/unconfirmed/size")) ~> route ~> check {
           status shouldEqual StatusCodes.OK
@@ -375,7 +375,7 @@ class TransactionsRouteSpec
       }
 
       "working properly otherwise" in {
-        val tx = TxHelpers.transfer(richAccount, defaultAddress, 20.waves)
+        val tx = TxHelpers.transfer(richAccount, defaultAddress, 20.hearth)
         domain.utxPool.putIfNew(tx)
         Get(routePath(s"/unconfirmed/info/${tx.id().toString}")) ~> route ~> check {
           status shouldEqual StatusCodes.OK
@@ -499,8 +499,8 @@ class TransactionsRouteSpec
     "returns merkle proofs" in {
       val sender = TxHelpers.signer(1390)
 
-      val tx1 = TxHelpers.transfer(richAccount, sender.toAddress, 10.waves)
-      val tx2 = TxHelpers.transfer(sender, richAddress, 1.waves)
+      val tx1 = TxHelpers.transfer(richAccount, sender.toAddress, 10.hearth)
+      val tx2 = TxHelpers.transfer(sender, richAddress, 1.hearth)
 
       domain.appendBlock(tx1, tx2)
 
@@ -526,7 +526,7 @@ class TransactionsRouteSpec
     "returns error in case of all transactions are filtered" in {
       // The genesis block carries no transactions any more - it is a snapshot - so this asks about transactions that
       // exist as ids and belong to no block
-      val unknownTransactions = Seq(TxHelpers.transfer(richAccount, TxHelpers.address(1391), 1.waves).id())
+      val unknownTransactions = Seq(TxHelpers.transfer(richAccount, TxHelpers.address(1391), 1.hearth).id())
 
       val queryParams = unknownTransactions.map(id => s"id=$id").mkString("?", "&", "")
       val requestBody = Json.obj("ids" -> unknownTransactions.map(_.toString))
@@ -576,7 +576,7 @@ class TransactionsRouteSpec
       val sender = TxHelpers.signer(1090)
 
       val transferTx = TxHelpers.transfer(from = sender)
-      domain.appendBlock(TxHelpers.transfer(richAccount, sender.toAddress, 100.waves), transferTx)
+      domain.appendBlock(TxHelpers.transfer(richAccount, sender.toAddress, 100.hearth), transferTx)
 
       val maxLimitIds      = Seq.fill(transactionsApiRoute.settings.transactionsByAddressLimit)(transferTx.id().toString)
       val moreThanLimitIds = transferTx.id().toString +: maxLimitIds
@@ -616,12 +616,12 @@ class TransactionsRouteSpec
     val issuedAsset = tradedAsset
     val exchange =
       TxHelpers.exchangeFromOrders(
-        TxHelpers.order(OrderType.BUY, Waves, issuedAsset, version = Order.V4, attachment = Some(attachment)),
-        TxHelpers.order(OrderType.SELL, Waves, issuedAsset, version = Order.V4, sender = issuer)
+        TxHelpers.order(OrderType.BUY, Hearth, issuedAsset, version = Order.V4, attachment = Some(attachment)),
+        TxHelpers.order(OrderType.SELL, Hearth, issuedAsset, version = Order.V4, sender = issuer)
       )
 
     domain.appendBlock(
-      TxHelpers.massTransfer(richAccount, Seq(sender.toAddress -> 10.waves, issuer.toAddress -> 10.waves), fee = 0.002.waves),
+      TxHelpers.massTransfer(richAccount, Seq(sender.toAddress -> 10.hearth, issuer.toAddress -> 10.hearth), fee = 0.002.hearth),
       exchange
     )
 

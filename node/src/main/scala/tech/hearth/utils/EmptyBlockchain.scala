@@ -7,7 +7,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.settings.BlockchainSettings
 import tech.hearth.state.*
 import tech.hearth.state.TxMeta.Status
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.{Asset, Transaction}
 
 trait EmptyBlockchain extends Blockchain {
@@ -39,7 +39,7 @@ trait EmptyBlockchain extends Blockchain {
   /** Block reward related */
   override def blockReward(height: Int): Option[Long] = None
 
-  override def wavesAmount(height: Int): BigInt = 0
+  override def hearthAmount(height: Int): BigInt = 0
 
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] = None
 
@@ -57,15 +57,15 @@ trait EmptyBlockchain extends Blockchain {
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = VolumeAndFee(0, 0)
 
-  /** Retrieves Waves balance snapshot in the [from, to] range (inclusive) */
-  override def balanceAtHeight(address: Address, height: Int, assetId: Asset = Waves): Option[(Int, Long)] = Option.empty
-  override def balanceSnapshots(address: Address, from: Int, to: Option[ByteStr]): Seq[BalanceSnapshot]    = Seq.empty
+  /** Retrieves Hearth balance snapshot in the [from, to] range (inclusive) */
+  override def balanceAtHeight(address: Address, height: Int, assetId: Asset = Hearth): Option[(Int, Long)] = Option.empty
+  override def balanceSnapshots(address: Address, from: Int, to: Option[ByteStr]): Seq[BalanceSnapshot]     = Seq.empty
 
   override def balance(address: Address, mayBeAssetId: Asset): Long = 0
 
   override def balances(req: Seq[(Address, Asset)]): Map[(Address, Asset), Long] = Map.empty
 
-  override def wavesBalances(addresses: Seq[Address]): Map[Address, Long] = Map.empty
+  override def hearthBalances(addresses: Seq[Address]): Map[Address, Long] = Map.empty
 
   override def effectiveBalanceBanHeights(address: Address): Seq[Int] = Seq.empty
 

@@ -5,11 +5,11 @@ import tech.hearth.Version
 /** System constants here.
   */
 object Constants {
-  val ApplicationName = "waves"
-  val AgentName       = s"Waves v${Version.VersionString}"
+  val ApplicationName = "hearth"
+  val AgentName       = s"Hearth v${Version.VersionString}"
 
-  val UnitsInWave = 100000000L
-  val TotalWaves  = 100000000L
+  val UnitsInHearth = 100000000L
+  val TotalHearth   = 100000000L
 
   lazy val TransactionNames: Map[Byte, String] =
     Map(

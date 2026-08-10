@@ -30,9 +30,9 @@ class AssetBalanceIterator(addressId: AddressId, resource: DBResource) extends A
     }(endOfData())
 }
 
-class WavesBalanceIterator(addressId: AddressId, resource: DBResource) extends AbstractIterator[(Int, Long)] {
-  private val prefixBytes: Array[Byte] = KeyTag.WavesBalanceHistory.prefixBytes ++ addressId.toByteArray
-  private val lastHeight: Int          = resource.get(Keys.wavesBalance(addressId)).height.toInt
+class HearthBalanceIterator(addressId: AddressId, resource: DBResource) extends AbstractIterator[(Int, Long)] {
+  private val prefixBytes: Array[Byte] = KeyTag.HearthBalanceHistory.prefixBytes ++ addressId.toByteArray
+  private val lastHeight: Int          = resource.get(Keys.hearthBalance(addressId)).height.toInt
 
   resource.withSafePrefixIterator(_.seekForPrev(prefixBytes ++ Ints.toByteArray(lastHeight)))(())
 

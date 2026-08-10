@@ -31,7 +31,7 @@ object FairPoSTestSuite {
   private val config =
     ConfigFactory.parseString(
       s"""
-         |waves {
+         |hearth {
          |   blockchain.custom {
          |      functionality {
          |        generation-balance-depth-from-50-to-1000-after-height = 1000

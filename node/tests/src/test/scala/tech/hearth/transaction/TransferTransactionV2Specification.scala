@@ -4,7 +4,7 @@ import tech.hearth.account.{AddressScheme, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.PropSpec
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.transfer.*
 import play.api.libs.json.Json
 
@@ -15,9 +15,9 @@ class TransferTransactionV2Specification extends PropSpec {
       val tx1 = TransferTransaction(
         PublicKey(acc2.publicKey),
         acc2.toAddress,
-        Waves,
+        Hearth,
         TxPositiveAmount.unsafeFrom(1),
-        Waves,
+        Hearth,
         TxPositiveAmount.unsafeFrom(1),
         attachment,
         1,
@@ -27,9 +27,9 @@ class TransferTransactionV2Specification extends PropSpec {
       val tx2 = TransferTransaction(
         PublicKey(acc2.publicKey),
         acc2.toAddress,
-        Waves,
+        Hearth,
         TxPositiveAmount.unsafeFrom(1),
-        Waves,
+        Hearth,
         TxPositiveAmount.unsafeFrom(1),
         attachment,
         1,
@@ -49,9 +49,9 @@ class TransferTransactionV2Specification extends PropSpec {
     val tx = TransferTransaction(
       sender,
       recipient,
-      Waves,
+      Hearth,
       TxPositiveAmount.unsafeFrom(100000000),
-      Waves,
+      Hearth,
       TxPositiveAmount.unsafeFrom(100000000),
       ByteStr.decodeBase16("66616c6166656c").get,
       1526641218066L,

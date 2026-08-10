@@ -50,7 +50,7 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
       fs,
       Seq(AddrWithBalance(master.toAddress))
     ) { (_, state) =>
-      val portfolio       = state.wavesPortfolio(lease1.sender.toAddress)
+      val portfolio       = state.hearthPortfolio(lease1.sender.toAddress)
       val expectedBalance = xfer1.amount.value + xfer2.amount.value - 2 * Fee
       portfolio.balance shouldBe expectedBalance
       state.generatingBalance(leaser.toAddress, state.lastBlockId) shouldBe 0
@@ -63,11 +63,11 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
     withDomain(RideV6) { d =>
       d.appendBlock()
       d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
-        bs(Height(2), regularBalance = 100004.waves, deposits = 1),
-        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+        bs(Height(2), regularBalance = 100004.hearth, deposits = 1),
+        bs(Height(1), regularBalance = 100000.hearth, deposits = 1)
       )
 
-      // Each round below appends a micro block carrying a 1-wavelet transfer and then a key block. The transfer and
+      // Each round below appends a micro block carrying a 1-ember transfer and then a key block. The transfer and
       // 60% of its fee - the carry the next block collects - land on the liquid block the micro block extends, so the
       // height that was liquid loses `1 + fee * 3 / 5` when the next key block makes it solid.
       //
@@ -76,70 +76,70 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
       val transfer1 = transfer(amount = 1)
       d.appendMicroBlock(transfer1)
       d.appendKeyBlock()
-      val bAt2 = 100004.waves - 1 - transfer1.fee.value * 3 / 5
+      val bAt2 = 100004.hearth - 1 - transfer1.fee.value * 3 / 5
       d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
-        bs(Height(3), regularBalance = 100008.waves - 1, deposits = 1),
+        bs(Height(3), regularBalance = 100008.hearth - 1, deposits = 1),
         bs(Height(2), regularBalance = bAt2, deposits = 1),
-        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+        bs(Height(1), regularBalance = 100000.hearth, deposits = 1)
       )
       d.blockchain.balanceSnapshots(defaultAddress, 2, None) shouldBe List(
-        bs(Height(3), regularBalance = 100008.waves - 1, deposits = 1)
+        bs(Height(3), regularBalance = 100008.hearth - 1, deposits = 1)
       )
       d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
-        bs(Height(3), regularBalance = 100008.waves - 1, deposits = 1)
+        bs(Height(3), regularBalance = 100008.hearth - 1, deposits = 1)
       )
 
       val transfer2 = transfer(amount = 1)
       d.appendMicroBlock(transfer2)
       d.appendKeyBlock()
-      val bAt3 = 100008.waves - 2 - transfer2.fee.value * 3 / 5
+      val bAt3 = 100008.hearth - 2 - transfer2.fee.value * 3 / 5
       d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
-        bs(Height(4), regularBalance = 100012.waves - 2, deposits = 1),
+        bs(Height(4), regularBalance = 100012.hearth - 2, deposits = 1),
         bs(Height(3), regularBalance = bAt3, deposits = 1),
         bs(Height(2), regularBalance = bAt2, deposits = 1),
-        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+        bs(Height(1), regularBalance = 100000.hearth, deposits = 1)
       )
       d.blockchain.balanceSnapshots(defaultAddress, 2, None) shouldBe List(
-        bs(Height(4), regularBalance = 100012.waves - 2, deposits = 1),
+        bs(Height(4), regularBalance = 100012.hearth - 2, deposits = 1),
         bs(Height(3), regularBalance = bAt3, deposits = 1),
         bs(Height(2), regularBalance = bAt2, deposits = 1)
       )
       d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
-        bs(Height(4), regularBalance = 100012.waves - 2, deposits = 1)
+        bs(Height(4), regularBalance = 100012.hearth - 2, deposits = 1)
       )
 
       val transfer3 = transfer(amount = 1)
       d.appendMicroBlock(transfer3)
       d.appendKeyBlock()
-      val bAt4 = 100012.waves - 3 - transfer3.fee.value * 3 / 5
+      val bAt4 = 100012.hearth - 3 - transfer3.fee.value * 3 / 5
       d.blockchain.balanceSnapshots(defaultAddress, 1, None) shouldBe List(
-        bs(Height(5), regularBalance = 100016.waves - 3, deposits = 1),
+        bs(Height(5), regularBalance = 100016.hearth - 3, deposits = 1),
         bs(Height(4), regularBalance = bAt4, deposits = 1),
         bs(Height(3), regularBalance = bAt3, deposits = 1),
         bs(Height(2), regularBalance = bAt2, deposits = 1),
-        bs(Height(1), regularBalance = 100000.waves, deposits = 1)
+        bs(Height(1), regularBalance = 100000.hearth, deposits = 1)
       )
       d.blockchain.balanceSnapshots(defaultAddress, 3, None) shouldBe List(
-        bs(Height(5), regularBalance = 100016.waves - 3, deposits = 1),
+        bs(Height(5), regularBalance = 100016.hearth - 3, deposits = 1),
         bs(Height(4), regularBalance = bAt4, deposits = 1),
         bs(Height(3), regularBalance = bAt3, deposits = 1)
       )
       d.blockchain.balanceSnapshots(defaultAddress, 4, None) shouldBe List(
-        bs(Height(5), regularBalance = 100016.waves - 3, deposits = 1)
+        bs(Height(5), regularBalance = 100016.hearth - 3, deposits = 1)
       )
     }
   }
 
   property("correct balance snapshots") {
-    val transferTx   = transfer(to = signer(1).toAddress, amount = 3.waves, fee = 0.1.waves)
-    val leaseTx      = lease(recipient = signer(1).toAddress, amount = 2.waves, fee = 0.1.waves)
-    val startBalance = 7.waves
+    val transferTx   = transfer(to = signer(1).toAddress, amount = 3.hearth, fee = 0.1.hearth)
+    val leaseTx      = lease(recipient = signer(1).toAddress, amount = 2.hearth, fee = 0.1.hearth)
+    val startBalance = 7.hearth
     // defaultSigner generates the blocks below, so it is a committed generator: its deposit is locked on top of what
     // it spends, and shows up in the snapshots as `deposits` rather than as a deduction from the regular balance.
-    val genesisBalance = startBalance + CommitToGenerationTransaction.DepositInWavelets
+    val genesisBalance = startBalance + CommitToGenerationTransaction.DepositInEmbers
 
-    // 2 txs in 1 a non-genesis block. The miner keeps 4 of the 6 waves a block pays - the DAO share is deducted.
-    val minerReward = 4.waves
+    // 2 txs in 1 a non-genesis block. The miner keeps 4 of the 6 hearth a block pays - the DAO share is deducted.
+    val minerReward = 4.hearth
     val feeReward   = (transferTx.fee.value + leaseTx.fee.value) * 2 / 5
     val feeCost     = transferTx.fee.value + leaseTx.fee.value
 
@@ -237,5 +237,5 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
   }
 
   private def bs(height: Height, regularBalance: Long, leaseIn: Long = 0, leaseOut: Long = 0, deposits: Int = 0): BalanceSnapshot =
-    BalanceSnapshot(height, regularBalance, leaseIn, leaseOut, CommitToGenerationTransaction.DepositInWavelets * deposits)
+    BalanceSnapshot(height, regularBalance, leaseIn, leaseOut, CommitToGenerationTransaction.DepositInEmbers * deposits)
 }

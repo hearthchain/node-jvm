@@ -11,7 +11,7 @@ import tech.hearth.metrics.TxProcessingStats.measureForType
 import tech.hearth.state.TxMeta.Status
 import tech.hearth.state.{Blockchain, NewTransactionInfo, Portfolio, StateSnapshot}
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.*
 import tech.hearth.transaction.assets.*
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order}
@@ -159,7 +159,7 @@ object TransactionDiffer {
   private def validateOrder(blockchain: Blockchain, order: Order, matcherFee: Long): Either[ValidationError, Unit] =
     for {
       _ <- order.matcherFeeAssetId match {
-        case Waves => Right(())
+        case Hearth => Right(())
         case asset @ IssuedAsset(_) =>
           blockchain
             .assetDescription(asset)
@@ -175,7 +175,7 @@ object TransactionDiffer {
     tx match {
       case ptx: ProvenTransaction =>
         ptx.assetFee match {
-          case (Waves, fee) => Map[Address, Portfolio](ptx.sender.toAddress -> Portfolio(-fee)).asRight
+          case (Hearth, fee) => Map[Address, Portfolio](ptx.sender.toAddress -> Portfolio(-fee)).asRight
           case (asset @ IssuedAsset(_), fee) =>
             for {
               minFee <- blockchain

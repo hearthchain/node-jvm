@@ -12,7 +12,7 @@ import tech.hearth.it.TransferSending.Req
 import tech.hearth.it.api.AsyncHttpApi.*
 import tech.hearth.it.api.Transaction
 import tech.hearth.transaction.TxHelpers
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TransactionType
 import tech.hearth.transaction.transfer.*
 import tech.hearth.utils.ScorexLogging
@@ -112,9 +112,9 @@ trait TransferSending extends ScorexLogging {
             keyPairFromSeed(Base16.decode(x.senderSeed)),
             Address.fromString(x.targetAddress).explicitGet(),
             x.amount,
-            Waves,
+            Hearth,
             x.fee,
-            Waves,
+            Hearth,
             if (includeAttachment)
               ByteStr(Array.fill(TransferTransaction.MaxAttachmentSize)(ThreadLocalRandom.current().nextInt().toByte))
             else ByteStr.empty,

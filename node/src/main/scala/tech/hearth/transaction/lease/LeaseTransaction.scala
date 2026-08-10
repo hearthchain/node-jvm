@@ -20,7 +20,7 @@ final case class LeaseTransaction(
     chainId: Byte
 ) extends Transaction(TransactionType.Lease),
       ProvenTransaction,
-      TxWithFee.InWaves,
+      TxWithFee.InHearth,
       FastHashId {
   type T = LeaseTransaction
 
@@ -43,7 +43,7 @@ object LeaseTransaction {
   ): Either[ValidationError, LeaseTransaction] = {
     for {
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, "waves"))
+      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, "hearth"))
       tx     <- LeaseTransaction(sender, recipient, amount, fee, timestamp, proofs, chainId).validatedEither
     } yield tx
 

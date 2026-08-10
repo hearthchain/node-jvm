@@ -4,7 +4,7 @@ import tech.hearth.account.{AddressScheme, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.transfer.MassTransferTransaction.{MaxTransferCount, ParsedTransfer, Transfer}
@@ -34,7 +34,7 @@ class MassTransferTransactionSpecification extends PropSpec {
   private val massTransfers = for {
     chainId   <- Seq(Byte.MinValue, 0: Byte, AddressScheme.current.chainId, Byte.MaxValue)
     version   <- massTransferTxSupportedVersions
-    asset     <- Seq(Waves, asset)
+    asset     <- Seq(Hearth, asset)
     recipient <- Seq(recipient.toAddress)
     fee       <- Seq(1, Long.MaxValue)
     transfers <- Seq(
@@ -122,7 +122,7 @@ class MassTransferTransactionSpecification extends PropSpec {
     val tx = MassTransferTransaction
       .create(
         PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
-        Waves,
+        Hearth,
         transfers,
         200000,
         1518091313964L,

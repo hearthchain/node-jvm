@@ -25,7 +25,7 @@ case class ExchangeTransaction(
     chainId: Byte
 ) extends Transaction(TransactionType.Exchange),
       ProvenTransaction,
-      TxWithFee.InWaves,
+      TxWithFee.InHearth,
       FastHashId {
 
   override type T = ExchangeTransaction

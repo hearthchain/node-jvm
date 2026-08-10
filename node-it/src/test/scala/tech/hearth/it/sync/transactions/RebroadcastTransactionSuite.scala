@@ -10,7 +10,7 @@ import tech.hearth.it.NodeConfigs.*
 import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.sync.*
 import tech.hearth.it.transactions.{BaseTransactionSuite, NodesFromDocker}
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 
 class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDocker {
@@ -31,9 +31,9 @@ class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDoc
         nodeAIsMiner.keyPair,
         Address.fromString(nodeBIsNotMiner.address).explicitGet(),
         transferAmount,
-        Waves,
+        Hearth,
         minFee,
-        Waves
+        Hearth
       )
       .json()
 
@@ -56,9 +56,9 @@ class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDoc
         nodeAIsMiner.keyPair,
         Address.fromString(nodeBIsNotMiner.address).explicitGet(),
         transferAmount,
-        Waves,
+        Hearth,
         minFee,
-        Waves
+        Hearth
       )
       .json()
 
@@ -80,9 +80,9 @@ class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDoc
         nodeAIsMiner.keyPair,
         Address.fromString(nodeBIsNotMiner.address).explicitGet(),
         transferAmount,
-        Waves,
+        Hearth,
         minFee,
-        Waves
+        Hearth
       )
       .json()
 
@@ -100,11 +100,11 @@ class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDoc
 }
 object RebroadcastTransactionSuite {
   private val configWithRebroadcastAllowed =
-    parseString("waves.synchronization.utx-synchronizer.allow-tx-rebroadcasting = true")
+    parseString("hearth.synchronization.utx-synchronizer.allow-tx-rebroadcasting = true")
 
   private val configWithRebroadcastNotAllowed =
-    parseString("waves.synchronization.utx-synchronizer.allow-tx-rebroadcasting = false")
+    parseString("hearth.synchronization.utx-synchronizer.allow-tx-rebroadcasting = false")
 
   private def configWithMinimumPeers(n: Int) =
-    parseString(s"waves.rest-api.minimum-peers = $n")
+    parseString(s"hearth.rest-api.minimum-peers = $n")
 }

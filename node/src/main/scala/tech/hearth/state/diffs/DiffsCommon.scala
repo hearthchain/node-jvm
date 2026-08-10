@@ -5,7 +5,7 @@ import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.{Blockchain, Height, LeaseBalance, LeaseDetails, LeaseStaticInfo, Portfolio, StateSnapshot, TransactionId}
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxPositiveAmount
 import tech.hearth.transaction.TxValidationError.GenericError
 
@@ -32,7 +32,7 @@ object DiffsCommon {
         GenericError(s"Lease with id=$leaseId is already in the state")
       )
       leaseBalance    = blockchain.leaseBalance(senderAddress)
-      senderBalance   = blockchain.balance(senderAddress, Waves)
+      senderBalance   = blockchain.balance(senderAddress, Hearth)
       requiredBalance = amount.value + fee
       _ <- Either.cond(
         senderBalance - leaseBalance.out >= requiredBalance,

@@ -2,7 +2,7 @@ package tech.hearth.history
 
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import org.scalacheck.Gen
 import org.scalatest.Suite
 import org.scalatestplus.scalacheck.{ScalaCheckDrivenPropertyChecks as GeneratorDrivenPropertyChecks}
@@ -20,7 +20,7 @@ trait DomainScenarioDrivenPropertyCheck extends WithDomain { suite: Suite & Gene
     */
   def scenario[S](
       gen: Gen[S],
-      bs: WavesSettings = DefaultWavesSettings,
+      bs: HearthSettings = DefaultHearthSettings,
       balances: S => Seq[AddrWithBalance] = (_: S) => Seq.empty[AddrWithBalance],
       generators: S => Seq[SigningKey] = (_: S) => Seq.empty[SigningKey]
   )(assertion: (Domain, S) => Any): Any =

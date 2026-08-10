@@ -129,23 +129,23 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
         )
     }
 
-    val wavesSettings = {
+    val hearthSettings = {
       val config = ConfigFactory
         .parseString("""
-                       |waves.miner {
+                       |hearth.miner {
                        |  quorum = 0
                        |  interval-after-last-block-then-generation-is-allowed = 0
                        |}
                        |
-                       |waves.features.supported=[2]
+                       |hearth.features.supported=[2]
                        |""".stripMargin)
         .withFallback(ConfigFactory.load())
 
-      WavesSettings.fromRootConfig(loadConfig(config))
+      HearthSettings.fromRootConfig(loadConfig(config))
     }
 
     val blockchainSettings = {
-      val bs = wavesSettings.blockchainSettings
+      val bs = hearthSettings.blockchainSettings
       val fs = bs.functionalitySettings
       bs.copy(functionalitySettings = fs.copy(preActivatedFeatures = Map(2.toShort -> 0)))
     }
@@ -154,12 +154,12 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
       val scheduler   = Scheduler.singleThread("appender")
       val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
       val utxPool =
-        new UtxPoolImpl(ntpTime, blockchainUpdater, wavesSettings.utxSettings, wavesSettings.maxTxErrorLogSize, wavesSettings.minerSettings.enable)
-      val pos = PoSSelector(blockchainUpdater, wavesSettings.synchronizationSettings.maxBaseTarget)
+        new UtxPoolImpl(ntpTime, blockchainUpdater, hearthSettings.utxSettings, hearthSettings.maxTxErrorLogSize, hearthSettings.minerSettings.enable)
+      val pos = PoSSelector(blockchainUpdater, hearthSettings.synchronizationSettings.maxBaseTarget)
       new MinerImpl(
         allChannels,
         blockchainUpdater,
-        wavesSettings.copy(blockchainSettings = blockchainSettings).minerSettings,
+        hearthSettings.copy(blockchainSettings = blockchainSettings).minerSettings,
         ntpTime,
         utxPool,
         BlockEndorser.Disabled,

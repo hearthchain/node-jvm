@@ -54,7 +54,7 @@ object TransferTransaction {
       chainId: Byte = AddressScheme.current.chainId
   ): Either[ValidationError, TransferTransaction] =
     for {
-      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, asset.maybeBase16Repr.getOrElse("waves")))
+      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, asset.maybeBase16Repr.getOrElse("hearth")))
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
       tx     <- TransferTransaction(sender, recipient, asset, amount, feeAsset, fee, attachment, timestamp, proofs, chainId).validatedEither
     } yield tx

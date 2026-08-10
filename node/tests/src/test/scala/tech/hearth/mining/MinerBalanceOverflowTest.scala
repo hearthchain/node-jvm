@@ -9,10 +9,10 @@ import org.scalatest.matchers.should.Matchers
 class MinerBalanceOverflowTest extends FlatSpec with Matchers with WithDomain {
   "Miner balance" should "not overflow" in withDomain(
     DomainPresets.RideV4WithRewards,
-    Seq(AddrWithBalance(TxHelpers.defaultAddress, Long.MaxValue - 1.waves)),
+    Seq(AddrWithBalance(TxHelpers.defaultAddress, Long.MaxValue - 1.hearth)),
     generators = Seq(TxHelpers.defaultSigner)
   ) { d =>
-    d.appendBlockE() should produce("Waves balance sum overflow")
+    d.appendBlockE() should produce("Hearth balance sum overflow")
     val minerBalance = d.blockchain.balance(TxHelpers.defaultAddress)
     minerBalance shouldBe >(0L)
   }

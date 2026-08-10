@@ -11,7 +11,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.metrics.BlockStats
 import tech.hearth.network.*
 import tech.hearth.network.MicroBlockSynchronizer.MicroblockData
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
 import tech.hearth.state.appender.MaxTimeDrift
@@ -42,7 +42,7 @@ class BlockChallengerImpl(
     blockchainUpdater: BlockchainUpdater & Blockchain,
     allChannels: ChannelGroup,
     generatorKeys: GeneratorKeys,
-    settings: WavesSettings,
+    settings: HearthSettings,
     timeService: Time,
     pos: PoSSelector,
     appendBlock: Block => Task[Either[ValidationError, BlockApplyResult]],
@@ -254,7 +254,7 @@ class BlockChallengerImpl(
     case err @ Left(_)      => Task(err)
   }
 
-  private def blockFeatures(blockchain: Blockchain, settings: WavesSettings): Seq[Short] = {
+  private def blockFeatures(blockchain: Blockchain, settings: HearthSettings): Seq[Short] = {
     val exclude = blockchain.approvedFeatures.keySet ++ settings.blockchainSettings.functionalitySettings.preActivatedFeatures.keySet
 
     settings.minerSettings.supportedFeatures

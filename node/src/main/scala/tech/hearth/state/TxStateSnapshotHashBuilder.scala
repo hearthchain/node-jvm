@@ -10,7 +10,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.state.TxMeta.Status
 import tech.hearth.state.diffs.BlockDiffer.CurrentBlockFeePart
 import tech.hearth.state.diffs.TransactionDiffer
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.smart.script.trace.TracedResult
 import tech.hearth.transaction.Transaction
 import org.bouncycastle.crypto.digests.Blake2bDigest
@@ -36,7 +36,7 @@ object TxStateSnapshotHashBuilder {
 
     snapshot.balances.foreach { case ((address, asset), balance) =>
       asset match {
-        case Waves              => changedKeys += address.toBytes ++ Longs.toByteArray(balance)
+        case Hearth             => changedKeys += address.toBytes ++ Longs.toByteArray(balance)
         case asset: IssuedAsset => changedKeys += address.toBytes ++ asset.id.arr ++ Longs.toByteArray(balance)
       }
     }

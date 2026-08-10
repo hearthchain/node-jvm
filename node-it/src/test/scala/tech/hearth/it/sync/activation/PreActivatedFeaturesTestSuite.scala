@@ -68,7 +68,7 @@ object PreActivatedFeaturesTestSuite {
   val votingInterval    = 10
   val featureNum: Short = BlockchainFeatures.SmallerMinimalGeneratingBalance.id
   val featureDescr      = BlockchainFeatures.SmallerMinimalGeneratingBalance.description
-  private val supportedConfig = ConfigFactory.parseString(s"""waves {
+  private val supportedConfig = ConfigFactory.parseString(s"""hearth {
                                                              |  blockchain.custom.functionality {
                                                              |    pre-activated-features = {}
                                                              |    feature-check-blocks-period = $votingInterval
@@ -77,7 +77,7 @@ object PreActivatedFeaturesTestSuite {
                                                              |  miner.supported-features = [$featureNum]
                                                              |  miner.quorum = 1
                                                              |}""".stripMargin)
-  private val preactivatedConfig = ConfigFactory.parseString(s"""waves {
+  private val preactivatedConfig = ConfigFactory.parseString(s"""hearth {
                                                                 |  blockchain.custom.functionality {
                                                                 |  feature-check-blocks-period = $votingInterval
                                                                 |  pre-activated-features {

@@ -17,9 +17,9 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
   private val ApprovalPeriod      = 100
   private val BlocksForActivation = (ApprovalPeriod * 0.9).toInt
 
-  private val WavesSettings = history.DefaultWavesSettings.copy(
-    blockchainSettings = history.DefaultWavesSettings.blockchainSettings.copy(
-      functionalitySettings = history.DefaultWavesSettings.blockchainSettings.functionalitySettings
+  private val HearthSettings = history.DefaultHearthSettings.copy(
+    blockchainSettings = history.DefaultHearthSettings.blockchainSettings.copy(
+      functionalitySettings = history.DefaultHearthSettings.blockchainSettings.functionalitySettings
         .copy(featureCheckBlocksPeriod = ApprovalPeriod, blocksForFeatureActivation = BlocksForActivation, preActivatedFeatures = Map.empty)
     ),
     // Off by default: most tests here vote a chain into activating a feature the node does not implement, and with this
@@ -28,12 +28,12 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     autoShutdownOnUnsupportedFeature = false
   )
 
-  private val WavesSettingsWithShutdown =
-    WavesSettings.copy(autoShutdownOnUnsupportedFeature = true)
+  private val HearthSettingsWithShutdown =
+    HearthSettings.copy(autoShutdownOnUnsupportedFeature = true)
 
-  private val WavesSettingsWithDoubling = WavesSettings.copy(
-    blockchainSettings = WavesSettings.blockchainSettings.copy(
-      functionalitySettings = WavesSettings.blockchainSettings.functionalitySettings.copy(preActivatedFeatures = Map.empty)
+  private val HearthSettingsWithDoubling = HearthSettings.copy(
+    blockchainSettings = HearthSettings.blockchainSettings.copy(
+      functionalitySettings = HearthSettings.blockchainSettings.functionalitySettings.copy(preActivatedFeatures = Map.empty)
     )
   )
 
@@ -43,7 +43,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     blockchainUpdater.processBlock(block)
   }
 
-  "features approved and accepted as height grows" in withDomain(WavesSettings) { domain =>
+  "features approved and accepted as height grows" in withDomain(HearthSettings) { domain =>
     val b = domain.blockchainUpdater
 
     b.processBlock(genesisBlock)
@@ -80,7 +80,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     b.featureStatus(3, 3 * ApprovalPeriod) shouldBe BlockchainFeatureStatus.Undefined
   }
 
-  "features rollback with block rollback" in withDomain(WavesSettings) { domain =>
+  "features rollback with block rollback" in withDomain(HearthSettings) { domain =>
     val b = domain.blockchainUpdater
     b.processBlock(genesisBlock)
 
@@ -157,7 +157,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       }
     }
 
-    "without votes for already activated feature" in withDomain(WavesSettings) { domain =>
+    "without votes for already activated feature" in withDomain(HearthSettings) { domain =>
       val b = domain.blockchainUpdater
       b.processBlock(genesisBlock)
 
@@ -191,7 +191,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       )
     }
 
-    "with votes for already activated feature" in withDomain(WavesSettings) { domain =>
+    "with votes for already activated feature" in withDomain(HearthSettings) { domain =>
       val b = domain.blockchainUpdater
       b.processBlock(genesisBlock)
 
@@ -217,7 +217,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       )
     }
 
-    "with multiple voting periods rollback" in withDomain(WavesSettings) { domain =>
+    "with multiple voting periods rollback" in withDomain(HearthSettings) { domain =>
       val b = domain.blockchainUpdater
       b.processBlock(genesisBlock)
 
@@ -293,7 +293,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       b.featureStatus(1, rollbackToHeight) shouldBe BlockchainFeatureStatus.Undefined
     }
 
-    "when not enough votes after rollback - should not approve and activate the feature" in withDomain(WavesSettings) { domain =>
+    "when not enough votes after rollback - should not approve and activate the feature" in withDomain(HearthSettings) { domain =>
       val b = domain.blockchainUpdater
       appendAndRollback(b, BlocksForActivation) // 1st blocks is genesis, BlocksForActivation - 1 votes
 
@@ -315,7 +315,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       b.featureStatus(1, newHeight) shouldBe BlockchainFeatureStatus.Undefined
     }
 
-    "when enough votes after rollback - should approve and activate the feature" in withDomain(WavesSettings) { domain =>
+    "when enough votes after rollback - should approve and activate the feature" in withDomain(HearthSettings) { domain =>
       val b = domain.blockchainUpdater
       appendAndRollback(b, BlocksForActivation + 1) // 1st blocks is genesis, BlocksForActivation - 1 + 1 votes
 
@@ -338,7 +338,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     }
   }
 
-  "feature activation height is not overridden with further periods" in withDomain(WavesSettings) { domain =>
+  "feature activation height is not overridden with further periods" in withDomain(HearthSettings) { domain =>
     val b = domain.blockchainUpdater
 
     b.processBlock(genesisBlock)
@@ -361,7 +361,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
   }
 
   "feature activated only by 90% of blocks" - {
-    "negative with insufficient votes" in withDomain(WavesSettings) { domain =>
+    "negative with insufficient votes" in withDomain(HearthSettings) { domain =>
       val b = domain.blockchainUpdater
       b.processBlock(genesisBlock)
 
@@ -382,7 +382,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
       b.featureStatus(1, ApprovalPeriod * 2) shouldBe BlockchainFeatureStatus.Undefined
     }
 
-    "positive" in withDomain(WavesSettings) { domain =>
+    "positive" in withDomain(HearthSettings) { domain =>
       val b = domain.blockchainUpdater
       b.processBlock(genesisBlock)
 
@@ -398,7 +398,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     }
   }
 
-  "features votes resets when voting window changes" in withDomain(WavesSettings) { domain =>
+  "features votes resets when voting window changes" in withDomain(HearthSettings) { domain =>
     val b = domain.blockchainUpdater
 
     b.processBlock(genesisBlock)
@@ -422,7 +422,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
 
   "block processing should fail if unimplemented feature was activated on blockchain when autoShutdownOnUnsupportedFeature = yes and exit with code 38" in {
     val stopProbe = fatalStopProbe(UnsupportedFeature)
-    withDomain(WavesSettingsWithShutdown, onFatalStop = stopProbe.onFatalStop) { domain =>
+    withDomain(HearthSettingsWithShutdown, onFatalStop = stopProbe.onFatalStop) { domain =>
       val b = domain.blockchainUpdater
       b.processBlock(genesisBlock)
 
@@ -439,7 +439,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     }
   }
 
-  "sunny day test when known feature activated" in withDomain(WavesSettings) { domain =>
+  "sunny day test when known feature activated" in withDomain(HearthSettings) { domain =>
     val b = domain.blockchainUpdater
     b.processBlock(genesisBlock)
 
@@ -452,7 +452,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     b.featureStatus(1, b.height) should be(BlockchainFeatureStatus.Activated)
   }
 
-  "empty blocks should not disable activation" in withDomain(WavesSettings) { domain =>
+  "empty blocks should not disable activation" in withDomain(HearthSettings) { domain =>
     val b = domain.blockchainUpdater
 
     b.processBlock(genesisBlock)
@@ -492,7 +492,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
     b.featureStatus(2, b.height) should be(BlockchainFeatureStatus.Activated)
   }
 
-  "doubling of feature periods works in the middle of activation period" in withDomain(WavesSettingsWithDoubling) { domain =>
+  "doubling of feature periods works in the middle of activation period" in withDomain(HearthSettingsWithDoubling) { domain =>
     val b = domain.blockchainUpdater
 
     b.processBlock(genesisBlock)
@@ -526,7 +526,7 @@ class BlockchainUpdaterTest extends FreeSpec with HistoryTest with WithDomain wi
    * the setting that used to turn doubling on is gone from FunctionalitySettings. What is left to check is that a
    * window is the same length late in the chain as it is at the start, which is what the counts below say.
    */
-  "feature periods keep their length at any height" in withDomain(WavesSettingsWithDoubling) { domain =>
+  "feature periods keep their length at any height" in withDomain(HearthSettingsWithDoubling) { domain =>
     val b = domain.blockchainUpdater
 
     b.processBlock(genesisBlock)

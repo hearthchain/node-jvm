@@ -7,7 +7,7 @@ import tech.hearth.it.keyPairFromSeed
 import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.api.{Transaction, TransactionInfo}
 import tech.hearth.state.Height
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange.{Order, OrderType}
 import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
 import tech.hearth.transaction.{TxExchangeAmount, TxExchangePrice, TxHelpers}
@@ -19,7 +19,7 @@ import play.api.libs.json.{JsString, JsValue, Json}
 
 class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
   override protected def nodeConfigs: Seq[Config] = Seq(
-    Miners(1).quorum(0).overrides("waves.miner.micro-block-interval = 5s"), // when UTX is empty, retry building microblock in 2 seconds
+    Miners(1).quorum(0).overrides("hearth.miner.micro-block-interval = 5s"), // when UTX is empty, retry building microblock in 2 seconds
     NotMiner
   )
 
@@ -78,7 +78,7 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     val ts = System.currentTimeMillis()
     val buyOrder = TxHelpers.order(
       OrderType.BUY,
-      Waves,
+      Hearth,
       GenesisAssets.TestAsset,
       sender = exchanger,
       matcher = exchanger,
@@ -91,7 +91,7 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     )
     val sellOrder = TxHelpers.order(
       OrderType.SELL,
-      Waves,
+      Hearth,
       GenesisAssets.TestAsset,
       sender = exchanger,
       matcher = exchanger,
@@ -210,12 +210,12 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     val rewardsAsInteger = sender.rewardStatus()
     val rewards          = sender.rewardStatus(amountsAsStrings = true)
     val rewardsByHeight  = sender.rewardStatus(Some(currentHeight), amountsAsStrings = true)
-    rewards.totalWavesAmount shouldBe rewardsAsInteger.totalWavesAmount
+    rewards.totalHearthAmount shouldBe rewardsAsInteger.totalHearthAmount
     rewards.currentReward shouldBe rewardsAsInteger.currentReward
-    rewards.minIncrement shouldBe rewardsAsInteger.minIncrement
-    rewardsByHeight.totalWavesAmount shouldBe rewardsAsInteger.totalWavesAmount
+    rewards.cEmit shouldBe rewardsAsInteger.cEmit
+    rewardsByHeight.totalHearthAmount shouldBe rewardsAsInteger.totalHearthAmount
     rewardsByHeight.currentReward shouldBe rewardsAsInteger.currentReward
-    rewardsByHeight.minIncrement shouldBe rewardsAsInteger.minIncrement
+    rewardsByHeight.cEmit shouldBe rewardsAsInteger.cEmit
   }
 
   test("amount as string in debug api") {
@@ -223,12 +223,12 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
 
     sender.debugBalanceHistory(firstAddress, amountsAsStrings = true).head.balance shouldBe firstBalance
 
-    val stateWavesOnHeight = sender.getWithCustomHeader(
-      s"/debug/stateWaves/${sender.height}",
+    val stateHearthOnHeight = sender.getWithCustomHeader(
+      s"/debug/stateHearth/${sender.height}",
       headerValue = "application/json;large-significand-format=string",
       withApiKey = true
     )
-    (parseResponse(stateWavesOnHeight) \ firstAddress).get shouldBe JsString(firstBalance.toString)
+    (parseResponse(stateHearthOnHeight) \ firstAddress).get shouldBe JsString(firstBalance.toString)
   }
 
   private def parseResponse(response: Response): JsValue = Json.parse(response.getResponseBody)

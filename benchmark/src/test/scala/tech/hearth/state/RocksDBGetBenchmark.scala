@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import com.typesafe.config.ConfigFactory
 import tech.hearth.database.RDB
-import tech.hearth.settings.{WavesSettings, loadConfig}
+import tech.hearth.settings.{HearthSettings, loadConfig}
 import tech.hearth.state.RocksDBGetBenchmark.*
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
@@ -47,12 +47,12 @@ object RocksDBGetBenchmark {
 
   @State(Scope.Benchmark)
   class BaseSt {
-    private val wavesSettings: WavesSettings =
-      WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    private val hearthSettings: HearthSettings =
+      HearthSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
 
     val rdb: RDB = {
       val dir = Files.createTempDirectory("state-synthetic").toAbsolutePath.toString
-      RDB.open(wavesSettings.dbSettings.copy(directory = dir))
+      RDB.open(hearthSettings.dbSettings.copy(directory = dir))
     }
 
     val kvs: Map[Array[Byte], Array[Byte]] = (1 to 10000).map { idx =>

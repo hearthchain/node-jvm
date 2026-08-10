@@ -12,6 +12,7 @@ import tech.hearth.database.{RDB, RocksDBWriter, TestStorageFactory}
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.UtxEvent
+import tech.hearth.history.DefaultRewardsSettings
 import tech.hearth.history.Domain.BlockchainUpdaterExt
 import tech.hearth.mining.*
 import tech.hearth.settings.*
@@ -19,7 +20,7 @@ import tech.hearth.state.*
 import tech.hearth.state.diffs.*
 import tech.hearth.state.utils.TestRocksDB
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.{GenericError, SenderIsBlacklisted}
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
@@ -58,13 +59,13 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
 
   private def withBlockchain[A](genAccounts: Map[Address, Long])(test: BlockchainUpdaterImpl => A): A = {
     val genesisSettings = TestHelpers.genesisSettings()
-    val origSettings    = WavesSettings.default()
+    val origSettings    = HearthSettings.default()
     val settings = origSettings.copy(
       blockchainSettings = BlockchainSettings(
         'T',
         FunctionalitySettings.TESTNET,
         genesisSettings,
-        RewardsSettings.TESTNET,
+        DefaultRewardsSettings,
         predefinedSnapshots = Seq(TestHelpers.genesisSnapshotSettings(genAccounts))
       ),
       autoShutdownOnUnsupportedFeature = false
@@ -94,9 +95,9 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
       from = sender,
       to = recipient.toAddress,
       amount = amount,
-      asset = Waves,
+      asset = Hearth,
       fee = fee,
-      feeAsset = Waves,
+      feeAsset = Hearth,
       attachment = ByteStr.empty
     ))
       .label("transferTransaction")
@@ -134,7 +135,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
           isMiningEnabled = true
         )
       val amountPart = (senderBalance - extraFee) / 2 - extraFee
-      val txs = for (_ <- 1 to 10) yield createWavesTransfer(sender, recipient.toAddress, amountPart, extraFee, time.getTimestamp()).explicitGet()
+      val txs = for (_ <- 1 to 10) yield createHearthTransfer(sender, recipient.toAddress, amountPart, extraFee, time.getTimestamp()).explicitGet()
       test(utx, time, txs, 2000.millis)
     }
 
@@ -263,9 +264,9 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
       from = sender,
       to = TxHelpers.address(2),
       amount = 1,
-      asset = Waves,
+      asset = Hearth,
       fee = extraFee,
-      feeAsset = Waves,
+      feeAsset = Hearth,
       attachment = ByteStr.empty
     )
 
@@ -274,9 +275,9 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
       from = sender,
       to = recipient.toAddress,
       amount = 1,
-      asset = Waves,
+      asset = Hearth,
       fee = extraFee,
-      feeAsset = Waves,
+      feeAsset = Hearth,
       attachment = ByteStr.empty
     )
 
@@ -284,7 +285,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
     val amount    = maxAmount / (recipients.size + 1)
     val transfers = recipients.map(r => ParsedTransfer(r.toAddress, TxNonNegativeAmount.unsafeFrom(amount)))
     val minFee    = FeeValidation.FeeConstants(TransactionType.Transfer) + FeeValidation.FeeConstants(TransactionType.MassTransfer) * transfers.size
-    TxHelpers.massTransfer(sender, transfers.map(t => (t.address, t.amount.value)), Waves, minFee)
+    TxHelpers.massTransfer(sender, transfers.map(t => (t.address, t.amount.value)), Hearth, minFee)
   }
 
   private def utxTest(utxSettings: UtxSettings, txCount: Int = 10)(f: (Seq[TransferTransaction], UtxPool, TestTime) => Unit): Unit = {
@@ -426,13 +427,13 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
     "processes transaction fees" in {
       val blockMiner    = TxHelpers.signer(1200)
       val recipient     = TxHelpers.signer(1201)
-      val initialAmount = 10000.waves
+      val initialAmount = 10000.hearth
       // The deposit it holds as a committed generator is locked, so it has to be funded on top of what it spends
-      val minerBalance = initialAmount + 0.001.waves * 2 + CommitToGenerationTransaction.DepositInWavelets
+      val minerBalance = initialAmount + 0.001.hearth * 2 + CommitToGenerationTransaction.DepositInEmbers
 
       withDomain(DomainPresets.NG, balances = Seq(AddrWithBalance(blockMiner.toAddress, minerBalance)), generators = Seq(blockMiner)) { d =>
-        val transfer1 = TxHelpers.transfer(blockMiner, recipient.toAddress, amount = initialAmount, fee = 0.001.waves)
-        val transfer2 = TxHelpers.transfer(blockMiner, recipient.toAddress, amount = 0.0004.waves, fee = 0.001.waves)
+        val transfer1 = TxHelpers.transfer(blockMiner, recipient.toAddress, amount = initialAmount, fee = 0.001.hearth)
+        val transfer2 = TxHelpers.transfer(blockMiner, recipient.toAddress, amount = 0.0004.hearth, fee = 0.001.hearth)
         d.appendBlock(d.createBlock(generator = blockMiner))
         d.utxPool.addTransaction(transfer1, verify = true)
         d.utxPool.addTransaction(transfer2, verify = true)
@@ -485,11 +486,11 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
 
     "cleanup" - {
       // The deposit of the generator withDomain commits is locked, so it comes on top: what this address can spend
-      // is still the 11 waves the transfers below are measured against
+      // is still the 11 hearth the transfers below are measured against
       "doesnt take the composite snapshot into account" in withDomain(
-        balances = Seq(AddrWithBalance(TxHelpers.defaultAddress, 11.waves + CommitToGenerationTransaction.DepositInWavelets))
+        balances = Seq(AddrWithBalance(TxHelpers.defaultAddress, 11.hearth + CommitToGenerationTransaction.DepositInEmbers))
       ) { d =>
-        val transfers = Seq.fill(10)(TxHelpers.transfer(amount = 10.waves))
+        val transfers = Seq.fill(10)(TxHelpers.transfer(amount = 10.hearth))
         transfers.foreach(tx => d.utxPool.addTransaction(tx, verify = false))
         d.utxPool.cleanUnconfirmed()
         d.utxPool.nonPriorityTransactions.toSet shouldBe transfers.toSet
@@ -508,9 +509,9 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
             from = richAcc,
             to = secondAcc.toAddress,
             amount = 1L,
-            asset = Waves,
+            asset = Hearth,
             fee = fee,
-            feeAsset = Waves,
+            feeAsset = Hearth,
             attachment = ByteStr.empty,
             timestamp = ts
           )
@@ -518,9 +519,9 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
             from = secondAcc,
             to = richAcc.toAddress,
             amount = 2L,
-            asset = Waves,
+            asset = Hearth,
             fee = fee,
-            feeAsset = Waves,
+            feeAsset = Hearth,
             attachment = ByteStr.empty,
             timestamp = ts
           )
@@ -535,8 +536,8 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
               new UtxPoolImpl(
                 time,
                 d.blockchainUpdater,
-                WavesSettings.default().utxSettings,
-                WavesSettings.default().maxTxErrorLogSize,
+                HearthSettings.default().utxSettings,
+                HearthSettings.default().maxTxErrorLogSize,
                 isMiningEnabled = true,
                 events += _
               )

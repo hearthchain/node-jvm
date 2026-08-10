@@ -1,7 +1,7 @@
 package tech.hearth.state
 
 import cats.syntax.option.*
-import tech.hearth.settings.{FunctionalitySettings, WavesSettings}
+import tech.hearth.settings.{FunctionalitySettings, HearthSettings}
 
 case class GenerationPeriod(start: Height, length: Int) extends Ordered[GenerationPeriod] {
   def end: Height = start + length - 1
@@ -22,8 +22,8 @@ case class GenerationPeriod(start: Height, length: Int) extends Ordered[Generati
 }
 
 object GenerationPeriod {
-  def from(h: Height, wavesSettings: WavesSettings): GenerationPeriod =
-    from(h, wavesSettings.blockchainSettings.functionalitySettings)
+  def from(h: Height, hearthSettings: HearthSettings): GenerationPeriod =
+    from(h, hearthSettings.blockchainSettings.functionalitySettings)
 
   def from(h: Height, functionalitySettings: FunctionalitySettings): GenerationPeriod =
     from(h, functionalitySettings.generationPeriodLength)

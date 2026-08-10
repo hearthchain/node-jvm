@@ -27,9 +27,9 @@ case class TransferRequest(
       tx <- TransferTransaction.create(
         validSender,
         validRecipient,
-        assetId.getOrElse(Asset.Waves),
+        assetId.getOrElse(Asset.Hearth),
         amount,
-        feeAssetId.getOrElse(Asset.Waves),
+        feeAssetId.getOrElse(Asset.Hearth),
         fee,
         attachment.getOrElse(ByteStr.empty),
         timestamp.getOrElse(0L),

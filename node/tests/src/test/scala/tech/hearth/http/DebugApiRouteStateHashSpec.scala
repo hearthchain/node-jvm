@@ -8,7 +8,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.mining.TestMiner
 import tech.hearth.network.PeerDatabase
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.{Blockchain, Height}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
@@ -31,7 +31,7 @@ class DebugApiRouteStateHashSpec
       OptionValues,
       SharedSchedulerMixin {
 
-  override def settings: WavesSettings = DomainPresets.TransactionStateSnapshot
+  override def settings: HearthSettings = DomainPresets.TransactionStateSnapshot
     .copy(
       dbSettings = DomainPresets.TransactionStateSnapshot.dbSettings.copy(storeStateHashes = true),
       restAPISettings = restAPISettings
@@ -44,9 +44,9 @@ class DebugApiRouteStateHashSpec
   private val thirdGenerator  = TxHelpers.signer(907)
 
   override def genesisBalances: Seq[AddrWithBalance] = Seq(
-    AddrWithBalance(TxHelpers.defaultSigner.toAddress, 10_000.waves),
-    AddrWithBalance(secondGenerator.toAddress, 11_000.waves),
-    AddrWithBalance(thirdGenerator.toAddress, 12_000.waves)
+    AddrWithBalance(TxHelpers.defaultSigner.toAddress, 10_000.hearth),
+    AddrWithBalance(secondGenerator.toAddress, 11_000.hearth),
+    AddrWithBalance(thirdGenerator.toAddress, 12_000.hearth)
   )
 
   val block: Block = TestBlock.create(Nil).block
@@ -93,7 +93,7 @@ class DebugApiRouteStateHashSpec
         val afterGeneratingBalanceUpdateHeader = domain.blockchain.blockHeader(afterGeneratingBalanceUpdateHeight).value
         val expectedResponseAfter = Json.obj(
           "stateHash"                      -> "88d74439c56a50252a40af206954021451ae6999598cdbb5e4dc3a92bedac6b5",
-          "wavesBalanceHash"               -> "877c92d02612bbef786e6e69d5c213047607c083ea641f46ab99943d1d5c2d22",
+          "hearthBalanceHash"              -> "877c92d02612bbef786e6e69d5c213047607c083ea641f46ab99943d1d5c2d22",
           "assetBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseStatusHash"                -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
@@ -125,7 +125,7 @@ class DebugApiRouteStateHashSpec
         val headerOnGenerationPeriod = domain.blockchain.blockHeader(heightOnGenerationPeriod).value
         val expectedResponseAfter2 = Json.obj(
           "stateHash"                      -> "f0fe639be392fc4e6ed1ba411da7172d9f93775df0dc2c1cc98f073591821a22",
-          "wavesBalanceHash"               -> "571af75a738868f8a2316a48943e6fccc714a55d1e429537a307d1533fa6f796",
+          "hearthBalanceHash"              -> "571af75a738868f8a2316a48943e6fccc714a55d1e429537a307d1533fa6f796",
           "assetBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseStatusHash"                -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",

@@ -6,7 +6,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.protobuf.transaction.PBRecipients
 import tech.hearth.state.TransactionId
 import tech.hearth.transaction.Asset
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 
 import scala.annotation.targetName
 
@@ -27,7 +27,7 @@ package object protobuf {
     def toByteStr: ByteStr           = ByteStr(bs.toByteArray)
     def toTxId: TransactionId        = TransactionId(toByteStr)
     def toIssuedAssetId: IssuedAsset = IssuedAsset(ByteStr(bs.toByteArray))
-    def toAssetId: Asset             = if (bs.isEmpty) Waves else toIssuedAssetId
+    def toAssetId: Asset             = if (bs.isEmpty) Hearth else toIssuedAssetId
     def toPublicKey: PublicKey       = PublicKey(bs.toByteArray)
     def toAddress: Address =
       PBRecipients

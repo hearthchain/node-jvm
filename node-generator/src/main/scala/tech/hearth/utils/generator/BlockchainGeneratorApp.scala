@@ -53,8 +53,8 @@ object BlockchainGeneratorApp extends ScorexLogging {
       import builder.*
 
       OParser.sequence(
-        programName("waves blockchain generator"),
-        head("Waves Blockchain Generator", Version.VersionString),
+        programName("hearth blockchain generator"),
+        head("Hearth Blockchain Generator", Version.VersionString),
         opt[File]("genesis-config")
           .required()
           .abbr("gc")
@@ -109,18 +109,18 @@ object BlockchainGeneratorApp extends ScorexLogging {
     log.info(s"Initial base target is ${genesis.initialBaseTarget}")
 
     val blockchainSettings = BlockchainSettings(genSettings.chainId.toChar, genSettings.functionalitySettings, genesis, RewardsSettings.MAINNET)
-    val wavesSettings = {
-      val settings = WavesSettings.fromRootConfig(loadConfig(options.configFile.map(readConfFile)))
+    val hearthSettings = {
+      val settings = HearthSettings.fromRootConfig(loadConfig(options.configFile.map(readConfFile)))
       settings.copy(blockchainSettings = blockchainSettings, minerSettings = settings.minerSettings.copy(quorum = 0))
     }
 
     val fakeTime = new FakeTime(genSettings.timestamp.getOrElse(System.currentTimeMillis()))
 
     val blockchain = {
-      val rdb = RDB.open(wavesSettings.dbSettings)
+      val rdb = RDB.open(hearthSettings.dbSettings)
       val (blockchainUpdater, rdbWriter) =
-        StorageFactory(wavesSettings, rdb, fakeTime, BlockchainUpdateTriggers.noop)
-      tech.hearth.checkGenesis(wavesSettings, blockchainUpdater, Miner.StrictDisabledMiner)
+        StorageFactory(hearthSettings, rdb, fakeTime, BlockchainUpdateTriggers.noop)
+      tech.hearth.checkGenesis(hearthSettings, blockchainUpdater, Miner.StrictDisabledMiner)
       sys.addShutdownHook(synchronized {
         blockchainUpdater.shutdown()
         rdbWriter.close()
@@ -135,13 +135,13 @@ object BlockchainGeneratorApp extends ScorexLogging {
         (info.signingKey, info.vrfKey)
     }
 
-    val utx = new UtxPoolImpl(fakeTime, blockchain, wavesSettings.utxSettings, wavesSettings.maxTxErrorLogSize, wavesSettings.minerSettings.enable)
+    val utx = new UtxPoolImpl(fakeTime, blockchain, hearthSettings.utxSettings, hearthSettings.maxTxErrorLogSize, hearthSettings.minerSettings.enable)
     val posSelector = PoSSelector(blockchain, None)
     val utxEvents   = ConcurrentSubject.publish[UtxEvent](using scheduler)
     val miner = new MinerImpl(
       new DefaultChannelGroup("", null),
       blockchain,
-      wavesSettings.minerSettings,
+      hearthSettings.minerSettings,
       fakeTime,
       utx,
       BlockEndorser.Disabled,

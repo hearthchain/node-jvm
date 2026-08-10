@@ -12,7 +12,7 @@ import tech.hearth.state.Height
 object NodeConfigs {
 
   /** Assets declared in template.conf's height-1 `predefined-snapshots` entry - there is no issue transaction any
-    * more, so a test that needs an existing non-WAVES asset has to reference one of these instead of minting one
+    * more, so a test that needs an existing non-HRTH asset has to reference one of these instead of minting one
     * at runtime.
     */
   object GenesisAssets {
@@ -36,16 +36,16 @@ object NodeConfigs {
 
   extension (c: Config) {
     def overrides(s: String): Config = ConfigFactory.parseString(s).withFallback(c)
-    def quorum(n: Int): Config       = overrides(s"waves.miner.quorum = $n")
+    def quorum(n: Int): Config       = overrides(s"hearth.miner.quorum = $n")
     def preactivatedFeatures(fs: PreactivatedFeature*): Config = overrides(
-      s"""waves.blockchain.custom.functionality.pre-activated-features {
+      s"""hearth.blockchain.custom.functionality.pre-activated-features {
         ${fs.map(f => s"${f.feature.id} = ${f.activationHeight}").mkString("\n")}
       }"""
     )
     def minAssetInfoUpdateInterval(blocks: Int): Config =
-      overrides(s"waves.blockchain.custom.functionality.min-asset-info-update-interval = $blocks")
+      overrides(s"hearth.blockchain.custom.functionality.min-asset-info-update-interval = $blocks")
 
-    def notMiner: Config = overrides("waves.miner.enable = no")
+    def notMiner: Config = overrides("hearth.miner.enable = no")
   }
 
   def newBuilder: Builder = Builder(Default, Default.size, Seq.empty)
@@ -86,7 +86,7 @@ object NodeConfigs {
 
       val bc =
         if (totalEntities > 1) baseConfigs
-        else baseConfigs.map(ConfigFactory.parseString("waves.network.max-outbound-connections = 0").withFallback)
+        else baseConfigs.map(ConfigFactory.parseString("hearth.network.max-outbound-connections = 0").withFallback)
 
       val (defaultNodes: Seq[Config], specialNodes: Seq[Config]) = bc.zipWithIndex
         .collect { case (x, i) if NonConflictingNodes.contains(i + 1) => x }
@@ -100,19 +100,19 @@ object NodeConfigs {
 
   object Templates {
     def raw(x: String): String = x
-    def quorum(n: Int): String = s"waves.miner.quorum = $n"
+    def quorum(n: Int): String = s"hearth.miner.quorum = $n"
     def preactivatedFeatures(f: (Int, Height)*): String = {
       s"""
-         |waves.blockchain.custom.functionality.pre-activated-features {
+         |hearth.blockchain.custom.functionality.pre-activated-features {
          ${f.map { case (id, height) => s"|  $id = $height" }.mkString("\n")}
          |}""".stripMargin
     }
     def minAssetInfoUpdateInterval(blocks: Int): String =
-      s"waves.blockchain.custom.functionality.min-asset-info-update-interval = $blocks"
+      s"hearth.blockchain.custom.functionality.min-asset-info-update-interval = $blocks"
 
-    val nonMiner: String = "waves.miner.enable = no"
+    val nonMiner: String = "hearth.miner.enable = no"
 
-    val lightNode: String = "waves.enable-light-mode = true"
+    val lightNode: String = "hearth.enable-light-mode = true"
   }
 
 }

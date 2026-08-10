@@ -5,8 +5,6 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.settings.Constants
 import tech.hearth.state.diffs.BlockDiffer.Fraction
 
-import scala.annotation.unused
-
 object BlockRewardCalculator {
 
   case class BlockRewardShares(miner: Long, daoAddress: Long) {
@@ -19,13 +17,23 @@ object BlockRewardCalculator {
   val CurrentBlockRewardPart: Fraction   = Fraction(1, 3)
   val RemaindRewardAddressPart: Fraction = Fraction(1, 2)
 
-  val FullRewardInit: Long        = 6 * Constants.UnitsInWave
-  val MaxAddressReward: Long      = 2 * Constants.UnitsInWave
-  val GuaranteedMinerReward: Long = 2 * Constants.UnitsInWave
+  val FullRewardInit: Long        = 6 * Constants.UnitsInHearth
+  val MaxAddressReward: Long      = 2 * Constants.UnitsInHearth
+  val GuaranteedMinerReward: Long = 2 * Constants.UnitsInHearth
   val RewardBoost                 = 10
 
-  def fullRewardAt(@unused height: Height, blockchain: Blockchain): Long =
-    blockchain.settings.rewardsSettings.initial
+  // The genesis block (height 1) earns no reward (see mkInitialSnapshot); the emission curve's own h=0 is the
+  // first block that does, height 2.
+  private val FirstRewardedHeight = Height(2)
+
+  def fullRewardAt(height: Height, blockchain: Blockchain): Long = {
+    val h = height - FirstRewardedHeight
+    if (h < 0) 0L
+    else {
+      val settings = blockchain.settings.rewardsSettings
+      EmissionCurve.rewardAt(h, settings.initialReward, settings.decayRatioFixed)
+    }
+  }
 
   def rewardSharesAt(
       height: Height,

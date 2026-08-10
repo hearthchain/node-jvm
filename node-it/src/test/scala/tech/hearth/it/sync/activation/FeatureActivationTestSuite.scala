@@ -16,7 +16,7 @@ class FeatureActivationTestSuite extends BaseFreeSpec with ActivationStatusReque
 
   import NodeConfigs.*
   override protected def nodeConfigs: Seq[Config] =
-    Seq(BiggestMiner, Miners(5)).map(_.overrides(s"""waves {
+    Seq(BiggestMiner, Miners(5)).map(_.overrides(s"""hearth {
                                                     |  blockchain.custom.functionality {
                                                     |    pre-activated-features = {}
                                                     |    feature-check-blocks-period = $votingInterval

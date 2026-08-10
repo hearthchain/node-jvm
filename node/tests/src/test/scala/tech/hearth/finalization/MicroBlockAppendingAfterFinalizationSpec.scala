@@ -121,9 +121,9 @@ class MicroBlockAppendingAfterFinalizationSpec extends BaseFinalizationSpec {
 
     val generators = Seq(generator1, generator2, generator3)
     val initBalances = Seq(
-      AddrWithBalance(generator1.toAddress, 5000.waves),
-      AddrWithBalance(generator2.toAddress, 2000.waves),
-      AddrWithBalance(generator3.toAddress, 3000.waves)
+      AddrWithBalance(generator1.toAddress, 5000.hearth),
+      AddrWithBalance(generator2.toAddress, 2000.hearth),
+      AddrWithBalance(generator3.toAddress, 3000.hearth)
     )
 
     withDomain(defaultSettings, initBalances, generators = generators) { d =>
@@ -174,8 +174,8 @@ class MicroBlockAppendingAfterFinalizationSpec extends BaseFinalizationSpec {
   "checks BLS signature in microblock" in {
     val generators = Seq(generator1, generator2)
     val initBalances = Seq(
-      AddrWithBalance(generator1.toAddress, 5000.waves),
-      AddrWithBalance(generator2.toAddress, 2000.waves)
+      AddrWithBalance(generator1.toAddress, 5000.hearth),
+      AddrWithBalance(generator2.toAddress, 2000.hearth)
     )
 
     withDomain(defaultSettings, initBalances, generators = generators) { d =>

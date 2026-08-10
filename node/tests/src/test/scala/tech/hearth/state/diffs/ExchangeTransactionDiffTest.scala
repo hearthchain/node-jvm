@@ -1,5 +1,6 @@
 package tech.hearth.state.diffs
 
+import tech.hearth.history.withFlatReward
 import tech.hearth.account.{Address, AddressScheme, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
@@ -8,14 +9,14 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.lang.ValidationError
 import tech.hearth.protobuf.transaction.{PBTransactions, SignedTransaction as PBSignedTransaction}
-import tech.hearth.settings.{Constants, FunctionalitySettings, GenesisAssetSettings, TestFunctionalitySettings, WavesSettings}
+import tech.hearth.settings.{Constants, FunctionalitySettings, GenesisAssetSettings, TestFunctionalitySettings, HearthSettings}
 import tech.hearth.state.*
 import tech.hearth.state.diffs.ExchangeTransactionDiff.getOrderFeePortfolio
 import tech.hearth.state.diffs.TransactionDiffer.TransactionValidationError
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxHelpers.defaultAddress
 import tech.hearth.transaction.TxValidationError.AccountBalanceError
 import tech.hearth.transaction.assets.exchange.*
@@ -29,13 +30,13 @@ import scala.util.Random
 
 class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain with EitherValues with TestWallet {
 
-  private def wavesPortfolio(amt: Long) = Portfolio.waves(amt)
+  private def hearthPortfolio(amt: Long) = Portfolio.hearth(amt)
 
   /** Assertions about how fees move between the traders and the matcher only balance if the block reward is not also
     * landing in the miner's account.
     */
-  private def withoutReward(ws: WavesSettings): WavesSettings =
-    ws.copy(blockchainSettings = ws.blockchainSettings.copy(rewardsSettings = ws.blockchainSettings.rewardsSettings.copy(initial = 0)))
+  private def withoutReward(ws: HearthSettings): HearthSettings =
+    ws.copy(blockchainSettings = ws.blockchainSettings.copy(rewardsSettings = withFlatReward(ws.blockchainSettings.rewardsSettings, 0)))
 
   // Predefined assets will be implemented later; for now asset-pair IDs are hardcoded.
   private def iasset(n: Int): IssuedAsset = IssuedAsset(ByteStr(Array.fill(32)(n.toByte)))
@@ -79,7 +80,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
   val fsWithRideV6: FunctionalitySettings =
     fsWithBlockV5.copy(preActivatedFeatures = fsWithBlockV5.preActivatedFeatures)
 
-  property("Preserves waves invariant, stores match info, rewards matcher") {
+  property("Preserves hearth invariant, stores match info, rewards matcher") {
 
     val preconditionsAndExchange: Seq[(Seq[AddrWithBalance], ExchangeTransaction, Seq[IssuedAsset])] = {
       val buyer   = TxHelpers.signer(1)
@@ -179,21 +180,21 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         d.appendBlock(exchange)
         d.liquidSnapshot.balances.toSeq
           .map {
-            case ((`defaultAddress`, Waves), amount) =>
+            case ((`defaultAddress`, Hearth), amount) =>
               val carryFee = -exchange.fee.value * 3 / 5
-              Waves -> (amount - d.rocksDBWriter.balance(defaultAddress, Waves) - carryFee)
+              Hearth -> (amount - d.rocksDBWriter.balance(defaultAddress, Hearth) - carryFee)
             case ((address, asset), amount) =>
               asset -> (amount - d.rocksDBWriter.balance(address, asset))
           }
           .groupMap(_._1)(_._2)
           .foreach { case (_, balances) => balances.sum shouldBe 0 }
-        d.liquidSnapshot.balances((exchange.sender.toAddress, Waves)) shouldBe
+        d.liquidSnapshot.balances((exchange.sender.toAddress, Hearth)) shouldBe
           d.rocksDBWriter.balance(exchange.sender.toAddress) + exchange.buyMatcherFee.value + exchange.sellMatcherFee.value - exchange.fee.value
       }
     }
   }
 
-  property("Preserves assets invariant (matcher's fee in one of the assets of the pair or in Waves), stores match info, rewards matcher") {
+  property("Preserves assets invariant (matcher's fee in one of the assets of the pair or in Hearth), stores match info, rewards matcher") {
     val preconditionsAndExchange: Seq[(Seq[AddrWithBalance], ExchangeTransaction)] = {
       val buyer   = TxHelpers.signer(1)
       val seller  = TxHelpers.signer(2)
@@ -252,9 +253,9 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         d.appendBlock(exchange)
         d.liquidSnapshot.balances.toSeq
           .map {
-            case ((`defaultAddress`, Waves), amount) =>
+            case ((`defaultAddress`, Hearth), amount) =>
               val carryFee = -exchange.fee.value * 3 / 5
-              Waves -> (amount - d.rocksDBWriter.balance(defaultAddress, Waves) - carryFee)
+              Hearth -> (amount - d.rocksDBWriter.balance(defaultAddress, Hearth) - carryFee)
             case ((address, asset), amount) =>
               asset -> (amount - d.rocksDBWriter.balance(address, asset))
           }
@@ -266,11 +267,11 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
           Seq(
             ExchangeTransactionDiff.getOrderFeePortfolio(exchange.buyOrder, exchange.buyMatcherFee.value),
             ExchangeTransactionDiff.getOrderFeePortfolio(exchange.sellOrder, exchange.sellMatcherFee.value),
-            wavesPortfolio(-exchange.fee.value)
+            hearthPortfolio(-exchange.fee.value)
           ).fold(Portfolio())(_.combine(_).explicitGet())
 
         d.liquidSnapshot.balances.collect {
-          case ((`sender`, Waves), balance) =>
+          case ((`sender`, Hearth), balance) =>
             balance - d.rocksDBWriter.balance(sender) shouldBe expectedMatcherPortfolio.balance
           case ((`sender`, asset: IssuedAsset), balance) =>
             balance - d.rocksDBWriter.balance(sender, asset) shouldBe expectedMatcherPortfolio.assets(asset)
@@ -372,8 +373,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         val carryFee = -exchange.fee.value * 3 / 5
         d.liquidSnapshot.balances.toSeq
           .map {
-            case ((`defaultAddress`, Waves), amount) =>
-              Waves -> (amount - d.rocksDBWriter.balance(defaultAddress, Waves) - carryFee)
+            case ((`defaultAddress`, Hearth), amount) =>
+              Hearth -> (amount - d.rocksDBWriter.balance(defaultAddress, Hearth) - carryFee)
             case ((address, asset), amount) =>
               asset -> (amount - d.rocksDBWriter.balance(address, asset))
           }
@@ -385,11 +386,11 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
           Seq(
             ExchangeTransactionDiff.getOrderFeePortfolio(exchange.buyOrder, exchange.buyMatcherFee.value),
             ExchangeTransactionDiff.getOrderFeePortfolio(exchange.sellOrder, exchange.sellMatcherFee.value),
-            wavesPortfolio(-exchange.fee.value)
+            hearthPortfolio(-exchange.fee.value)
           ).fold(Portfolio())(_.combine(_).explicitGet())
 
         d.liquidSnapshot.balances.collect {
-          case ((`sender`, Waves), balance) =>
+          case ((`sender`, Hearth), balance) =>
             balance - d.rocksDBWriter.balance(sender) shouldBe expectedMatcherPortfolio.balance
           case ((`sender`, asset: IssuedAsset), balance) =>
             balance - d.rocksDBWriter.balance(sender, asset) shouldBe expectedMatcherPortfolio.assets(asset)
@@ -505,8 +506,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       val carryFee = (massTransfer.fee.value - exchanges.map(_.fee.value).sum) * 3 / 5
       d.liquidSnapshot.balances.toSeq
         .map {
-          case ((`defaultAddress`, Waves), amount) => Waves -> (amount - d.rocksDBWriter.balance(defaultAddress, Waves) - carryFee)
-          case ((address, asset), amount)          => asset -> (amount - d.rocksDBWriter.balance(address, asset))
+          case ((`defaultAddress`, Hearth), amount) => Hearth -> (amount - d.rocksDBWriter.balance(defaultAddress, Hearth) - carryFee)
+          case ((address, asset), amount)           => asset  -> (amount - d.rocksDBWriter.balance(address, asset))
         }
         .groupMap(_._1)(_._2)
         .foreach { case (_, balanceDiff) => balanceDiff.sum shouldBe 0 }
@@ -553,7 +554,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     }
   }
 
-  property("buy waves without enough money for fee") {
+  property("buy hearth without enough money for fee") {
     val buyer   = TxHelpers.signer(1)
     val seller  = TxHelpers.signer(2)
     val matcher = TxHelpers.signer(3)
@@ -561,7 +562,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val asset      = iasset(1)
     val matcherFee = 300000L
 
-    // The buyer buys Waves and pays in `asset`, so it is the buyer that has to hold the whole issued quantity. The
+    // The buyer buys Hearth and pays in `asset`, so it is the buyer that has to hold the whole issued quantity. The
     // matcher is funded because it pays the transaction fee up front, before the matcher fees it collects are credited.
     def genesisWithBuyerBalance(buyerBalance: Long): Seq[AddrWithBalance] = Seq(
       AddrWithBalance(buyer.toAddress, buyerBalance, Map(asset -> AssetQuantity)),
@@ -573,33 +574,33 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       Seq(
         TxHelpers.exchangeFromOrders(
           TxHelpers
-            .order(OrderType.BUY, Waves, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V1),
+            .order(OrderType.BUY, Hearth, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V1),
           TxHelpers
-            .order(OrderType.SELL, Waves, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V1),
+            .order(OrderType.SELL, Hearth, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V1),
           matcher,
           fee = 300000
         ),
         TxHelpers.exchangeFromOrders(
           TxHelpers
-            .order(OrderType.BUY, Waves, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V1),
+            .order(OrderType.BUY, Hearth, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V1),
           TxHelpers
-            .order(OrderType.SELL, Waves, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V1),
+            .order(OrderType.SELL, Hearth, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V1),
           matcher,
           fee = 300000
         ),
         TxHelpers.exchangeFromOrders(
           TxHelpers
-            .order(OrderType.BUY, Waves, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V2),
+            .order(OrderType.BUY, Hearth, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V2),
           TxHelpers
-            .order(OrderType.SELL, Waves, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V2),
+            .order(OrderType.SELL, Hearth, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V2),
           matcher,
           fee = 300000
         ),
         TxHelpers.exchangeFromOrders(
           TxHelpers
-            .order(OrderType.BUY, Waves, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V3),
+            .order(OrderType.BUY, Hearth, asset, amount = 100000000L, fee = 300000, sender = buyer, matcher = matcher, version = Order.V3),
           TxHelpers
-            .order(OrderType.SELL, Waves, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V3),
+            .order(OrderType.SELL, Hearth, asset, amount = 100000000L, fee = 300000, sender = seller, matcher = matcher, version = Order.V3),
           matcher,
           fee = 300000
         )
@@ -609,27 +610,27 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val assets = Seq(genesisAsset(asset, AssetQuantity))
 
     exchanges.foreach { exchange =>
-      withDomain(withoutReward(ScriptsAndSponsorship), genesisWithBuyerBalance(1 * Constants.UnitsInWave), assets = assets) { d =>
+      withDomain(withoutReward(ScriptsAndSponsorship), genesisWithBuyerBalance(1 * Constants.UnitsInHearth), assets = assets) { d =>
         d.appendBlock(exchange)
         d.liquidSnapshot.balances.toSeq
           .map {
-            case ((`defaultAddress`, Waves), amount) =>
+            case ((`defaultAddress`, Hearth), amount) =>
               val carryFee = -exchange.fee.value * 3 / 5
-              Waves -> (amount - d.rocksDBWriter.balance(defaultAddress, Waves) - carryFee)
+              Hearth -> (amount - d.rocksDBWriter.balance(defaultAddress, Hearth) - carryFee)
             case ((address, asset), amount) =>
               asset -> (amount - d.rocksDBWriter.balance(address, asset))
           }
           .groupMap(_._1)(_._2)
           .foreach { case (_, balanceDiff) => balanceDiff.sum shouldBe 0 }
 
-        d.liquidSnapshot.balances((exchange.sender.toAddress, Waves)) shouldBe
+        d.liquidSnapshot.balances((exchange.sender.toAddress, Hearth)) shouldBe
           d.rocksDBWriter.balance(
             exchange.sender.toAddress,
-            Waves
+            Hearth
           ) + exchange.buyMatcherFee.value + exchange.sellMatcherFee.value - exchange.fee.value
       }
 
-      // The point of the property: the buyer pays the matcher fee out of what it already has, before the Waves it buys
+      // The point of the property: the buyer pays the matcher fee out of what it already has, before the Hearth it buys
       // are credited, so a balance below that fee is not enough - however much the trade is about to bring in
       withDomain(domainSettingsWithFS(fsWithBlockV5), genesisWithBuyerBalance(matcherFee - 1), assets = assets) { d =>
         d.appendBlockE(exchange) should produce("AccountBalanceError")
@@ -676,14 +677,14 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
 
     val (buyer, seller, matcher, genesis, _) = preconditions
     val buy =
-      TxHelpers.order(OrderType.BUY, issue, Waves, amount = 1000000L, fee = MatcherFee, sender = buyer, matcher = matcher, version = Order.V1)
-    val sell = TxHelpers.order(OrderType.SELL, issue, Waves, fee = MatcherFee, sender = seller, matcher = matcher, version = Order.V1)
+      TxHelpers.order(OrderType.BUY, issue, Hearth, amount = 1000000L, fee = MatcherFee, sender = buyer, matcher = matcher, version = Order.V1)
+    val sell = TxHelpers.order(OrderType.SELL, issue, Hearth, fee = MatcherFee, sender = seller, matcher = matcher, version = Order.V1)
     val tx   = createExTx(buy, sell, buy.price.value, matcher)
     assertDiffAndState(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(tx)), fs, genesis, Seq(genesisAsset(issue, AssetQuantity))) {
       case (snapshot, state) =>
         // The buy order is filled for a fraction of its amount, so its share of the matcher fee rounds down to a single
-        // wavelet - which is what the matcher is left with on top of what it started with
-        snapshot.balances((tx.sender.toAddress, Waves)) shouldBe
+        // ember - which is what the matcher is left with on top of what it started with
+        snapshot.balances((tx.sender.toAddress, Hearth)) shouldBe
           MatcherFee + tx.buyMatcherFee.value + tx.sellMatcherFee.value - tx.fee.value
         state.balance(tx.sender.toAddress) shouldBe MatcherFee + 1L
     }
@@ -712,7 +713,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val buy = TxHelpers.order(
       OrderType.BUY,
       issue,
-      Waves,
+      Hearth,
       amount = 1000L + 1,
       fee = MatcherFee,
       sender = buyer,
@@ -722,7 +723,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val sell = TxHelpers.order(
       OrderType.SELL,
       issue,
-      Waves,
+      Hearth,
       amount = 1000L + 1,
       fee = MatcherFee,
       sender = seller,
@@ -746,7 +747,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       val matcher = TxHelpers.signer(3)
 
       val issue = iasset(1)
-      // The buyer buys Waves and pays in `issue`, so it holds the whole issued quantity
+      // The buyer buys Hearth and pays in `issue`, so it holds the whole issued quantity
       val genesis =
         AddrWithBalance(buyer.toAddress, ENOUGH_AMT, Map(issue -> AssetQuantity)) +:
           AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, seller, matcher)
@@ -758,7 +759,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
 
     val buy = TxHelpers.order(
       OrderType.BUY,
-      Waves,
+      Hearth,
       issue,
       amount = 3100000000L,
       price = 238,
@@ -769,7 +770,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     )
     val sell = TxHelpers.order(
       OrderType.SELL,
-      Waves,
+      Hearth,
       issue,
       amount = 425532L,
       price = 235,
@@ -790,9 +791,9 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     )
     withDomain(ScriptsAndSponsorship, genesis, assets = Seq(genesisAsset(issue, AssetQuantity))) { d =>
       d.appendBlock(tx)
-      d.liquidSnapshot.balances((buyer.toAddress, Waves)) shouldBe d.rocksDBWriter.balance(buyer.toAddress) - 41 + 425532
-      d.liquidSnapshot.balances((seller.toAddress, Waves)) shouldBe d.rocksDBWriter.balance(seller.toAddress) - 300000 - 425532
-      d.liquidSnapshot.balances((matcher.toAddress, Waves)) shouldBe d.rocksDBWriter.balance(seller.toAddress) + 41 + 300000 - tx.fee.value
+      d.liquidSnapshot.balances((buyer.toAddress, Hearth)) shouldBe d.rocksDBWriter.balance(buyer.toAddress) - 41 + 425532
+      d.liquidSnapshot.balances((seller.toAddress, Hearth)) shouldBe d.rocksDBWriter.balance(seller.toAddress) - 300000 - 425532
+      d.liquidSnapshot.balances((matcher.toAddress, Hearth)) shouldBe d.rocksDBWriter.balance(seller.toAddress) + 41 + 300000 - tx.fee.value
     }
   }
 
@@ -966,7 +967,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     val asset   = iasset(1)
 
     def generateTx(version: Byte, mode: OrderPriceMode): ExchangeTransaction = {
-      val pair = AssetPair(asset, Waves)
+      val pair = AssetPair(asset, Hearth)
 
       val buyOrder =
         TxHelpers
@@ -1012,14 +1013,14 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       )
     }
 
-    def generateAndAppendTx(orderVersion: Byte, mode: OrderPriceMode, settings: WavesSettings = DomainPresets.RideV5): Unit = {
+    def generateAndAppendTx(orderVersion: Byte, mode: OrderPriceMode, settings: HearthSettings = DomainPresets.RideV5): Unit = {
       // defaultSigner is the seller, so it holds the whole issued quantity of `asset`
       withDomain(
         settings,
         Seq(AddrWithBalance(TxHelpers.defaultAddress, ENOUGH_AMT, Map(asset -> AssetQuantity))),
         assets = Seq(genesisAsset(asset, AssetQuantity))
       ) { d =>
-        d.helpers.creditWavesFromDefaultSigner(TxHelpers.secondAddress)
+        d.helpers.creditHearthFromDefaultSigner(TxHelpers.secondAddress)
         d.appendAndAssertSucceed(generateTx(orderVersion, mode))
       }
     }
@@ -1048,7 +1049,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       (Seq(TestBlock.create(Seq())), usdn, tidex, liquid) // Height 1: carries the genesis snapshot
     }
 
-    // Every pair below trades one of these three against Waves, in both directions across the scenarios, so both
+    // Every pair below trades one of these three against Hearth, in both directions across the scenarios, so both
     // traders hold all of them. The decimals are the point of the property - they are what the two price modes
     // normalize by - so they keep the values the real assets these are named after have.
     val assetSettings = Seq(
@@ -1100,9 +1101,9 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       TxHelpers.exchange(buyOrder, sellOrder, matcher, amount, txPrice, enoughFee, enoughFee, enoughFee)
     }
 
-    val wavesUsdn   = AssetPair(Waves, usdn)
-    val tidexWaves  = AssetPair(tidex, Waves)
-    val liquidWaves = AssetPair(liquid, Waves)
+    val hearthUsdn   = AssetPair(Hearth, usdn)
+    val tidexHearth  = AssetPair(tidex, Hearth)
+    val liquidHearth = AssetPair(liquid, Hearth)
 
     val scenarios = Table(
       (
@@ -1117,13 +1118,13 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       (
         // The transaction price is always in the normalized scale now - there is no transaction version left that would
         // read it as written, so this scenario carries the same price as the others
-        mkExchange(Order.V3, Order.V3, 55768188998L, 59260000L, 592600L, DefaultPriceMode, 592600L, DefaultPriceMode, wavesUsdn),
-        mkExchange(Order.V4, Order.V4, 55768188998L, 59260000L, 592600L, AssetDecimals, 592600L, AssetDecimals, wavesUsdn),
-        mkExchange(Order.V4, Order.V4, 55768188998L, 59260000L, 59260000L, DefaultPriceMode, 59260000L, DefaultPriceMode, wavesUsdn),
-        mkExchange(Order.V3, Order.V4, 55768188998L, 59260000L, 592600L, DefaultPriceMode, 592600L, AssetDecimals, wavesUsdn),
-        mkExchange(Order.V3, Order.V4, 55768188998L, 59260000L, 592600L, DefaultPriceMode, 59260000L, FixedDecimals, wavesUsdn),
-        mkExchange(Order.V4, Order.V3, 55768188998L, 59260000L, 592600L, AssetDecimals, 592600L, DefaultPriceMode, wavesUsdn),
-        mkExchange(Order.V4, Order.V3, 55768188998L, 59260000L, 59260000L, FixedDecimals, 592600L, DefaultPriceMode, wavesUsdn)
+        mkExchange(Order.V3, Order.V3, 55768188998L, 59260000L, 592600L, DefaultPriceMode, 592600L, DefaultPriceMode, hearthUsdn),
+        mkExchange(Order.V4, Order.V4, 55768188998L, 59260000L, 592600L, AssetDecimals, 592600L, AssetDecimals, hearthUsdn),
+        mkExchange(Order.V4, Order.V4, 55768188998L, 59260000L, 59260000L, DefaultPriceMode, 59260000L, DefaultPriceMode, hearthUsdn),
+        mkExchange(Order.V3, Order.V4, 55768188998L, 59260000L, 592600L, DefaultPriceMode, 592600L, AssetDecimals, hearthUsdn),
+        mkExchange(Order.V3, Order.V4, 55768188998L, 59260000L, 592600L, DefaultPriceMode, 59260000L, FixedDecimals, hearthUsdn),
+        mkExchange(Order.V4, Order.V3, 55768188998L, 59260000L, 592600L, AssetDecimals, 592600L, DefaultPriceMode, hearthUsdn),
+        mkExchange(Order.V4, Order.V3, 55768188998L, 59260000L, 59260000L, FixedDecimals, 592600L, DefaultPriceMode, hearthUsdn)
       ),
       (
         mkExchange(
@@ -1135,23 +1136,23 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
           DefaultPriceMode,
           35016774000000L,
           DefaultPriceMode,
-          tidexWaves
+          tidexHearth
         ),
-        mkExchange(Order.V4, Order.V4, 213L, 35016774L, 35016774000000L, AssetDecimals, 35016774000000L, AssetDecimals, tidexWaves),
-        mkExchange(Order.V4, Order.V4, 213L, 35016774L, 35016774, FixedDecimals, 35016774L, FixedDecimals, tidexWaves),
-        mkExchange(Order.V3, Order.V4, 213L, 35016774L, 35016774000000L, DefaultPriceMode, 35016774000000L, AssetDecimals, tidexWaves),
-        mkExchange(Order.V3, Order.V4, 213L, 35016774L, 35016774000000L, DefaultPriceMode, 35016774L, FixedDecimals, tidexWaves),
-        mkExchange(Order.V4, Order.V3, 213L, 35016774L, 35016774000000L, AssetDecimals, 35016774000000L, DefaultPriceMode, tidexWaves),
-        mkExchange(Order.V4, Order.V3, 213L, 35016774L, 35016774L, FixedDecimals, 35016774000000L, DefaultPriceMode, tidexWaves)
+        mkExchange(Order.V4, Order.V4, 213L, 35016774L, 35016774000000L, AssetDecimals, 35016774000000L, AssetDecimals, tidexHearth),
+        mkExchange(Order.V4, Order.V4, 213L, 35016774L, 35016774, FixedDecimals, 35016774L, FixedDecimals, tidexHearth),
+        mkExchange(Order.V3, Order.V4, 213L, 35016774L, 35016774000000L, DefaultPriceMode, 35016774000000L, AssetDecimals, tidexHearth),
+        mkExchange(Order.V3, Order.V4, 213L, 35016774L, 35016774000000L, DefaultPriceMode, 35016774L, FixedDecimals, tidexHearth),
+        mkExchange(Order.V4, Order.V3, 213L, 35016774L, 35016774000000L, AssetDecimals, 35016774000000L, DefaultPriceMode, tidexHearth),
+        mkExchange(Order.V4, Order.V3, 213L, 35016774L, 35016774L, FixedDecimals, 35016774000000L, DefaultPriceMode, tidexHearth)
       ),
       (
-        mkExchange(Order.V3, Order.V3, 2000000000L, 13898832L, 13898832L, DefaultPriceMode, 13898832L, DefaultPriceMode, liquidWaves),
-        mkExchange(Order.V4, Order.V4, 2000000000L, 13898832L, 13898832L, AssetDecimals, 13898832L, AssetDecimals, liquidWaves),
-        mkExchange(Order.V4, Order.V4, 2000000000L, 13898832L, 13898832L, FixedDecimals, 13898832L, FixedDecimals, liquidWaves),
-        mkExchange(Order.V3, Order.V4, 2000000000L, 13898832L, 13898832L, DefaultPriceMode, 13898832L, AssetDecimals, liquidWaves),
-        mkExchange(Order.V3, Order.V4, 2000000000L, 13898832L, 13898832L, DefaultPriceMode, 13898832L, FixedDecimals, liquidWaves),
-        mkExchange(Order.V4, Order.V3, 2000000000L, 13898832L, 13898832L, AssetDecimals, 13898832L, DefaultPriceMode, liquidWaves),
-        mkExchange(Order.V4, Order.V3, 2000000000L, 13898832L, 13898832L, FixedDecimals, 13898832L, DefaultPriceMode, liquidWaves)
+        mkExchange(Order.V3, Order.V3, 2000000000L, 13898832L, 13898832L, DefaultPriceMode, 13898832L, DefaultPriceMode, liquidHearth),
+        mkExchange(Order.V4, Order.V4, 2000000000L, 13898832L, 13898832L, AssetDecimals, 13898832L, AssetDecimals, liquidHearth),
+        mkExchange(Order.V4, Order.V4, 2000000000L, 13898832L, 13898832L, FixedDecimals, 13898832L, FixedDecimals, liquidHearth),
+        mkExchange(Order.V3, Order.V4, 2000000000L, 13898832L, 13898832L, DefaultPriceMode, 13898832L, AssetDecimals, liquidHearth),
+        mkExchange(Order.V3, Order.V4, 2000000000L, 13898832L, 13898832L, DefaultPriceMode, 13898832L, FixedDecimals, liquidHearth),
+        mkExchange(Order.V4, Order.V3, 2000000000L, 13898832L, 13898832L, AssetDecimals, 13898832L, DefaultPriceMode, liquidHearth),
+        mkExchange(Order.V4, Order.V3, 2000000000L, 13898832L, 13898832L, FixedDecimals, 13898832L, DefaultPriceMode, liquidHearth)
       )
     )
 
@@ -1268,7 +1269,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
   }
 
   property("buyMatcherFee/sellMatcherFee validation") {
-    val exchangeFee = 0.003.waves
+    val exchangeFee = 0.003.hearth
 
     val sender      = testWallet.generateNewAccount().get
     val priceAsset  = iasset(1)
