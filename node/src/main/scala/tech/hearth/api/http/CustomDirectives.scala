@@ -5,11 +5,10 @@ import cats.data.{Validated, ValidatedNel}
 import cats.instances.vector.*
 import cats.syntax.traverse.*
 import tech.hearth.common.state.ByteStr
-import tech.hearth.utils.{EthEncoding, ScorexLogging}
+import tech.hearth.utils.ScorexLogging
 import play.api.libs.json.JsObject
 
 import scala.concurrent.duration.DurationInt
-import scala.util.Try
 
 trait CustomDirectives extends Directives with ApiMarshallers with ScorexLogging {
   def anyParam(paramName: String, nonEmpty: Boolean = false, limit: Int = Int.MaxValue): Directive1[Iterable[String]] = {
@@ -38,12 +37,6 @@ trait CustomDirectives extends Directives with ApiMarshallers with ScorexLogging
   implicit class AnyParamStrDirectiveValidationExt(dir: Directive1[Iterable[String]]) {
     def massValidateIds: Directive1[Vector[ByteStr]] =
       dir.massValidate(str => Validated.fromTry(ByteStr.decodeBase16(str)).leftMap(_ => str)).flatMap {
-        case Validated.Valid(a)   => provide(a)
-        case Validated.Invalid(e) => complete(ApiError.InvalidIds(e.toList))
-      }
-
-    def massValidateEthereumIds: Directive1[Vector[ByteStr]] =
-      dir.massValidate(str => Validated.fromTry(Try(ByteStr(EthEncoding.toBytes(str)))).leftMap(_ => str)).flatMap {
         case Validated.Valid(a)   => provide(a)
         case Validated.Invalid(e) => complete(ApiError.InvalidIds(e.toList))
       }

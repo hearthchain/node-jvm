@@ -112,6 +112,53 @@ key to `SigningKey.fromSeed` gives `Ed25519 seed must be 32 bytes`.
 In tests, get keys from `TxHelpers`: `signer(i)`/`defaultSigner`, and `vrfKeyOf(signer)`/`defaultVrfKey` for the
 matching VRF key. Wallets hand out `SigningKey` (`Wallet.signingKey(address)`).
 
+## Dependency cleanup: web3j and blst-java
+
+`web3j` and the direct `blst-java` dependency are gone from `node`'s build. Both were legacy from the pre-fork
+Waves codebase and had shrunk to a handful of call sites, most of them dead.
+
+`web3j` turned out to have no live callers left. `EthEncoding` (its only wrapper) served three things, and every
+one was dead code: `transaction.ERC20Address`'s JSON `Format` (nothing ever serializes or deserializes that
+type), `CustomDirectives.massValidateEthereumIds` (zero call sites), and `testkit`'s `Domain.solidStateSnapshot()`
+(computed inside `makeStateSolid()`, whose return value is discarded at its only call site,
+`liquidAndSolidAssert`). All three were deleted outright rather than reimplemented, along with the dead
+`Keys.assetStaticInfo(addr: ERC20Address)` overload. The one live `web3j` use, `P256Curve`'s `toBytesPadded` (pads
+a `BigInteger` to a fixed-length unsigned byte array, used by the P-256 certificate-chain verification path),
+moved to `org.bouncycastle.util.BigIntegers.asUnsignedByteArray`, an existing hard dependency (`bcprov-jdk18on`)
+that already does the same thing.
+
+BLS (`crypto.bls.BlsUtils`/`BlsKeyPair`) no longer imports `supranational.blst` directly; it calls
+`tech.hearth.crypto.BlsKey` instead. `blst-java` itself is still on the classpath (`tech.hearth:crypto`'s own pom
+depends on it), just not as a direct dependency of this repo any more.
+
+This repo's BLS scheme did not match what `tech.hearth.crypto.BlsKey` shipped with. `BlsKey.sign`/`verify`/
+`fastAggregateVerify` hardcode the eth2 proof-of-possession ciphersuite DST (`..._POP_`); this repo signs block
+endorsements and generation commitments under the Basic (unaugmented, `..._NUL_`) DST instead, and implements its
+own period-bound proof of possession at commit time (`CommitToGenerationTransaction.mkPopMessage`, `pubkey ++
+periodStart`, checked with the same signing primitive as everything else) rather than the library's dedicated PoP
+DST. `BlsKey` had no way to pick a DST, so a straight swap would have silently changed the on-chain BLS scheme.
+Fixed by patching the crypto library itself (sibling repo, `../hearth-chain/java`) to add a second, explicitly
+named Basic ciphersuite alongside the POP one: `signBasic`/`verifyBasic`/`fastAggregateVerifyBasic`, plus
+`isValidPublicKey` (in-group, non-infinity check, backs this repo's `BlsPublicKey.validated`) and
+`fromSeedKeygenV5` (blst's own arbitrary-length-seed `keygen_v5`, for `BlsKeyPair.fromSeed`, the seed-derived
+test/tooling convenience path; distinct from `fromSeed`'s EIP-2333 derivation, which needs a real account index
+and rejects seeds under 32 bytes). This makes the migration byte-for-byte identical to the previous
+directly-on-blst implementation, not a protocol change: same DST, same `keygen_v5` salt, confirmed by the
+"expected public keys" fixture in `BlsUtilsTest` and the hash-pinned fixture in `TxStateSnapshotHashSpec` (see
+"Node Tests" below) needing zero changes.
+
+A short seed to `BlsKeyPair.fromSeed`/`fromSeedKeygenV5` collapses to the zero scalar (blst's own `keygen_v5`
+quirk, not EIP-2333); `TxStateSnapshotHashSpec`'s "with generation commitment" case deliberately relies on this
+(`Ints.toByteArray(101)`, 4 bytes) to get a compact, hash-pinned point-at-infinity BLS public key fixture. Do not
+change `fromSeedKeygenV5`'s algorithm without recomputing that fixture.
+
+The crypto library lives in a sibling repo, `../hearth-chain` (its Java module at `../hearth-chain/java`, Maven,
+published as `tech.hearth:crypto:0.1.0-SNAPSHOT`). A change there needs `mvn install` (run from
+`../hearth-chain/java`) to publish the rebuilt jar to `~/.m2` before `node` picks it up; `build.sbt` already
+resolves through `Resolver.mavenLocal`, but sbt's dependency cache can still hold an already-resolved older
+SNAPSHOT, so `sbt update`/a clean rebuild may be needed on top of the `mvn install` if a stale version was
+resolved earlier in the same environment.
+
 ## Block fees
 
 The miner of a block receives two things from transaction fees:

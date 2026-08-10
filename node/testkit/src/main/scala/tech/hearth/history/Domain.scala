@@ -11,7 +11,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.consensus.nxt.NxtLikeConsensusBlockData
 import tech.hearth.consensus.PoSSelector
-import tech.hearth.database.{DBExt, Keys, RDB, RocksDBWriter}
+import tech.hearth.database.{DBExt, RDB, RocksDBWriter}
 import tech.hearth.events.BlockchainUpdateTriggers
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.lang.ValidationError
@@ -27,7 +27,7 @@ import tech.hearth.test.TestTime
 import tech.hearth.transaction.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
 import tech.hearth.transaction.smart.script.trace.TracedResult
-import tech.hearth.utils.{EthEncoding, Schedulers, SystemTime}
+import tech.hearth.utils.{Schedulers, SystemTime}
 import tech.hearth.utx.UtxPoolImpl
 import tech.hearth.wallet.Wallet
 import tech.hearth.{Application, TestValues, crypto}
@@ -41,7 +41,6 @@ import org.rocksdb.RocksDB
 import org.scalatest.matchers.should.Matchers.*
 import tech.hearth.crypto.{Hex, SigningKey, VrfKey}
 
-import scala.collection.immutable.SortedMap
 import scala.concurrent.Future
 import scala.concurrent.duration.*
 import scala.util.Try
@@ -168,22 +167,8 @@ case class Domain(
     catch { case NonFatal(err) => throw new RuntimeException("Solid check failed", err) }
   }
 
-  def makeStateSolid(): (Int, SortedMap[String, String]) = {
+  def makeStateSolid(): Unit =
     if (liquidState.isDefined) appendBlock() // Just append empty block
-    (solidStateHeight, solidStateSnapshot())
-  }
-
-  def solidStateHeight: Int = {
-    rdb.db.get(Keys.height).toInt
-  }
-
-  def solidStateSnapshot(): SortedMap[String, String] = {
-    val builder = SortedMap.newBuilder[String, String]
-    rdb.db.iterateOver(Array.emptyByteArray, None)(e =>
-      builder.addOne(EthEncoding.toHexString(e.getKey).drop(2) -> EthEncoding.toHexString(e.getValue).drop(2))
-    )
-    builder.result()
-  }
 
   def lastBlock: Block = {
     blockchainUpdater.lastBlockId
