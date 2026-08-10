@@ -48,8 +48,8 @@ Run it, mounting data and config directories from the host:
 
 ```bash
 docker run \
-  -v /path/to/data:/var/lib/waves \
-  -v /path/to/config:/etc/waves \
+  -v /path/to/data:/var/lib/hearth \
+  -v /path/to/config:/etc/hearth \
   -p 6869:6869 \
   hearth-node
 ```
@@ -60,7 +60,7 @@ Alternatively, run the assembled jar directly:
 
 ```bash
 sbt node/assembly
-java -jar node/target/hearth-all-*.jar path/to/waves-{network}.conf
+java -jar node/target/hearth-all-*.jar path/to/hearth-{network}.conf
 ```
 
 Network config templates (mainnet, testnet, stagenet) are in [network-defaults.conf](./node/src/main/resources/network-defaults.conf).

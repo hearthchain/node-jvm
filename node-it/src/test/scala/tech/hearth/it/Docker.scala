@@ -376,7 +376,7 @@ class Docker(
 
       // Docker do not allow updating ENV https://github.com/moby/moby/issues/8838 :(
       log.debug("Set new config directly in the entrypoint.sh script")
-      val shPath = "/usr/share/waves/bin/entrypoint.sh"
+      val shPath = "/usr/share/hearth/bin/entrypoint.sh"
       val scriptCmd: Array[String] =
         Array("sh", "-c", s"sed -i 's|$${JAVA_OPTS}|$${JAVA_OPTS} $renderedConfig|' $shPath && cat $shPath")
 
@@ -567,9 +567,9 @@ class Docker(
 }
 
 object Docker {
-  val NodeImageName: String = "com.wavesplatform/node-it:latest"
+  val NodeImageName: String = "hearth/node-it:latest"
 
-  private val ContainerRoot = Paths.get("/usr/share/waves")
+  private val ContainerRoot = Paths.get("/usr/share/hearth")
   private val ProfilerPort  = 10001
 
   private val RunId = Option(System.getenv("RUN_ID")).getOrElse(DateTimeFormatter.ofPattern("MM-dd--HH_mm_ss").format(LocalDateTime.now()))

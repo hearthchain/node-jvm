@@ -100,7 +100,7 @@ jobs:
             echo 'annotations<<EOF'
             echo org.opencontainers.image.source=https://github.com/${{ github.repository }}/tree/${{ steps.ghd.outputs.sha }}/docker
             echo org.opencontainers.image.licenses=MIT
-            echo org.opencontainers.image.description=Waves Node
+            echo org.opencontainers.image.description=Hearth Node
             echo org.opencontainers.image.base.name=${{ steps.versions.outputs.base-image }}
             echo org.opencontainers.image.base.digest=${{ steps.versions.outputs.base-image-digest }}
             echo org.opencontainers.image.version=${{ steps.versions.outputs.node-version }}
@@ -189,7 +189,7 @@ jobs:
           flavor: latest=false
           tags: ${{ env.TAGS }}
           annotations: |
-            org.opencontainers.image.description=Waves Private Node
+            org.opencontainers.image.description=Hearth Private Node
             org.opencontainers.image.documentation=https://github.com/wavesplatform/Waves/blob/${{ github.sha }}/docker/README.md#waves-private-node
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.publish.outputs.node-version }}

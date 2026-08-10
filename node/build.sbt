@@ -86,7 +86,7 @@ linuxScriptReplacements += ("network" -> network.value.toString)
 
 inConfig(Universal)(
   Seq(
-    maintainer  := "com.wavesplatform",
+    maintainer  := "tech.hearth",
     packageName := s"hearth-jvm-${version.value}",
     mappings += (baseDirectory.value / s"hearth-sample.conf" -> "doc/hearth.conf.sample"),
     javaOptions ++= Seq(
@@ -108,9 +108,9 @@ inConfig(Universal)(
 
 inConfig(Linux)(
   Seq(
-    packageSummary     := "Waves node",
-    packageDescription := "Waves node",
-    name               := s"waves${network.value.packageSuffix}",
+    packageSummary     := "Hearth node",
+    packageDescription := "Hearth node",
+    name               := s"hearth${network.value.packageSuffix}",
     normalizedName     := name.value,
     packageName        := normalizedName.value
   )
@@ -149,7 +149,7 @@ linuxPackageSymlinks := linuxPackageSymlinks.value.map { lsl =>
 inConfig(Debian)(
   Seq(
     packageArchitecture      := debArchitecture.value.debString,
-    maintainer               := "com.wavesplatform",
+    maintainer               := "tech.hearth",
     packageSource            := sourceDirectory.value / "package",
     linuxStartScriptTemplate := (packageSource.value / "systemd.service").toURI.toURL,
     debianPackageDependencies += "java17-runtime-headless",

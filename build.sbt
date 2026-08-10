@@ -109,11 +109,11 @@ lazy val buildTarballsForDocker = taskKey[Unit]("Package node and grpc-server ta
 buildTarballsForDocker := {
   IO.copyFile(
     (node / Universal / packageZipTarball).value,
-    baseDirectory.value / "docker" / "target" / "waves.tgz"
+    baseDirectory.value / "docker" / "target" / "hearth.tgz"
   )
   IO.copyFile(
     (`grpc-server` / Universal / packageZipTarball).value,
-    baseDirectory.value / "docker" / "target" / "waves-grpc-server.tgz"
+    baseDirectory.value / "docker" / "target" / "hearth-grpc-server.tgz"
   )
 }
 

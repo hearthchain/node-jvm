@@ -1,10 +1,10 @@
 #!/bin/bash
 
-WAVES_VERSION=$(cut -d\" -f2 ../version.sbt)
+HEARTH_VERSION=$(cut -d\" -f2 ../version.sbt)
 
 docker build \
   --build-arg SBT_VERSION=$(cut -d= -f2 ../project/build.properties) \
-  --build-arg WAVES_VERSION=$WAVES_VERSION \
+  --build-arg HEARTH_VERSION=$HEARTH_VERSION \
   --pull \
-  -t wavesplatform/node-sbt-builder:$WAVES_VERSION \
+  -t hearth/node-sbt-builder:$HEARTH_VERSION \
   - < node-sbt-builder.Dockerfile

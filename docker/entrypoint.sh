@@ -1,34 +1,34 @@
 #!/bin/bash
 
 JAVA_OPTS="-XX:+ExitOnOutOfMemoryError
-  -Xmx${WAVES_HEAP_SIZE}
+  -Xmx${HEARTH_HEAP_SIZE}
   --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
   --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
-  -Dlogback.stdout.level=${WAVES_LOG_LEVEL}
-  -Dlogback.file.directory=${WVLOG}
+  -Dlogback.stdout.level=${HEARTH_LOG_LEVEL}
+  -Dlogback.file.directory=${HEARTH_LOG}
   -Dlogback.file.level=TRACE
-  -Dhearth.config.directory=/etc/waves
-  -Dhearth.defaults.blockchain.type=${WAVES_NETWORK}
-  -Dhearth.directory=${WVDATA}
+  -Dhearth.config.directory=/etc/hearth
+  -Dhearth.defaults.blockchain.type=${HEARTH_NETWORK}
+  -Dhearth.directory=${HEARTH_DATA}
   -Dhearth.rest-api.bind-address=0.0.0.0
   ${JAVA_OPTS}"
 
-if [ "$WAVES_LOG_JAVA_OPTS" = "true" ] ; then
-  echo "JAVA_OPTS=${JAVA_OPTS}" | tee -a ${WVLOG}/waves.log
+if [ "$HEARTH_LOG_JAVA_OPTS" = "true" ] ; then
+  echo "JAVA_OPTS=${JAVA_OPTS}" | tee -a ${HEARTH_LOG}/hearth.log
 fi
 
-if [ -n "$WAVES_WALLET_SEED" ] ; then
-  JAVA_OPTS="-Dhearth.wallet.seed=${WAVES_WALLET_SEED} ${JAVA_OPTS}"
+if [ -n "$HEARTH_WALLET_SEED" ] ; then
+  JAVA_OPTS="-Dhearth.wallet.seed=${HEARTH_WALLET_SEED} ${JAVA_OPTS}"
 fi
 
-if [ -n "$WAVES_WALLET_PASSWORD" ] ; then
-  JAVA_OPTS="-Dhearth.wallet.password=${WAVES_WALLET_PASSWORD} ${JAVA_OPTS}"
+if [ -n "$HEARTH_WALLET_PASSWORD" ] ; then
+  JAVA_OPTS="-Dhearth.wallet.password=${HEARTH_WALLET_PASSWORD} ${JAVA_OPTS}"
 fi
 
-if [ $# -eq 0 ] && [ -f /etc/waves/waves.conf ] ; then
-  ARGS="/etc/waves/waves.conf"
+if [ $# -eq 0 ] && [ -f /etc/hearth/hearth.conf ] ; then
+  ARGS="/etc/hearth/hearth.conf"
 else
   ARGS=$@
 fi
 
-exec java $JAVA_OPTS -cp "$WAVES_INSTALL_PATH/lib/plugins/*:$WAVES_INSTALL_PATH/lib/*" tech.hearth.Application $ARGS
+exec java $JAVA_OPTS -cp "$HEARTH_INSTALL_PATH/lib/plugins/*:$HEARTH_INSTALL_PATH/lib/*" tech.hearth.Application $ARGS

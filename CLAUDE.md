@@ -19,7 +19,7 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
   `mount source: "overlay", ... err: operation not permitted`, even for a trivial `RUN echo`. Switch to a
   docker-container buildx builder first (`docker buildx create --use` if none exists, or `docker buildx use
   <existing-container-builder>` — check `docker buildx ls` for one already running), then build the image directly:
-  `cd docker && docker buildx build --load -t com.wavesplatform/node-it:latest .`. `sbt node-it/docker` itself always
+  `cd docker && docker buildx build --load -t hearth/node-it:latest .`. `sbt node-it/docker` itself always
   uses the default builder and cannot be told to use buildx, so it will keep failing in this environment; run the
   `docker buildx build` command by hand instead (the tarballs it needs are still produced by
   `sbt node-it/docker`'s dependency on `buildTarballsForDocker`, which itself works fine — only the final
@@ -339,6 +339,58 @@ them fails config parsing outright (`KeyNotFound(c-emit, ...)` etc.), not just a
 (`decay-ratio-fixed = "340282366920938463463374607431768211456"`, i.e. `2^128`, quoted since it is a ~39-digit
 decimal string, not a native HOCON number) to preserve their previous constant-reward behavior exactly, since
 these are templates/dev fixtures rather than a network with real tokenomics.
+
+## Token rename: waves → Hearth/HRTH, wavelet → ember
+
+The native currency's code-level naming was renamed to match the "Hearth"/"HRTH" branding the tokenomics spec
+already used: `Waves`/`waves`/`WAVES` → `Hearth`/`hearth`/`HRTH` (`Asset.Waves` → `Asset.Hearth`,
+`Constants.TotalWaves`/`UnitsInWave` → `TotalHearth`/`UnitsInHearth`, `WavesSettings` → `HearthSettings`, the
+`waves {}` HOCON config root → `hearth {}` and every `-Dwaves.*` system property → `-Dhearth.*`, REST/gRPC JSON
+fields like `totalWavesAmount`/`totalFeeInWaves` → `totalHearthAmount`/`totalFeeInHearth`), and the base unit
+`wavelet` → `ember` (`CommitToGenerationTransaction.DepositInWavelets` → `DepositInEmbers`). This also reached the
+two local proto messages (`node/src/main/protobuf/hearth/database.proto`): `BlockMeta.total_waves_amount` →
+`total_hearth_amount`, and `TransactionData`'s oneof case `waves_transaction` → `hearth_transaction` (so
+`TD.WavesTransaction` → `TD.HearthTransaction` at its two call sites in `database/package.scala`). Renamed files:
+`WavesSettings.scala`/`WavesSettingsSpecification.scala`/`WavesTxChecks.scala` → `Hearth*.scala`,
+`node/waves-sample.conf` → `hearth-sample.conf`, `docker/private/waves.custom.conf` → `hearth.custom.conf`.
+
+Docker/deployment packaging followed the same rename: `docker/Dockerfile`/`entrypoint.sh`'s env vars
+(`WAVES_NETWORK`/`WVDATA`/`WVLOG`/etc. → `HEARTH_NETWORK`/`HEARTH_DATA`/`HEARTH_LOG`/etc.) and paths
+(`/etc/waves`, `/var/lib/waves`, `/usr/share/waves` → `/etc/hearth`, `/var/lib/hearth`, `/usr/share/hearth`), the
+`node-it` test image tag (`com.wavesplatform/node-it` → `hearth/node-it`), the tarball names `buildTarballsForDocker`
+produces (`waves.tgz`/`waves-grpc-server.tgz` → `hearth.tgz`/`hearth-grpc-server.tgz`), `grpc-server`'s artifact
+name (`waves-grpc-server` → `hearth-grpc-server`, matching `node`'s already-renamed `hearth-jvm`), and the Linux
+package name/summary in `node/build.sbt`/`ExtensionPackaging.scala` (`waves${network}` → `hearth${network}`,
+`maintainer` → `tech.hearth`).
+
+Several things were deliberately left saying "waves", each for a different reason:
+
+- **The external `tech.hearth % protobuf-schemas` dependency's own fields** — `SignedTransaction.wavesTransaction`
+  (from `transaction.proto`'s *top-level* `waves_transaction` field, not to be confused with the local
+  `TransactionData` oneof case above, which is a different message in a different file),
+  `BalanceResponse.WavesBalances`/`.waves` (`accounts_api.proto`), and `StateUpdate`'s `updatedWavesAmount`
+  (`events.proto`) are defined in the sibling `protobuf-schemas` repo, out of scope here. The local hand-written
+  code that talks to them keeps matching names too, rather than renaming just one side of the wire: `grpc-server`'s
+  vanilla event mirror (`events.scala`, `events/repo/LiquidState.scala`, `events/protobuf/serde/package.scala`) and
+  `events/fixtures/HearthTxChecks.scala`'s pattern matches all still say `updatedWavesAmount`/`wavesTransaction`.
+  `PBTransactions.scala`, `PBBlocks.scala`, and `PBTransactionSerializer.scala` likewise still call
+  `.wavesTransaction`/`.getWavesTransaction`/`.withWavesTransaction` on `SignedTransaction`. A future rename of
+  `protobuf-schemas` itself needs to update all of these together.
+- **CI publish destinations** — Docker Hub (`wavesplatform/wavesnode`, `wavesplatform/waves-private-node`,
+  `wavesplatform/ride-runner`), `ghcr.io/wavesplatform/waves*`, `apt.wavesplatform.com`, and the `@waves/ride-lang`
+  npm package (`.github/workflows/*.yml`, `create-aptly-repo.sh`) are real registries tied to existing
+  `DOCKERHUB_USER`/`DOCKERHUB_PASSWORD`/`OSSRH_*` secrets; renaming the target without matching credentials would
+  just break the release pipeline. Only cosmetic labels/descriptions in those workflows were updated (e.g.
+  `org.opencontainers.image.description=Hearth Node`); `docker/private/Dockerfile`'s
+  `ARG baseImage=wavesplatform/wavesnode:latest` default is the same case, left as-is.
+- **`project/Dependencies.scala`'s `"com.wavesplatform" % "curve25519-java"`** is a real external Maven
+  coordinate (an actual published groupId) — renaming the string breaks dependency resolution, not just cosmetics.
+- **Historical lineage prose** ("a Scala 3 fork of the Waves node", "pre-fork Waves codebase", `gowaves`, and the
+  `com.wavesplatform.*` → `tech.hearth.*` package-migration paragraphs above) describes this repo's actual
+  ancestry and past migrations, not its current branding — left as written.
+- **Real external references not owned by this repo**: `wavesnodes.com` seed hosts (`network-defaults.conf`),
+  `waves.tech`/`docs.waves.tech` (homepage and doc links), and `mpotanin@wavesplatform.com`
+  (`node/build.sbt`/`node/testkit/build.sbt` developer list).
 
 ## Transaction JSON
 

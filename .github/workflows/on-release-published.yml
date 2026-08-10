@@ -6,7 +6,7 @@ on:
 
 jobs:
   publish-node-image:
-    name: Publish Waves Node to Docker Hub
+    name: Publish Hearth Node to Docker Hub
     uses: ./.github/workflows/publish-docker-image.yml
     with:
       raw-docker-tags: |
