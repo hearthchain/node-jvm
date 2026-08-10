@@ -27,11 +27,15 @@ package object api {
 
     def as[A: Reads](numberAsString: Boolean = false)(implicit ec: ExecutionContext): Future[A] = {
       def convert(jsv: JsValue): Either[RuntimeException, JsValue] = {
+        // Kept in sync with CustomJson.fieldNamesToTranslate (node/src/main/scala/tech/hearth/api/http/CustomJson.scala) -
+        // that's the production allow-list this converts back against; a name missing here means a string-format
+        // response can't be read back into the client-side numeric model.
         val fieldNamesToTranslate = Set(
           "amount",
           "available",
           "balance",
           "buyMatcherFee",
+          "cEmit",
           "currentReward",
           "desiredReward",
           "effective",
@@ -40,12 +44,12 @@ package object api {
           "generating",
           "in",
           "matcherFee",
-          "minIncrement",
           "minSponsoredAssetFee",
           "out",
           "price",
           "quantity",
           "regular",
+          "remainingToCap",
           "reward",
           "sellMatcherFee",
           "sponsorBalance",

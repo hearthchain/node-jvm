@@ -347,7 +347,8 @@ already used: `Waves`/`waves`/`WAVES` → `Hearth`/`hearth`/`HRTH` (`Asset.Waves
 `Constants.TotalWaves`/`UnitsInWave` → `TotalHearth`/`UnitsInHearth`, `WavesSettings` → `HearthSettings`, the
 `waves {}` HOCON config root → `hearth {}` and every `-Dwaves.*` system property → `-Dhearth.*`, REST/gRPC JSON
 fields like `totalWavesAmount`/`totalFeeInWaves` → `totalHearthAmount`/`totalFeeInHearth`), and the base unit
-`wavelet` → `ember` (`CommitToGenerationTransaction.DepositInWavelets` → `DepositInEmbers`). This also reached the
+`wavelet` → `ember` (`CommitToGenerationTransaction.DepositInWavelets` → `DepositInEmbers`). `Constants.UnitsInHearth
+= 100000000L`, i.e. 1 HRTH = 10^8 embers, unchanged by the rename. This also reached the
 two local proto messages (`node/src/main/protobuf/hearth/database.proto`): `BlockMeta.total_waves_amount` →
 `total_hearth_amount`, and `TransactionData`'s oneof case `waves_transaction` → `hearth_transaction` (so
 `TD.WavesTransaction` → `TD.HearthTransaction` at its two call sites in `database/package.scala`). Renamed files:
