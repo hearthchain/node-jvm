@@ -2,7 +2,7 @@ package tech.hearth.crypto
 
 import com.typesafe.scalalogging.StrictLogging
 import org.bouncycastle.asn1.{ASN1EncodableVector, ASN1Integer, DERSequence}
-import org.web3j.utils.Numeric.toBytesPadded
+import org.bouncycastle.util.BigIntegers.asUnsignedByteArray
 
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
@@ -76,7 +76,7 @@ object P256Curve extends StrictLogging {
 
   private def publicKeyToBytes(key: PublicKey): Array[Byte] = {
     val point = key.asInstanceOf[ECPublicKey].getW
-    toBytesPadded(point.getAffineX, 32) ++ toBytesPadded(point.getAffineY, 32)
+    asUnsignedByteArray(32, point.getAffineX) ++ asUnsignedByteArray(32, point.getAffineY)
   }
 
   def verify(message: Array[Byte], signature: Array[Byte], publicKey: Array[Byte]): Either[String, Boolean] = try {

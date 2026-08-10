@@ -5,10 +5,9 @@ import tech.hearth.block.{Block, BlockSnapshot, MicroBlock}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.{GeneratorSet, StateSnapshot}
-import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.assets.exchange.Order
 import tech.hearth.transaction.validation.TxValidator
-import tech.hearth.utils.{EthEncoding, base16Length}
+import tech.hearth.utils.base16Length
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.{Interval, NonNegative, Positive}
 import play.api.libs.json.*
@@ -88,22 +87,5 @@ package object transaction {
     def validatedNel(implicit validator: TxValidator[T]): ValidatedNel[ValidationError, T] = validator.validate(tx)
     def validatedEither(implicit validator: TxValidator[T]): Either[ValidationError, T]    = this.validatedNel.toEither.left.map(_.head)
   }
-
-  object ERC20Address {
-    def apply(bs: ByteStr): ERC20Address = {
-      require(bs.arr.length == 20, "ERC20 token address length must be 20 bytes")
-      bs
-    }
-
-    def apply(ia: IssuedAsset): ERC20Address = apply(ia.id.take(20))
-
-    given Format[ERC20Address] = Format(
-      implicitly[Reads[String]].map(str => ERC20Address(ByteStr(EthEncoding.toBytes(str)))),
-      implicitly[Writes[String]].contramap((addr: ERC20Address) => EthEncoding.toHexString(addr.arr))
-    )
-
-    extension (ea: ERC20Address) def arr: Array[Byte] = ea.arr
-  }
-  opaque type ERC20Address = ByteStr
 
 }

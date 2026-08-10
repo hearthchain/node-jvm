@@ -7,7 +7,7 @@ import tech.hearth.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, 
 import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import tech.hearth.state.*
 import tech.hearth.transaction.Asset.IssuedAsset
-import tech.hearth.transaction.{ERC20Address, Transaction}
+import tech.hearth.transaction.Transaction
 import tech.hearth.crypto.Address
 
 case class CurrentBalance(balance: Long, height: Height, prevHeight: Height)
@@ -178,9 +178,6 @@ object Keys {
 
   def assetStaticInfo(asset: IssuedAsset): Key[Option[StaticAssetInfo]] =
     Key.opt(AssetStaticInfo, asset.id.arr.take(20), StaticAssetInfo.parseFrom, _.toByteArray)
-
-  def assetStaticInfo(addr: ERC20Address): Key[Option[StaticAssetInfo]] =
-    Key.opt(AssetStaticInfo, addr.arr, StaticAssetInfo.parseFrom, _.toByteArray)
 
   def stateHash(height: Height): Key[Option[StateHash]] =
     Key.opt(StateHash, h(height), readStateHash, writeStateHash)

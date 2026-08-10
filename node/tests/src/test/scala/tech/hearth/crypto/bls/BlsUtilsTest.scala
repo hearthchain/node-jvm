@@ -1,30 +1,32 @@
 package tech.hearth.crypto.bls
 
 import tech.hearth.common.utils.Base64
-import tech.hearth.crypto.bls.BlsUtils.*
 import tech.hearth.test.{FreeSpec, produce}
 import org.scalatest.EitherValues
-import supranational.blst
-import supranational.blst.{P1, SecretKey}
 
 import java.nio.charset.StandardCharsets
 import scala.util.Random
 
+/** Whitebox coverage of BlsUtils' own Either-wrapping and BlsKeyPair's derivation. The underlying blst-backed
+  * ciphersuite/point-arithmetic properties (sign/verify roundtrip, aggregate/subset rejection, malformed/infinity
+  * public keys, keygen_v5's short-seed handling) are covered by tech.hearth:crypto's own BlsSignatureTest, since
+  * that's now the only place touching blst directly.
+  */
 class BlsUtilsTest extends FreeSpec with EitherValues {
-  private val sk1 = mkRandomSecretKey()
-  private val pk1 = mkPublicKey(sk1)
+  private val kp1 = mkRandomKeyPair()
+  private val pk1 = kp1.publicKey.arr
 
-  private val sk2 = mkRandomSecretKey()
-  private val pk2 = mkPublicKey(sk2)
+  private val kp2 = mkRandomKeyPair()
+  private val pk2 = kp2.publicKey.arr
 
-  private val sk3 = mkRandomSecretKey()
-  private val pk3 = mkPublicKey(sk3)
+  private val kp3 = mkRandomKeyPair()
+  private val pk3 = kp3.publicKey.arr
 
   private val message = "assertion".getBytes()
 
-  private val sig1 = signBasic(sk1, message)
-  private val sig2 = signBasic(sk2, message)
-  private val sig3 = signBasic(sk3, message)
+  private val sig1 = kp1.sign(message).arr
+  private val sig2 = kp2.sign(message).arr
+  private val sig3 = kp3.sign(message).arr
 
   "aggregation in verifyAgg" - {
     "signed with one" - {
@@ -85,7 +87,7 @@ class BlsUtilsTest extends FreeSpec with EitherValues {
   "signBasic" - {
     "zero message" in {
       val message = Array.emptyByteArray
-      val sig     = BlsUtils.signBasic(sk1, message)
+      val sig     = kp1.sign(message).arr
       BlsUtils.verifyBasic(sig, message, pk1) should beRight
     }
   }
@@ -103,114 +105,63 @@ class BlsUtilsTest extends FreeSpec with EitherValues {
   "zero secret/public keys and signatures" - {
     val message = "test".getBytes()
 
-    val zeroSk = BlsUtils.mkSecretKey(Array.fill[Byte](31)(1)) // Still zero if even less bytes
-    val zeroPk = new blst.P1(zeroSk)
-    val zeroSig = new blst.P2()
-      .hash_to(message, BlsDomainSeparationTag)
-      .sign_with(zeroSk)
+    // A seed shorter than 32 bytes collapses to the zero scalar in BlsKeyPair.fromSeed's underlying keygen
+    // (still zero if even less bytes); its public key is the point at infinity, and its signature is the point
+    // at infinity in G2 too, since scalar multiplication by zero is the group identity regardless of message.
+    val zeroKp  = BlsKeyPair.fromSeed(Array.fill[Byte](31)(1))
+    val zeroPk  = zeroKp.publicKey.arr
+    val zeroSig = zeroKp.sign(message).arr
 
-    val okSk = BlsUtils.mkSecretKey(Array.fill[Byte](32)(0))
-    val okPk = new blst.P1(okSk)
-    val okSig = new blst.P2()
-      .hash_to(message, BlsDomainSeparationTag)
-      .sign_with(okSk)
+    val okKp  = BlsKeyPair.fromSeed(Array.fill[Byte](32)(0))
+    val okPk  = okKp.publicKey.arr
+    val okSig = okKp.sign(message).arr
 
-    "can't create pk from zero bytes" in {
-      val bytes = Array.fill[Byte](zeroPk.compress().length)(0)
-      intercept[RuntimeException] { new blst.P1(bytes) }.getMessage should include("bad point encoding")
+    "can't validate an all-zero byte string as a public key" in {
+      BlsUtils.validatePublicKey(Array.fill[Byte](BlsUtils.PublicKeySizeInBytes)(0)) should produce("Invalid BLS public key")
     }
 
-    "zeroSk" in {
-      zeroSk.to_bendian() shouldBe Array.fill[Byte](32)(0)
-    }
-
-    "zeroPk in group" in {
-      zeroPk.is_inf() shouldBe true
-      zeroPk.in_group() shouldBe true
-    }
-
-    "zeroSig in group" in {
-      zeroSig.is_inf() shouldBe true
-      zeroSig.in_group() shouldBe true
+    "zeroPk is well-formed but invalid (point at infinity)" in {
+      BlsUtils.validatePublicKey(zeroPk) should produce("Invalid BLS public key")
     }
 
     "zeroSig not verified" - {
       "by zeroPk" in {
-        BlsUtils.verifyBasic(zeroSig.compress(), message, zeroPk.compress()) should produce("BLST_PK_IS_INFINITY")
+        BlsUtils.verifyBasic(zeroSig, message, zeroPk) should produce("Wrong BLS signature")
       }
 
       "by okPk" in {
-        BlsUtils.verifyBasic(zeroSig.compress(), message, okPk.compress()) should produce("Wrong BLS signature")
+        BlsUtils.verifyBasic(zeroSig, message, okPk) should produce("Wrong BLS signature")
       }
     }
 
     "okSig not verified by zeroPk" in {
-      BlsUtils.verifyBasic(okSig.compress(), message, zeroPk.compress()) should produce("BLST_PK_IS_INFINITY")
+      BlsUtils.verifyBasic(okSig, message, zeroPk) should produce("Wrong BLS signature")
     }
 
-    "aggregated pk" - {
-      "okPk + zeroPk == okPk" in {
-        okPk.dup().add(zeroPk).is_equal(okPk) shouldBe true
-      }
-
-      "zeroPk + okPk == okPk" in {
-        zeroPk.dup().add(okPk).is_equal(okPk) shouldBe true
-      }
-    }
-
-    "aggSig" - {
-      "okSig + zeroSig == okSig" in {
-        okSig.dup().add(zeroSig).is_equal(okSig) shouldBe true
-      }
-
-      "zeroSig + okSig == okSig" in {
-        zeroSig.dup().add(okSig).is_equal(okSig) shouldBe true
-      }
-    }
-
-    "aggSig verification with zeroSk" in {
-      val aggSig = okSig.dup().add(zeroSig)
-      BlsUtils.verifyAgg(aggSig.compress(), message, Seq(okPk.compress(), zeroPk.compress())) should beRight
+    "aggregate verification still succeeds when one signer's key is the degenerate zero key" in {
+      val aggSig = aggSig2(zeroSig, okSig)
+      BlsUtils.verifyAgg(aggSig, message, Seq(zeroPk, okPk)) should beRight
     }
   }
 
   "expected public keys" in forAll(
     Table(
-      ("seed", "expected sk in base64", "expected pk in base64"),
+      ("seed", "expected pk in base64"),
       (
         "-EXACTLY-32-BYTES-LENGTH-STRING-",
-        "ELIahWN5dDHoS9hScLMgGSNwF1qpuikaqNrdxZHCIuE=",
         "qSUdS6J92V1nNOdx4TafRu4U17qhqwVXKNyy2IVV9GWnUzUYlk/uH4l8fOoupSJj"
       ),
       (
         "a string longer than 32 bytes is used as the seed here",
-        "TmpPD8kiXQtRzvpQ+TJm6RUqjy5N3t9WZlv40iA66cw=",
         "o2DzLHA7PG7BvHXTqnz4c8arX/tjiU11YuHsQnfUH0Lo/+ksy1toSYXFFy5auEJT"
       )
     )
-  ) { (seed, expectedSkInBase64, expectedPkInBase64) =>
-    val sk = BlsUtils.mkSecretKey(seed.getBytes(StandardCharsets.UTF_8))
-    Base64.encode(sk.to_bendian()) shouldBe expectedSkInBase64
-
-    val pk = BlsUtils.mkPublicKey(sk)
+  ) { (seed, expectedPkInBase64) =>
+    val pk = BlsKeyPair.fromSeed(seed.getBytes(StandardCharsets.UTF_8)).publicKey.arr
     Base64.encode(pk) shouldBe expectedPkInBase64
-  }
-
-  "pk restore" in {
-    val sk = BlsUtils.mkSecretKey("-EXACTLY-32-BYTES-LENGTH-STRING-".getBytes(StandardCharsets.UTF_8))
-    val pk = BlsUtils.mkPublicKey(sk)
-
-    val pkRestored = new P1(pk).compress()
-    pkRestored shouldBe pk
-
-    val skRestored = new SecretKey()
-    skRestored.from_bendian(sk.to_bendian())
-
-    val pkFromRestoredSk = BlsUtils.mkPublicKey(skRestored)
-    pkFromRestoredSk shouldBe pk
   }
 
   private def aggSig2(sig1: Array[Byte], sig2: Array[Byte]): Array[Byte] = BlsUtils.aggSig(Seq(sig1, sig2)).value
 
-  private def mkRandomSecretKey(): SecretKey = mkSecretKey(Array.fill(32)(Random.nextInt().toByte))
+  private def mkRandomKeyPair(): BlsKeyPair = BlsKeyPair.fromSeed(Array.fill(32)(Random.nextInt().toByte))
 }

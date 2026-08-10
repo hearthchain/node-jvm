@@ -34,10 +34,6 @@ class DataFuncs {
     bh.consume(org.apache.commons.codec.binary.Hex.decodeHex(st.message))
 
   @Benchmark
-  def decode16_32kb_web3j(st: StrSt32K, bh: Blackhole): Unit =
-    bh.consume(org.web3j.utils.Numeric.hexStringToByteArray(st.message))
-
-  @Benchmark
   def decode16_32kb_headlong(st: StrSt32K, bh: Blackhole): Unit =
     bh.consume(FastHex.decode(st.message))
 

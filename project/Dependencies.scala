@@ -4,7 +4,7 @@ import sbt.{Def, *}
 import scalapb.compiler.Version.scalapbVersion
 
 object Dependencies {
-  private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.16.Final"
+  private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.17.Final"
 
   val gProtoVersion = "4.35.1"
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
@@ -45,20 +45,18 @@ object Dependencies {
 
   private def kamonModule(module: String) = "io.kamon" %% s"kamon-$module" % "2.8.1"
 
-  private def jacksonModule(group: String, module: String, version: String = "2.21.1") = s"com.fasterxml.jackson.$group" % s"jackson-$module" % version
-
-  private def web3jModule(module: String) = "org.web3j" % module % "4.13.0" // 4.14+ requires Java 21 https://github.com/LFDT-web3j/web3j/releases/tag/v4.14.0
+  private def jacksonModule(group: String, module: String, version: String = "2.21.4") = s"com.fasterxml.jackson.$group" % s"jackson-$module" % version
 
   def monixModule(module: String): Def.Initialize[ModuleID] = Def.setting("io.monix" %%% s"monix-$module" % "3.4.1")
 
-  private def grpcModule(module: String) = "io.grpc" % module % "1.83.0"
+  private def grpcModule(module: String) = "io.grpc" % module % "1.83.1"
 
   val pekkoHttp       = pekkoHttpModule("pekko-http")
   val googleGuava     = "com.google.guava"    % "guava"             % "33.6.0-jre"
   val kamonCore       = kamonModule("core")
   val machinist       = "org.typelevel"      %% "machinist"         % "0.6.8"
   val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.1"
-  val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "3.0.11"
+  val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "3.0.13"
   val curve25519      = "com.wavesplatform"   % "curve25519-java"   % "0.6.6"
   val nettyHandler    = nettyModule("handler")
 
@@ -141,11 +139,8 @@ object Dependencies {
       scalaLogging,
       "eu.timepit"        %% "refined"  % "0.11.4" exclude ("org.scala-lang.modules", "scala-xml_2.13"),
       "com.esaulpaugh"     % "headlong" % "13.3.1",
-      web3jModule("abi").excludeAll(ExclusionRule("org.bouncycastle", "bcprov-jdk15on")),
-      "com.wavesplatform"         % "blst-java"                    % "0.3.15-1",
       amazonCorretto("linux-x86_64") % Optional,
       amazonCorretto("linux-aarch_64") % Optional,
-      web3jModule("crypto").excludeAll(ExclusionRule("org.bouncycastle", "bcprov-jdk15on")),
     ) ++ cryptoProviders ++ cli ++ logDeps ++ protobuf.value
   )
 
