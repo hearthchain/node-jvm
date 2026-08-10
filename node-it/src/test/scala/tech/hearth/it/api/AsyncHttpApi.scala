@@ -425,11 +425,6 @@ object AsyncHttpApi extends Assertions {
     def assetsBalance(address: String, amountsAsStrings: Boolean = false): Future[FullAssetsInfo] =
       get(s"/assets/balance/$address", amountsAsStrings).as[FullAssetsInfo](amountsAsStrings)
 
-    def nftList(address: String, limit: Int, maybeAfter: Option[String] = None, amountsAsStrings: Boolean = false): Future[Seq[NFTAssetInfo]] = {
-      val after = maybeAfter.fold("")(a => s"?after=$a")
-      get(s"/assets/nft/$address/limit/$limit$after", amountsAsStrings).as[Seq[NFTAssetInfo]](amountsAsStrings)
-    }
-
     def assetsDetails(assetId: String, fullInfo: Boolean = false, amountsAsStrings: Boolean = false): Future[AssetInfo] = {
       get(s"/assets/details/$assetId?full=$fullInfo", amountsAsStrings).as[AssetInfo](amountsAsStrings)
     }
@@ -440,6 +435,7 @@ object AsyncHttpApi extends Assertions {
         fee: Long,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
+        feeAssetId: Option[String] = None,
         amountsAsStrings: Boolean = false
     ): Future[Transaction] = {
       signedBroadcast(
@@ -448,6 +444,7 @@ object AsyncHttpApi extends Assertions {
           Asset.fromString(assetId),
           transfers.map(t => ParsedTransfer(Address.fromString(t.recipient).explicitGet(), TxNonNegativeAmount.unsafeFrom(t.amount))),
           TxPositiveAmount.unsafeFrom(fee),
+          Asset.fromString(feeAssetId),
           System.currentTimeMillis(),
           attachment.fold(ByteStr.empty)(s => ByteStr(s.getBytes())),
           Proofs.empty,
@@ -703,13 +700,9 @@ object AsyncHttpApi extends Assertions {
       for {
         plainBalance <- n.assetBalance(acc, assetIdString)
         pf           <- n.assetsBalance(acc)
-        asset        <- n.assetsDetails(assetIdString)
-        nftList      <- n.nftList(acc, 100)
       } yield {
         plainBalance.balance shouldBe balance
-        if (asset.isNFT) {
-          nftList.count(_.assetId == assetIdString) shouldBe balance
-        } else if (balance != 0) {
+        if (balance != 0) {
           pf.balances.find(_.assetId == assetIdString).map(_.balance) should contain(balance)
         }
       }

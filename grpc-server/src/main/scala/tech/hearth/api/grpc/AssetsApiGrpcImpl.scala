@@ -1,10 +1,10 @@
 package tech.hearth.api.grpc
 
-import tech.hearth.account.Address
-import tech.hearth.api.common.{CommonAccountsApi, CommonAssetsApi}
+import com.google.protobuf.ByteString
+import tech.hearth.api.common.CommonAssetsApi
 import tech.hearth.api.http.ApiError.TransactionDoesNotExist
 import tech.hearth.protobuf.*
-import tech.hearth.state.{AssetDescription, Blockchain}
+import tech.hearth.state.AssetDescription
 import tech.hearth.transaction.Asset.IssuedAsset
 import io.grpc.stub.StreamObserver
 import monix.execution.Scheduler
@@ -12,43 +12,27 @@ import monix.reactive.Observable
 
 import scala.concurrent.Future
 
-class AssetsApiGrpcImpl(assetsApi: CommonAssetsApi, accountsApi: CommonAccountsApi, blockchain: Blockchain)(implicit sc: Scheduler)
-    extends AssetsApiGrpc.AssetsApi {
+class AssetsApiGrpcImpl(assetsApi: CommonAssetsApi)(implicit sc: Scheduler) extends AssetsApiGrpc.AssetsApi {
   override def getInfo(request: AssetRequest): Future[AssetInfoResponse] = Future {
-    val result =
-      for (info <- assetsApi.fullInfo(IssuedAsset(request.assetId.toByteStr)))
-        yield {
-          val issueTransaction = blockchain.transactionInfo(info.description.originTransactionId.byteStr).map(_._2.toPB)
-          issueTransaction.fold(assetInfoResponse(info.description))(assetInfoResponse(info.description).withIssueTransaction)
-        }
-    result.explicitGetErr(TransactionDoesNotExist)
+    assetsApi
+      .fullInfo(IssuedAsset(request.assetId.toByteStr))
+      .map(info => assetInfoResponse(info.description))
+      .explicitGetErr(TransactionDoesNotExist)
   }
 
+  // The NFT-portfolio-listing feature was dropped along with AssetDescription.nft (no consensus purpose left
+  // once Reissue/Burn/Issue don't exist); this RPC still has to be implemented, but has nothing to serve.
   override def getNFTList(request: NFTRequest, responseObserver: StreamObserver[NFTResponse]): Unit = responseObserver.interceptErrors {
-    val addressOption: Option[Address]    = if (request.address.isEmpty) None else Some(request.address.toAddress)
-    val afterAssetId: Option[IssuedAsset] = if (request.afterAssetId.isEmpty) None else Some(IssuedAsset(request.afterAssetId.toByteStr))
-
-    val responseStream = addressOption match {
-      case Some(address) =>
-        accountsApi
-          .nftList(address, afterAssetId)
-          .concatMapIterable(_.map { case (a, d) =>
-            NFTResponse(a.id.toByteString, Some(assetInfoResponse(d)))
-          })
-          .take(request.limit)
-      case _ => Observable.empty
-    }
-
-    responseObserver.completeWith(responseStream)
+    responseObserver.completeWith(Observable.empty)
   }
 
   private def assetInfoResponse(d: AssetDescription): AssetInfoResponse =
     AssetInfoResponse(
-      d.issuer.toByteString,
-      d.name.toStringUtf8,
-      d.description.toStringUtf8,
+      ByteString.EMPTY, // wire-compat only: AssetDescription no longer carries an issuer
+      d.name,
+      d.description,
       d.decimals,
-      d.reissuable,
+      reissuable = false, // wire-compat only: no Reissue transaction exists any more
       d.totalVolume.longValue,
       sequenceInBlock = d.sequenceInBlock,
       issueHeight = d.issueHeight.toInt

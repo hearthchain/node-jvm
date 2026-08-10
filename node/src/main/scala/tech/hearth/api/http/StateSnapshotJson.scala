@@ -17,7 +17,6 @@ case class StateSnapshotJson(
     leaseBalances: Seq[LeaseBalanceJson],
     assetStatics: Seq[AssetStaticInfo],
     assetVolumes: Seq[AssetVolumeJson],
-    assetNamesAndDescriptions: Seq[AssetInfoJson],
     newLeases: Seq[NewLeaseJson],
     cancelledLeases: Seq[CancelledLeaseJson],
     orderFills: Seq[OrderFillJson],
@@ -31,10 +30,7 @@ object StateSnapshotJson {
       s.balances.map { case ((address, asset), balance) => BalanceJson(address, asset, balance) }.toSeq,
       s.leaseBalances.map { case (address, lease) => LeaseBalanceJson(address, lease.in, lease.out) }.toSeq,
       s.assetStatics.map(_._2._1).toSeq,
-      s.assetVolumes.map { case (id, info) => AssetVolumeJson(id, info.isReissuable, info.volume) }.toSeq,
-      s.assetNamesAndDescriptions.map { case (id, info) =>
-        AssetInfoJson(id, info.name.toStringUtf8, info.description.toStringUtf8, info.lastUpdatedAt)
-      }.toSeq,
+      s.assetVolumes.map { case (id, volume) => AssetVolumeJson(id, volume) }.toSeq,
       s.newLeases.map { case (id, info) =>
         NewLeaseJson(id, info.sender, info.recipientAddress, info.amount.value, info.sourceId, info.height)
       }.toSeq,
@@ -51,11 +47,8 @@ object StateSnapshotJson {
   case class LeaseBalanceJson(address: Address, in: Long, out: Long)
   given OWrites[LeaseBalanceJson] = Json.writes
 
-  case class AssetVolumeJson(id: IssuedAsset, isReissuable: Boolean, volume: BigInt)
+  case class AssetVolumeJson(id: IssuedAsset, volume: BigInt)
   given OWrites[AssetVolumeJson] = Json.writes
-
-  case class AssetInfoJson(id: IssuedAsset, name: String, description: String, lastUpdatedAt: Height)
-  given OWrites[AssetInfoJson] = Json.writes
 
   case class NewLeaseJson(id: ByteStr, sender: PublicKey, recipient: Address, amount: Long, txId: TransactionId, height: Height)
   given OWrites[NewLeaseJson] = Json.writes

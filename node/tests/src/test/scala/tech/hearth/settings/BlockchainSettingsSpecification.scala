@@ -52,7 +52,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |        {
           |          height = 1
           |          assets = [
-          |            {id = "aabbccddeeff00112233445566778899", issuer = "HEXISSUERKEY", name = "Asset", description = "Desc", decimals = 4, quantity = 1000}
+          |            {id = "aabbccddeeff00112233445566778899", name = "Asset", description = "Desc", decimals = 4, quantity = 1000, min-fee = 100000}
           |          ]
           |          generators = [
           |            {public-key = "HEXPUBLICKEY", endorser-public-key = "HEXBLSKEY", vrf-public-key = "HEXVRFKEY"}
@@ -93,10 +93,10 @@ class BlockchainSettingsSpecification extends FlatSpec {
       Seq(
         GenesisAssetSettings(
           ByteStr.decodeBase16("aabbccddeeff00112233445566778899").get,
-          "HEXISSUERKEY",
           "Asset",
           decimals = 4,
           quantity = 1000,
+          minFee = 100000,
           description = "Desc"
         )
       )

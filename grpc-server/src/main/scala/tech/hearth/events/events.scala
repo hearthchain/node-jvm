@@ -152,21 +152,19 @@ object StateUpdate {
 
     def fromPB(self: PBAssetStateUpdate): AssetStateUpdate = {
 
-      // script_info/sponsorship are wire-compat only: AssetDescription no longer carries scripted-asset or
-      // sponsorship data, so those fields are read here for nobody and dropped
+      // script_info/issuer/reissuable/nft/last_updated are wire-compat only: AssetDescription no longer
+      // carries scripted-asset, issuer, reissuable, nft or lastUpdatedAt data, so those fields are read here
+      // for nobody and dropped. sponsorship is repurposed to carry minAssetFee, the one mandatory per-asset
+      // fee floor left once sponsorship itself was removed.
       def detailsFromPB(v: PBAssetDetails): AssetDescription = {
         AssetDescription(
-          TransactionId(v.assetId.toByteStr),
-          v.issuer.toPublicKey,
-          ByteString.copyFromUtf8(v.name),
-          ByteString.copyFromUtf8(v.description),
+          v.name,
+          v.description,
           v.decimals,
-          v.reissuable,
           BigInt(v.safeVolume.toByteArray),
-          Height(v.lastUpdated),
-          v.nft,
           v.sequenceInBlock,
-          Height(v.issueHeight)
+          Height(v.issueHeight),
+          MinAssetFee.unsafeFrom(v.sponsorship)
         )
       }
 
@@ -181,17 +179,18 @@ object StateUpdate {
       def detailsToPB(v: AssetDescription): PBAssetDetails = {
         PBAssetDetails(
           assetId = self.assetId.toByteString,
-          issuer = v.issuer.toByteString,
+          issuer = ByteString.EMPTY,
           decimals = v.decimals,
-          name = v.name.toStringUtf8,
-          description = v.description.toStringUtf8,
-          reissuable = v.reissuable,
+          name = v.name,
+          description = v.description,
+          reissuable = false,
           volume = v.totalVolume.longValue,
-          nft = v.nft,
+          nft = false,
           safeVolume = ByteString.copyFrom(v.totalVolume.toByteArray),
-          lastUpdated = v.lastUpdatedAt.toInt,
+          lastUpdated = v.issueHeight.toInt,
           sequenceInBlock = v.sequenceInBlock,
-          issueHeight = v.issueHeight.toInt
+          issueHeight = v.issueHeight.toInt,
+          sponsorship = v.minAssetFee.value
         )
       }
 
@@ -307,7 +306,7 @@ object StateUpdate {
       asset <- (
         snapshot.assetStatics.keySet ++
           snapshot.assetVolumes.keySet ++
-          snapshot.assetNamesAndDescriptions.keySet
+          snapshot.minAssetFees.keySet
       ).toSeq
       assetBefore = blockchainBeforeWithMinerReward.assetDescription(asset)
       assetAfter  = blockchainAfter.assetDescription(asset)
@@ -378,7 +377,7 @@ object StateUpdate {
     txsStateUpdates
       .flatMap(st => st.assets.map(_.assetId) ++ st.balances.flatMap(_.asset.compatId))
       .distinct
-      .flatMap(id => blockchain.assetDescription(IssuedAsset(id)).map(ad => AssetInfo(id, ad.decimals, ad.name.toStringUtf8)))
+      .flatMap(id => blockchain.assetDescription(IssuedAsset(id)).map(ad => AssetInfo(id, ad.decimals, ad.name)))
 
   def container(
       blockchainBeforeWithReward: Blockchain,

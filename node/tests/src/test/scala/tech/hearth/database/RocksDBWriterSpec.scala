@@ -1,6 +1,7 @@
 package tech.hearth.database
 
 import com.google.common.primitives.{Ints, Longs, Shorts}
+import tech.hearth.TestValues
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.database.RocksDBWriter.{merge3, slice}
@@ -105,10 +106,10 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
     val issuedAsset = IssuedAsset(ByteStr.fill(32)(7))
     val assetSettings = GenesisAssetSettings(
       id = issuedAsset.id,
-      issuer = ByteStr(issuer.publicKey()).toString,
       name = "Genesis",
       decimals = 0,
-      quantity = 100
+      quantity = 100,
+      minFee = TestValues.fee
     )
 
     def issueAssetTx = TxHelpers.transfer(from = issuer, to = aliceAddress, asset = issuedAsset, amount = 100)
@@ -235,10 +236,10 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
       val issuedAsset = IssuedAsset(ByteStr.fill(32)(9))
       val assetSettings = GenesisAssetSettings(
         id = issuedAsset.id,
-        issuer = ByteStr(richAccount.publicKey()).toString,
         name = "IA01",
         decimals = 2,
-        quantity = 10000
+        quantity = 10000,
+        minFee = TestValues.fee
       )
 
       withDomain(

@@ -217,13 +217,6 @@ case class Domain(
   def balance(address: Address): Long               = blockchainUpdater.balance(address)
   def balance(address: Address, asset: Asset): Long = blockchainUpdater.balance(address, asset)
 
-  def nftList(address: Address): Seq[(IssuedAsset, AssetDescription)] = rdb.db.withResource(rdb.apiHandle.handle) { resource =>
-    AddressPortfolio
-      .nftIterator(resource, address, blockchainUpdater.bestLiquidSnapshot.orEmpty, None, blockchainUpdater.assetDescription)
-      .toSeq
-      .flatten
-  }
-
   def addressTransactions(address: Address, from: Option[ByteStr] = None): Seq[(Height, Transaction)] =
     AddressTransactions
       .allAddressTransactions(
@@ -683,12 +676,7 @@ object Domain {
 
   def portfolio(address: Address, db: RocksDB, blockchainUpdater: CompleteBlockchainUpdater): Seq[(IssuedAsset, Long)] = db.withResource { resource =>
     AddressPortfolio
-      .assetBalanceIterator(
-        resource,
-        address,
-        blockchainUpdater.bestLiquidSnapshot.orEmpty,
-        id => blockchainUpdater.assetDescription(id).exists(!_.nft)
-      )
+      .assetBalanceIterator(resource, address, blockchainUpdater.bestLiquidSnapshot.orEmpty)
       .toSeq
       .flatten
   }

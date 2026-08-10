@@ -2,7 +2,7 @@ package tech.hearth.state
 
 import cats.implicits.catsSyntaxSemigroup
 import cats.syntax.either.*
-import com.google.common.primitives.{Ints, Longs, UnsignedBytes}
+import com.google.common.primitives.{Longs, UnsignedBytes}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto
@@ -16,6 +16,7 @@ import tech.hearth.transaction.Transaction
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import tech.hearth.crypto.SigningKey
 
+import java.nio.charset.StandardCharsets
 import scala.collection.mutable
 
 object TxStateSnapshotHashBuilder {
@@ -58,18 +59,18 @@ object TxStateSnapshotHashBuilder {
     }
 
     snapshot.assetStatics.foreach { case (asset, (assetInfo, _)) =>
-      changedKeys += asset.id.arr ++ assetInfo.issuer.arr ++ Array(assetInfo.decimals.toByte) ++ booleanToBytes(assetInfo.nft)
+      changedKeys += asset.id.arr ++
+        Array(assetInfo.decimals.toByte) ++
+        assetInfo.name.getBytes(StandardCharsets.UTF_8) ++
+        assetInfo.description.getBytes(StandardCharsets.UTF_8)
     }
 
     snapshot.assetVolumes.foreach { case (asset, volume) =>
-      changedKeys += asset.id.arr ++ booleanToBytes(volume.isReissuable) ++ volume.volume.toByteArray
+      changedKeys += asset.id.arr ++ volume.toByteArray
     }
 
-    snapshot.assetNamesAndDescriptions.foreach { case (asset, assetInfo) =>
-      changedKeys += asset.id.arr ++
-        assetInfo.name.toByteArray ++
-        assetInfo.description.toByteArray ++
-        Ints.toByteArray(assetInfo.lastUpdatedAt.toInt)
+    snapshot.minAssetFees.foreach { case (asset, minFee) =>
+      changedKeys += asset.id.arr ++ Longs.toByteArray(minFee.value)
     }
 
     snapshot.nextCommittedGenerators.foreach { gc =>

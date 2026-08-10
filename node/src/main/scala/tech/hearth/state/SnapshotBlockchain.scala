@@ -266,36 +266,24 @@ object SnapshotBlockchain {
       inner: Blockchain
   ): Option[AssetDescription] = {
     lazy val volume = snapshot.assetVolumes.get(asset)
-    lazy val info   = snapshot.assetNamesAndDescriptions.get(asset)
+    lazy val minFee = snapshot.minAssetFees.get(asset)
     snapshot.assetStatics
       .get(asset)
       .map { case (static, assetNum) =>
         AssetDescription(
-          static.source,
-          static.issuer,
-          info.get.name,
-          info.get.description,
+          static.name,
+          static.description,
           static.decimals,
-          volume.get.isReissuable,
-          volume.get.volume,
-          info.get.lastUpdatedAt,
-          static.nft,
+          volume.get,
           assetNum,
-          Height(height)
+          Height(height),
+          minFee.get
         )
       }
       .orElse(
         inner
           .assetDescription(asset)
-          .map(d =>
-            d.copy(
-              totalVolume = volume.map(_.volume).getOrElse(d.totalVolume),
-              reissuable = volume.map(_.isReissuable).getOrElse(d.reissuable),
-              name = info.map(_.name).getOrElse(d.name),
-              description = info.map(_.description).getOrElse(d.description),
-              lastUpdatedAt = info.map(_.lastUpdatedAt).getOrElse(d.lastUpdatedAt)
-            )
-          )
+          .map(d => minFee.fold(d)(mf => d.copy(minAssetFee = mf)))
       )
   }
 }

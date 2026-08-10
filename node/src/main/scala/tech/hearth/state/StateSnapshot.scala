@@ -1,7 +1,6 @@
 package tech.hearth.state
 
-import cats.data.Ior
-import cats.implicits.{catsSyntaxEitherId, catsSyntaxSemigroup, toBifunctorOps, toTraverseOps}
+import cats.implicits.{catsSyntaxEitherId, toBifunctorOps, toTraverseOps}
 import cats.kernel.Monoid
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
@@ -17,8 +16,8 @@ case class StateSnapshot(
     balances: VectorMap[(Address, Asset), Long] = VectorMap(), // VectorMap is used to preserve the order of NFTs for a given address
     leaseBalances: Map[Address, LeaseBalance] = Map(),
     assetStatics: Map[IssuedAsset, (AssetStaticInfo, Int)] = Map(),
-    assetVolumes: Map[IssuedAsset, AssetVolumeInfo] = Map(),
-    assetNamesAndDescriptions: Map[IssuedAsset, AssetInfo] = Map(),
+    assetVolumes: Map[IssuedAsset, BigInt] = Map(),
+    minAssetFees: Map[IssuedAsset, MinAssetFee] = Map(),
     newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
     cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
     orderFills: Map[ByteStr, VolumeAndFee] = Map(),
@@ -50,7 +49,7 @@ object StateSnapshot {
       portfolios: Map[Address, Portfolio] = Map(),
       orderFills: Map[ByteStr, VolumeAndFee] = Map(),
       issuedAssets: Seq[(IssuedAsset, NewAssetInfo)] = Seq(),
-      updatedAssets: Map[IssuedAsset, Ior[AssetInfo, AssetVolumeInfo]] = Map(),
+      updatedMinAssetFees: Map[IssuedAsset, MinAssetFee] = Map(),
       newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
       cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
       transactions: VectorMap[ByteStr, NewTransactionInfo] = VectorMap(),
@@ -66,8 +65,8 @@ object StateSnapshot {
         b,
         lb,
         assetStatics(issuedAssets),
-        assetVolumes(blockchain, issuedAssets, updatedAssets),
-        assetNamesAndDescriptions(issuedAssets, updatedAssets),
+        assetVolumes(issuedAssets),
+        minAssetFees(issuedAssets, updatedMinAssetFees),
         newLeases,
         cancelledLeases,
         of,
@@ -129,35 +128,16 @@ object StateSnapshot {
       asset -> (info.static, idx + 1)
     }.toMap
 
-  private def assetVolumes(
-      blockchain: Blockchain,
-      issuedAssets: Seq[(IssuedAsset, NewAssetInfo)],
-      updatedAssets: Map[IssuedAsset, Ior[AssetInfo, AssetVolumeInfo]]
-  ): Map[IssuedAsset, AssetVolumeInfo] = {
-    val issued = issuedAssets.view.map { case (id, nai) => id -> nai.volume }.toMap
-    val updated = updatedAssets.collect {
-      case (asset, Ior.Right(volume))   => (asset, volume)
-      case (asset, Ior.Both(_, volume)) => (asset, volume)
-    }
-    (issued |+| updated).map { case (asset, volume) =>
-      val blockchainAsset = blockchain.assetDescription(asset)
-      val newIsReissuable = blockchainAsset.map(_.reissuable && volume.isReissuable).getOrElse(volume.isReissuable)
-      val newVolume       = blockchainAsset.map(_.totalVolume + volume.volume).getOrElse(volume.volume)
-      asset -> AssetVolumeInfo(newIsReissuable, newVolume)
-    }
-  }
+  // an asset's volume is fixed forever at issuance - a predefined snapshot can only mint a brand-new asset id,
+  // never touch an existing one - so there is no "merge with an existing volume" case to handle here
+  private def assetVolumes(issuedAssets: Seq[(IssuedAsset, NewAssetInfo)]): Map[IssuedAsset, BigInt] =
+    issuedAssets.view.map { case (id, nai) => id -> nai.volume }.toMap
 
-  private def assetNamesAndDescriptions(
+  private def minAssetFees(
       issuedAssets: Seq[(IssuedAsset, NewAssetInfo)],
-      updatedAssets: Map[IssuedAsset, Ior[AssetInfo, AssetVolumeInfo]]
-  ): Map[IssuedAsset, AssetInfo] = {
-    val issued = issuedAssets.view.map { case (id, nai) => id -> nai.dynamic }.toMap
-    val updated = updatedAssets.collect {
-      case (asset, Ior.Left(info))    => (asset, info)
-      case (asset, Ior.Both(info, _)) => (asset, info)
-    }
-    issued ++ updated
-  }
+      updatedMinAssetFees: Map[IssuedAsset, MinAssetFee]
+  ): Map[IssuedAsset, MinAssetFee] =
+    issuedAssets.view.map { case (id, nai) => id -> nai.minAssetFee }.toMap ++ updatedMinAssetFees
 
   private def orderFills(volumeAndFees: Map[ByteStr, VolumeAndFee], blockchain: Blockchain): Either[String, Map[ByteStr, VolumeAndFee]] =
     volumeAndFees.toSeq
@@ -177,7 +157,7 @@ object StateSnapshot {
         s1.leaseBalances ++ s2.leaseBalances,
         s1.assetStatics ++ s2.assetStatics.map { case (id, (asi, idx)) => (id, (asi, idx + s1.assetStatics.size)) },
         s1.assetVolumes ++ s2.assetVolumes,
-        s1.assetNamesAndDescriptions ++ s2.assetNamesAndDescriptions,
+        s1.minAssetFees ++ s2.minAssetFees,
         s1.newLeases ++ s2.newLeases,
         s1.cancelledLeases ++ s2.cancelledLeases,
         s1.orderFills ++ s2.orderFills,

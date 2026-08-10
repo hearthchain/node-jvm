@@ -125,7 +125,8 @@ object PBTransactions {
             timestamp,
             mt.attachment.toByteStr,
             proofs,
-            chainId
+            chainId,
+            feeAssetId
           )
         } yield tx
 
@@ -191,7 +192,7 @@ object PBTransactions {
         val data = LeaseCancelTransactionData(leaseId.toByteString)
         PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.LeaseCancel(data))
 
-      case tx @ MassTransferTransaction(sender, assetId, transfers, fee, timestamp, attachment, proofs, chainId) =>
+      case tx @ MassTransferTransaction(sender, assetId, transfers, fee, _, timestamp, attachment, proofs, chainId) =>
         val data = MassTransferTransactionData(
           PBAmounts.toPBAssetId(assetId),
           transfers.map(pt => MassTransferTransactionData.Transfer(Some(pt.address.toPB), pt.amount.value)),

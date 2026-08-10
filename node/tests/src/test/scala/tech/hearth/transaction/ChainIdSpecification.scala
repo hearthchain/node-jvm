@@ -114,6 +114,7 @@ class ChainIdSpecification extends PropSpec {
           Waves,
           Seq(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(amount.value))),
           fee,
+          Waves,
           ts,
           ByteStr.empty,
           Proofs.empty,

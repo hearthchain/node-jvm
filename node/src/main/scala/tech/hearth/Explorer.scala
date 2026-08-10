@@ -32,7 +32,7 @@ object Explorer extends ScorexLogging {
     Portfolio(
       blockchain.balance(address),
       blockchain.leaseBalance(address),
-      db.withResource(r => AddressPortfolio.assetBalanceIterator(r, address, StateSnapshot.empty, _ => true).flatten.to(VectorMap)),
+      db.withResource(r => AddressPortfolio.assetBalanceIterator(r, address, StateSnapshot.empty).flatten.to(VectorMap)),
       blockchain.generationDeposit(address)
     )
 

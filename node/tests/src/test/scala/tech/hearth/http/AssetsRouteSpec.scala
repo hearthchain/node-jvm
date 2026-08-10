@@ -1,8 +1,6 @@
 package tech.hearth.http
 
-import com.google.protobuf.ByteString
-import tech.hearth.TestWallet
-import tech.hearth.account.PublicKey
+import tech.hearth.{TestValues, TestWallet}
 import tech.hearth.api.http.ApiError.{AssetIdNotSpecified, AssetsDoesNotExist, InvalidIds, TooBigArrayAllocation}
 import tech.hearth.api.http.RouteTimeout
 import tech.hearth.api.http.assets.AssetsApiRoute
@@ -11,7 +9,7 @@ import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.{Domain, defaultSigner}
 import tech.hearth.settings.{GenesisAssetSettings, WavesSettings}
-import tech.hearth.state.{AssetDescription, Height, TransactionId}
+import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.Asset.IssuedAsset
@@ -55,7 +53,6 @@ class AssetsRouteSpec
             60.seconds,
             testWallet,
             d.blockchain,
-            () => d.blockchain.snapshotBlockchain,
             TestTime(),
             d.accountsApi,
             d.assetsApi,
@@ -67,36 +64,36 @@ class AssetsRouteSpec
     }
 
   /** Assets are declared in the genesis snapshot: nothing issues one any more. What an issue transaction used to
-    * decide is now settings - name, description, decimals, quantity, reissuable - and what it used to imply follows
-    * from the declaration itself: the origin transaction id is the asset id, the issue height is the genesis one, and
-    * the sequence in block is the asset's position in the declared list. A genesis asset is never an NFT.
+    * decide is now settings - name, description, decimals, quantity - and what it used to imply follows from the
+    * declaration itself: the issue height is the genesis one, and the sequence in block is the asset's position in
+    * the declared list.
     */
   private val assetIssuer = TxHelpers.signer(700)
 
-  private def genesisAsset(index: Int, quantity: Long = 100, reissuable: Boolean = true, decimals: Int = 0): GenesisAssetSettings =
+  private def genesisAsset(
+      index: Int,
+      quantity: Long = 100,
+      decimals: Int = 0,
+      minFee: Long = TestValues.fee
+  ): GenesisAssetSettings =
     GenesisAssetSettings(
       id = ByteStr.fill(AssetIdLength)(index.toByte),
-      issuer = ByteStr(assetIssuer.publicKey()).toString,
       name = "test",
       decimals = decimals,
       quantity = quantity,
-      description = "description",
-      reissuable = reissuable
+      minFee = minFee,
+      description = "description"
     )
 
   private def descriptionOf(asset: GenesisAssetSettings, sequenceInBlock: Int): AssetDescription =
     AssetDescription(
-      TransactionId(asset.id),
-      issuer = PublicKey(assetIssuer.publicKey()),
-      name = ByteString.copyFromUtf8(asset.name),
-      description = ByteString.copyFromUtf8(asset.description),
+      name = asset.name,
+      description = asset.description,
       decimals = asset.decimals,
-      reissuable = asset.reissuable,
       totalVolume = asset.quantity,
-      lastUpdatedAt = Height(1),
-      nft = false,
       sequenceInBlock,
-      Height(1)
+      Height(1),
+      minAssetFee = MinAssetFee.unsafeFrom(asset.minFee)
     )
 
   "/balance/{address}" - {
@@ -205,8 +202,7 @@ class AssetsRouteSpec
   }
 
   routePath(s"/details/{id}") in {
-    // The version dimension is gone with the issue transaction; what a declaration still varies is reissuable
-    val assets = Seq(genesisAsset(1, reissuable = false), genesisAsset(2, reissuable = true))
+    val assets = Seq(genesisAsset(1), genesisAsset(2))
     routeTest(
       balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.waves, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
       assets = assets
@@ -333,15 +329,11 @@ class AssetsRouteSpec
   private def checkResponse(desc: AssetDescription, assetId: String, response: JsObject): Unit = {
     (response \ "assetId").as[String] shouldBe assetId
     (response \ "issueTimestamp").as[Long] shouldBe 0L
-    (response \ "issuer").as[String] shouldBe desc.issuer.toAddress.toString
-    (response \ "name").as[String] shouldBe desc.name.toStringUtf8
-    (response \ "description").as[String] shouldBe desc.description.toStringUtf8
+    (response \ "name").as[String] shouldBe desc.name
+    (response \ "description").as[String] shouldBe desc.description
     (response \ "decimals").as[Int] shouldBe desc.decimals
-    (response \ "reissuable").as[Boolean] shouldBe desc.reissuable
     (response \ "quantity").as[BigDecimal] shouldBe desc.totalVolume
-    (response \ "minSponsoredAssetFee").asOpt[Long] shouldBe empty
-    // The asset was declared, not issued, so it stands in for its own origin transaction
-    (response \ "originTransactionId").as[String] shouldBe assetId
     (response \ "sequenceInBlock").as[Int] shouldBe desc.sequenceInBlock
+    (response \ "minAssetFee").as[Long] shouldBe desc.minAssetFee.value
   }
 }

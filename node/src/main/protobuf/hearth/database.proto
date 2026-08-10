@@ -8,12 +8,8 @@ import "hearth/amount.proto";
 import "hearth/recipient.proto";
 import "hearth/transaction_state_snapshot.proto";
 
-message AssetDetails {
-  bytes name = 1;
-  bytes description = 2;
-  int32 last_renamed_at = 3;
-  bool reissuable = 4;
-  bytes total_volume = 5;
+message AssetVolumeDetails {
+  bytes total_volume = 1;
 }
 
 message BlockMeta {
@@ -78,13 +74,18 @@ message AccountScriptInfo {
 }
 
 message StaticAssetInfo {
-  bytes source_id = 1;
-  bytes issuer_public_key = 2;
+  // field 1 (source_id) retired: it always equalled the asset's own id, since nothing issues an asset via a
+  // real transaction any more
+  // field 2 (issuer_public_key) retired: nothing checks who issued an asset any more (no Reissue/Burn/SponsorFee
+  // to gate by it)
   int32 decimals = 3;
-  bool is_nft = 4;
+  // field 4 (is_nft) retired: no remaining consumer once NFT-portfolio-listing and its reissuable/quantity/
+  // decimals-derived "is this an NFT" classification were removed
   int32 sequence_in_block = 5;
   int32 height = 6;
   bytes id = 7;
+  string name = 8;
+  string description = 9;
 }
 
 message DataEntry {

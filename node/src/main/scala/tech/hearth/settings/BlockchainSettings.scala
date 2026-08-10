@@ -127,21 +127,28 @@ object FunctionalitySettings {
   )
 }
 
-/** An asset issued by a predefined snapshot. Since there is no issue transaction to derive it from, the id is specified explicitly. */
+/** An asset issued by a predefined snapshot. Since there is no issue transaction to derive it from, the id is
+  * specified explicitly. `minFee` is mandatory: every issued asset must carry a non-zero minimum fee floor for
+  * paying transaction fees in it (see MinAssetFee), there is no "sponsorship disabled" state any more. There is no
+  * issuer either: nothing ever checks who issued an asset any more (no Reissue/Burn/SponsorFee to gate by it), so
+  * it isn't tracked.
+  */
 case class GenesisAssetSettings(
     id: ByteStr,
-    issuer: String,
     name: String,
     decimals: Int,
     quantity: Long,
-    description: String = "",
-    reissuable: Boolean = false
+    minFee: Long,
+    description: String = ""
 )
 
 object GenesisAssetSettings {
   // This given is required for default args to work, see FunctionalitySettings.
   given ConfigReader[GenesisAssetSettings] = deriveReader
 }
+
+/** Changes an already-issued asset's minAssetFee at this predefined snapshot's height, without re-issuing it. */
+case class MinAssetFeeSettings(assetId: ByteStr, minFee: Long) derives ConfigReader
 
 /** An account committed to generating blocks starting from the generation period of the predefined snapshot's height.
   *
@@ -171,7 +178,8 @@ case class PredefinedSnapshotSettings(
     height: Int,
     assets: Seq[GenesisAssetSettings] = Seq.empty,
     generators: Seq[GenesisGeneratorSettings] = Seq.empty,
-    balances: Seq[GenesisBalanceSettings] = Seq.empty
+    balances: Seq[GenesisBalanceSettings] = Seq.empty,
+    minAssetFees: Seq[MinAssetFeeSettings] = Seq.empty
 )
 
 object PredefinedSnapshotSettings {

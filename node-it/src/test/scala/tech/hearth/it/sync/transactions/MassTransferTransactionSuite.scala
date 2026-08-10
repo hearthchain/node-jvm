@@ -55,6 +55,21 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
     sender.assetBalance(secondAddress, assetId).balance shouldBe secondAssetBalanceBefore + 1000
   }
 
+  test("fee in an asset at or above its minAssetFee is accepted, below is rejected") {
+    // GenesisTestAsset's configured min-fee (template.conf) equals minFee (0.001 waves) - unrelated to
+    // calcMassTransferFee's per-unit Waves fee sizing, which is orthogonal to the flat per-asset fee floor.
+    val assetId   = GenesisAssets.TestAsset.id.toString
+    val transfers = List(Transfer(secondAddress, 1))
+
+    val okTransfer = sender.massTransfer(firstKeyPair, transfers, minFee, feeAssetId = Some(assetId))
+    nodes.waitForHeightAriseAndTxPresent(okTransfer.id)
+
+    assertBadRequestAndResponse(
+      sender.massTransfer(firstKeyPair, transfers, minFee - 1, feeAssetId = Some(assetId)),
+      "does not exceed minimal value"
+    )
+  }
+
   test("waves mass transfer changes waves balances") {
     val (balance1, eff1) = miner.accountBalances(firstAddress)
     val (balance2, eff2) = miner.accountBalances(secondAddress)
@@ -155,6 +170,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
           None,
           transfers,
           fee,
+          None,
           timestamp,
           ByteStr(attachment),
           signature
@@ -186,6 +202,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
             None,
             transfers,
             fee,
+            None,
             timestamp,
             ByteStr(Array.emptyByteArray),
             Proofs(Seq(bodyBytes))

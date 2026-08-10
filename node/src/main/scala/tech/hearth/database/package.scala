@@ -201,38 +201,24 @@ package object database {
     b.array()
   }
 
-  def readSponsorship(data: Array[Byte]): SponsorshipValue = {
+  def readAssetMinFee(data: Array[Byte]): MinAssetFee = {
     val ndi = newDataInput(data)
-    SponsorshipValue(ndi.readLong())
+    MinAssetFee.unsafeFrom(ndi.readLong())
   }
 
-  def writeSponsorship(ai: SponsorshipValue): Array[Byte] = {
+  def writeAssetMinFee(minFee: MinAssetFee): Array[Byte] = {
     val ndo = newDataOutput()
-    ndo.writeLong(ai.minFee)
+    ndo.writeLong(minFee.value)
     ndo.toByteArray
   }
 
-  def readAssetDetails(data: Array[Byte]): (AssetInfo, AssetVolumeInfo) = {
-
-    val pbad = pb.AssetDetails.parseFrom(data)
-
-    (
-      AssetInfo(pbad.name, pbad.description, Height(pbad.lastRenamedAt)),
-      AssetVolumeInfo(pbad.reissuable, BigInt(pbad.totalVolume.toByteArray))
-    )
+  def readAssetVolumeDetails(data: Array[Byte]): BigInt = {
+    val pbad = pb.AssetVolumeDetails.parseFrom(data)
+    BigInt(pbad.totalVolume.toByteArray)
   }
 
-  def writeAssetDetails(ai: (AssetInfo, AssetVolumeInfo)): Array[Byte] = {
-    val (info, volumeInfo) = ai
-
-    pb.AssetDetails(
-      info.name,
-      info.description,
-      info.lastUpdatedAt.toInt,
-      volumeInfo.isReissuable,
-      ByteString.copyFrom(volumeInfo.volume.toByteArray)
-    ).toByteArray
-  }
+  def writeAssetVolumeDetails(volume: BigInt): Array[Byte] =
+    pb.AssetVolumeDetails(ByteString.copyFrom(volume.toByteArray)).toByteArray
 
   def writeBlockMeta(data: pb.BlockMeta): Array[Byte] = data.toByteArray
 
@@ -665,20 +651,17 @@ package object database {
 
   def loadAssetDescription(resource: DBResource, asset: IssuedAsset): Option[AssetDescription] =
     for {
-      pbStaticInfo       <- resource.get(Keys.assetStaticInfo(asset))
-      (info, volumeInfo) <- fromHistory(resource, Keys.assetDetailsHistory(asset), Keys.assetDetails(asset))
+      pbStaticInfo <- resource.get(Keys.assetStaticInfo(asset))
+      volumeInfo   <- fromHistory(resource, Keys.assetVolumeDetailsHistory(asset), Keys.assetVolumeDetails(asset))
+      minFee       <- fromHistory(resource, Keys.assetMinFeeHistory(asset), Keys.assetMinFee(asset))
     } yield AssetDescription(
-      TransactionId(pbStaticInfo.sourceId.toByteStr),
-      PublicKey(pbStaticInfo.issuerPublicKey.toByteStr),
-      info.name,
-      info.description,
+      pbStaticInfo.name,
+      pbStaticInfo.description,
       pbStaticInfo.decimals,
-      volumeInfo.isReissuable,
-      volumeInfo.volume,
-      info.lastUpdatedAt,
-      pbStaticInfo.isNft,
+      volumeInfo,
       pbStaticInfo.sequenceInBlock,
-      Height(pbStaticInfo.height)
+      Height(pbStaticInfo.height),
+      minFee
     )
 
   def loadActiveLeases(rdb: RDB, fromHeight: Height, toHeight: Height): Map[ByteStr, LeaseDetails] = rdb.db.withResource { r =>

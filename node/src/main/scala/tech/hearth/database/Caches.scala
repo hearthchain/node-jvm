@@ -395,8 +395,8 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
     val assetsToInvalidate =
       snapshot.assetStatics.keySet ++
-        snapshot.assetNamesAndDescriptions.keySet ++
-        snapshot.assetVolumes.keySet
+        snapshot.assetVolumes.keySet ++
+        snapshot.minAssetFees.keySet
 
     for ((address, id) <- newAddressIds) addressIdCache.put(address, Some(id))
     for ((orderId, (volumeAndFee, _)) <- orderFillsWithNodes) volumeAndFeeCache.put(orderId, volumeAndFee)

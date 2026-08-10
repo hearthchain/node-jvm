@@ -1,6 +1,7 @@
 package tech.hearth.state.snapshot
 
 import com.google.common.primitives.Ints
+import com.google.protobuf.ByteString
 import com.google.protobuf.ByteString.copyFrom as bs
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base64
@@ -10,6 +11,7 @@ import tech.hearth.protobuf.snapshot.{TransactionStatus, TransactionStateSnapsho
 import tech.hearth.protobuf.{Amount, PBSnapshots}
 import tech.hearth.state.*
 import tech.hearth.test.*
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxHelpers
 import org.bouncycastle.util.encoders.Hex
 
@@ -70,30 +72,30 @@ class TxStateSnapshotHashSpec extends PropSpec {
     )
   )
 
+  // AssetVolume.reissuable and NewAsset.issuer_public_key/nft are wire-compat only (nothing reissues an asset,
+  // checks who issued it, or classifies it as an NFT any more, see PBSnapshots.toProtobuf) - always
+  // empty/false on the wire, and every asset now carries a name/description pair from the moment it's issued
+  // (an asset can no longer exist with no name at all, unlike under the old separate-rename-transaction model).
   private val newAsset = TSS(
     assetStatics = Seq(
-      TSS.NewAsset(assetId1, hashInt(0x88aadd55), nft = true),
-      TSS.NewAsset(assetId2, hashInt(0x88aadd55), decimals = 8)
+      TSS.NewAsset(assetId1, ByteString.EMPTY, nft = false),
+      TSS.NewAsset(assetId2, ByteString.EMPTY, decimals = 8)
     ),
     assetVolumes = Seq(
-      TSS.AssetVolume(assetId2, true, bs((BigInt(Long.MaxValue) * 10).toByteArray)),
+      TSS.AssetVolume(assetId2, false, bs((BigInt(Long.MaxValue) * 10).toByteArray)),
       TSS.AssetVolume(assetId1, false, bs(BigInt(1).toByteArray))
     ),
-    assetNamesAndDescriptions = Seq()
+    assetNamesAndDescriptions = Seq(
+      TSS.AssetNameAndDescription(assetId1, "", ""),
+      TSS.AssetNameAndDescription(assetId2, "", "")
+    )
   )
 
+  // A second asset's volume, with no corresponding assetStatics entry - the hash builder hashes whatever
+  // assetVolumes it's given regardless of whether the asset was also issued in this same snapshot.
   private val reissuedAsset = TSS(
     assetVolumes = Seq(
       TSS.AssetVolume(hashInt(0x23aadd55), false, bs((BigInt(10000000_00L)).toByteArray))
-    )
-  )
-  private val renamedAsset = TSS(
-    assetNamesAndDescriptions = Seq(
-      TSS.AssetNameAndDescription(
-        assetId2,
-        "newname",
-        "some fancy description"
-      )
     )
   )
   private val failedTransaction = TSS(
@@ -123,7 +125,7 @@ class TxStateSnapshotHashSpec extends PropSpec {
     cancelledLeases = cancelledLease.cancelledLeases,
     assetStatics = newAsset.assetStatics,
     assetVolumes = newAsset.assetVolumes ++ reissuedAsset.assetVolumes,
-    assetNamesAndDescriptions = newAsset.assetNamesAndDescriptions ++ renamedAsset.assetNamesAndDescriptions,
+    assetNamesAndDescriptions = newAsset.assetNamesAndDescriptions,
     orderFills = volumeAndFee.orderFills,
     transactionStatus = failedTransaction.transactionStatus,
     generationCommitment = withCommitment.generationCommitment
@@ -174,34 +176,34 @@ class TxStateSnapshotHashSpec extends PropSpec {
     (
       "new asset",
       newAsset,
-      "KkYKIF5mn4IKZ9CIbYdHjPBDoqx4XMevVdwxzhB1OUvTUKJbEiDcYGFqY9MotHTpDpskoycN/Mt62bZfPxIC4fpU0ZTBniABKkYKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEiDcYGFqY9MotHTpDpskoycN/Mt62bZfPxIC4fpU0ZTBnhgIMi8KIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOEAEaCQT/////////9jIlCiBeZp+CCmfQiG2HR4zwQ6KseFzHr1XcMc4QdTlL01CiWxoBAQ==",
+      "KiIKIF5mn4IKZ9CIbYdHjPBDoqx4XMevVdwxzhB1OUvTUKJbKiQKIHidwBEj1TYPcIKv1LRquL/otRYLv7UmwEPl/Hg6T4lOGAgyLQogeJ3AESPVNg9wgq/UtGq4v+i1Fgu/tSbAQ+X8eDpPiU4aCQT/////////9jIlCiBeZp+CCmfQiG2HR4zwQ6KseFzHr1XcMc4QdTlL01CiWxoBAToiCiBeZp+CCmfQiG2HR4zwQ6KseFzHr1XcMc4QdTlL01CiWzoiCiB4ncARI9U2D3CCr9S0ari/6LUWC7+1JsBD5fx4Ok+JTg==",
       ByteStr.empty,
       "ad08b2cdcf276172198ac60568a1e207ab9e6247c6eedd353b12f9bcd7ef6426",
-      "2643d5d21f3af883518ebc409e35f891b73f93b451ef3864ce620ba6cc45be83"
+      "46aff309589a8ca05a593adb61a65ca1b093360445f9411595d0239c8b6c9a41"
     ),
     (
       "elided transaction",
       elidedTransaction,
       "cAI=",
       ByteStr(fastHash(Ints.toByteArray(0xaabbef40))),
-      "4185fb099c6dd4f483d4488045cc0912f02b9c292128b90142367af680ce2a32",
-      "7a15507d73ff9f98c3c777e687e23a4c8b33d02212203be73f0518403e91d431"
+      "46aff309589a8ca05a593adb61a65ca1b093360445f9411595d0239c8b6c9a41",
+      "dbbd7dd99509c00d1494b17387be2f989cefea1503322044cecf9eb4a35056a9"
     ),
     (
       "with generation commitment",
       withCommitment,
       "enYKIIxJnPpE5E9nuRR/Rrv2KwS91GygJLoMXMoZy9YvXiPIEjDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaIIxJnPpE5E9nuRR/Rrv2KwS91GygJLoMXMoZy9YvXiPI",
       ByteStr.empty,
-      "7a15507d73ff9f98c3c777e687e23a4c8b33d02212203be73f0518403e91d431",
-      "8d980f5400c62017dce2d4a038341dcf1d14149bb77840fef68f08fc7e366bb8"
+      "dbbd7dd99509c00d1494b17387be2f989cefea1503322044cecf9eb4a35056a9",
+      "9117eac44911daf6f916441b560ccfa8d4b0649159a3754b6785f20cf49382e3"
     ),
     (
       "all together",
       all,
-      "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",
+      "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",
       ByteStr(fastHash(Ints.toByteArray(0xaabbef50))),
-      "9ef6a85dd20ebb3834bcf391baff065803ba90e8cc3db1ff81062466a866d56f",
-      "f0397c7dafcdfba107462a74eb384e3fa97b9fe7b6198d63adfedcbb873d9af4"
+      "9117eac44911daf6f916441b560ccfa8d4b0649159a3754b6785f20cf49382e3",
+      "ca30dbcbc2d6c8b93aa17ec9e8053176595014da98a716dfc6fc9c6241b0d2ad"
     )
   )
 
@@ -221,5 +223,21 @@ class TxStateSnapshotHashSpec extends PropSpec {
         raw shouldEqual expectedResult
       }
     }
+  }
+
+  // minAssetFee has no representation in TransactionStateSnapshot (only PredefinedSnapshot ever sets it, never a
+  // transaction diff - see PBSnapshots.fromProtobuf), so it can't be exercised through the table above; it must
+  // still change the hash, or two configs/nodes that disagree only on an asset's minAssetFee would be undetectable.
+  property("minAssetFee changes the resulting hash") {
+    val asset        = IssuedAsset(ByteStr(fastHash(Ints.toByteArray(0xaa22aa44))))
+    val withoutFee   = StateSnapshot()
+    val withFee      = StateSnapshot(minAssetFees = Map(asset -> MinAssetFee.unsafeFrom(100000L)))
+    val withOtherFee = StateSnapshot(minAssetFees = Map(asset -> MinAssetFee.unsafeFrom(200000L)))
+
+    def hashOf(s: StateSnapshot): ByteStr =
+      TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
+
+    hashOf(withFee) should not equal hashOf(withoutFee)
+    hashOf(withFee) should not equal hashOf(withOtherFee)
   }
 }

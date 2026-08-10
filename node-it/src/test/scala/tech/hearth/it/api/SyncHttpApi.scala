@@ -241,9 +241,6 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     def assetsBalance(address: String, amountsAsStrings: Boolean = false): FullAssetsInfo =
       sync(async(n).assetsBalance(address, amountsAsStrings))
 
-    def nftList(address: String, limit: Int, maybeAfter: Option[String] = None, amountsAsStrings: Boolean = false): Seq[NFTAssetInfo] =
-      sync(async(n).nftList(address, limit, maybeAfter, amountsAsStrings))
-
     def assetDistributionAtHeight(
         asset: String,
         height: Height,
@@ -354,11 +351,12 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
         fee: Long,
         attachment: Option[String] = None,
         assetId: Option[String] = None,
+        feeAssetId: Option[String] = None,
         waitForTx: Boolean = false,
         amountsAsStrings: Boolean = false
     ): Transaction = {
       maybeWaitForTransaction(
-        sync(async(n).massTransfer(sender, transfers, fee, attachment, assetId, amountsAsStrings)),
+        sync(async(n).massTransfer(sender, transfers, fee, attachment, assetId, feeAssetId, amountsAsStrings)),
         waitForTx
       )
     }

@@ -62,16 +62,18 @@ object Keys {
   def assetBalanceAt(addressId: AddressId, asset: IssuedAsset, height: Height): Key[BalanceNode] =
     Key(AssetBalanceHistory, hBytes(asset.id.arr ++ addressId.toByteArray, height), readBalanceNode, writeBalanceNode)
 
-  def assetDetailsHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(AssetDetailsHistory, asset.id.arr)
-  def assetDetails(asset: IssuedAsset)(height: Height): Key[(AssetInfo, AssetVolumeInfo)] =
-    Key(AssetDetails, hBytes(asset.id.arr, height), readAssetDetails, writeAssetDetails)
+  def assetVolumeDetailsHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(AssetVolumeDetailsHistory, asset.id.arr)
+  def assetVolumeDetails(asset: IssuedAsset)(height: Height): Key[BigInt] =
+    Key(AssetVolumeDetails, hBytes(asset.id.arr, height), readAssetVolumeDetails, writeAssetVolumeDetails)
+
+  def assetMinFeeHistory(asset: IssuedAsset): Key[Seq[Height]] = historyKey(AssetMinFeeHistory, asset.id.arr)
+  def assetMinFee(asset: IssuedAsset)(height: Height): Key[MinAssetFee] =
+    Key(AssetMinFee, hBytes(asset.id.arr, height), readAssetMinFee, writeAssetMinFee)
 
   def issuedAssets(height: Height): Key[Seq[IssuedAsset]] =
     Key(IssuedAssets, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
-  def updatedAssets(height: Height): Key[Seq[IssuedAsset]] =
-    Key(UpdatedAssets, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
-  def sponsorshipAssets(height: Height): Key[Seq[IssuedAsset]] =
-    Key(SponsoredAssets, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
+  def assetsWithMinFee(height: Height): Key[Seq[IssuedAsset]] =
+    Key(AssetsWithMinFee, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
   def leaseBalanceAt(addressId: AddressId, height: Height): Key[LeaseBalanceNode] =
     Key(LeaseBalanceHistory, hBytes(addressId.toByteArray, height), readLeaseBalanceNode, writeLeaseBalanceNode)
 
@@ -179,12 +181,6 @@ object Keys {
 
   def assetStaticInfo(addr: ERC20Address): Key[Option[StaticAssetInfo]] =
     Key.opt(AssetStaticInfo, addr.arr, StaticAssetInfo.parseFrom, _.toByteArray)
-
-  def nftCount(addressId: AddressId, cfh: RDB.ApiHandle): Key[Int] =
-    Key(NftCount, addressId.toByteArray, Option(_).fold(0)(Ints.fromByteArray), Ints.toByteArray, Some(cfh.handle))
-
-  def nftAt(addressId: AddressId, index: Int, assetId: IssuedAsset, cfh: RDB.ApiHandle): Key[Option[Unit]] =
-    Key.opt(NftPossession, addressId.toByteArray ++ Longs.toByteArray(index) ++ assetId.id.arr, _ => (), _ => Array.emptyByteArray, Some(cfh.handle))
 
   def stateHash(height: Height): Key[Option[StateHash]] =
     Key.opt(StateHash, h(height), readStateHash, writeStateHash)

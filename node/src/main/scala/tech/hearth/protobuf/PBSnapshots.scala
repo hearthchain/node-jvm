@@ -1,7 +1,7 @@
 package tech.hearth.protobuf
 
 import com.google.protobuf.ByteString
-import tech.hearth.account.{Address, PublicKey}
+import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto.bls.BlsPublicKey
@@ -33,19 +33,27 @@ object PBSnapshots {
       cancelledLeases = snapshot.cancelledLeases.view.map { case (id, _) =>
         S.CancelledLease(id.toByteString)
       }.toSeq,
+      // NewAsset.issuer_public_key/is_nft are wire-compat only: AssetStaticInfo no longer carries an issuer or
+      // an NFT flag (nothing checks either any more), so they're written as constants and never read back
       assetStatics = assetStatics
         .map { case (id, (st, idx)) =>
-          (idx, NewAsset(id.id.toByteString, st.issuer.toByteString, st.decimals, st.nft))
+          (idx, NewAsset(id.id.toByteString, ByteString.EMPTY, st.decimals, nft = false))
         }
         .toSeq
         .sortBy(_._1)
         .map(_._2),
-      assetVolumes = assetVolumes.map { case (asset, info) =>
-        S.AssetVolume(asset.id.toByteString, info.isReissuable, ByteString.copyFrom(info.volume.toByteArray))
+      // AssetVolume.reissuable is wire-compat only: nothing reissues an asset any more, so it's written as a
+      // constant and never read back
+      assetVolumes = assetVolumes.map { case (asset, volume) =>
+        S.AssetVolume(asset.id.toByteString, reissuable = false, ByteString.copyFrom(volume.toByteArray))
       }.toSeq,
-      assetNamesAndDescriptions = assetNamesAndDescriptions.map { case (asset, info) =>
-        S.AssetNameAndDescription(asset.id.toByteString, info.name.toStringUtf8, info.description.toStringUtf8)
-      }.toSeq,
+      assetNamesAndDescriptions = assetStatics
+        .map { case (asset, (st, idx)) =>
+          (idx, S.AssetNameAndDescription(asset.id.toByteString, st.name, st.description))
+        }
+        .toSeq
+        .sortBy(_._1)
+        .map(_._2),
       orderFills = orderFills.map { case (orderId, VolumeAndFee(volume, fee)) =>
         S.OrderFill(orderId.toByteString, volume, fee)
       }.toSeq,
@@ -65,28 +73,23 @@ object PBSnapshots {
         .map(b => b.address.toAddress -> LeaseBalance(b.in, b.out))
         .toMap
 
+    // AssetVolume.reissuable and NewAsset.issuer_public_key/is_nft are wire-compat only, never read back - see
+    // toProtobuf
+    val namesAndDescriptions: Map[ByteStr, (String, String)] =
+      pbSnapshot.assetNamesAndDescriptions.map(i => i.assetId.toByteStr -> (i.name, i.description)).toMap
+
     val assetStatics: Map[IssuedAsset, (AssetStaticInfo, Int)] =
       pbSnapshot.assetStatics.zipWithIndex.map { case (info, idx) =>
+        val (name, description) = namesAndDescriptions.getOrElse(info.assetId.toByteStr, ("", ""))
         info.assetId.toIssuedAssetId -> (
-          AssetStaticInfo(
-            info.assetId.toByteStr,
-            TransactionId(txId),
-            PublicKey(info.issuerPublicKey.toByteStr),
-            info.decimals,
-            info.nft
-          ),
+          AssetStaticInfo(info.assetId.toByteStr, info.decimals, name, description),
           idx + 1
         )
       }.toMap
 
-    val assetVolumes: Map[IssuedAsset, AssetVolumeInfo] =
+    val assetVolumes: Map[IssuedAsset, BigInt] =
       pbSnapshot.assetVolumes
-        .map(v => v.assetId.toIssuedAssetId -> AssetVolumeInfo(v.reissuable, BigInt(v.volume.toByteArray)))
-        .toMap
-
-    val assetNamesAndDescriptions: Map[IssuedAsset, AssetInfo] =
-      pbSnapshot.assetNamesAndDescriptions
-        .map(i => i.assetId.toIssuedAssetId -> AssetInfo(i.name, i.description, height))
+        .map(v => v.assetId.toIssuedAssetId -> BigInt(v.volume.toByteArray))
         .toMap
 
     val newLeases = pbSnapshot.newLeases.map { l =>
@@ -120,7 +123,7 @@ object PBSnapshots {
         leaseBalances,
         assetStatics,
         assetVolumes,
-        assetNamesAndDescriptions,
+        Map.empty, // a per-transaction snapshot never sets minAssetFee - only PredefinedSnapshot does
         newLeases,
         cancelledLeases,
         orderFills,

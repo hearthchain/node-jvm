@@ -7,12 +7,13 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
 import tech.hearth.crypto.bls.BlsPublicKey
 import tech.hearth.lang.ValidationError
-import tech.hearth.settings.{GenesisGeneratorSettings, PredefinedSnapshotSettings}
+import tech.hearth.settings.{GenesisGeneratorSettings, MinAssetFeeSettings, PredefinedSnapshotSettings}
 import tech.hearth.state.diffs.BalanceDiffValidation
 import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.{Asset, CommitToGenerationTransaction, TxDecimals}
 
+import java.nio.charset.StandardCharsets
 import scala.collection.immutable.VectorMap
 
 /** A predefined chunk of state, applied outside of transaction processing before the block at
@@ -24,14 +25,16 @@ import scala.collection.immutable.VectorMap
 object PredefinedSnapshot {
   def build(settings: PredefinedSnapshotSettings, blockchain: Blockchain): Either[ValidationError, StateSnapshot] =
     for {
-      assets     <- issuedAssets(settings, blockchain)
-      balances   <- this.balances(settings, assets)
-      _          <- checkAssetsAreFullyDistributed(assets, balances)
-      generators <- committedGenerators(settings.generators)
+      assets        <- issuedAssets(settings, blockchain)
+      balances      <- this.balances(settings, assets)
+      _             <- checkAssetsAreFullyDistributed(assets, balances)
+      generators    <- committedGenerators(settings.generators)
+      minFeeChanges <- minAssetFeeChanges(settings.minAssetFees, blockchain, assets.map(_._1).toSet)
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = toPortfolios(balances),
         issuedAssets = assets,
+        updatedMinAssetFees = minFeeChanges,
         nextCommittedGenerators = generators
       )
       _ <- BalanceDiffValidation(blockchain)(snapshot)
@@ -58,7 +61,6 @@ object PredefinedSnapshot {
       _ <- checkNoDuplicates(settings.assets.map(_.id.toString), "asset id")
       assets <- settings.assets.toList.traverse { a =>
         for {
-          issuer <- PublicKey.fromBase16String(a.issuer).leftMap(e => GenericError(s"Predefined snapshot asset ${a.id}: invalid issuer: $e"))
           _ <- Either.cond(a.quantity > 0, (), GenericError(s"Predefined snapshot asset ${a.id}: quantity must be greater than 0, got ${a.quantity}"))
           decimalsError = GenericError(s"Predefined snapshot asset ${a.id}: ${TxDecimals.errMsg}, got ${a.decimals}")
           _ <- Either.cond(a.decimals.isValidByte, (), decimalsError)
@@ -68,14 +70,46 @@ object PredefinedSnapshot {
             (),
             GenericError(s"Predefined snapshot asset ${a.id}: an asset with this id already exists")
           )
-          isNft = a.quantity == 1 && a.decimals == 0 && !a.reissuable
+          _ <- validateUtf8(a.name, "name", a.id)
+          _ <- validateUtf8(a.description, "description", a.id)
+          minFeeError = GenericError(s"Predefined snapshot asset ${a.id}: minFee must be positive, got ${a.minFee}")
+          minFee <- MinAssetFee.from(a.minFee).leftMap(_ => minFeeError)
         } yield IssuedAsset(a.id) -> NewAssetInfo(
-          AssetStaticInfo(a.id, TransactionId(a.id), issuer, a.decimals, nft = isNft),
-          AssetInfo(a.name, a.description, Height(settings.height)),
-          AssetVolumeInfo(a.reissuable, BigInt(a.quantity))
+          AssetStaticInfo(a.id, a.decimals, a.name, a.description),
+          BigInt(a.quantity),
+          minFee
         )
       }
     } yield assets
+
+  private def validateUtf8(s: String, field: String, assetId: ByteStr): Either[ValidationError, Unit] =
+    Either.cond(
+      StandardCharsets.UTF_8.newEncoder().canEncode(s),
+      (),
+      GenericError(s"Predefined snapshot asset $assetId: $field is not valid UTF-8")
+    )
+
+  private def minAssetFeeChanges(
+      settings: Seq[MinAssetFeeSettings],
+      blockchain: Blockchain,
+      freshlyIssued: Set[IssuedAsset]
+  ): Either[ValidationError, Map[IssuedAsset, MinAssetFee]] =
+    for {
+      _ <- checkNoDuplicates(settings.map(_.assetId.toString), "minAssetFee change asset id")
+      changes <- settings.toList.traverse { s =>
+        val asset = IssuedAsset(s.assetId)
+        for {
+          _ <- Either.cond(
+            freshlyIssued(asset) || blockchain.assetDescription(asset).isDefined,
+            (),
+            GenericError(s"Predefined snapshot minAssetFee change: asset ${s.assetId} does not exist")
+          )
+          minFee <- MinAssetFee
+            .from(s.minFee)
+            .leftMap(_ => GenericError(s"Predefined snapshot minAssetFee change for ${s.assetId}: minFee must be positive, got ${s.minFee}"))
+        } yield asset -> minFee
+      }
+    } yield changes.toMap
 
   private def balances(
       settings: PredefinedSnapshotSettings,
@@ -143,9 +177,9 @@ object PredefinedSnapshot {
       case (_, (asset, info)) =>
         val issued = distributed.getOrElse(asset, BigInt(0))
         Either.cond(
-          issued == info.volume.volume,
+          issued == info.volume,
           (),
-          GenericError(s"Predefined snapshot asset ${asset.id}: quantity ${info.volume.volume} does not match the distributed amount $issued")
+          GenericError(s"Predefined snapshot asset ${asset.id}: quantity ${info.volume} does not match the distributed amount $issued")
         )
     }
   }
