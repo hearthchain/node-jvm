@@ -129,9 +129,9 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(120.minutes)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(90.minutes)
     settings.rewardsSettings.cEmit should be(9500000000000000L)
-    settings.rewardsSettings.initialReward should be(4572845982860L)
-    settings.rewardsSettings.decayRatioFixed should be(BigInt("340118610667410880413344550167336787510"))
-    settings.rewardsSettings.halfLifeBlocks should be(1440L)
+    settings.rewardsSettings.initialReward should be(12528345158L)
+    settings.rewardsSettings.decayRatioFixed should be(BigInt("340281918165977088157076486680406733895"))
+    settings.rewardsSettings.halfLifeBlocks should be(525_600L)
     settings.genesisSettings.timestamp should be(1478000000000L)
     settings.genesisSettings.signature should be(None)  // The genesis block is signed by Block.GenesisGenerator
     settings.initialBalance should be(500000000000000L) // 5% premine; the other 95% is emitted, not genesis-credited

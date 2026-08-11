@@ -20,7 +20,6 @@ object BlockRewardCalculator {
   val FullRewardInit: Long        = 6 * Constants.UnitsInHearth
   val MaxAddressReward: Long      = 2 * Constants.UnitsInHearth
   val GuaranteedMinerReward: Long = 2 * Constants.UnitsInHearth
-  val RewardBoost                 = 10
 
   // The genesis block (height 1) earns no reward (see mkInitialSnapshot); the emission curve's own h=0 is the
   // first block that does, height 2.

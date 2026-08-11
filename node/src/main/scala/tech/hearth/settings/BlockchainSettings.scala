@@ -54,16 +54,16 @@ object RewardsSettings {
   // instead of only in unit tests. Not economically meaningful, purely for testing observability.
   val TESTNET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 4572845982860L,
-    decayRatioFixed = BigInt("340118610667410880413344550167336787510"),
-    halfLifeBlocks = 1_440L
+    initialReward = 12528345158L,
+    decayRatioFixed = BigInt("340281918165977088157076486680406733895"),
+    halfLifeBlocks = 525_600L
   )
 
   val STAGENET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 65848982153194L,
-    decayRatioFixed = BigInt("337931864918735857425456001828432707560"),
-    halfLifeBlocks = 100L
+    initialReward = 12528345158L,
+    decayRatioFixed = BigInt("340281918165977088157076486680406733895"),
+    halfLifeBlocks = 525_600L
   )
 }
 
