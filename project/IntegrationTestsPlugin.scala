@@ -14,10 +14,10 @@ object IntegrationTestsPlugin extends AutoPlugin {
   object autoImport extends ItKeys
   import autoImport.*
 
-  override def projectSettings: Seq[Def.Setting[_]] =
+  override def projectSettings: Seq[Def.Setting[?]] =
     inConfig(Test)(
       Seq(
-        logDirectory := {
+        logDirectory := Def.uncached {
           val runId = Option(System.getenv("RUN_ID")).getOrElse {
             val formatter = DateTimeFormatter.ofPattern("MM-dd--HH_mm_ss")
             formatter.format(LocalDateTime.now()) // git branch?
@@ -35,10 +35,10 @@ object IntegrationTestsPlugin extends AutoPlugin {
            * W - without color
            */
           val args = Seq("-fFW", (logDirectory.value / "summary.log").toString) ++ excludeTags
-          Tests.Argument(TestFrameworks.ScalaTest, args: _*)
+          Tests.Argument(TestFrameworks.ScalaTest, args*)
         },
         parallelExecution := true,
-        testGrouping := {
+        testGrouping := Def.uncached {
           // ffs, sbt!
           // https://github.com/sbt/sbt/issues/3266
           val javaHomeValue     = javaHome.value

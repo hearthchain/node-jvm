@@ -47,6 +47,7 @@ object Tasks {
           "Duplicate detected"
         )
         .mapValues(_.head)
+        .toMap
 
     def str(s: String): String = "\"" + s + "\""
 

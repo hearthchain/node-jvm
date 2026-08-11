@@ -1,4 +1,5 @@
 import com.typesafe.sbt.SbtNativePackager.Debian
+import sbtcompat.PluginCompat.toFileRef
 
 enablePlugins(
   RunApplicationSettings,
@@ -14,22 +15,22 @@ libraryDependencies ++= Dependencies.node.value
 
 debArchitecture := Arm64
 
-homepage := Some(url("https://waves.tech/"))
+homepage := Some(uri("https://waves.tech/"))
 developers := List(
-  Developer("ismagin", "Ilya Smagin", "ilya.smagin@gmail.com", url("https://github.com/ismagin")),
-  Developer("asayadyan", "Artyom Sayadyan", "xrtm000@gmail.com", url("https://github.com/xrtm000")),
-  Developer("mpotanin", "Mike Potanin", "mpotanin@wavesplatform.com", url("https://github.com/potan")),
-  Developer("irakitnykh", "Ivan Rakitnykh", "mrkr.reg@gmail.com", url("https://github.com/mrkraft")),
-  Developer("akiselev", "Alexey Kiselev", "alexey.kiselev@gmail.com>", url("https://github.com/alexeykiselev")),
-  Developer("phearnot", "Sergey Nazarov", "phearnot@renee.ru", url("https://github.com/phearnot")),
-  Developer("tolsi", "Sergey Tolmachev", "tolsi.ru@gmail.com", url("https://github.com/tolsi")),
-  Developer("vsuharnikov", "Vyatcheslav Suharnikov", "arz.freezy@gmail.com", url("https://github.com/vsuharnikov")),
-  Developer("ivan-mashonskiy", "Ivan Mashonskii", "ivan.mashonsky@gmail.com", url("https://github.com/ivan-mashonskiy"))
+  Developer("ismagin", "Ilya Smagin", "ilya.smagin@gmail.com", uri("https://github.com/ismagin")),
+  Developer("asayadyan", "Artyom Sayadyan", "xrtm000@gmail.com", uri("https://github.com/xrtm000")),
+  Developer("mpotanin", "Mike Potanin", "mpotanin@wavesplatform.com", uri("https://github.com/potan")),
+  Developer("irakitnykh", "Ivan Rakitnykh", "mrkr.reg@gmail.com", uri("https://github.com/mrkraft")),
+  Developer("akiselev", "Alexey Kiselev", "alexey.kiselev@gmail.com>", uri("https://github.com/alexeykiselev")),
+  Developer("phearnot", "Sergey Nazarov", "phearnot@renee.ru", uri("https://github.com/phearnot")),
+  Developer("tolsi", "Sergey Tolmachev", "tolsi.ru@gmail.com", uri("https://github.com/tolsi")),
+  Developer("vsuharnikov", "Vyatcheslav Suharnikov", "arz.freezy@gmail.com", uri("https://github.com/vsuharnikov")),
+  Developer("ivan-mashonskiy", "Ivan Mashonskii", "ivan.mashonsky@gmail.com", uri("https://github.com/ivan-mashonskiy"))
 )
 
 inConfig(Compile)(
   Seq(
-    PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value,
+    PB.targets += PB.Target(scalapb.gen(flatPackage = true), sourceManaged.value),
     PB.protoSources += PB.externalIncludePath.value,
     PB.generate / includeFilter := { (f: File) =>
       (** / "hearth" / "*.proto").matches(f.toPath)
@@ -38,11 +39,14 @@ inConfig(Compile)(
   )
 )
 
-inTask(assembly)(
+// sbt 1's inTask(assembly)(...) helper was dropped in sbt 2 (ProjectExtra keeps only inConfig/inScope),
+// so this expands it manually: inTask(key)(settings) == inScope(ThisScope.copy(task = Select(key.key)))(settings).
+inScope(ThisScope.copy(task = Select(assembly.key)))(
   Seq(
     name := "hearth",
     fullClasspath := {
-      val optional = (Optional / update).value.select(configurationFilter("optional")).toSet
+      implicit val conv: xsbti.FileConverter = fileConverter.value
+      val optional = (Optional / update).value.select(configurationFilter("optional")).map(f => toFileRef(f)).toSet
       (Runtime / fullClasspath).value.filterNot(item => optional.contains(item.data))
     }
   ) ++ CommonSettings.assemblySettings
@@ -88,7 +92,10 @@ inConfig(Universal)(
   Seq(
     maintainer  := "tech.hearth",
     packageName := s"hearth-jvm-${version.value}",
-    mappings += (baseDirectory.value / s"hearth-sample.conf" -> "doc/hearth.conf.sample"),
+    mappings += {
+      implicit val conv: xsbti.FileConverter = fileConverter.value
+      toFileRef(baseDirectory.value / s"hearth-sample.conf") -> "doc/hearth.conf.sample"
+    },
     javaOptions ++= Seq(
       // -J prefix is required by the bash script
       "-J-server",
@@ -159,7 +166,7 @@ inConfig(Debian)(
       val platformSpecificMappings = packageMapping(
         (Optional / update).value
           .select(artifactFilter(classifier = classifier))
-          .map(f => f -> (defaultLinuxInstallLocation.value + "/" + (Debian / packageName).value + "/lib/software.amazon.cryptools." + f.getName)): _*
+          .map(f => f -> (defaultLinuxInstallLocation.value + "/" + (Debian / packageName).value + "/lib/software.amazon.cryptools." + f.getName))*
       )
 
       linuxPackageMappings.value.map(m =>

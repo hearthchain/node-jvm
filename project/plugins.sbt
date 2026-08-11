@@ -4,17 +4,20 @@ resolvers ++= Seq(
 )
 
 // Should go before Scala.js
-addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.8")
+// Pinned to an RC: 1.1.0-RC2 is the newest sbt-2-compatible build as of this writing, no stable
+// sbt2 release exists yet. Bump to a stable release once sbt-protoc cuts one.
+addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.1.0-RC2")
 
 libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "1.0.0-alpha.6"
 
 Seq(
-  "com.eed3si9n"       % "sbt-assembly"             % "2.3.1",
+  "com.eed3si9n"       % "sbt-assembly"             % "2.4.1",
   "com.github.sbt"     % "sbt-git"                  % "2.1.0",
   "com.github.sbt"     % "sbt-native-packager"      % "1.11.7",
   "com.github.sbt"     % "sbt-pgp"                  % "2.3.1",
-  "org.scalameta"      % "sbt-scalafmt"             % "2.6.1",
-  "pl.project13.scala" % "sbt-jmh"                  % "0.4.8"
+  "org.scalameta"      % "sbt-scalafmt"             % "2.6.2",
+  "pl.project13.scala" % "sbt-jmh"                  % "0.4.8",
+  "com.github.sbt"     % "sbt2-compat"              % "0.2.0"
 ).map(addSbtPlugin)
 
 val dockerJavaVersion = "3.7.1"

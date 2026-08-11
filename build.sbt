@@ -62,8 +62,8 @@ inScope(Global)(
     scalaVersion         := "3.8.4",
     organization         := "tech.hearth",
     organizationName     := "Hearth Chain",
-    organizationHomepage := Some(url("https://hearth.tech")),
-    licenses             := Seq(("MIT", url("https://github.com/hearthchain/node-jvm/blob/main/LICENSE"))),
+    organizationHomepage := Some(uri("https://hearth.tech")),
+    licenses             := Seq(("MIT", uri("https://github.com/hearthchain/node-jvm/blob/main/LICENSE"))),
     publish / skip       := true,
     scalacOptions ++= Seq(
       "-feature",
@@ -87,7 +87,7 @@ inScope(Global)(
      * u - select the JUnit XML reporter with output directory
      */
     testOptions += Tests.Argument("-oIDOF", "-u", "target/test-reports"),
-    testOptions += Tests.Setup(_ => sys.props("sbt-testing") = "true"),
+    testOptions += Tests.Setup(() => sys.props("sbt-testing") = "true"),
     network := Network.default(),
     resolvers ++= Resolver.sonatypeCentralSnapshots +: Seq(Resolver.mavenLocal),
     Compile / packageDoc / publishArtifact := false,
@@ -107,31 +107,34 @@ commands += Command.command("packageAll") { state =>
 
 lazy val buildTarballsForDocker = taskKey[Unit]("Package node and grpc-server tarballs and copy them to docker/target")
 buildTarballsForDocker := {
+  val conv = fileConverter.value
   IO.copyFile(
-    (node / Universal / packageZipTarball).value,
+    conv.toPath((node / Universal / packageZipTarball).value).toFile,
     baseDirectory.value / "docker" / "target" / "hearth.tgz"
   )
   IO.copyFile(
-    (`grpc-server` / Universal / packageZipTarball).value,
+    conv.toPath((`grpc-server` / Universal / packageZipTarball).value).toFile,
     baseDirectory.value / "docker" / "target" / "hearth-grpc-server.tgz"
   )
 }
 
 lazy val compilePRRaw = taskKey[Unit]("Compile the project")
-compilePRRaw := Def
-  .sequential(
-    clean.all(ScopeFilter(inAnyProject)),
-    scalafmtCheck.all(ScopeFilter(inAnyProject, inConfigurations(Compile))),
-    compile.all(ScopeFilter(inAnyProject, inConfigurations(Test)))
-  )
-  .value
+compilePRRaw := Def.uncached(
+  Def
+    .sequential(
+      clean.all(ScopeFilter(inAnyProject)),
+      scalafmtCheck.all(ScopeFilter(inAnyProject, inConfigurations(Compile))),
+      compile.all(ScopeFilter(inAnyProject, inConfigurations(Test)))
+    )
+    .value
+)
 
 lazy val checkPRRaw = taskKey[Unit]("Compile the project and run unit tests")
 checkPRRaw := Def
   .sequential(
     compilePRRaw,
     Def.sequential(
-      test.all(
+      testFull.all(
         ScopeFilter(inProjects(`grpc-server`, `node-tests`), inConfigurations(Test))
       ),
       assembly.all(ScopeFilter(inProjects(node))),

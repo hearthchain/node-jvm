@@ -1,4 +1,3 @@
-import org.portablescala.sbtplatformdeps.PlatformDepsPlugin.autoImport.*
 import sbt.Keys.scalaVersion
 import sbt.{Def, *}
 import scalapb.compiler.Version.scalapbVersion
@@ -37,7 +36,7 @@ object Dependencies {
 
   // Node protobuf schemas
   lazy val protoSchemasLib =
-    "tech.hearth" % "protobuf-schemas" % "0.1.0-SNAPSHOT" classifier "protobuf-src" intransitive ()
+    ("tech.hearth" % "protobuf-schemas" % "0.1.0-SNAPSHOT").classifier("protobuf-src").intransitive()
 
   private def pekkoModule(module: String) = "org.apache.pekko" %% s"pekko-$module" % "1.6.0"
 
@@ -47,7 +46,7 @@ object Dependencies {
 
   private def jacksonModule(group: String, module: String, version: String = "2.21.4") = s"com.fasterxml.jackson.$group" % s"jackson-$module" % version
 
-  def monixModule(module: String): Def.Initialize[ModuleID] = Def.setting("io.monix" %%% s"monix-$module" % "3.4.1")
+  def monixModule(module: String): ModuleID = "io.monix" %% s"monix-$module" % "3.4.1"
 
   private def grpcModule(module: String) = "io.grpc" % module % "1.83.1"
 
@@ -62,13 +61,7 @@ object Dependencies {
 
   val playJson = "org.playframework" %% "play-json" % "3.0.6"
 
-  val scalaTest   = "org.scalatest" %% "scalatest" % "3.2.20" % Test
-  val scalaJsTest = Def.setting("com.lihaoyi" %%% "utest" % "0.9.5" % Test)
-
-  private def sttp3Module(module: String) = "com.softwaremill.sttp.client3" %% module % "3.11.0"
-
-  val sttp3      = sttp3Module("core")
-  val sttp3Monix = sttp3Module("monix")
+  val scalaTest = "org.scalatest" %% "scalatest" % "3.2.20" % Test
 
   val cli = Seq("com.github.scopt" %% "scopt" % "4.1.0")
 
@@ -82,13 +75,6 @@ object Dependencies {
     // fallback Java
     "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
     "tech.hearth" % "crypto" % "0.1.0-SNAPSHOT"
-  )
-
-  lazy val scalapbRuntimeJS = Def.setting(
-    Seq(
-      "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapbVersion,
-      "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapbVersion % "protobuf"
-    )
   )
 
   lazy val it = scalaTest +: Seq(
@@ -134,7 +120,7 @@ object Dependencies {
       pekkoModule("stream"),
       pekkoHttp,
       "org.bitlet" % "weupnp" % "0.1.4",
-      monixModule("reactive").value,
+      monixModule("reactive"),
       nettyHandler,
       scalaLogging,
       "eu.timepit"        %% "refined"  % "0.11.4" exclude ("org.scala-lang.modules", "scala-xml_2.13"),
@@ -166,32 +152,6 @@ object Dependencies {
     "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapbVersion,
     protoSchemasLib         % "protobuf"
   )
-
-  lazy val rideRunner = Def.setting(
-    Seq(
-      rocksdb,
-      "com.github.ben-manes.caffeine" % "caffeine"                 % "3.2.4",
-      "net.logstash.logback"          % "logstash-logback-encoder" % "9.0" % Runtime,
-      kamonModule("caffeine"),
-      kamonModule("prometheus"),
-      sttp3,
-      sttp3Monix,
-      "org.scala-lang.modules"             %% "scala-xml"              % "2.4.0", // JUnit reports
-      pekkoHttpModule("pekko-http-testkit") % Test,
-      "com.softwaremill.diffx"             %% "diffx-core"             % "0.9.0" % Test,
-      "com.softwaremill.diffx"             %% "diffx-scalatest-should" % "0.9.0" % Test,
-      grpcModule("grpc-inprocess")          % Test
-    ) ++ Dependencies.cli ++ Dependencies.logDeps ++ Dependencies.test
-  )
-
-  lazy val circe = Def.setting {
-    val circeVersion = "0.14.16"
-    Seq(
-      "io.circe" %%% "circe-core",
-      "io.circe" %%% "circe-generic",
-      "io.circe" %%% "circe-parser"
-    ).map(_ % circeVersion)
-  }
 
   // https://github.com/sbt/sbt-javaagent#scopes
   // dist (only sbt-native-packager), because causes using logs before needed, so System.setProperty in RideRunnerWithPreparedStateApp has no effect.
