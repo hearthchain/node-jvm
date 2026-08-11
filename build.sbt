@@ -92,11 +92,37 @@ inScope(Global)(
     resolvers ++= Resolver.sonatypeCentralSnapshots +: Seq(Resolver.mavenLocal),
     Compile / packageDoc / publishArtifact := false,
     concurrentRestrictions                 := Seq(Tags.limit(Tags.Test, math.min(EvaluateTask.SystemProcessors, 8))),
+    // Dead settings sbt 2's project-load lint now catches that sbt 1 missed (same keys, same plugin
+    // wiring, unused under sbt 1 too - see "SBT 2 unused-settings lint" in CLAUDE.md for the investigation).
     excludeLintKeys ++= Set(
       node / Universal / configuration,
       node / Linux / configuration,
       node / Debian / configuration,
-      Global / maxParallelSuites
+      Global / maxParallelSuites,
+      node / Rpm / daemonGroupGid,
+      node / Rpm / daemonUserUid,
+      node / Rpm / executableScriptName,
+      node / Rpm / name,
+      node / Linux / javaOptions,
+      node / Debian / executableScriptName,
+      node / Debian / daemonUser,
+      node / Debian / daemonUserUid,
+      node / Debian / daemonGroup,
+      node / Debian / daemonGroupGid,
+      node / debianControlScriptsDirectory,
+      node / Universal / executableScriptName,
+      node / UniversalSrc / name,
+      `grpc-server` / Debian / executableScriptName,
+      `grpc-server` / Debian / sourceDirectory,
+      `grpc-server` / Universal / executableScriptName,
+      `grpc-server` / UniversalSrc / name,
+      node / git.gitDescribedVersion,
+      `grpc-server` / git.gitDescribedVersion,
+      benchmark / git.gitDescribedVersion,
+      `node-generator` / git.gitDescribedVersion,
+      `node-it` / git.gitDescribedVersion,
+      `node-testkit` / git.gitDescribedVersion,
+      `node-tests` / git.gitDescribedVersion
     )
   )
 )

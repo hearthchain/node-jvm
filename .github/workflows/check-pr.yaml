@@ -45,7 +45,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hearth-all
-          path: node/target/hearth-all-*.jar
+          path: target/out/jvm/u/node/hearth-all-*.jar
       - name: Save debug data
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
