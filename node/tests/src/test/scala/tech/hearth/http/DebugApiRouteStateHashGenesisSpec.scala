@@ -8,7 +8,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.mining.TestMiner
 import tech.hearth.network.PeerDatabase
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.test.*
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.utils.SharedSchedulerMixin
@@ -29,7 +29,7 @@ class DebugApiRouteStateHashGenesisSpec
     with OptionValues
     with SharedSchedulerMixin {
 
-  override def settings: WavesSettings = DomainPresets.DeterministicFinality
+  override def settings: HearthSettings = DomainPresets.DeterministicFinality
     .copy(
       dbSettings = DomainPresets.DeterministicFinality.dbSettings.copy(storeStateHashes = true),
       restAPISettings = restAPISettings
@@ -39,7 +39,7 @@ class DebugApiRouteStateHashGenesisSpec
 
   private val richAccount = TxHelpers.signer(905)
 
-  override def genesisBalances: Seq[AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 50_000.waves))
+  override def genesisBalances: Seq[AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 50_000.hearth))
 
   val block: Block = TestBlock.create(Nil).block
 
@@ -77,11 +77,11 @@ class DebugApiRouteStateHashGenesisSpec
         val genesisHeight      = 1
         val genesisBlockHeader = domain.blockchain.blockHeader(genesisHeight).value
         val expectedResponse = Json.obj(
-          "stateHash"        -> "d2ba495b9f3ffded5d9f53a518d77713b89b1e9273b603b08c8484712a3a8330",
-          "wavesBalanceHash" -> "13efdbee131f5f02c49c7558a185a5933946754bb0f9258d9823660f363bebd3",
-          "assetBalanceHash" -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "leaseBalanceHash" -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-          "leaseStatusHash"  -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
+          "stateHash"         -> "d2ba495b9f3ffded5d9f53a518d77713b89b1e9273b603b08c8484712a3a8330",
+          "hearthBalanceHash" -> "13efdbee131f5f02c49c7558a185a5933946754bb0f9258d9823660f363bebd3",
+          "assetBalanceHash"  -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
+          "leaseBalanceHash"  -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
+          "leaseStatusHash"   -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           // Note: "nextCommittedGeneratorsHash" and "committedGeneratorBalancesHash" fields are present
           "nextCommittedGeneratorsHash"    -> "be516123bf31843e0b6003004cb2f0e445e5007e04bfd4b2951b4a2d70588bc4",
           "committedGeneratorBalancesHash" -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",

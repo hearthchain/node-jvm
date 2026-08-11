@@ -23,13 +23,13 @@ trait BaseFinalizationSpec extends FreeSpec, WithDomain, WithResourceManager, Ei
   ): FinalizationVoting = FinalizationVoting(valid, finalizedHeight, aggregatedEndorsement = None, conflict)
 
   protected def mkConflictEndorsement(
-      wavesAcc: SigningKey,
+      hearthAcc: SigningKey,
       idx: GeneratorIndex,
       endorsedId: BlockId,
       finalizedHeight: Height = GenesisBlockHeight,
       finalizedId: BlockId = TxHelpers.randomBlockId
   ): BlockEndorsement = BlockEndorsement.signed(
-    TxHelpers.blsKeyOf(wavesAcc),
+    TxHelpers.blsKeyOf(hearthAcc),
     idx,
     finalizedId,
     finalizedHeight = finalizedHeight,
@@ -37,16 +37,16 @@ trait BaseFinalizationSpec extends FreeSpec, WithDomain, WithResourceManager, Ei
   )
 
   protected def bs(height: Int, regularBalance: Long, deposits: Int = 0): BalanceSnapshot =
-    BalanceSnapshot(Height(height), regularBalance, 0L, 0L, CommitToGenerationTransaction.DepositInWavelets * deposits)
+    BalanceSnapshot(Height(height), regularBalance, 0L, 0L, CommitToGenerationTransaction.DepositInEmbers * deposits)
 
   extension (self: FinalizationVoting) {
     def withConflict(
-        wavesAcc: SigningKey,
+        hearthAcc: SigningKey,
         idx: GeneratorIndex,
         endorsedId: BlockId,
         finalizedHeight: Height = GenesisBlockHeight,
         finalizedId: BlockId = TxHelpers.randomBlockId
-    ): FinalizationVoting = self.copy(conflict = self.conflict :+ mkConflictEndorsement(wavesAcc, idx, endorsedId, finalizedHeight, finalizedId))
+    ): FinalizationVoting = self.copy(conflict = self.conflict :+ mkConflictEndorsement(hearthAcc, idx, endorsedId, finalizedHeight, finalizedId))
 
     def signed(endorsedId: BlockId, finalizedId: BlockId, validEndorsers: SigningKey*): FinalizationVoting = {
       val aggSig = validEndorsers

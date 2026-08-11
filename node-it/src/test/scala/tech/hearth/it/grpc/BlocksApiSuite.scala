@@ -24,7 +24,7 @@ class BlocksApiSuite extends GrpcBaseTransactionSuite {
       // Block format is a single, unconditional version now (no more per-height feature-gated transitions), and
       // every check below is version-agnostic (chainId), so BlockV4Height/BlockV5Height just pick heights to
       // sample rather than gate an actual behavior change.
-      Default(6).overrides(s"""waves {
+      Default(6).overrides(s"""hearth {
                               |  miner {
                               |    quorum = 0
                               |    max-transactions-in-micro-block = 1

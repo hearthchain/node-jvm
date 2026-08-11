@@ -38,12 +38,12 @@ class NetworkSeparationTestSuite extends BaseFreeSpec, ScorexLogging {
   }
 
   "after fork node should apply correct subchain" in {
-    val txId = nodeA.transfer(nodeA.keyPair, nodeB.address, 1.waves, minFee).id
+    val txId = nodeA.transfer(nodeA.keyPair, nodeB.address, 1.hearth, minFee).id
     nodes.waitForHeightAriseAndTxPresent(txId)
 
     docker.disconnectFromNetwork(dockerNodes().head)
 
-    val divergingTxId = nodeB.transfer(nodeB.keyPair, nodeA.address, 1.waves, minFee).id
+    val divergingTxId = nodeB.transfer(nodeB.keyPair, nodeA.address, 1.hearth, minFee).id
     nodeB.waitForTransaction(divergingTxId, 2.minute)
     val heightAfter = nodeB.height
 
@@ -69,7 +69,7 @@ object NetworkSeparationTestSuite {
   // Both nodes used to differ on a second, now-removed feature (id 6); only feature 1 survives, and this
   // suite's fork/reconnect scenario never depended on that other feature, so both configs collapse to the same one.
   private val config = ConfigFactory.parseString(s"""
-                                                    |waves {
+                                                    |hearth {
                                                     |  synchronization.synchronization-timeout = 10s
                                                     |  blockchain.custom.functionality {
                                                     |    pre-activated-features = {

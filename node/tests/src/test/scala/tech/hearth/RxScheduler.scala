@@ -6,7 +6,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto.*
 import tech.hearth.lagonaki.mocks.TestBlock
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Proofs
 import tech.hearth.transaction.transfer.*
 import monix.execution.schedulers.SchedulerService
@@ -42,7 +42,7 @@ trait RxScheduler extends BeforeAndAfterAll { suite: Suite =>
 
   def microBlock(total: Int, prev: Int): MicroBlock = {
     val tx = TransferTransaction
-      .create(PublicKey(signer.publicKey), signer.toAddress, Waves, 1, Waves, 1, ByteStr.empty, 1, Proofs.empty)
+      .create(PublicKey(signer.publicKey), signer.toAddress, Hearth, 1, Hearth, 1, ByteStr.empty, 1, Proofs.empty)
       .map(_.signWith(signer))
       .explicitGet()
     MicroBlock.buildAndSign(signer, Seq(tx), ref(prev), sig(total), None, None).explicitGet()

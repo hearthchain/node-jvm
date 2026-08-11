@@ -6,7 +6,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.*
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.*
@@ -20,8 +20,8 @@ import scala.concurrent.duration.*
 
 trait TransactionGenBase extends NTPTime { suite: Suite =>
 
-  val ScriptExtraFee                  = 400000L
-  protected def waves(n: Float): Long = (n * 100000000L).toLong
+  val ScriptExtraFee                   = 400000L
+  protected def hearth(n: Float): Long = (n * 100000000L).toLong
 
   def byteArrayGen(length: Int): Gen[Array[Byte]] = Gen.containerOfN[Array, Byte](length, Arbitrary.arbitrary[Byte])
 
@@ -70,17 +70,17 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
   def validTimestampGen(blockTimestamp: Long, back: FiniteDuration = 120.minutes, forward: FiniteDuration = 90.minutes): Gen[Long] =
     Gen.choose(blockTimestamp - back.toMillis, blockTimestamp + forward.toMillis)
 
-  val wavesAssetGen: Gen[Option[ByteStr]] = Gen.const(None)
-  val assetIdGen: Gen[Option[ByteStr]]    = Gen.frequency((1, wavesAssetGen), (10, Gen.option(bytes32gen.map(ByteStr(_)))))
+  val hearthAssetGen: Gen[Option[ByteStr]] = Gen.const(None)
+  val assetIdGen: Gen[Option[ByteStr]]     = Gen.frequency((1, hearthAssetGen), (10, Gen.option(bytes32gen.map(ByteStr(_)))))
 
   val assetPairGen: Gen[AssetPair] = assetIdGen.flatMap {
-    case None => bytes32gen.map(b => AssetPair(Waves, IssuedAsset(ByteStr(b))))
+    case None => bytes32gen.map(b => AssetPair(Hearth, IssuedAsset(ByteStr(b))))
     case Some(a1bytes) =>
       val a2bytesGen: Gen[Option[Array[Byte]]] = byteArrayGen(31).map(a2bytes => Option(a1bytes.arr(0) +: a2bytes))
 
       Gen.oneOf(Gen.const(None), a2bytesGen).map { a2 =>
         val asset1 = IssuedAsset(a1bytes)
-        val asset2 = a2.fold[Asset](Waves)(arr => IssuedAsset(ByteStr(arr)))
+        val asset2 = a2.fold[Asset](Hearth)(arr => IssuedAsset(ByteStr(arr)))
         AssetPair(asset1, asset2)
       }
   }
@@ -182,7 +182,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       amount                                    <- Gen.choose(1L, maxAmount)
       (_, _, _, _, _, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, Hearth, amount, Hearth, feeAmount, attachment, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -194,13 +194,13 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       .map(_.signWith(sender))
       .explicitGet()
 
-  def wavesTransferGeneratorP(sender: SigningKey, recipient: Address): Gen[TransferTransaction] =
-    transferGeneratorP(sender, recipient, Waves, Waves)
+  def hearthTransferGeneratorP(sender: SigningKey, recipient: Address): Gen[TransferTransaction] =
+    transferGeneratorP(sender, recipient, Hearth, Hearth)
 
-  def wavesTransferGeneratorP(timestamp: Long, sender: SigningKey, recipient: Address): Gen[TransferTransaction] =
-    transferGeneratorP(timestamp, sender, recipient, Waves, Waves)
+  def hearthTransferGeneratorP(timestamp: Long, sender: SigningKey, recipient: Address): Gen[TransferTransaction] =
+    transferGeneratorP(timestamp, sender, recipient, Hearth, Hearth)
 
-  def createWavesTransfer(
+  def createHearthTransfer(
       sender: SigningKey,
       recipient: Address,
       amount: Long,
@@ -208,7 +208,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       timestamp: Long
   ): Either[ValidationError, TransferTransaction] =
     TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, Waves, amount, Waves, fee, ByteStr.empty, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), recipient, Hearth, amount, Hearth, fee, ByteStr.empty, timestamp, Proofs.empty)
       .map(_.signWith(sender))
 
   val transferV1Gen: Gen[TransferTransaction] = (for {
@@ -325,8 +325,8 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     assetPair               <- assetPairGen
     buyerAnotherAsset       <- assetIdGen.map(Asset.fromCompatId)
     sellerAnotherAsset      <- assetIdGen.map(Asset.fromCompatId)
-    buyerMatcherFeeAssetId  <- Gen.oneOf(assetPair.amountAsset, assetPair.priceAsset, buyerAnotherAsset, Waves)
-    sellerMatcherFeeAssetId <- Gen.oneOf(assetPair.amountAsset, assetPair.priceAsset, sellerAnotherAsset, Waves)
+    buyerMatcherFeeAssetId  <- Gen.oneOf(assetPair.amountAsset, assetPair.priceAsset, buyerAnotherAsset, Hearth)
+    sellerMatcherFeeAssetId <- Gen.oneOf(assetPair.amountAsset, assetPair.priceAsset, sellerAnotherAsset, Hearth)
     r <- Gen.oneOf(
       exchangeV1GeneratorP(sender1, sender2, assetPair.amountAsset, assetPair.priceAsset),
       exchangeV2GeneratorP(
@@ -405,8 +405,8 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       priceAssetId: Asset,
       fixedMatcherFee: Option[Long] = None,
       orderVersions: Set[Byte] = Set(1, 2, 3),
-      buyMatcherFeeAssetId: Asset = Waves,
-      sellMatcherFeeAssetId: Asset = Waves,
+      buyMatcherFeeAssetId: Asset = Hearth,
+      sellMatcherFeeAssetId: Asset = Hearth,
       fixedMatcher: Option[SigningKey] = None
   ): Gen[ExchangeTransaction] = {
     def mkBuyOrder(version: Byte): OrderConstructor = (version: @unchecked) match {

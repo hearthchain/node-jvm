@@ -5,7 +5,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.lang.ValidationError
 import tech.hearth.test.PropSpec
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.{GenericError, OrderValidationError}
 import tech.hearth.transaction.assets.exchange.AssetPair.extractAssetId
 import tech.hearth.transaction.serialization.impl.PBTransactionSerializer
@@ -77,7 +77,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
           time,
           expirationTimestamp,
           buyMatcherFee,
-          if (buyV == 3) buyerMatcherFeeAssetId else Waves
+          if (buyV == 3) buyerMatcherFeeAssetId else Hearth
         )
         .explicitGet()
       val sell = TxHelpers
@@ -91,7 +91,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
           time,
           expirationTimestamp,
           sellMatcherFee,
-          if (sellV == 3) sellerMatcherFeeAssetId else Waves
+          if (sellV == 3) sellerMatcherFeeAssetId else Hearth
         )
         .explicitGet()
 
@@ -151,7 +151,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
       create(sellOrder = buy, buyOrder = buy) shouldBe Left(GenericError("sellOrder should has OrderType.SELL"))
 
       create(
-        buyOrder = buy.copy(assetPair = buy.assetPair.copy(amountAsset = Waves)),
+        buyOrder = buy.copy(assetPair = buy.assetPair.copy(amountAsset = Hearth)),
         sellOrder = sell.copy(assetPair = sell.assetPair.copy(priceAsset = IssuedAsset(ByteStr(Array(1: Byte)))))
       ) shouldBe an[Left[?, ?]]
     }
@@ -195,7 +195,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
             time,
             expirationTimestamp,
             matcherFee,
-            if (sellV == 3) sellerMatcherFeeAssetId else Waves
+            if (sellV == 3) sellerMatcherFeeAssetId else Hearth
           )
           .explicitGet()
       val buy =
@@ -210,7 +210,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
             time,
             expirationTimestamp,
             matcherFee,
-            if (buyV == 3) buyerMatcherFeeAssetId else Waves
+            if (buyV == 3) buyerMatcherFeeAssetId else Hearth
           )
           .explicitGet()
 
@@ -241,7 +241,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+      AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.BUY,
       TxExchangeAmount.unsafeFrom(2),
       TxOrderPrice.unsafeFrom(6000000000L),
@@ -263,7 +263,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+      AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.SELL,
       TxExchangeAmount.unsafeFrom(3),
       TxOrderPrice.unsafeFrom(5000000000L),
@@ -361,7 +361,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+      AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.BUY,
       TxExchangeAmount.unsafeFrom(2),
       TxOrderPrice.unsafeFrom(6000000000L),
@@ -383,7 +383,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+      AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.SELL,
       TxExchangeAmount.unsafeFrom(3),
       TxOrderPrice.unsafeFrom(5000000000L),
@@ -482,7 +482,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+      AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.BUY,
       TxExchangeAmount.unsafeFrom(2),
       TxOrderPrice.unsafeFrom(6000000000L),
@@ -505,7 +505,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
         )
       ),
       PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-      AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+      AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
       OrderType.SELL,
       TxExchangeAmount.unsafeFrom(3),
       TxOrderPrice.unsafeFrom(5000000000L),

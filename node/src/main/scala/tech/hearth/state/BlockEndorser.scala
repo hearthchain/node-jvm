@@ -23,7 +23,7 @@ object BlockEndorser {
 
   /** @param generatorKeys
     *   The accounts this node generates with. An endorsement is signed by the BLS key an account committed, and those
-    *   keys are configured in `waves.miner.accounts` - the wallet holds no BLS key and knows nothing about the accounts
+    *   keys are configured in `hearth.miner.accounts` - the wallet holds no BLS key and knows nothing about the accounts
     *   the miner was configured with, so asking it which committed generators are ours answers for the wrong set.
     */
   class InMemory(

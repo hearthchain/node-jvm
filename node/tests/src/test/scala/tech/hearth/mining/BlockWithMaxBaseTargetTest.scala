@@ -103,7 +103,7 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
       BlockchainUpdateTriggers.noop
     )._2
 
-    val settings0                = WavesSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
+    val settings0                = HearthSettings.fromRootConfig(loadConfig(ConfigFactory.load()))
     val minerSettings            = settings0.minerSettings.copy(quorum = 0)
     val synchronizationSettings0 = settings0.synchronizationSettings.copy(maxBaseTarget = Some(1L))
     val settings = settings0.copy(
@@ -159,7 +159,7 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
 object BlockWithMaxBaseTargetTest {
 
   final case class Env(
-      settings: WavesSettings,
+      settings: HearthSettings,
       pos: PoSSelector,
       bcu: Blockchain & BlockchainUpdater & NG,
       utxPool: UtxPoolImpl,

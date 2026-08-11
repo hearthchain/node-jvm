@@ -56,6 +56,7 @@ object CustomJson {
     "available",
     "balance",
     "buyMatcherFee",
+    "cEmit",
     "currentReward",
     "desiredReward",
     "effective",
@@ -64,19 +65,19 @@ object CustomJson {
     "generating",
     "in",
     "matcherFee",
-    "minIncrement",
     "minSponsoredAssetFee",
     "out",
     "price",
     "quantity",
     "regular",
+    "remainingToCap",
     "reward",
     "rewardShares",
     "sellMatcherFee",
     "sponsorBalance",
     "totalAmount",
     "totalFee",
-    "totalWavesAmount",
+    "totalHearthAmount",
     "value"
   )
 
@@ -86,7 +87,7 @@ object CustomJson {
   }
 
   private lazy val mapper = (new ObjectMapper)
-    .registerModule(new SimpleModule("WavesJson").addSerializer(classOf[JsValue], NumberAsStringSerializer))
+    .registerModule(new SimpleModule("HearthJson").addSerializer(classOf[JsValue], NumberAsStringSerializer))
     .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, true)
 
   def writeValueAsString(value: JsValue): String = {

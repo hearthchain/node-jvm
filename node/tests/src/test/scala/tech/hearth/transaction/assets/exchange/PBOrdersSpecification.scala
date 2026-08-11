@@ -8,7 +8,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.protobuf.order.AssetPair as PBAssetPair
 import tech.hearth.protobuf.transaction.{PBAmounts, PBOrder, PBOrders}
 import tech.hearth.test.FlatSpec
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 
 class PBOrdersSpecification extends FlatSpec {
   // Order.sender is a plain field now, rather than a oneof of a public key and an ethereum signature
@@ -16,13 +16,13 @@ class PBOrdersSpecification extends FlatSpec {
     chainId = AddressScheme.current.chainId.toInt,
     senderPublicKey = ByteString.copyFrom(TestValues.keyPair.publicKey),
     matcherPublicKey = ByteString.copyFrom(TestValues.keyPair.publicKey),
-    assetPair = Some(PBAssetPair(PBAmounts.toPBAssetId(TestValues.asset), PBAmounts.toPBAssetId(Waves))),
+    assetPair = Some(PBAssetPair(PBAmounts.toPBAssetId(TestValues.asset), PBAmounts.toPBAssetId(Hearth))),
     orderSide = PBOrder.Side.SELL,
     amount = 1000,
     price = 1000,
     timestamp = 1000,
     expiration = 10000,
-    matcherFee = Some(PBAmounts.fromAssetAndAmount(Waves, 300000L)),
+    matcherFee = Some(PBAmounts.fromAssetAndAmount(Hearth, 300000L)),
     version = 1,
     proofs = Nil
   )

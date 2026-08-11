@@ -2,6 +2,7 @@ package tech.hearth.settings
 
 import com.typesafe.config.ConfigFactory
 import tech.hearth.common.state.ByteStr
+import tech.hearth.state.EmissionCurve
 import tech.hearth.test.FlatSpec
 
 import scala.concurrent.duration.*
@@ -10,9 +11,9 @@ class BlockchainSettingsSpecification extends FlatSpec {
   "BlockchainSettings" should "read custom values" in {
     val config = loadConfig(
       ConfigFactory.parseString(
-        """waves {
-          |  directory = "/waves"
-          |  data-directory = "/waves/data"
+        """hearth {
+          |  directory = "/hearth"
+          |  data-directory = "/hearth/data"
           |  blockchain {
           |    type = CUSTOM
           |    custom {
@@ -33,11 +34,10 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |        light-node-block-fields-absence-interval = 123
           |      }
           |      rewards {
-          |        term = 100000
-          |        term-after-capped-reward-feature = 50000
-          |        initial = 600000000
-          |        min-increment = 50000000
-          |        voting-interval = 10000
+          |        c-emit = 9500000000000000
+          |        initial-reward = 600000000
+          |        decay-ratio-fixed = "340282322045415694657836056900309514630"
+          |        half-life-blocks = 5256000
           |      }
           |      genesis {
           |        timestamp = 1460678400000
@@ -58,8 +58,8 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |            {public-key = "HEXPUBLICKEY", endorser-public-key = "HEXBLSKEY", vrf-public-key = "HEXVRFKEY"}
           |          ]
           |          balances = [
-          |            {recipient = "ADDRESS1", waves = 50000000000001},
-          |            {recipient = "ADDRESS2", waves = 49999999999999, assets {aabbccddeeff00112233445566778899 = 1000}}
+          |            {recipient = "ADDRESS1", hearth = 50000000000001},
+          |            {recipient = "ADDRESS2", hearth = 49999999999999, assets {aabbccddeeff00112233445566778899 = 1000}}
           |          ]
           |        }
           |      ]
@@ -76,11 +76,10 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.functionalitySettings.preActivatedFeatures should be(Map(19 -> 100, 20 -> 200))
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(55.seconds)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(12.days)
-    settings.rewardsSettings.initial should be(600000000)
-    settings.rewardsSettings.minIncrement should be(50000000)
-    settings.rewardsSettings.term should be(100000)
-    settings.rewardsSettings.termAfterCappedRewardFeature should be(50000)
-    settings.rewardsSettings.votingInterval should be(10000)
+    settings.rewardsSettings.cEmit should be(9500000000000000L)
+    settings.rewardsSettings.initialReward should be(600000000L)
+    settings.rewardsSettings.decayRatioFixed should be(BigInt("340282322045415694657836056900309514630"))
+    settings.rewardsSettings.halfLifeBlocks should be(5256000L)
     settings.genesisSettings.blockTimestamp should be(1460678400000L)
     settings.genesisSettings.timestamp should be(1460678400000L)
     settings.genesisSettings.signature should be(ByteStr.decodeBase16("aa11bb22cc33dd44").toOption)
@@ -115,9 +114,9 @@ class BlockchainSettingsSpecification extends FlatSpec {
   it should "read testnet settings" in {
     val config = loadConfig(
       ConfigFactory.parseString(
-        """waves {
-          |  directory = "/waves"
-          |  data-directory = "/waves/data"
+        """hearth {
+          |  directory = "/hearth"
+          |  data-directory = "/hearth/data"
           |  blockchain {
           |    type = TESTNET
           |  }
@@ -129,22 +128,19 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.addressSchemeCharacter should be('T')
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(120.minutes)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(90.minutes)
-    settings.rewardsSettings.initial should be(600000000)
-    settings.rewardsSettings.minIncrement should be(50000000)
-    settings.rewardsSettings.term should be(100000)
-    settings.rewardsSettings.termAfterCappedRewardFeature should be(50000)
-    settings.rewardsSettings.votingInterval should be(10000)
+    settings.rewardsSettings.cEmit should be(9500000000000000L)
+    settings.rewardsSettings.initialReward should be(12528345158L)
+    settings.rewardsSettings.decayRatioFixed should be(BigInt("340281918165977088157076486680406733895"))
+    settings.rewardsSettings.halfLifeBlocks should be(525_600L)
     settings.genesisSettings.timestamp should be(1478000000000L)
-    settings.genesisSettings.signature should be(None) // The genesis block is signed by Block.GenesisGenerator
-    settings.initialBalance should be(10000000000000000L)
+    settings.genesisSettings.signature should be(None)  // The genesis block is signed by Block.GenesisGenerator
+    settings.initialBalance should be(500000000000000L) // 5% premine; the other 95% is emitted, not genesis-credited
 
     settings.predefinedSnapshots.find(_.height == 1).get.balances should be(
       Seq(
-        GenesisBalanceSettings("3My3KZgFQ3CrVHgz6vGRt8687sH4oAA1qp8", 400000000000000L),
-        GenesisBalanceSettings("3NBVqYXrapgJP9atQccdBPAgJPwHDKkh6A8", 200000000000000L),
-        GenesisBalanceSettings("3N5GRqzDBhjVXnCn44baHcz2GoZy5qLxtTh", 200000000000000L),
-        GenesisBalanceSettings("3NCBMxgdghg4tUhEEffSXy11L6hUi6fcBpd", 200000000000000L),
-        GenesisBalanceSettings("3N18z4B8kyyQ96PhN5eyhCAbg4j49CgwZJx", 9000000000000000L)
+        GenesisBalanceSettings("thrth1x0welf80ljp2psdstmfywkhqmj9s7q5hjgzpvj", 300000000000000L),
+        GenesisBalanceSettings("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn", 100000000000000L),
+        GenesisBalanceSettings("thrth1wpm9trpt4fm4ucmmq556f6j6arzxg7c4n9rgsj", 100000000000000L)
       )
     )
   }
@@ -152,9 +148,9 @@ class BlockchainSettingsSpecification extends FlatSpec {
   it should "read mainnet settings" in {
     val config = loadConfig(
       ConfigFactory.parseString(
-        """waves {
-          |  directory = "/waves"
-          |  data-directory = "/waves/data"
+        """hearth {
+          |  directory = "/hearth"
+          |  data-directory = "/hearth/data"
           |  blockchain {
           |    type = MAINNET
           |  }
@@ -166,23 +162,41 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.addressSchemeCharacter should be('W')
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(120.minutes)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(90.minutes)
-    settings.rewardsSettings.initial should be(600000000)
-    settings.rewardsSettings.minIncrement should be(50000000)
-    settings.rewardsSettings.term should be(100000)
-    settings.rewardsSettings.termAfterCappedRewardFeature should be(50000)
-    settings.rewardsSettings.votingInterval should be(10000)
+    settings.rewardsSettings.cEmit should be(9500000000000000L)
+    settings.rewardsSettings.initialReward should be(1252834515L)
+    settings.rewardsSettings.decayRatioFixed should be(BigInt("340282322045415694657836056900309514630"))
+    settings.rewardsSettings.halfLifeBlocks should be(5256000L)
     settings.genesisSettings.timestamp should be(1465742577614L)
-    settings.genesisSettings.signature should be(None) // The genesis block is signed by Block.GenesisGenerator
-    settings.initialBalance should be(10000000000000000L)
+    settings.genesisSettings.signature should be(None)  // The genesis block is signed by Block.GenesisGenerator
+    settings.initialBalance should be(500000000000000L) // 5% premine; the other 95% is emitted, not genesis-credited
     settings.predefinedSnapshots.find(_.height == 1).get.balances should be(
       Seq(
-        GenesisBalanceSettings("3PAWwWa6GbwcJaFzwqXQN5KQm7H96Y7SHTQ", 9999999500000000L),
-        GenesisBalanceSettings("3P8JdJGYc7vaLu4UXUZc1iRLdzrkGtdCyJM", 100000000L),
-        GenesisBalanceSettings("3PAGPDPqnGkyhcihyjMHe9v36Y4hkAh9yDy", 100000000L),
-        GenesisBalanceSettings("3P9o3ZYwtHkaU1KxsKkFjJqJKS3dLHLC9oF", 100000000L),
-        GenesisBalanceSettings("3PJaDyprvekvPXPuAtxrapacuDJopgJRaU3", 100000000L),
-        GenesisBalanceSettings("3PBWXDFUc86N2EQxKJmW8eFco65xTyMZx6J", 100000000L)
+        GenesisBalanceSettings("hrth1h3s3jrkjgd3f3c705tpczxxmrkxehg6v74gye7", 300000000000000L),
+        GenesisBalanceSettings("hrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehuhszwk", 100000000000000L),
+        GenesisBalanceSettings("hrth1e5ecq68dxwl7r5gdslt23u5c0c875fjc5f9qu7", 100000000000000L)
       )
     )
+  }
+
+  it should "reject a decay ratio above 1.0 (a growing, not decaying, curve)" in {
+    val oneFixed = BigInt(1) << EmissionCurve.FixedPointBits
+
+    // Exactly 1.0 (flat, no decay) is fine - node/testkit relies on it (DefaultRewardsSettings/withFlatReward)
+    noException should be thrownBy RewardsSettings(cEmit = 1, initialReward = 1, decayRatioFixed = oneFixed, halfLifeBlocks = 1)
+
+    an[IllegalArgumentException] should be thrownBy
+      RewardsSettings(cEmit = 1, initialReward = 1, decayRatioFixed = oneFixed + 1, halfLifeBlocks = 1)
+  }
+
+  it should "derive hardCap from this network's own premine + cEmit, not the global TotalHearth constant" in {
+    val mainnet =
+      BlockchainSettings('W', FunctionalitySettings.MAINNET, GenesisSettings.MAINNET, RewardsSettings.MAINNET, PredefinedSnapshotSettings.MAINNET)
+    mainnet.hardCap should be(Constants.TotalHearth * Constants.UnitsInHearth)
+
+    // STAGENET premines the full TotalHearth *and* still emits cEmit on top (see PredefinedSnapshotSettings.STAGENET's
+    // comment) - its hardCap must reflect that instead of silently going negative against the global constant.
+    val stagenet =
+      BlockchainSettings('S', FunctionalitySettings.STAGENET, GenesisSettings.STAGENET, RewardsSettings.STAGENET, PredefinedSnapshotSettings.STAGENET)
+    stagenet.hardCap should be(Constants.TotalHearth * Constants.UnitsInHearth + RewardsSettings.STAGENET.cEmit)
   }
 }

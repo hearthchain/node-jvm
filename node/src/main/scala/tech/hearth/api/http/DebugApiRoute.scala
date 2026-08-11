@@ -9,7 +9,7 @@ import tech.hearth.database.RocksDBWriter
 import tech.hearth.lang.ValidationError
 import tech.hearth.mining.MinerDebugInfo
 import tech.hearth.network.{PeerDatabase, PeerInfo, *}
-import tech.hearth.settings.{RestAPISettings, WavesSettings}
+import tech.hearth.settings.{RestAPISettings, HearthSettings}
 import tech.hearth.state.diffs.TransactionDiffer
 import tech.hearth.state.{Blockchain, Height, LeaseBalance, NG, SnapshotBlockchain, StateHash, TxMeta}
 import tech.hearth.transaction.*
@@ -33,7 +33,7 @@ import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
 
 case class DebugApiRoute(
-    ws: WavesSettings,
+    ws: HearthSettings,
     time: Time,
     blockchain: Blockchain & NG,
     accountsApi: CommonAccountsApi,
@@ -58,9 +58,9 @@ case class DebugApiRoute(
 
   import DebugApiRoute.*
 
-  private lazy val configStr             = configRoot.render(ConfigRenderOptions.concise().setJson(true).setFormatted(true))
-  private lazy val fullConfig: JsValue   = Json.parse(configStr)
-  private lazy val wavesConfig: JsObject = Json.obj("waves" -> (fullConfig \ "waves").get)
+  private lazy val configStr              = configRoot.render(ConfigRenderOptions.concise().setJson(true).setFormatted(true))
+  private lazy val fullConfig: JsValue    = Json.parse(configStr)
+  private lazy val hearthConfig: JsObject = Json.obj("hearth" -> (fullConfig \ "hearth").get)
 
   override val settings: RestAPISettings = ws.restAPISettings
 
@@ -68,7 +68,7 @@ case class DebugApiRoute(
 
   override lazy val route: Route = pathPrefix("debug") {
     balanceHistory ~ stateHash ~ validate ~ withAuth {
-      state ~ info ~ stateWaves ~ rollback ~ blacklist ~ minerInfo ~ configInfo ~ print
+      state ~ info ~ stateHearth ~ rollback ~ blacklist ~ minerInfo ~ configInfo ~ print
     }
   }
 
@@ -87,7 +87,7 @@ case class DebugApiRoute(
   private def distribution(height: Int): Route = optionalHeaderValueByType(Accept) { accept =>
     routeTimeout.executeToFuture {
       assetsApi
-        .wavesDistribution(height, None)
+        .hearthDistribution(height, None)
         .toListL
         .map {
           case l if accept.exists(_.mediaRanges.exists(CustomJson.acceptsNumbersAsStrings)) =>
@@ -102,7 +102,7 @@ case class DebugApiRoute(
     distribution(blockchain.height)
   }
 
-  def stateWaves: Route = (path("stateWaves" / IntNumber) & get) { height =>
+  def stateHearth: Route = (path("stateHearth" / IntNumber) & get) { height =>
     distribution(height)
   }
 
@@ -155,7 +155,7 @@ case class DebugApiRoute(
   }
 
   def configInfo: Route = (path("configInfo") & get & parameter("full".as[Boolean])) { full =>
-    complete(if (full) fullConfig else wavesConfig)
+    complete(if (full) fullConfig else hearthConfig)
   }
 
   def blacklist: Route = (path("blacklist") & post) {

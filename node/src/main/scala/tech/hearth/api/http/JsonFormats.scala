@@ -5,7 +5,7 @@ import tech.hearth.transaction.Transaction
 import play.api.libs.json.*
 
 trait JsonFormats {
-  implicit lazy val wavesAddressWrites: Writes[Address] = Writes(w => JsString(w.toString))
+  implicit lazy val hearthAddressWrites: Writes[Address] = Writes(w => JsString(w.toString))
 
   implicit lazy val TransactionJsonWrites: OWrites[Transaction] = OWrites(_.json())
 }

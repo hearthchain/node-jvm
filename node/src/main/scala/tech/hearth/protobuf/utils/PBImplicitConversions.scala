@@ -4,7 +4,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.protobuf.transaction.*
 import tech.hearth.protobuf.*
 import tech.hearth.transaction.Asset
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.crypto.Address
 
 object PBImplicitConversions {
@@ -21,7 +21,7 @@ object PBImplicitConversions {
         .withAssetId(assetId.toByteString)
         .withAmount(amount)
 
-    case (Waves, amount) =>
+    case (Hearth, amount) =>
       Amount().withAmount(amount)
   }
 

@@ -95,17 +95,17 @@ class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, Embed
           val block2WithCommitments = d.createBlock(txs, generator = generator1, strictTime = true)
           d.appender.appendBlock(block2WithCommitments)
 
-          log.debug("Append block 3 of new period with spending all WAVES by generator2")
+          log.debug("Append block 3 of new period with spending all HRTH by generator2")
           d.appender.appendBlock(
             d.createBlock(
               txs = Seq(
                 TxHelpers.transfer(
                   from = generator2,
                   to = generator1.toAddress,
-                  // Everything it can spend but the fee and a waves - its deposits are locked, and it holds two of
+                  // Everything it can spend but the fee and a hearth - its deposits are locked, and it holds two of
                   // them, being committed for both the genesis period and the one under test
-                  amount = d.blockchain.balance(generator2.toAddress) - d.blockchain.generationDeposit(generator2.toAddress) - 2.waves,
-                  fee = 1.waves
+                  amount = d.blockchain.balance(generator2.toAddress) - d.blockchain.generationDeposit(generator2.toAddress) - 2.hearth,
+                  fee = 1.hearth
                 )
               ),
               generator = generator1,

@@ -5,11 +5,11 @@ import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.StateUpdate.LeaseUpdate.LeaseStatus
-import tech.hearth.events.fixtures.WavesTxChecks.*
+import tech.hearth.events.fixtures.HearthTxChecks.*
 import tech.hearth.events.protobuf.BlockchainUpdated.Append
-import tech.hearth.settings.{GenesisAssetSettings, WavesSettings}
+import tech.hearth.settings.{GenesisAssetSettings, HearthSettings}
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.assets.exchange.Order.Version
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
@@ -23,17 +23,17 @@ import org.scalatest.concurrent.ScalaFutures
 
 class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFutures {
   import BlockchainUpdatesTestBase.*
-  val currentSettings: WavesSettings         = DomainPresets.RideV6
+  val currentSettings: HearthSettings        = DomainPresets.RideV6
   val amount: Long                           = 9000000
   val additionalAmount: Long                 = 5000000
   val customFee: Long                        = 5234567L
   val firstTxParticipant: SigningKey         = TxHelpers.signer(2)
   val firstTxParticipantAddress: Address     = firstTxParticipant.toAddress
-  val firstTxParticipantBalanceBefore: Long  = 20.waves
+  val firstTxParticipantBalanceBefore: Long  = 20.hearth
   val secondTxParticipant: SigningKey        = TxHelpers.signer(3)
   val secondTxParticipantAddress: Address    = secondTxParticipant.toAddress
   val secondTxParticipantPKHash: Array[Byte] = secondTxParticipantAddress.toBytes()
-  val secondTxParticipantBalanceBefore: Long = 20.waves
+  val secondTxParticipantBalanceBefore: Long = 20.hearth
   val recipients: Seq[ParsedTransfer]        = TxHelpers.accountSeqGenerator(100, additionalAmount)
 
   val firstTokenAsset: IssuedAsset  = IssuedAsset(ByteStr.fill(32)(1))
@@ -56,7 +56,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
       orderType,
       secondTokenAsset,
       firstTokenAsset,
-      Waves,
+      Hearth,
       amount = 50000L,
       price = 400000000L,
       fee = customFee,
@@ -73,8 +73,8 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
     checkBalances(
       filterOutMinerBalanceUpdates(append),
       Map(
-        (firstTxParticipantAddress, Waves)  -> (firstTxParticipantBalanceBefore, firstTxParticipantBalanceAfter),
-        (secondTxParticipantAddress, Waves) -> (secondTxParticipantBalanceBefore, secondTxParticipantBalanceAfter)
+        (firstTxParticipantAddress, Hearth)  -> (firstTxParticipantBalanceBefore, firstTxParticipantBalanceAfter),
+        (secondTxParticipantAddress, Hearth) -> (secondTxParticipantBalanceBefore, secondTxParticipantBalanceAfter)
       )
     )
   }
@@ -92,10 +92,10 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
     checkBalances(
       filterOutMinerBalanceUpdates(append),
       Map(
-        (firstTxParticipantAddress, Waves)             -> (firstTxParticipantBalanceBeforeExchange, firstTxParticipantBalanceAfterExchange),
+        (firstTxParticipantAddress, Hearth)            -> (firstTxParticipantBalanceBeforeExchange, firstTxParticipantBalanceAfterExchange),
         (secondTxParticipantAddress, firstTokenAsset)  -> (0, normalizedPrice),
         (firstTxParticipantAddress, secondTokenAsset)  -> (0, orderAmount),
-        (secondTxParticipantAddress, Waves)            -> (secondTxParticipantBalanceBeforeExchange, secondTxParticipantBalanceAfterExchange),
+        (secondTxParticipantAddress, Hearth)           -> (secondTxParticipantBalanceBeforeExchange, secondTxParticipantBalanceAfterExchange),
         (firstTxParticipantAddress, firstTokenAsset)   -> (firstTokenQuantity, firstTokenQuantity - normalizedPrice),
         (secondTxParticipantAddress, secondTokenAsset) -> (amountAssetQuantity, amountAssetQuantity - orderAmount)
       )
@@ -108,7 +108,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
     checkBalances(
       filterOutMinerBalanceUpdates(append),
       Map(
-        (firstTxParticipantAddress, Waves) -> (firstTxParticipantBalanceBefore, firstTxParticipantBalanceBefore - customFee)
+        (firstTxParticipantAddress, Hearth) -> (firstTxParticipantBalanceBefore, firstTxParticipantBalanceBefore - customFee)
       )
     )
     checkLeasingForAddress(
@@ -134,7 +134,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
     checkBalances(
       filterOutMinerBalanceUpdates(append),
       Map(
-        (firstTxParticipantAddress, Waves) -> (firstTxParticipantBalanceBeforeTx, firstTxParticipantBalanceAfterTx)
+        (firstTxParticipantAddress, Hearth) -> (firstTxParticipantBalanceBeforeTx, firstTxParticipantBalanceAfterTx)
       )
     )
     checkLeasingForAddress(
@@ -158,7 +158,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
     val firstTxParticipantAssetBalanceAfterTx = firstTokenQuantity - additionalAmount * recipients.size
 
     val balancesMap = Map(
-      (firstTxParticipantAddress, Waves)                -> (firstTxParticipantBalanceBeforeTx, firstTxParticipantBalanceAfterTx),
+      (firstTxParticipantAddress, Hearth)               -> (firstTxParticipantBalanceBeforeTx, firstTxParticipantBalanceAfterTx),
       (firstTxParticipantAddress, massTransfer.assetId) -> (firstTokenQuantity, firstTxParticipantAssetBalanceAfterTx)
     ) ++ recipients.map(r => (r.address, massTransfer.assetId) -> (0L, additionalAmount)).toMap
     checkMassTransfer(

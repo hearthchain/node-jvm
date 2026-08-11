@@ -117,7 +117,7 @@ object MerkleRootTestSuite {
 
   val Config: Config = ConfigFactory.parseString(
     s"""
-       |waves {
+       |hearth {
        |   miner {
        |      quorum = 0
        |      min-micro-block-age = 10s

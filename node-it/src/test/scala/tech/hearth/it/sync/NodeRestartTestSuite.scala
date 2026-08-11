@@ -9,7 +9,7 @@ import tech.hearth.it.api.TransactionInfo
 import tech.hearth.it.BaseFreeSpec
 import tech.hearth.state.Height
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 
 class NodeRestartTestSuite extends BaseFreeSpec {
@@ -38,10 +38,10 @@ class NodeRestartTestSuite extends BaseFreeSpec {
       .transfer(
         from = nodeB.keyPair,
         to = Address.fromString(nodeA.address).explicitGet(),
-        amount = 1.waves,
-        asset = Waves,
+        amount = 1.hearth,
+        asset = Hearth,
         fee = minFee,
-        feeAsset = Waves,
+        feeAsset = Hearth,
         attachment = ByteStr.empty,
         timestamp = System.currentTimeMillis()
       )
@@ -70,7 +70,7 @@ class NodeRestartTestSuite extends BaseFreeSpec {
 object NodeRestartTestSuite {
   import tech.hearth.it.NodeConfigs.*
   private val FirstNode = ConfigFactory.parseString(s"""
-                                                       |waves {
+                                                       |hearth {
                                                        |  synchronization.synchronization-timeout = 10s
                                                        |  blockchain.custom.functionality {
                                                        |    pre-activated-features.1 = 0
@@ -84,7 +84,7 @@ object NodeRestartTestSuite {
                                                        |}""".stripMargin)
 
   private val SecondNode = ConfigFactory.parseString(s"""
-                                                        |waves {
+                                                        |hearth {
                                                         |  synchronization.synchronization-timeout = 10s
                                                         |  blockchain.custom.functionality {
                                                         |    pre-activated-features.1 = 0

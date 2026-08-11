@@ -76,7 +76,7 @@ object SyncGrpcApi extends Assertions {
         sellMatcherFee: Long,
         fee: Long,
         timestamp: Long,
-        matcherFeeAssetId: String = "WAVES",
+        matcherFeeAssetId: String = "HRTH",
         waitForTx: Boolean = false
     ): PBSignedTransaction = {
       maybeWaitForTransaction(
@@ -92,8 +92,8 @@ object SyncGrpcApi extends Assertions {
         recipient: Recipient,
         amount: Long,
         fee: Long,
-        assetId: String = "WAVES",
-        feeAssetId: String = "WAVES",
+        assetId: String = "HRTH",
+        feeAssetId: String = "HRTH",
         attachment: ByteString = ByteString.EMPTY,
         timestamp: Long = System.currentTimeMillis(),
         waitForTx: Boolean = false
@@ -119,7 +119,7 @@ object SyncGrpcApi extends Assertions {
       assert(actual == balance, s"Asset balance mismatch, required=$balance, actual=$actual")
     }
 
-    def wavesBalance(address: ByteString): WavesBalances = {
+    def hearthBalance(address: ByteString): WavesBalances = {
       accounts.getBalances(BalancesRequest.of(address, Seq(ByteString.EMPTY))).next().getWaves
     }
 

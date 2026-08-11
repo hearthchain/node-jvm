@@ -10,7 +10,7 @@ class OverflowTest extends PropSpec with WithDomain {
   import DomainPresets.*
 
   private val transferFee     = FeeConstants(TransactionType.Transfer) * FeeUnit
-  private val massTransferFee = 0.002.waves
+  private val massTransferFee = 0.002.hearth
 
   private def numPairs(fee: Long) =
     Seq(
@@ -24,12 +24,12 @@ class OverflowTest extends PropSpec with WithDomain {
 
   // These two can no longer be set up: overflowing the recipient's balance needs the sender to hold the counterpart,
   // so the genesis total necessarily exceeds Long.MaxValue - which PredefinedSnapshot rejects, since a chain's total
-  // Waves has to fit in a Long. Reaching that ceiling now requires minting via block rewards rather than genesis.
+  // Hearth has to fit in a Long. Reaching that ceiling now requires minting via block rewards rather than genesis.
   ignore("transfer overflow") {
     numPairs(transferFee).foreach { case (recipientBalance, transferAmount) =>
       val balances = Seq(AddrWithBalance(sender.toAddress, Long.MaxValue), AddrWithBalance(recipient, recipientBalance))
       withDomain(RideV5, balances) { d =>
-        d.appendBlockE(TxHelpers.transfer(sender, recipient, transferAmount)) should produce("Waves balance sum overflow")
+        d.appendBlockE(TxHelpers.transfer(sender, recipient, transferAmount)) should produce("Hearth balance sum overflow")
       }
     }
   }
@@ -39,7 +39,7 @@ class OverflowTest extends PropSpec with WithDomain {
       val balances = Seq(AddrWithBalance(sender.toAddress, Long.MaxValue), AddrWithBalance(recipient, recipientBalance))
       withDomain(RideV5, balances) { d =>
         d.appendBlockE(TxHelpers.massTransfer(sender, Seq(recipient -> transferAmount), fee = massTransferFee)) should produce(
-          "Waves balance sum overflow"
+          "Hearth balance sum overflow"
         )
       }
     }

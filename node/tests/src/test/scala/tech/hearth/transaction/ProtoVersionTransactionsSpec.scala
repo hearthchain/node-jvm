@@ -20,12 +20,12 @@ import tech.hearth.crypto.SigningKey
 
 class ProtoVersionTransactionsSpec extends FreeSpec {
 
-  val MinFee: Long            = (0.001 * Constants.UnitsInWave).toLong
+  val MinFee: Long            = (0.001 * Constants.UnitsInHearth).toLong
   val DataTxFee: Long         = 15000000
   val InvokeScriptTxFee: Long = 15000000
   val MassTransferTxFee: Long = 15000000
-  val SetScriptFee: Long      = (0.01 * Constants.UnitsInWave).toLong
-  val SetAssetScriptFee: Long = Constants.UnitsInWave
+  val SetScriptFee: Long      = (0.01 * Constants.UnitsInHearth).toLong
+  val SetAssetScriptFee: Long = Constants.UnitsInHearth
 
   val Now: Long = ntpNow
 
@@ -76,7 +76,7 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
 
       val transferTx =
         TransferTransaction
-          .create(PublicKey(Account.publicKey), recipient, asset, 100, Asset.Waves, MinFee, ByteStr(attachment), Now, Proofs.empty)
+          .create(PublicKey(Account.publicKey), recipient, asset, 100, Asset.Hearth, MinFee, ByteStr(attachment), Now, Proofs.empty)
           .map(_.signWith(Account))
           .explicitGet()
 
@@ -92,7 +92,7 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
 
       val massTransferTx =
         MassTransferTransaction
-          .create(PublicKey(Account.publicKey), Asset.Waves, transfers, MassTransferTxFee, Now, ByteStr(attachment), Proofs.empty)
+          .create(PublicKey(Account.publicKey), Asset.Hearth, transfers, MassTransferTxFee, Now, ByteStr(attachment), Proofs.empty)
           .map(_.signWith(Account))
           .explicitGet()
       val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(massTransferTx)))

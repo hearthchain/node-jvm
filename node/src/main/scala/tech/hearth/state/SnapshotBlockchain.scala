@@ -7,7 +7,7 @@ import tech.hearth.block.{Block, SignedBlockHeader}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.settings.BlockchainSettings
 import tech.hearth.state.TxMeta.Status
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.{Asset, CommitToGenerationTransaction, Transaction}
 
 case class SnapshotBlockchain(
@@ -37,16 +37,16 @@ case class SnapshotBlockchain(
     inner.balances(innerBalances) ++ snapshotBalances
   }
 
-  override def wavesBalances(addresses: Seq[Address]): Map[Address, Long] = {
+  override def hearthBalances(addresses: Seq[Address]): Map[Address, Long] = {
     val (innerBalances, snapshotBalances) = addresses
       .foldLeft((Seq[Address](), Map[Address, Long]())) { case ((innerBalances, snapshotBalances), address) =>
         snapshot.balances
-          .get((address, Waves))
+          .get((address, Hearth))
           .fold(
             (innerBalances :+ address, snapshotBalances)
           )(balance => (innerBalances, snapshotBalances + (address -> balance)))
       }
-    inner.wavesBalances(innerBalances) ++ snapshotBalances
+    inner.hearthBalances(innerBalances) ++ snapshotBalances
   }
 
   override def effectiveBalanceBanHeights(address: Address): Seq[Int] = {
@@ -122,7 +122,7 @@ case class SnapshotBlockchain(
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee =
     snapshot.orderFills.getOrElse(orderId, inner.filledVolumeAndFee(orderId))
 
-  override def balanceAtHeight(address: Address, h: Int, assetId: Asset = Waves): Option[(Int, Long)] =
+  override def balanceAtHeight(address: Address, h: Int, assetId: Asset = Hearth): Option[(Int, Long)] =
     if (maybeSnapshot.forall(!_.balances.contains(address -> assetId)) || h < this.height) {
       inner.balanceAtHeight(address, h, assetId)
     } else {
@@ -177,7 +177,7 @@ case class SnapshotBlockchain(
   /** Block reward related */
   override def blockReward(height: Int): Option[Long] = reward.filter(_ => this.height == height) orElse inner.blockReward(height)
 
-  override def wavesAmount(height: Int): BigInt = {
+  override def hearthAmount(height: Int): BigInt = {
     val parentBlockHeader = blockMeta match {
       case None => inner.blockHeader(height - 1)
       case _    => inner.lastBlockHeader
@@ -188,9 +188,9 @@ case class SnapshotBlockchain(
       voting            <- parentBlockHeader.header.finalizationVoting
     } yield voting.conflict.size
 
-    inner.wavesAmount(height) +
+    inner.hearthAmount(height) +
       BigInt(reward.getOrElse(0L)) -
-      parentConflictEndorsements.getOrElse(0) * CommitToGenerationTransaction.DepositInWavelets
+      parentConflictEndorsements.getOrElse(0) * CommitToGenerationTransaction.DepositInEmbers
   }
 
   override def hitSource(height: Int): Option[ByteStr] =

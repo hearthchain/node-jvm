@@ -1,6 +1,6 @@
 package tech.hearth.transaction
 
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 
 sealed trait TxWithFee {
   def fee: TxPositiveAmount
@@ -8,8 +8,8 @@ sealed trait TxWithFee {
 }
 
 object TxWithFee {
-  trait InWaves extends TxWithFee {
-    override def assetFee: (Asset, Long) = (Waves, fee.value)
+  trait InHearth extends TxWithFee {
+    override def assetFee: (Asset, Long) = (Hearth, fee.value)
   }
 
   trait InCustomAsset extends TxWithFee {

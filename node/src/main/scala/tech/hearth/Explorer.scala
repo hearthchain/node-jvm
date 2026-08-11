@@ -38,7 +38,7 @@ object Explorer extends ScorexLogging {
 
   def main(argsRaw: Array[String]): Unit = {
     if (argsRaw.isEmpty || Seq("-h", "--help").exists(argsRaw.contains)) {
-      System.err.println("Usage: waves explore <command> [args] [--config|-c <cfg file>]")
+      System.err.println("Usage: hearth explore <command> [args] [--config|-c <cfg file>]")
       return
     }
 
@@ -89,12 +89,12 @@ object Explorer extends ScorexLogging {
       flag match {
         case "WB" =>
           var accountsBaseTotalBalance = 0L
-          var wavesBalanceRecords      = 0
-          rdb.db.iterateOver(KeyTag.WavesBalance) { e =>
+          var hearthBalanceRecords     = 0
+          rdb.db.iterateOver(KeyTag.HearthBalance) { e =>
             val addressId = AddressId(Longs.fromByteArray(e.getKey.drop(Shorts.BYTES)))
-            val key       = Keys.wavesBalance(addressId)
+            val key       = Keys.hearthBalance(addressId)
             accountsBaseTotalBalance += key.parse(e.getValue).balance
-            wavesBalanceRecords += 1
+            hearthBalanceRecords += 1
           }
 
           var actualTotalReward = 0L
@@ -106,21 +106,21 @@ object Explorer extends ScorexLogging {
             blocksRecords += 1
           }
 
-          log.info(s"Found $wavesBalanceRecords waves balance records and $blocksRecords block records")
+          log.info(s"Found $hearthBalanceRecords hearth balance records and $blocksRecords block records")
 
           // the carry of the last block hasn't been credited to anyone yet, so it's not part of any account balance
-          val lastBlockCarry       = reader.lastBlockId.flatMap(reader.carryFee(_).toOption).fold(0L)(_.wavesAmount)
+          val lastBlockCarry       = reader.lastBlockId.flatMap(reader.carryFee(_).toOption).fold(0L)(_.hearthAmount)
           val actualTotalBalance   = accountsBaseTotalBalance + lastBlockCarry
-          val expectedTotalBalance = Constants.UnitsInWave * Constants.TotalWaves + actualTotalReward
-          val byKeyTotalBalance    = reader.wavesAmount(blockchainHeight)
+          val expectedTotalBalance = Constants.UnitsInHearth * Constants.TotalHearth + actualTotalReward
+          val byKeyTotalBalance    = reader.hearthAmount(blockchainHeight)
 
           if (actualTotalBalance != expectedTotalBalance || expectedTotalBalance != byKeyTotalBalance)
             log.error(
-              s"Something wrong, actual total waves balance: $actualTotalBalance," +
-                s" expected total waves balance: $expectedTotalBalance, total waves balance by key: $byKeyTotalBalance"
+              s"Something wrong, actual total hearth balance: $actualTotalBalance," +
+                s" expected total hearth balance: $expectedTotalBalance, total hearth balance by key: $byKeyTotalBalance"
             )
           else
-            log.info(s"Correct total waves balance: $actualTotalBalance WAVELETS")
+            log.info(s"Correct total hearth balance: $actualTotalBalance EMBERS")
 
         case "DA" =>
           val addressIds = mutable.Seq[(BigInt, Address)]()
@@ -185,7 +185,7 @@ object Explorer extends ScorexLogging {
           val addressId = aid.parse(rdb.db.get(aid.keyBytes)).get
           log.info(s"Address id = $addressId")
 
-          loadBalanceHistory(Keys.wavesBalance(addressId), Keys.wavesBalanceAt(addressId, _)).foreach { case (h, balance) =>
+          loadBalanceHistory(Keys.hearthBalance(addressId), Keys.hearthBalanceAt(addressId, _)).foreach { case (h, balance) =>
             log.info(s"h = $h: balance = $balance")
           }
 
@@ -266,7 +266,7 @@ object Explorer extends ScorexLogging {
         case "AP" =>
           val address = Address.fromString(argument(1, "address")).explicitGet()
           val pf      = portfolio(rdb.db, reader, address)
-          log.info(s"$address : ${pf.balance} WAVES, ${pf.lease}, ${pf.assets.size} assets")
+          log.info(s"$address : ${pf.balance} HRTH, ${pf.lease}, ${pf.assets.size} assets")
           pf.assets.toSeq.sortBy(_._1.toString) foreach { case (assetId, balance) =>
             log.info(s"$assetId : $balance")
           }
@@ -385,7 +385,7 @@ object Explorer extends ScorexLogging {
           var thisAddressId = 0L
           var prevHeight    = Height(0)
           var addressCount  = 0
-          rdb.db.iterateOver(KeyTag.WavesBalanceHistory.prefixBytes, None) { e =>
+          rdb.db.iterateOver(KeyTag.HearthBalanceHistory.prefixBytes, None) { e =>
             val addressIdFromKey = Longs.fromByteArray(e.getKey.slice(2, 10))
             val heightFromKey    = Height(Ints.fromByteArray(e.getKey.takeRight(4)))
             if (addressIdFromKey != thisAddressId) {

@@ -4,7 +4,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.consensus.TransactionsOrdering
 import tech.hearth.state.{AssetDescription, Height, MinAssetFee}
 import tech.hearth.test.PropSpec
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.{Asset, TxHelpers}
 import tech.hearth.crypto.SigningKey
@@ -21,9 +21,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         125L,
-        Waves,
+        Hearth,
         ByteStr.empty,
         1
       ),
@@ -31,9 +31,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         124L,
-        Waves,
+        Hearth,
         ByteStr.empty,
         2
       ),
@@ -41,9 +41,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         124L,
-        Waves,
+        Hearth,
         ByteStr.empty,
         1
       ),
@@ -51,7 +51,7 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         124L,
         Asset.fromCompatId(Some(ByteStr.empty)),
         ByteStr.empty,
@@ -61,7 +61,7 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         124L,
         Asset.fromCompatId(Some(ByteStr.empty)),
         ByteStr.empty,
@@ -80,9 +80,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         124L,
-        Waves,
+        Hearth,
         ByteStr.empty,
         1
       ),
@@ -90,9 +90,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         123L,
-        Waves,
+        Hearth,
         ByteStr.empty,
         1
       ),
@@ -100,9 +100,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         123L,
-        Waves,
+        Hearth,
         ByteStr.empty,
         2
       ),
@@ -110,7 +110,7 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         124L,
         Asset.fromCompatId(Some(ByteStr.empty)),
         ByteStr.empty,
@@ -120,7 +120,7 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         124L,
         Asset.fromCompatId(Some(ByteStr.empty)),
         ByteStr.empty,
@@ -133,7 +133,7 @@ class TransactionsOrderingSpecification extends PropSpec {
     sorted shouldBe correctSeq
   }
 
-  property("TransactionsOrdering.InUTXPool sorts an asset-fee transaction by its waves-equivalent fee density") {
+  property("TransactionsOrdering.InUTXPool sorts an asset-fee transaction by its hearth-equivalent fee density") {
     val asset  = IssuedAsset(ByteStr.fill(32)(1))
     val minFee = 1000L
     val blockchainWithAsset = new EmptyBlockchain {
@@ -142,18 +142,18 @@ class TransactionsOrderingSpecification extends PropSpec {
         else None
     }
 
-    // fee = 10 * minFee in `asset` converts to (fee * FeeUnit / minFee) = 10 * FeeUnit waves-equivalent, dwarfing the
-    // 124-wavelet Waves fee below - the asset-fee tx must sort first, not last as a zero-fee tx would.
-    val assetFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, minFee * 10, asset, ByteStr.empty, 1)
-    val wavesFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, 124L, Waves, ByteStr.empty, 2)
-    val correctSeq = Seq(assetFeeTx, wavesFeeTx)
+    // fee = 10 * minFee in `asset` converts to (fee * FeeUnit / minFee) = 10 * FeeUnit hearth-equivalent, dwarfing the
+    // 124-ember Hearth fee below - the asset-fee tx must sort first, not last as a zero-fee tx would.
+    val assetFeeTx  = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Hearth, minFee * 10, asset, ByteStr.empty, 1)
+    val hearthFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Hearth, 124L, Hearth, ByteStr.empty, 2)
+    val correctSeq  = Seq(assetFeeTx, hearthFeeTx)
 
     val sorted = Random.shuffle(correctSeq).sorted(using TransactionsOrdering.InUTXPool(Set.empty, blockchainWithAsset))
 
     sorted shouldBe correctSeq
   }
 
-  property("TransactionsOrdering.InUTXPool does not throw when the waves-equivalent fee overflows Long") {
+  property("TransactionsOrdering.InUTXPool does not throw when the hearth-equivalent fee overflows Long") {
     val asset  = IssuedAsset(ByteStr.fill(32)(2))
     val minFee = 1L
     val blockchainWithAsset = new EmptyBlockchain {
@@ -163,12 +163,12 @@ class TransactionsOrderingSpecification extends PropSpec {
     }
 
     // fee (Long.MaxValue) * FeeUnit (100000) / minFee (1) vastly exceeds Long range - must saturate, not throw
-    val overflowingFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, Long.MaxValue, asset, ByteStr.empty, 1)
-    val wavesFeeTx       = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Waves, 124L, Waves, ByteStr.empty, 2)
+    val overflowingFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Hearth, Long.MaxValue, asset, ByteStr.empty, 1)
+    val hearthFeeTx      = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Hearth, 124L, Hearth, ByteStr.empty, 2)
     val ordering         = TransactionsOrdering.InUTXPool(Set.empty, blockchainWithAsset)
 
-    noException should be thrownBy ordering.compare(overflowingFeeTx, wavesFeeTx)
-    Seq(wavesFeeTx, overflowingFeeTx).sorted(using ordering) shouldBe Seq(overflowingFeeTx, wavesFeeTx)
+    noException should be thrownBy ordering.compare(overflowingFeeTx, hearthFeeTx)
+    Seq(hearthFeeTx, overflowingFeeTx).sorted(using ordering) shouldBe Seq(overflowingFeeTx, hearthFeeTx)
   }
 
   property("TransactionsOrdering.InBlock should sort txs by decreasing block timestamp") {
@@ -177,9 +177,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         1,
-        Waves,
+        Hearth,
         ByteStr.empty,
         124L
       ),
@@ -187,9 +187,9 @@ class TransactionsOrderingSpecification extends PropSpec {
         kp,
         TxHelpers.address(20),
         100000,
-        Waves,
+        Hearth,
         1,
-        Waves,
+        Hearth,
         ByteStr.empty,
         123L
       )

@@ -50,11 +50,11 @@ object Keys {
 
   def heightOf(blockId: ByteStr): Key[Option[Int]] = Key.opt[Int](HeightOf, blockId.arr, Ints.fromByteArray, Ints.toByteArray)
 
-  def wavesBalance(addressId: AddressId): Key[CurrentBalance] =
-    Key(WavesBalance, addressId.toByteArray, readCurrentBalance, writeCurrentBalance)
+  def hearthBalance(addressId: AddressId): Key[CurrentBalance] =
+    Key(HearthBalance, addressId.toByteArray, readCurrentBalance, writeCurrentBalance)
 
-  def wavesBalanceAt(addressId: AddressId, height: Height): Key[BalanceNode] =
-    Key(WavesBalanceHistory, hBytes(addressId.toByteArray, height), readBalanceNode, writeBalanceNode)
+  def hearthBalanceAt(addressId: AddressId, height: Height): Key[BalanceNode] =
+    Key(HearthBalanceHistory, hBytes(addressId.toByteArray, height), readBalanceNode, writeBalanceNode)
 
   def assetBalance(addressId: AddressId, asset: IssuedAsset): Key[CurrentBalance] =
     Key(AssetBalance, addressId.toByteArray ++ asset.id.arr, readCurrentBalance, writeCurrentBalance)
@@ -92,8 +92,8 @@ object Keys {
 
   def changedAddresses(height: Height): Key[Seq[AddressId]] = Key(ChangedAddresses, h(height), readAddressIds, writeAddressIds)
 
-  def changedWavesBalances(height: Height): Key[Seq[AddressId]] =
-    Key(ChangedWavesBalances, h(height), readAddressIds, writeAddressIds)
+  def changedHearthBalances(height: Height): Key[Seq[AddressId]] =
+    Key(ChangedHearthBalances, h(height), readAddressIds, writeAddressIds)
 
   def changedBalances(height: Height, asset: IssuedAsset): Key[Seq[AddressId]] =
     Key(ChangedAssetBalances, h(height) ++ asset.id.arr, readAddressIds, writeAddressIds)

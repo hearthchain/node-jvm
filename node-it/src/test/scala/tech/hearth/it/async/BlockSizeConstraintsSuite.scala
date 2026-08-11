@@ -45,7 +45,7 @@ object BlockSizeConstraintsSuite {
                                                              |  request-timeout = 60s
                                                              |}
                                                              |
-                                                             |waves {
+                                                             |hearth {
                                                              |  network.enable-peers-exchange = no
                                                              |
                                                              |  miner {

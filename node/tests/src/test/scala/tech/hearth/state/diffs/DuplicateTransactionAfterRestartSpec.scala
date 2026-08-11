@@ -19,7 +19,7 @@ class DuplicateTransactionAfterRestartSpec extends PropSpec with WithDomain {
 
   property("a transaction already in the state is rejected after a simulated restart") {
     withDomain(DomainPresets.TransactionStateSnapshot) { d =>
-      val tx = TxHelpers.transfer(TxHelpers.defaultSigner, TxHelpers.secondAddress, 1.waves)
+      val tx = TxHelpers.transfer(TxHelpers.defaultSigner, TxHelpers.secondAddress, 1.hearth)
       d.appendBlock(tx)
       // Solidify: NG keeps the latest block "liquid" (in BlockchainUpdaterImpl's memory only) until another block
       // lands on top of it, so without this the tx's block would never actually reach RocksDBWriter to begin with.

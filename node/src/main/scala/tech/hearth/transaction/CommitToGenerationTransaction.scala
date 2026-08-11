@@ -36,7 +36,7 @@ final case class CommitToGenerationTransaction(
     override val chainId: Byte
 ) extends Transaction(TransactionType.CommitToGeneration)
     with ProvenTransaction
-    with TxWithFee.InWaves
+    with TxWithFee.InHearth
     with FastHashId {
 
   override type T = CommitToGenerationTransaction
@@ -60,7 +60,7 @@ final case class CommitToGenerationTransaction(
 }
 
 object CommitToGenerationTransaction {
-  val DepositInWavelets = 100_00000000L
+  val DepositInEmbers = 100_00000000L
 
   implicit val validator: TxValidator[CommitToGenerationTransaction] = CommitToGenerationTxValidator
 
@@ -86,21 +86,21 @@ object CommitToGenerationTransaction {
       vrfPublicKey: ByteStr,
       generationPeriodStart: Height,
       timestamp: TxTimestamp,
-      feeInWaves: Long,
+      feeInHearth: Long,
       commitmentSignature: BlsSignature,
       vrfCommitmentSignature: ByteStr,
       proofs: Proofs,
       chainId: Byte
   ): Either[ValidationError, CommitToGenerationTransaction] =
     for {
-      feeInWaves <- TxPositiveAmount(feeInWaves)(TxValidationError.InsufficientFee)
+      feeInHearth <- TxPositiveAmount(feeInHearth)(TxValidationError.InsufficientFee)
       tx <- CommitToGenerationTransaction(
         sender,
         endorserPublicKey,
         vrfPublicKey,
         generationPeriodStart,
         timestamp,
-        feeInWaves,
+        feeInHearth,
         commitmentSignature,
         vrfCommitmentSignature,
         proofs,

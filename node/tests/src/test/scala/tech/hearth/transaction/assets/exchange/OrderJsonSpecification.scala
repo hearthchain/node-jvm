@@ -5,7 +5,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.PropSpec
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.assets.exchange.OrderJson.*
 import tech.hearth.utils.JsonMatchers
@@ -216,7 +216,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
           "signature": "aabbcc"
         } """
 
-    val jsons = Seq(""" "" """, "null", """ "WAVES" """).map { x =>
+    val jsons = Seq(""" "" """, "null", """ "HRTH" """).map { x =>
       x -> mkJson(x)
     }
 
@@ -226,8 +226,8 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
           case e: JsError =>
             fail("Error: " + JsError.toJson(e).toString())
           case JsSuccess(o, _) =>
-            o.assetPair.amountAsset shouldBe Waves
-            o.assetPair.priceAsset shouldBe Waves
+            o.assetPair.amountAsset shouldBe Hearth
+            o.assetPair.priceAsset shouldBe Hearth
         }
       }
     }

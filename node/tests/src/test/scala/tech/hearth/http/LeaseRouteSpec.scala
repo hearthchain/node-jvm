@@ -9,7 +9,7 @@ import tech.hearth.api.http.leasing.LeaseApiRoute
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.{Blockchain, LeaseDetails, LeaseStaticInfo, Height, TransactionId}
 import tech.hearth.test.*
 import tech.hearth.transaction.lease.LeaseTransaction
@@ -24,8 +24,8 @@ import scala.concurrent.duration.*
 class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISettingsHelper, SharedDomain, SharedSchedulerMixin {
   private val richAccount = TxHelpers.signer(200)
 
-  override def genesisBalances: Seq[WithState.AddrWithBalance] = Seq(richAccount -> 500_000.waves, TxHelpers.defaultSigner -> 2000.waves)
-  override def settings: WavesSettings                         = DomainPresets.RideV6
+  override def genesisBalances: Seq[WithState.AddrWithBalance] = Seq(richAccount -> 500_000.hearth, TxHelpers.defaultSigner -> 2000.hearth)
+  override def settings: HearthSettings                        = DomainPresets.RideV6
 
   private val route =
     seal(
@@ -71,7 +71,7 @@ class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISetting
       val lessor         = TxHelpers.signer(201)
       val leaseRecipient = TxHelpers.address(202)
 
-      domain.appendBlock(TxHelpers.transfer(richAccount, lessor.toAddress, 30.006.waves))
+      domain.appendBlock(TxHelpers.transfer(richAccount, lessor.toAddress, 30.006.hearth))
 
       forAll(transactionVersions) { _ =>
         val leaseTransaction = TxHelpers.lease(lessor, leaseRecipient)
@@ -102,7 +102,7 @@ class LeaseRouteSpec extends RouteSpec("/leasing"), OptionValues, RestAPISetting
     val leases3 = Seq.tabulate(10)(i => TxHelpers.lease(sender, TxHelpers.address(261 + i)))
     val leases4 = Seq.tabulate(10)(i => TxHelpers.lease(sender, TxHelpers.address(271 + i)))
 
-    domain.appendBlock(TxHelpers.transfer(richAccount, sender.toAddress, 10_000.waves))
+    domain.appendBlock(TxHelpers.transfer(richAccount, sender.toAddress, 10_000.hearth))
     domain.appendBlock(leases1*)
     domain.appendBlock(leases2*)
     domain.appendBlock(leases3*)

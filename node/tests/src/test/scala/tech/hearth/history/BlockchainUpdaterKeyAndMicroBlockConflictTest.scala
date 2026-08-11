@@ -15,7 +15,7 @@ class BlockchainUpdaterKeyAndMicroBlockConflictTest extends PropSpec with Domain
   // key it committed and a computed state hash, none of which a hand-rolled block builder supplies.
   property("new key block should be validated to previous") {
     forAll(accountGen, accountGen) { (richAccount, secondAccount) =>
-      withDomain(MicroblocksActivatedAt0WavesSettings, Seq(AddrWithBalance(richAccount.toAddress, TransferAmount + FeeAmount))) { d =>
+      withDomain(MicroblocksActivatedAt0HearthSettings, Seq(AddrWithBalance(richAccount.toAddress, TransferAmount + FeeAmount))) { d =>
         val transfer1 = TxHelpers.transfer(richAccount, secondAccount.toAddress, TransferAmount, fee = FeeAmount)
         // Everything the second account has, twice over: only one of the two can be in the state
         val transfer2 = TxHelpers.transfer(secondAccount, richAccount.toAddress, TransferAmount - FeeAmount, fee = FeeAmount)
@@ -37,7 +37,7 @@ class BlockchainUpdaterKeyAndMicroBlockConflictTest extends PropSpec with Domain
 
   property("a key block that references the liquid block sees the transactions of its micro blocks") {
     forAll(accountGen, accountGen) { (richAccount, secondAccount) =>
-      withDomain(MicroblocksActivatedAt0WavesSettings, Seq(AddrWithBalance(richAccount.toAddress, TransferAmount + FeeAmount))) { d =>
+      withDomain(MicroblocksActivatedAt0HearthSettings, Seq(AddrWithBalance(richAccount.toAddress, TransferAmount + FeeAmount))) { d =>
         val transfer1 = TxHelpers.transfer(richAccount, secondAccount.toAddress, TransferAmount, fee = FeeAmount)
         val transfer2 = TxHelpers.transfer(secondAccount, richAccount.toAddress, TransferAmount - FeeAmount, fee = FeeAmount)
         val transfer3 = TxHelpers.transfer(secondAccount, richAccount.toAddress, TransferAmount - FeeAmount, fee = FeeAmount)
@@ -47,14 +47,14 @@ class BlockchainUpdaterKeyAndMicroBlockConflictTest extends PropSpec with Domain
 
         // The other side of the property above: on top of the liquid block the micro block's transfer is part of the
         // state, and it left the second account with nothing to spend
-        d.appendBlockE(transfer3) should produce("negative waves balance")
+        d.appendBlockE(transfer3) should produce("negative hearth balance")
       }
     }
   }
 
   property("effective balance is validated against the referenced block") {
     forAll(accountGen, accountGen, accountGen) { (richAccount, secondAccount, randomAccount) =>
-      withDomain(MicroblocksActivatedAt0WavesSettings, Seq(AddrWithBalance(richAccount.toAddress, TransferAmount + FeeAmount * 3))) { d =>
+      withDomain(MicroblocksActivatedAt0HearthSettings, Seq(AddrWithBalance(richAccount.toAddress, TransferAmount + FeeAmount * 3))) { d =>
         val lease       = TxHelpers.lease(richAccount, secondAccount.toAddress, TransferAmount, fee = FeeAmount)
         val leaseCancel = TxHelpers.leaseCancel(lease.id(), richAccount, fee = FeeAmount)
         val transfer    = TxHelpers.transfer(richAccount, randomAccount.toAddress, TransferAmount, fee = FeeAmount)

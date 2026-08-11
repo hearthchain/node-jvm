@@ -125,8 +125,8 @@ package object state {
     extension (cf: BlockFee) {
       def pf: Portfolio = cf
 
-      /** The amount of fee collected in WAVES; asset fees are not converted. */
-      def wavesAmount: Long = cf.balance
+      /** The amount of fee collected in HRTH; asset fees are not converted. */
+      def hearthAmount: Long = cf.balance
 
       def combine(that: Portfolio): Either[String, BlockFee] = {
         val self: Portfolio = cf

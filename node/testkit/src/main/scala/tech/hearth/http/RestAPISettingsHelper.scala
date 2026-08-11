@@ -21,7 +21,7 @@ trait RestAPISettingsHelper {
     val keyHash = Base16.encode(crypto.secureHash(apiKey.getBytes("UTF-8")))
     val config = ConfigFactory
       .parseString(
-        s"""waves.rest-api {
+        s"""hearth.rest-api {
            |  api-key-hash = $keyHash
            |  transactions-by-address-limit = $MaxTransactionsPerRequest
            |  distribution-address-limit = $MaxAddressesPerRequest
@@ -31,6 +31,6 @@ trait RestAPISettingsHelper {
          """.stripMargin
       )
       .withFallback(ConfigFactory.load())
-    ConfigSource.fromConfig(config).at("waves.rest-api").loadOrThrow[RestAPISettings]
+    ConfigSource.fromConfig(config).at("hearth.rest-api").loadOrThrow[RestAPISettings]
   }
 }

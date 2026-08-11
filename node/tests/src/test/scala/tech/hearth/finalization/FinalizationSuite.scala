@@ -228,7 +228,7 @@ class FinalizationSuite extends BaseFinalizationSpec {
 
   "finalized with less votes after conflict endorsement" in withDomain(
     defaultSettings,
-    Seq(node0Acc, node1Acc, node2Acc, node3Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+    Seq(node0Acc, node1Acc, node2Acc, node3Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.hearth)),
     generators = allNodes
   ) { d =>
     val genesisBlockId = d.blockchain.lastBlockId.value
@@ -288,10 +288,10 @@ class FinalizationSuite extends BaseFinalizationSpec {
       d.createBlock(
         txs = Seq(
           TxHelpers.transfer(
-            node0Acc,                                                                            // Endorser
-            to = node3Acc.toAddress,                                                             // Not endorser
-            amount = d.blockchain.wavesPortfolio(node0Acc.toAddress).spendableBalance - 1.waves, // All waves
-            fee = 1.waves
+            node0Acc,                                                                              // Endorser
+            to = node3Acc.toAddress,                                                               // Not endorser
+            amount = d.blockchain.hearthPortfolio(node0Acc.toAddress).spendableBalance - 1.hearth, // All hearth
+            fee = 1.hearth
           )
         ),
         generator = node1Acc,
@@ -315,18 +315,18 @@ class FinalizationSuite extends BaseFinalizationSpec {
         // transfer below only counts once the chain is past height 1000 - and the commitment is for the period
         // starting right after that, so that has to be the period length too.
         defaultSettings.configure(_.copy(generationPeriodLength = 1001)),
-        AddrWithBalance(node3Acc.toAddress, 6000.waves) +:
-          Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+        AddrWithBalance(node3Acc.toAddress, 6000.hearth) +:
+          Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.hearth)),
         generators = Seq(TxHelpers.defaultSigner, node1Acc)
       ) { d =>
         // This is block #2
         // Generating balance of node1Acc increased on 2 + 1000 (generatingBalance depth) = 1002
         d.appendBlock(
           TxHelpers.transfer(
-            node3Acc,                                                                            // Not endorser
-            to = node1Acc.toAddress,                                                             // Miner
-            amount = d.blockchain.wavesPortfolio(node3Acc.toAddress).spendableBalance - 1.waves, // Enough for finalization
-            fee = 1.waves
+            node3Acc,                                                                              // Not endorser
+            to = node1Acc.toAddress,                                                               // Miner
+            amount = d.blockchain.hearthPortfolio(node3Acc.toAddress).spendableBalance - 1.hearth, // Enough for finalization
+            fee = 1.hearth
           )
         )
 
@@ -356,9 +356,9 @@ class FinalizationSuite extends BaseFinalizationSpec {
           // transfer below only counts once the chain is past height 1000 - and the commitment is for the period
           // starting right after that, so that has to be the period length too.
           defaultSettings.configure(_.copy(generationPeriodLength = 1001)),
-          AddrWithBalance(node3Acc.toAddress, 6000.waves) +:
-            AddrWithBalance(node2Acc.toAddress, 4000.waves) +:
-            Seq(node0Acc, node1Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+          AddrWithBalance(node3Acc.toAddress, 6000.hearth) +:
+            AddrWithBalance(node2Acc.toAddress, 4000.hearth) +:
+            Seq(node0Acc, node1Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.hearth)),
           generators = Seq(TxHelpers.defaultSigner, node1Acc)
         ) { d =>
           val genesisBlockId = d.blockchain.lastBlockId.value
@@ -367,10 +367,10 @@ class FinalizationSuite extends BaseFinalizationSpec {
           // Generating balance of node0Acc increased on 2 + 1000 (generatingBalance depth) = 1002
           d.appendBlock(
             TxHelpers.transfer(
-              node3Acc,                                                                            // Not endorser
-              to = node0Acc.toAddress,                                                             // Endorser
-              amount = d.blockchain.wavesPortfolio(node3Acc.toAddress).spendableBalance - 1.waves, // Enough for finalization
-              fee = 1.waves
+              node3Acc,                                                                              // Not endorser
+              to = node0Acc.toAddress,                                                               // Endorser
+              amount = d.blockchain.hearthPortfolio(node3Acc.toAddress).spendableBalance - 1.hearth, // Enough for finalization
+              fee = 1.hearth
             )
           )
 
@@ -409,8 +409,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
       // Heights 2-51 must stay within a single period (no re-commitment as defaultSigner mines them), and the
       // commitment below is for the period starting at height 52, so that has to be the period length.
       defaultSettings.configure(_.copy(generationPeriodLength = 51)),
-      AddrWithBalance(node3Acc.toAddress, 6000.waves) +:
-        Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.waves)),
+      AddrWithBalance(node3Acc.toAddress, 6000.hearth) +:
+        Seq(node0Acc, node1Acc, node2Acc).map(kp => AddrWithBalance(kp.toAddress, 2000.hearth)),
       generators = Seq(TxHelpers.defaultSigner, node1Acc)
     ) { d =>
       val genesisBlockId = d.blockchain.lastBlockId.value
@@ -421,8 +421,8 @@ class FinalizationSuite extends BaseFinalizationSpec {
         TxHelpers.transfer(
           node3Acc,                // Not endorser
           to = node2Acc.toAddress, // Not voting
-          amount = d.blockchain.wavesPortfolio(node3Acc.toAddress).spendableBalance - 1.waves,
-          fee = 1.waves
+          amount = d.blockchain.hearthPortfolio(node3Acc.toAddress).spendableBalance - 1.hearth,
+          fee = 1.hearth
         )
       )
 

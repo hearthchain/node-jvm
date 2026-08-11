@@ -43,9 +43,9 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
     Seq(recipient1, recipient2).foreach { recipient =>
       withDomain(DomainPresets.RideV6, Seq(AddrWithBalance(sender.toAddress))) { d =>
         val genesisBlock  = d.lastBlock
-        val transactions1 = (1 to txCount1 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalWaves / 2 / txCount1))
+        val transactions1 = (1 to txCount1 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalHearth / 2 / txCount1))
         val block1        = d.appendBlock(transactions1*)
-        val transactions2 = (1 to txCount2 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalWaves / 2 / txCount2))
+        val transactions2 = (1 to txCount2 / 2).flatMap(_ => transfers(sender, recipient.toAddress, Constants.TotalHearth / 2 / txCount2))
         val block2        = d.appendBlock(transactions2*)
 
         val blocks = Seq(genesisBlock, block1, block2)

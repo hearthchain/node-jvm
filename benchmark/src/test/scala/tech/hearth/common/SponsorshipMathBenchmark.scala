@@ -15,24 +15,24 @@ import org.openjdk.jmh.infra.Blackhole
 class SponsorshipMathBenchmark {
   @Benchmark
   def bigDecimal_test(bh: Blackhole): Unit = {
-    def toWaves(assetFee: Long, sponsorship: Long): Long = {
-      val waves = (BigDecimal(assetFee) * BigDecimal(FeeValidation.FeeUnit)) / BigDecimal(sponsorship)
-      if (waves > Long.MaxValue) {
+    def toHearth(assetFee: Long, sponsorship: Long): Long = {
+      val hearth = (BigDecimal(assetFee) * BigDecimal(FeeValidation.FeeUnit)) / BigDecimal(sponsorship)
+      if (hearth > Long.MaxValue) {
         throw new java.lang.ArithmeticException("Overflow")
       }
-      waves.toLong
+      hearth.toLong
     }
 
-    bh.consume(toWaves(100000, 100000000))
+    bh.consume(toHearth(100000, 100000000))
   }
 
   @Benchmark
   def bigInt_test(bh: Blackhole): Unit = {
-    def toWaves(assetFee: Long, sponsorship: Long): Long = {
-      val waves = BigInt(assetFee) * FeeValidation.FeeUnit / sponsorship
-      waves.bigInteger.longValueExact()
+    def toHearth(assetFee: Long, sponsorship: Long): Long = {
+      val hearth = BigInt(assetFee) * FeeValidation.FeeUnit / sponsorship
+      hearth.bigInteger.longValueExact()
     }
 
-    bh.consume(toWaves(100000, 100000000))
+    bh.consume(toHearth(100000, 100000000))
   }
 }

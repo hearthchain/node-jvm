@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 import tech.hearth.account.PublicKey
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.util.GlobalTimer
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.diffs.FeeValidation
 import tech.hearth.transaction.TransactionType
 import tech.hearth.wallet.Wallet
@@ -20,7 +20,7 @@ import tech.hearth.crypto.SigningKey
 abstract class Node(val config: Config) extends AutoCloseable {
   lazy val log: Logger = Logger(LoggerFactory.getLogger(this.name))
 
-  val settings: WavesSettings = WavesSettings.fromRootConfig(config)
+  val settings: HearthSettings = HearthSettings.fromRootConfig(config)
   val client: AsyncHttpClient = asyncHttpClient(
     clientConfig()
       .setKeepAlive(false)

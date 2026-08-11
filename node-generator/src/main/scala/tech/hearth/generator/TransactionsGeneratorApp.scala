@@ -32,7 +32,7 @@ object TransactionsGeneratorApp extends ScoptImplicits {
     val log                                  = Logger(LoggerFactory.getLogger("generator"))
 
     val parser = new OptionParser[GeneratorSettings]("generator") {
-      head("TransactionsGenerator - Waves load testing transactions generator")
+      head("TransactionsGenerator - Hearth load testing transactions generator")
       opt[File]('c', "configuration").valueName("<file>").text("generator configuration path")
       opt[FiniteDuration]('d', "delay").valueName("<delay>").text("delay between iterations").action { (v, c) =>
         c.copy(worker = c.worker.copy(delay = v))
@@ -102,10 +102,10 @@ object TransactionsGeneratorApp extends ScoptImplicits {
         .parse(args, new File("generator.local.conf"))
         .getOrElse(throw new RuntimeException("Failed to parse configuration path from command line parameters"))
 
-    val wavesSettings = Application.loadApplicationConfig(if (externalConf.isFile) Some(externalConf) else None)
+    val hearthSettings = Application.loadApplicationConfig(if (externalConf.isFile) Some(externalConf) else None)
 
     val defaultConfig =
-      ConfigSource.fromConfig(wavesSettings.config).at("waves.generator").loadOrThrow[GeneratorSettings]
+      ConfigSource.fromConfig(hearthSettings.config).at("hearth.generator").loadOrThrow[GeneratorSettings]
 
     parser.parse(args, defaultConfig) match {
       case None => parser.failure("Failed to parse command line parameters")
@@ -137,7 +137,8 @@ object TransactionsGeneratorApp extends ScoptImplicits {
         val threadPool                            = Executors.newFixedThreadPool(Math.max(1, finalConfig.sendTo.size))
         implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(threadPool)
 
-        val sender = new NetworkSender(wavesSettings.networkSettings.trafficLogger, finalConfig.addressScheme, "generator", nonce = Random.nextLong())
+        val sender =
+          new NetworkSender(hearthSettings.networkSettings.trafficLogger, finalConfig.addressScheme, "generator", nonce = Random.nextLong())
 
         sys.addShutdownHook(sender.close())
 

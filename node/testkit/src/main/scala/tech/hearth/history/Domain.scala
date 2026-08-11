@@ -17,7 +17,7 @@ import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.lang.ValidationError
 import tech.hearth.mining.{BlockChallenger, BlockChallengerImpl, GeneratorKeys, MiningAccount}
 import tech.hearth.network.{MessageCodec, PeerDatabase}
-import tech.hearth.settings.{MiningAccount as MiningAccountSettings, WavesSettings}
+import tech.hearth.settings.{MiningAccount as MiningAccountSettings, HearthSettings}
 import tech.hearth.state.*
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.{Applied, Ignored}
@@ -25,7 +25,7 @@ import tech.hearth.state.appender.{BlockAppender, findBlockAndGetGenerators}
 import tech.hearth.state.diffs.{BlockDiffer, TransactionDiffer}
 import tech.hearth.test.TestTime
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.smart.script.trace.TracedResult
 import tech.hearth.utils.{Schedulers, SystemTime}
 import tech.hearth.utx.UtxPoolImpl
@@ -50,7 +50,7 @@ case class Domain(
     rdb: RDB,
     blockchainUpdater: CompleteBlockchainUpdater,
     rocksDBWriter: RocksDBWriter,
-    settings: WavesSettings,
+    settings: HearthSettings,
     testTime: TestTime = TestTime()
 ) {
   import Domain.*
@@ -87,7 +87,7 @@ case class Domain(
 
   lazy val endorsementStorage: EndorsementStorage = EndorsementStorage.Disabled
 
-  /** The accounts this domain generates with, as a node takes them from `waves.miner.accounts`. */
+  /** The accounts this domain generates with, as a node takes them from `hearth.miner.accounts`. */
   lazy val generatorKeys: GeneratorKeys = GeneratorKeys.fromSettings(settings.minerSettings)
 
   def createBlockEndorser(allChannels: ChannelGroup, storage: EndorsementStorage = endorsementStorage): BlockEndorser =
@@ -115,16 +115,16 @@ case class Domain(
   object commonApi {
 
     /** @return
-      *   Tuple of (asset, feeInAsset, feeInWaves)
+      *   Tuple of (asset, feeInAsset, feeInHearth)
       * @see
       *   [[tech.hearth.state.diffs.FeeValidation#getMinFee(tech.hearth.state.Blockchain, tech.hearth.transaction.Transaction)]]
       */
     def calculateFee(tx: Transaction): (Asset, Long, Long) =
       transactions.calculateFee(tx).explicitGet()
 
-    def calculateWavesFee(tx: Transaction): Long = {
-      val (Waves, _, feeInWaves) = calculateFee(tx): @unchecked
-      feeInWaves
+    def calculateHearthFee(tx: Transaction): Long = {
+      val (Hearth, _, feeInHearth) = calculateFee(tx): @unchecked
+      feeInHearth
     }
 
     def transactionMeta(transactionId: ByteStr): TransactionMeta =
@@ -267,7 +267,7 @@ case class Domain(
 
   /** Builds the block at an explicit timestamp rather than the one PoS would put it at, the way the `history` package
     * builders used to take it from the first transaction. The older property suites stamp their transactions near the
-    * epoch - which is why `DefaultWavesSettings` starts its genesis there - and a block the domain timestamps itself
+    * epoch - which is why `DefaultHearthSettings` starts its genesis there - and a block the domain timestamps itself
     * would be `maxTransactionTimeForwardOffset` away from them.
     */
   def appendBlockAtE(timestamp: Long, generator: SigningKey = defaultSigner)(txs: Transaction*): Either[ValidationError, BlockApplyResult] =
@@ -565,7 +565,7 @@ case class Domain(
 
   // noinspection ScalaStyle
   object helpers {
-    def creditWavesFromDefaultSigner(to: Address, amount: Long = 1_0000_0000): Unit = {
+    def creditHearthFromDefaultSigner(to: Address, amount: Long = 1_0000_0000): Unit = {
       appendBlock(TxHelpers.transfer(to = to, amount = amount))
     }
 
@@ -576,7 +576,7 @@ case class Domain(
     def transferAll(account: SigningKey, to: Address, asset: Asset): Unit = {
       val balanceMinusFee = {
         val balance = blockchain.balance(account.toAddress, asset)
-        if (asset == Waves) balance - TestValues.fee else balance
+        if (asset == Hearth) balance - TestValues.fee else balance
       }
       transfer(account, to, balanceMinusFee, asset)
     }
@@ -612,7 +612,7 @@ case class Domain(
 object Domain {
   val DefaultWalletSeed = "wallet".getBytes
 
-  /** The `waves.miner.accounts` entry for one of this domain's wallet accounts. A miner takes its accounts from the
+  /** The `hearth.miner.accounts` entry for one of this domain's wallet accounts. A miner takes its accounts from the
     * settings and nowhere else, so an account the wallet holds is not one it will mine with; the VRF and BLS seeds are
     * the ones `TxHelpers` derives, because those are the keys the genesis snapshot commits for a generator.
     */

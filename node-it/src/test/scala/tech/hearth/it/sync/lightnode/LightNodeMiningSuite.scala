@@ -10,7 +10,7 @@ import tech.hearth.test.NumericExt
 
 class LightNodeMiningSuite extends BaseFunSuite with TransferSending {
   override def nodeConfigs: Seq[Config] = {
-    val interval = "waves.blockchain.custom.functionality.light-node-block-fields-absence-interval = 2"
+    val interval = "hearth.blockchain.custom.functionality.light-node-block-fields-absence-interval = 2"
     // buildNonConflicting's withDefault/withSpecial always assigns the lowest-index NonConflictingNodes entry (node01)
     // as the default (full) node and a later one (node04) as the special (light) one - but template.conf's genesis
     // balances only grow with node index, so that pairing hands the light node a genesis balance 2.5x the full
@@ -19,7 +19,7 @@ class LightNodeMiningSuite extends BaseFunSuite with TransferSending {
     // enough ahead in balance to reliably win them.
     Seq(
       Default(6).overrides(interval),
-      Default(0).overrides(interval).overrides("waves.enable-light-mode = true")
+      Default(0).overrides(interval).overrides("hearth.enable-light-mode = true")
     )
   }
 
@@ -32,7 +32,7 @@ class LightNodeMiningSuite extends BaseFunSuite with TransferSending {
     nodes.waitForHeight(Height(5))
     // available (unlike the regular balance) excludes the generation deposit fullNode reserves as a committed
     // generator.
-    fullNode.transfer(fullNode.keyPair, lightNodeAddress, fullNode.balanceDetails(fullNodeAddress).available - 1.waves)
+    fullNode.transfer(fullNode.keyPair, lightNodeAddress, fullNode.balanceDetails(fullNodeAddress).available - 1.hearth)
     lightNode.blockSeq(Height(2), Height(5)).foreach(_.generator shouldBe fullNodeAddress)
 
     lightNode.waitForHeight(Height(6))

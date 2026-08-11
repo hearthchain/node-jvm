@@ -13,7 +13,7 @@ import tech.hearth.it.transactions.BaseTransactionSuite
 import tech.hearth.it.util.TxHelpers
 import tech.hearth.protobuf.transaction.{MassTransferTransactionData, PBRecipients}
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.transfer.MassTransferTransaction.{MaxTransferCount, Transfer}
 import tech.hearth.transaction.transfer.TransferTransaction.MaxAttachmentSize
@@ -33,7 +33,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
 
   private def fakeSignature = ByteStr(Array.fill(64)(Random.nextInt().toByte))
 
-  test("asset mass transfer changes asset balances and sender's.waves balance is decreased by fee.") {
+  test("asset mass transfer changes asset balances and sender's.hearth balance is decreased by fee.") {
     val (balance1, eff1) = miner.accountBalances(firstAddress)
     val (balance2, eff2) = miner.accountBalances(secondAddress)
 
@@ -56,8 +56,8 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
   }
 
   test("fee in an asset at or above its minAssetFee is accepted, below is rejected") {
-    // GenesisTestAsset's configured min-fee (template.conf) equals minFee (0.001 waves) - unrelated to
-    // calcMassTransferFee's per-unit Waves fee sizing, which is orthogonal to the flat per-asset fee floor.
+    // GenesisTestAsset's configured min-fee (template.conf) equals minFee (0.001 hearth) - unrelated to
+    // calcMassTransferFee's per-unit Hearth fee sizing, which is orthogonal to the flat per-asset fee floor.
     val assetId   = GenesisAssets.TestAsset.id.toString
     val transfers = List(Transfer(secondAddress, 1))
 
@@ -70,7 +70,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
     )
   }
 
-  test("waves mass transfer changes waves balances") {
+  test("hearth mass transfer changes hearth balances") {
     val (balance1, eff1) = miner.accountBalances(firstAddress)
     val (balance2, eff2) = miner.accountBalances(secondAddress)
     val (balance3, eff3) = miner.accountBalances(thirdAddress)
@@ -89,7 +89,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
     miner.assertBalances(thirdAddress, balance3 + 2 * 1000, eff3 + 2 * 1000)
   }
 
-  test("can not make mass transfer without having enough waves") {
+  test("can not make mass transfer without having enough hearth") {
     val (balance1, eff1) = miner.accountBalances(firstAddress)
     val (balance2, eff2) = miner.accountBalances(secondAddress)
     val transfers        = List(Transfer(secondAddress, balance1 / 2), Transfer(thirdAddress, balance1 / 2))
@@ -153,7 +153,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
           tx <- MassTransferTransaction
             .create(
               PublicKey(sender.keyPair.publicKey()),
-              Waves,
+              Hearth,
               parsedTransfers,
               fee,
               timestamp,
@@ -304,7 +304,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
   }
 
   test("reporting MassTransfer transactions") {
-    val transfers = List(Transfer(firstAddress, 5.waves), Transfer(secondAddress, 2.waves), Transfer(thirdAddress, 3.waves))
+    val transfers = List(Transfer(firstAddress, 5.hearth), Transfer(secondAddress, 2.hearth), Transfer(thirdAddress, 3.hearth))
     val txId      = sender.massTransfer(firstKeyPair, transfers, 300000).id
     nodes.waitForHeightAriseAndTxPresent(txId)
 
@@ -321,7 +321,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
       .head
     assert(txSender.as[MassTransferRequest].transfers.size == 3)
     assert((txSender \ "transferCount").as[Int] == 3)
-    assert((txSender \ "totalAmount").as[Long] == 10.waves)
+    assert((txSender \ "totalAmount").as[Long] == 10.hearth)
     val transfersAfterTrans = txSender.as[MassTransferRequest].transfers
     assert(transfers.equals(transfersAfterTrans))
 
@@ -339,7 +339,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
 
     assert(txRecipient.as[MassTransferRequest].transfers.size == 1)
     assert((txRecipient \ "transferCount").as[Int] == 3)
-    assert((txRecipient \ "totalAmount").as[Long] == 10.waves)
+    assert((txRecipient \ "totalAmount").as[Long] == 10.hearth)
     val transferToSecond = txRecipient.as[MassTransferRequest].transfers.head
     assert(transfers contains transferToSecond)
   }

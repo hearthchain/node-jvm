@@ -21,14 +21,14 @@ case class Portfolio(
   lazy val isEmpty: Boolean = this == Portfolio.empty
 
   @inline
-  final def balanceOf(assetId: Asset): Long = if (assetId eq Waves) balance else assets.getOrElse(assetId.asInstanceOf[IssuedAsset], 0L)
+  final def balanceOf(assetId: Asset): Long = if (assetId eq Hearth) balance else assets.getOrElse(assetId.asInstanceOf[IssuedAsset], 0L)
 
   def effectiveBalance(isBanned: Boolean): Either[String, Long] =
     if (isBanned) Right(0L) else effectiveBalance
 
   def combine(that: Portfolio): Either[String, Portfolio] =
     for {
-      balance           <- safeSum(this.balance, that.balance, "Waves balance")
+      balance           <- safeSum(this.balance, that.balance, "Hearth balance")
       assets            <- combineAssets(this.assets, that.assets)
       leaseIn           <- safeSum(this.lease.in, that.lease.in, "Lease in")
       leaseOut          <- safeSum(this.lease.out, that.lease.out, "Lease out")
@@ -66,16 +66,16 @@ object Portfolio {
         seed.updated(asset, newBalance)
       }
 
-  def waves(amount: Long): Portfolio = build(Waves, amount)
+  def hearth(amount: Long): Portfolio = build(Hearth, amount)
 
   def build(af: (Asset, Long)): Portfolio = build(af._1, af._2)
 
   def build(a: Asset, amount: Long): Portfolio = a match {
-    case Waves              => Portfolio(amount)
+    case Hearth             => Portfolio(amount)
     case t @ IssuedAsset(_) => Portfolio(assets = VectorMap(t -> amount))
   }
 
-  def build(wavesAmount: Long, a: IssuedAsset, amount: Long): Portfolio = Portfolio(wavesAmount, assets = VectorMap(a -> amount))
+  def build(hearthAmount: Long, a: IssuedAsset, amount: Long): Portfolio = Portfolio(hearthAmount, assets = VectorMap(a -> amount))
 
   val empty: Portfolio = Portfolio()
 
@@ -98,7 +98,7 @@ object Portfolio {
     def minus(other: Portfolio): Portfolio =
       Portfolio(self.balance - other.balance, LeaseBalance.empty, unsafeCombineAssets(self.assets, other.assets.view.mapValues(-_).to(VectorMap)))
 
-    def assetIds: Set[Asset] = self.assets.keySet ++ Set[Asset](Waves)
+    def assetIds: Set[Asset] = self.assets.keySet ++ Set[Asset](Hearth)
   }
 
   def combine(portfolios1: Map[Address, Portfolio], portfolios2: Map[Address, Portfolio]): Either[String, Map[Address, Portfolio]] =

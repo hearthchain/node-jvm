@@ -35,7 +35,7 @@ class ChallengingAfterFinalizationSuite extends BaseFinalizationSpec, TestSchedu
   // for the period it starts cannot produce that block. Both accounts get the same balance so that the challenged
   // block's deliberately-worsened timestamp below is what decides the race, not an unfair balance edge.
   private val accountBalance =
-    MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInWavelets
+    MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
 
   "Anyone can challenge" in withDomain(
     defaultSettings,

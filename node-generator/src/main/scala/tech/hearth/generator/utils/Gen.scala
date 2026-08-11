@@ -4,7 +4,7 @@ import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.KeyLength
 import tech.hearth.generator.utils.Implicits.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.{Proofs, Transaction}
 import tech.hearth.crypto.SigningKey
@@ -29,7 +29,7 @@ object Gen {
       .zipWithIndex
       .map { case (((src, dst), fee), i) =>
         TransferTransaction
-          .create(PublicKey(src.publicKey()), dst, Waves, fee, Waves, fee, ByteStr.empty, now + i, Proofs.empty)
+          .create(PublicKey(src.publicKey()), dst, Hearth, fee, Hearth, fee, ByteStr.empty, now + i, Proofs.empty)
           .map(_.signWith(src))
       }
       .collect { case Right(x) => x }

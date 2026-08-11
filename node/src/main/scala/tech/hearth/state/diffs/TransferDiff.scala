@@ -3,7 +3,7 @@ package tech.hearth.state.diffs
 import cats.syntax.either.*
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.transaction.Asset
@@ -33,7 +33,7 @@ object TransferDiff {
 
       // Ride4DApps is active: overflow no longer needs an explicit check, the transaction validates itself
       transferPf <- assetId match {
-        case Waves =>
+        case Hearth =>
           Portfolio
             .combine(
               Map(senderAddress -> Portfolio(-amount)),
@@ -49,7 +49,7 @@ object TransferDiff {
             .leftMap(GenericError(_))
       }
       feePf <- feeAssetId match {
-        case Waves => Right(Map(senderAddress -> Portfolio(-fee)))
+        case Hearth => Right(Map(senderAddress -> Portfolio(-fee)))
         case asset @ IssuedAsset(_) =>
           val senderPf = Map(senderAddress -> Portfolio.build(asset -> -fee))
           Right(senderPf)

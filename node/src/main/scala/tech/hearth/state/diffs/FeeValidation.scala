@@ -4,13 +4,13 @@ import cats.data.Chain
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.*
 import tech.hearth.transaction.transfer.*
 
 object FeeValidation {
 
-  case class FeeDetails(asset: Asset, requirements: Chain[String], minFeeInAsset: Long, minFeeInWaves: Long)
+  case class FeeDetails(asset: Asset, requirements: Chain[String], minFeeInAsset: Long, minFeeInHearth: Long)
 
   val ScriptExtraFee    = 400000L
   val FeeUnit           = 100000
@@ -45,7 +45,7 @@ object FeeValidation {
 
   def getMinFee(tx: Transaction): Either[ValidationError, FeeDetails] =
     feeInUnits(tx).map { units =>
-      val amountInWaves = units * FeeUnit
-      FeeDetails(Waves, Chain.empty, amountInWaves, amountInWaves)
+      val amountInHearth = units * FeeUnit
+      FeeDetails(Hearth, Chain.empty, amountInHearth, amountInHearth)
     }
 }

@@ -18,7 +18,7 @@ import tech.hearth.mining.Miner
 import tech.hearth.network.BlockSnapshotResponse
 import tech.hearth.protobuf.block.{PBBlocks, VanillaBlock}
 import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
 import tech.hearth.state.ParSignatureChecker.sigverify
 import tech.hearth.state.appender.BlockAppender
@@ -66,8 +66,8 @@ object Importer extends ScorexLogging {
       import builder.*
 
       OParser.sequence(
-        programName("waves import"),
-        head("Waves Blockchain Importer", Version.VersionString),
+        programName("hearth import"),
+        head("Hearth Blockchain Importer", Version.VersionString),
         opt[File]('c', "config")
           .text("Config file name")
           .action((f, c) => c.copy(configFile = Some(f))),
@@ -110,24 +110,24 @@ object Importer extends ScorexLogging {
       }
   }
 
-  def loadSettings(file: Option[File]): WavesSettings = Application.loadApplicationConfig(file)
+  def loadSettings(file: Option[File]): HearthSettings = Application.loadApplicationConfig(file)
 
   private var triggers = Seq.empty[BlockchainUpdateTriggers]
 
   def initExtensions(
-      wavesSettings: WavesSettings,
+      hearthSettings: HearthSettings,
       blockchainUpdater: BlockchainUpdaterImpl,
       appenderScheduler: Scheduler,
       extensionTime: Time,
       utxPool: UtxPool,
       rdb: RDB
   ): Seq[Extension] =
-    if (wavesSettings.extensions.isEmpty) Seq.empty
+    if (hearthSettings.extensions.isEmpty) Seq.empty
     else {
       val extensionContext: Context = {
         new Context {
-          override def settings: WavesSettings = wavesSettings
-          override def blockchain: Blockchain  = blockchainUpdater
+          override def settings: HearthSettings = hearthSettings
+          override def blockchain: Blockchain   = blockchainUpdater
           override def rollbackTo(blockId: ByteStr): Task[Either[ValidationError, DiscardedBlocks]] =
             Task(blockchainUpdater.removeAfter(blockId)).executeOn(appenderScheduler)
           override def time: Time     = extensionTime
@@ -163,7 +163,7 @@ object Importer extends ScorexLogging {
         }
       }
 
-      val extensions = wavesSettings.extensions.map { extensionClassName =>
+      val extensions = hearthSettings.extensions.map { extensionClassName =>
         val extensionClass = Class.forName(extensionClassName).asInstanceOf[Class[Extension]]
         val ctor           = extensionClass.getConstructor(classOf[Context])
         log.info(s"Enable extension: $extensionClassName")
@@ -322,7 +322,7 @@ object Importer extends ScorexLogging {
           System.in
 
         case _ =>
-          System.setProperty("http.agent", s"waves-node/${Version.VersionString}")
+          System.setProperty("http.agent", s"hearth-node/${Version.VersionString}")
           val uri = new URI(file)
           if (isRemoteResource(uri)) {
             val connection = uri.toURL.openConnection()

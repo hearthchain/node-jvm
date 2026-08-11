@@ -35,10 +35,10 @@ latest_release=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
 cat > /home/runner/.aptly/public/index.html <<EOF
 <html>
 <head>
-<title>Waves Platform APT Repository</title>
+<title>Hearth Platform APT Repository</title>
 </head>
 <body>
-<h1>Waves Platform APT Repository</h1>
+<h1>Hearth Platform APT Repository</h1>
 <p>Latest release: $latest_release</p>
 <h3>Adding This Repository</h3>
 <pre>
@@ -48,14 +48,14 @@ sudo mkdir -p /etc/apt/keyrings; sudo chmod 755 /etc/apt/keyrings
 sudo wget -O /etc/apt/keyrings/wavesplatform.asc https://apt.wavesplatform.com/pubkey.txt
 sudo apt-get update
 </pre>
-<h3>Installing Waves Node</h3>
+<h3>Installing Hearth Node</h3>
 <p>Mainnet:</p>
 <pre>
-sudo apt-get install waves
+sudo apt-get install hearth
 </pre>
 <p>Testnet:</p>
 <pre>
-sudo apt-get install waves-testnet
+sudo apt-get install hearth-testnet
 </pre>
 <small>Last update: $current_date</small>
 </body>

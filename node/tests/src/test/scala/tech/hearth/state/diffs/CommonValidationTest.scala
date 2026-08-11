@@ -7,7 +7,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.state.Height
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.OrderType
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.{Transaction, TxHelpers}
@@ -42,7 +42,7 @@ class CommonValidationTest extends PropSpec with WithState {
     val preconditionsAndPayment: Seq[Transaction] = {
       val recipient = TxHelpers.signer(2)
 
-      val amount = 100.waves
+      val amount = 100.hearth
       val asset  = IssuedAsset(ByteStr.fill(32)(1))
 
       val invChainId   = '#'.toByte
@@ -51,8 +51,8 @@ class CommonValidationTest extends PropSpec with WithState {
         TxHelpers.transfer(master, invChainAddr, amount, chainId = invChainId),
         TxHelpers.lease(master, invChainAddr, amount, chainId = invChainId),
         TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = master),
-          TxHelpers.order(OrderType.SELL, asset, Waves, Waves, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = recipient),
+          TxHelpers.order(OrderType.BUY, asset, Hearth, Hearth, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = master),
+          TxHelpers.order(OrderType.SELL, asset, Hearth, Hearth, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = recipient),
           master,
           chainId = invChainId
         ),

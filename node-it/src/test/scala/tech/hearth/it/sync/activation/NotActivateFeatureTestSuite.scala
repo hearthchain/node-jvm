@@ -19,7 +19,7 @@ class NotActivateFeatureTestSuite extends BaseFreeSpec with ActivationStatusRequ
   override protected def nodeConfigs: Seq[Config] =
     Seq(BiggestMiner, Miners(5)).map(
       _.overrides(
-        s"""waves {
+        s"""hearth {
            |  blockchain {
            |    custom {
            |      functionality {

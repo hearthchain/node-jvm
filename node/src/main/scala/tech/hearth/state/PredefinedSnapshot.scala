@@ -9,7 +9,7 @@ import tech.hearth.crypto.bls.BlsPublicKey
 import tech.hearth.lang.ValidationError
 import tech.hearth.settings.{GenesisGeneratorSettings, MinAssetFeeSettings, PredefinedSnapshotSettings}
 import tech.hearth.state.diffs.BalanceDiffValidation
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.{Asset, CommitToGenerationTransaction, TxDecimals}
 
@@ -18,7 +18,7 @@ import scala.collection.immutable.VectorMap
 
 /** A predefined chunk of state, applied outside of transaction processing before the block at
   * [[PredefinedSnapshotSettings.height]] applies its own transactions. Since there is no issue transaction, this is
-  * the only way to mint a new asset; it can also credit asset balances and commit generators (Waves balances only
+  * the only way to mint a new asset; it can also credit asset balances and commit generators (Hearth balances only
   * at genesis, see [[balances]]). The height-1 entry is the genesis snapshot - unlike every other block, genesis
   * carries no transactions at all, so its whole effect is this predefined snapshot.
   */
@@ -45,7 +45,7 @@ object PredefinedSnapshot {
       resultingBlockchain = SnapshotBlockchain(blockchain, snapshot)
       _ <- generators
         .collectFirst {
-          case c if resultingBlockchain.balance(c.sender.toAddress) < CommitToGenerationTransaction.DepositInWavelets =>
+          case c if resultingBlockchain.balance(c.sender.toAddress) < CommitToGenerationTransaction.DepositInEmbers =>
             GenericError(
               s"Generator ${c.sender.toAddress} balance ${resultingBlockchain.balance(c.sender.toAddress)} is less than required for generation"
             )
@@ -119,20 +119,24 @@ object PredefinedSnapshot {
     for {
       // Bech32 decoding is case-insensitive, so duplicates are checked on the lowercased form
       _ <- checkNoDuplicates(settings.balances.map(_.recipient.toLowerCase), "predefined snapshot balance recipient")
-      // Waves supply growth is tracked as reward + genesis balance only (see Blockchain.wavesAmount); a predefined
-      // snapshot beyond genesis is for minting new assets, not new Waves, so it must not credit any.
+      // Hearth supply growth is tracked as reward + genesis balance only (see Blockchain.hearthAmount); a predefined
+      // snapshot beyond genesis is for minting new assets, not new Hearth, so it must not credit any.
       _ <- Either.cond(
-        settings.height == GenesisBlockHeight.toInt || settings.balances.forall(_.waves == 0),
+        settings.height == GenesisBlockHeight.toInt || settings.balances.forall(_.hearth == 0),
         (),
-        GenericError(s"Predefined snapshot at height ${settings.height}: crediting Waves is only supported at genesis (height $GenesisBlockHeight)")
+        GenericError(s"Predefined snapshot at height ${settings.height}: crediting Hearth is only supported at genesis (height $GenesisBlockHeight)")
       )
       _ <- Either
-        .catchNonFatal(settings.balances.map(_.waves).foldLeft(0L)(Math.addExact))
-        .leftMap(_ => GenericError("Total Waves balance in the predefined snapshot overflows"))
+        .catchNonFatal(settings.balances.map(_.hearth).foldLeft(0L)(Math.addExact))
+        .leftMap(_ => GenericError("Total Hearth balance in the predefined snapshot overflows"))
       entries <- settings.balances.toList.flatTraverse { b =>
         for {
           address <- Address.fromString(b.recipient).leftMap(e => GenericError(s"Predefined snapshot balance ${b.recipient}: invalid recipient: $e"))
-          _ <- Either.cond(b.waves >= 0, (), GenericError(s"Predefined snapshot balance $address: Waves amount must not be negative, got ${b.waves}"))
+          _ <- Either.cond(
+            b.hearth >= 0,
+            (),
+            GenericError(s"Predefined snapshot balance $address: Hearth amount must not be negative, got ${b.hearth}")
+          )
           // Hex decoding is case-insensitive, so duplicates are checked on the lowercased form
           _ <- checkNoDuplicates(b.assets.keys.toSeq.map(_.toLowerCase), s"asset id in the balance of $address")
           assetEntries <- b.assets.toList.traverse { case (id, amount) =>
@@ -150,7 +154,7 @@ object PredefinedSnapshot {
               )
             } yield (address, asset: Asset) -> amount
           }
-        } yield (if (b.waves > 0) List((address, Waves: Asset) -> b.waves) else Nil) ++ assetEntries
+        } yield (if (b.hearth > 0) List((address, Hearth: Asset) -> b.hearth) else Nil) ++ assetEntries
       }
     } yield VectorMap.from(entries)
   }
@@ -159,9 +163,9 @@ object PredefinedSnapshot {
   // address never needs to combine two entries for the same asset
   private def toPortfolios(balances: VectorMap[(Address, Asset), Long]): Map[Address, Portfolio] =
     balances.groupBy(_._1._1).map { case (address, entries) =>
-      val waves        = entries.collectFirst { case ((_, Waves), amount) => amount }.getOrElse(0L)
+      val hearth       = entries.collectFirst { case ((_, Hearth), amount) => amount }.getOrElse(0L)
       val assetEntries = entries.collect { case ((_, a: IssuedAsset), amount) => a -> amount }
-      address -> Portfolio(waves, assets = VectorMap.from(assetEntries))
+      address -> Portfolio(hearth, assets = VectorMap.from(assetEntries))
     }
 
   private def checkAssetsAreFullyDistributed(

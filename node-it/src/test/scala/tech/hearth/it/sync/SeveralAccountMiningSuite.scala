@@ -24,7 +24,7 @@ class SeveralAccountMiningSuite extends BaseFunSuite {
     // generator (see CLAUDE.md's "Balance snapshots" notes), and is read only now - not before the 5-block wait
     // above, during which it also earns mining rewards - so the spent amount is actually spendable.
     val minerBalance1       = miner.balanceDetails(MinerPk1.toAddress.toString).available
-    val tx                  = miner.transfer(MinerPk1, notMiner.address, minerBalance1 - 10.waves, waitForTx = true)
+    val tx                  = miner.transfer(MinerPk1, notMiner.address, minerBalance1 - 10.hearth, waitForTx = true)
     val minerTransferHeight = nodes.waitForTransaction(tx.id).height
     nodes.waitForHeight(Height(minerTransferHeight) + 5)
     val pkMiners = Set(MinerPk1.toAddress.toString, MinerPk2.toAddress.toString)
@@ -54,7 +54,7 @@ object SeveralAccountMiningSuite {
   // those exact template values - a self-derived vrf-key here would register a different VRF public key than the
   // one genesis committed, and every block this account mines would fail with "Invalid VRF proof". Using the
   // template's own values for the same index keeps this test's accounts consistent with what genesis expects.
-  private def templateMinerAccount(idx: Int): Config = Default(idx).getConfigList("waves.miner.accounts").get(0)
+  private def templateMinerAccount(idx: Int): Config = Default(idx).getConfigList("hearth.miner.accounts").get(0)
 
   private def accountConfig(idx: Int): String = {
     val seed            = signingSeed(idx)
@@ -65,7 +65,7 @@ object SeveralAccountMiningSuite {
 
   private val minerConfig =
     ConfigFactory.parseString(s"""
-                                 |waves {
+                                 |hearth {
                                  |  blockchain.custom.genesis {
                                  |     average-block-delay = 3s
                                  |  }
@@ -81,7 +81,7 @@ object SeveralAccountMiningSuite {
 
   private val nonMinerConfig =
     ConfigFactory.parseString(s"""
-                                 |waves {
+                                 |hearth {
                                  |  blockchain.custom.genesis {
                                  |     average-block-delay = 3s
                                  |  }

@@ -23,7 +23,7 @@ class GrpcReflectionApiSuite extends GrpcBaseTransactionSuite {
     Seq(
       Default(6)
         .quorum(0)
-        .overrides("waves.extensions = [tech.hearth.api.grpc.GRPCServerExtension\ntech.hearth.events.BlockchainUpdates]")
+        .overrides("hearth.extensions = [tech.hearth.api.grpc.GRPCServerExtension\ntech.hearth.events.BlockchainUpdates]")
     )
 
   test("successful getServerReflectionInfo call for BU") {
@@ -32,7 +32,7 @@ class GrpcReflectionApiSuite extends GrpcBaseTransactionSuite {
       .usePlaintext()
       .build()
     val call = buChannel.newCall(getServerReflectionInfoMethod, CallOptions.DEFAULT)
-    // Proto packages moved from waves.* to hearth.* in the protobuf-schemas migration (see CLAUDE.md's protobuf
+    // Proto packages moved from hearth.* to hearth.* in the protobuf-schemas migration (see CLAUDE.md's protobuf
     // package migration notes); this symbol is stale from before it.
     val request = ServerReflectionRequest.newBuilder().setFileContainingSymbol("hearth.events.grpc.BlockchainUpdatesApi").build()
     val result  = Try(ClientCalls.blockingUnaryCall(call, request))

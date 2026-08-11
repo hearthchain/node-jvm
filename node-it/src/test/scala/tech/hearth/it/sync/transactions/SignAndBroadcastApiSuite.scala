@@ -29,7 +29,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
   override protected def nodeConfigs: Seq[Config] = Seq(BiggestMiner.quorum(0).minAssetInfoUpdateInterval(0))
 
   test("height should always be reported for transactions") {
-    val txId = sender.transfer(firstKeyPair, secondAddress, 1.waves, fee = minFee).id
+    val txId = sender.transfer(firstKeyPair, secondAddress, 1.hearth, fee = minFee).id
 
     sender.waitForTransaction(txId)
     val jsv1               = Json.parse(sender.get(s"/transactions/info/$txId").getResponseBody)
@@ -149,7 +149,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
       Json.obj(
         "type"       -> MassTransferTransaction.typeId,
         "sender"     -> sender.address,
-        "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, 1.waves), Transfer(thirdAddress, 2.waves))),
+        "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, 1.hearth), Transfer(thirdAddress, 2.hearth))),
         "attachment" -> Base16.encode("masspay".getBytes("UTF-8"))
       )
     )
@@ -213,7 +213,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
       val mf                  = 300000L
       val buyAmount           = 2
       val sellAmount          = 3
-      val assetPair           = AssetPair.createAssetPair("WAVES", assetId).get
+      val assetPair           = AssetPair.createAssetPair("HRTH", assetId).get
 
       val buy = TxHelpers.order(
         OrderType.BUY,

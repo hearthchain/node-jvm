@@ -27,7 +27,7 @@ class AddressApiSuite extends BaseTransactionSuite with NTPTime {
     balance shouldBe 2
   }
 
-  test("balances for waves should be correct") {
+  test("balances for hearth should be correct") {
     assertBalances(None)
   }
 
@@ -36,7 +36,7 @@ class AddressApiSuite extends BaseTransactionSuite with NTPTime {
   }
 
   test("limit violation requests should be handled correctly") {
-    val limit     = miner.config.getInt("waves.rest-api.transactions-by-address-limit")
+    val limit     = miner.config.getInt("hearth.rest-api.transactions-by-address-limit")
     val addresses = List.fill(limit + 1)(firstAddress)
     assertApiError(
       miner.get(s"/addresses/balance?${addresses.map(a => s"address=$a").mkString("&")}"),
@@ -98,7 +98,7 @@ class AddressApiSuite extends BaseTransactionSuite with NTPTime {
   private def transferAndReturnHeights(addresses: List[(String, Long)], asset: Option[String]): List[Int] = {
     // Genesis assets are only ever distributed to firstKeyPair/secondKeyPair, never to a node's own account (see
     // CLAUDE.md's node-it fixtures notes), so an asset transfer has to be sent from firstKeyPair; miner.keyPair
-    // still works fine for the plain-WAVES case.
+    // still works fine for the plain-HRTH case.
     val sender = asset.fold(miner.keyPair)(_ => firstKeyPair)
     val ids    = addresses.map { case (address, a) => miner.transfer(sender, address, a, minFee, asset).id }
     ids.map(id => miner.waitForTransaction(id).height)
@@ -120,5 +120,5 @@ class AddressApiSuite extends BaseTransactionSuite with NTPTime {
 
   import NodeConfigs.*
   override protected def nodeConfigs: Seq[Config] =
-    Seq(BiggestMiner.quorum(0).overrides("waves.rest-api.transactions-by-address-limit = 20"), NotMiner)
+    Seq(BiggestMiner.quorum(0).overrides("hearth.rest-api.transactions-by-address-limit = 20"), NotMiner)
 }

@@ -8,7 +8,7 @@ import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.features.{BlockchainFeature, BlockchainFeatureStatus}
 import tech.hearth.settings.BlockchainSettings
 import tech.hearth.state.TxMeta.Status
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.{Asset, CommitToGenerationTransaction, Transaction}
 import tech.hearth.utils.Numbers
 import tech.hearth.crypto.Address
@@ -38,7 +38,7 @@ trait Blockchain {
   /** Block reward related */
   def blockReward(height: Int): Option[Long]
 
-  def wavesAmount(height: Int): BigInt
+  def hearthAmount(height: Int): BigInt
 
   def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)]
   def transactionInfos(ids: Seq[ByteStr]): Seq[Option[(TxMeta, Transaction)]]
@@ -53,9 +53,9 @@ trait Blockchain {
 
   def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee
 
-  def balanceAtHeight(address: Address, height: Int, assetId: Asset = Waves): Option[(Int, Long)]
+  def balanceAtHeight(address: Address, height: Int, assetId: Asset = Hearth): Option[(Int, Long)]
 
-  /** Retrieves Waves balance snapshot in the [from, to] range (inclusive).
+  /** Retrieves Hearth balance snapshot in the [from, to] range (inclusive).
     * Used only for getting a regular balance with confirmations and effective balance calculations.
     * @return Balance snapshots from most recent to oldest. May contain consecutive duplicate values
     */
@@ -65,11 +65,11 @@ trait Blockchain {
 
   def leaseBalances(addresses: Seq[Address]): Map[Address, LeaseBalance]
 
-  def balance(address: Address, mayBeAssetId: Asset = Waves): Long
+  def balance(address: Address, mayBeAssetId: Asset = Hearth): Long
 
   def balances(req: Seq[(Address, Asset)]): Map[(Address, Asset), Long]
 
-  def wavesBalances(addresses: Seq[Address]): Map[Address, Long]
+  def hearthBalances(addresses: Seq[Address]): Map[Address, Long]
 
   def effectiveBalanceBanHeights(address: Address): Seq[Int]
 
@@ -136,7 +136,7 @@ object Blockchain {
         .heightOf(id)
         .getOrElse(throw new IllegalStateException(s"Can't find a block: $id"))
 
-    def wavesPortfolio(address: Address): Portfolio = Portfolio(
+    def hearthPortfolio(address: Address): Portfolio = Portfolio(
       blockchain.balance(address),
       blockchain.leaseBalance(address),
       generationDeposit = blockchain.generationDeposit(address)
@@ -173,7 +173,7 @@ object Blockchain {
       val hasOnNext = blockchain.committedGenerators(period.next).exists(_.address == address)
 
       val committedTimes = idxOnCurrent.size + Numbers.when(hasOnNext)(1)
-      committedTimes * CommitToGenerationTransaction.DepositInWavelets
+      committedTimes * CommitToGenerationTransaction.DepositInEmbers
     }
 
     def isGeneratingBalanceValid(height: Height, blockHeader: BlockHeader, balance: Long): Boolean =

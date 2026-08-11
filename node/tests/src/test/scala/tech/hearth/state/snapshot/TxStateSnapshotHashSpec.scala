@@ -34,10 +34,10 @@ class TxStateSnapshotHashSpec extends PropSpec {
   private val orderId1 = hashInt(0xee23ef22)
   private val orderId2 = hashInt(0xbb77ef29)
 
-  private val wavesBalances = TSS(balances =
+  private val hearthBalances = TSS(balances =
     Seq(
-      TSS.Balance(bs(address1.toBytes), Some(Amount(amount = 10.waves))),
-      TSS.Balance(bs(address2.toBytes), Some(Amount(amount = 20.waves)))
+      TSS.Balance(bs(address1.toBytes), Some(Amount(amount = 10.hearth))),
+      TSS.Balance(bs(address2.toBytes), Some(Amount(amount = 20.hearth)))
     )
   )
 
@@ -50,16 +50,16 @@ class TxStateSnapshotHashSpec extends PropSpec {
 
   private val newLease = TSS(
     leaseBalances = Seq(
-      TSS.LeaseBalance(bs(address1.toBytes), out = 45.waves),
-      TSS.LeaseBalance(bs(address2.toBytes), in = 55.waves)
+      TSS.LeaseBalance(bs(address1.toBytes), out = 45.hearth),
+      TSS.LeaseBalance(bs(address2.toBytes), in = 55.hearth)
     ),
     newLeases = Seq(
-      TSS.NewLease(leaseId, bs(signer101.publicKey()), bs(address2.toBytes), 25.waves)
+      TSS.NewLease(leaseId, bs(signer101.publicKey()), bs(address2.toBytes), 25.hearth)
     )
   )
 
   private val cancelledLease = TSS(
-    leaseBalances = Seq(TSS.LeaseBalance(bs(address3.toBytes), out = 20.waves), TSS.LeaseBalance(bs(TxHelpers.address(104).toBytes), in = 0.waves)),
+    leaseBalances = Seq(TSS.LeaseBalance(bs(address3.toBytes), out = 20.hearth), TSS.LeaseBalance(bs(TxHelpers.address(104).toBytes), in = 0.hearth)),
     cancelledLeases = Seq(
       TSS.CancelledLease(leaseId)
     )
@@ -67,8 +67,8 @@ class TxStateSnapshotHashSpec extends PropSpec {
 
   private val volumeAndFee = TSS(
     orderFills = Seq(
-      TSS.OrderFill(orderId1, 10.waves, 2000),
-      TSS.OrderFill(orderId2, 10.waves, 2000)
+      TSS.OrderFill(orderId1, 10.hearth, 2000),
+      TSS.OrderFill(orderId2, 10.hearth, 2000)
     )
   )
 
@@ -100,7 +100,7 @@ class TxStateSnapshotHashSpec extends PropSpec {
   )
   private val failedTransaction = TSS(
     balances = Seq(
-      TSS.Balance(bs(address2.toBytes), Some(Amount(amount = 25.995.waves)))
+      TSS.Balance(bs(address2.toBytes), Some(Amount(amount = 25.995.hearth)))
     ),
     transactionStatus = TransactionStatus.FAILED
   )
@@ -119,7 +119,7 @@ class TxStateSnapshotHashSpec extends PropSpec {
   )
 
   private val all = TSS(
-    balances = assetBalances.balances ++ wavesBalances.balances,
+    balances = assetBalances.balances ++ hearthBalances.balances,
     leaseBalances = newLease.leaseBalances ++ cancelledLease.leaseBalances,
     newLeases = newLease.newLeases,
     cancelledLeases = cancelledLease.cancelledLeases,
@@ -134,8 +134,8 @@ class TxStateSnapshotHashSpec extends PropSpec {
   private val testData = Table(
     ("clue", "state snapshot", "base64 bytes", "tx id", "previous state hash", "expected result"),
     (
-      "waves balances",
-      wavesBalances,
+      "hearth balances",
+      hearthBalances,
       "Ch4KFPDjERx1UoettFtdN7y5oQgF6T5uEgYQgJTr3AMKHgoUBBIwcyZ6gOgX+RqInVgBe4bf9wESBhCAqNa5Bw==",
       ByteStr.empty,
       Hex.toHexString(TxStateSnapshotHashBuilder.InitStateHash.arr),

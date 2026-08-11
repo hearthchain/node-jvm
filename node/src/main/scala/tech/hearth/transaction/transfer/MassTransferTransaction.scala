@@ -6,7 +6,7 @@ import tech.hearth.account.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.*
 import tech.hearth.transaction.serialization.impl.MassTransferTxSerializer
 import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
@@ -72,7 +72,7 @@ object MassTransferTransaction {
       attachment: ByteStr,
       proofs: Proofs,
       chainId: Byte = AddressScheme.current.chainId,
-      feeAssetId: Asset = Waves
+      feeAssetId: Asset = Hearth
   ): Either[ValidationError, MassTransferTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)

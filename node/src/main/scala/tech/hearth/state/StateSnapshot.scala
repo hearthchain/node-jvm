@@ -5,7 +5,7 @@ import cats.kernel.Monoid
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.{Asset, Transaction}
 
@@ -77,7 +77,7 @@ object StateSnapshot {
 
   // ignores lease balances from portfolios
   private def balances(portfolios: Map[Address, Portfolio], blockchain: Blockchain): Either[String, VectorMap[(Address, Asset), Long]] =
-    flatTraverse(portfolios) { case (address, Portfolio(wavesAmount, _, assets, _)) =>
+    flatTraverse(portfolios) { case (address, Portfolio(hearthAmount, _, assets, _)) =>
       val assetBalancesE = flatTraverse(assets) {
         case (_, 0) =>
           Right(VectorMap[(Address, Asset), Long]())
@@ -85,11 +85,11 @@ object StateSnapshot {
           safeSum(blockchain.balance(address, assetId), balance, s"$address -> Asset balance")
             .map(newBalance => VectorMap((address, assetId: Asset) -> newBalance))
       }
-      if (wavesAmount != 0)
+      if (hearthAmount != 0)
         for {
-          assetBalances   <- assetBalancesE
-          newWavesBalance <- safeSum(blockchain.balance(address), wavesAmount, s"$address -> Waves balance")
-        } yield assetBalances + ((address, Waves) -> newWavesBalance)
+          assetBalances    <- assetBalancesE
+          newHearthBalance <- safeSum(blockchain.balance(address), hearthAmount, s"$address -> Hearth balance")
+        } yield assetBalances + ((address, Hearth) -> newHearthBalance)
       else
         assetBalancesE
     }

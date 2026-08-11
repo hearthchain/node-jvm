@@ -24,7 +24,7 @@ class SpendingTableTest extends FreeSpec with WithState {
             generationPeriodLength = 2
           )
 
-        val spendingAmount = CommitToGenerationTransaction.DepositInWavelets + // To fit both leasing and deposit cases
+        val spendingAmount = CommitToGenerationTransaction.DepositInEmbers + // To fit both leasing and deposit cases
           Numbers.when(hasDeposit || spending == Spending.Deposit)(GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2)
 
         val miner     = TxHelpers.signer(0)
@@ -33,9 +33,9 @@ class SpendingTableTest extends FreeSpec with WithState {
         val spender     = TxHelpers.signer(10)
         val spenderAddr = spender.toAddress
 
-        val txFee       = 1.waves
-        val initLeasing = Numbers.when(hasLeasing)(11.waves)
-        val initDeposit = Numbers.when(hasDeposit)(CommitToGenerationTransaction.DepositInWavelets)
+        val txFee       = 1.hearth
+        val initLeasing = Numbers.when(hasLeasing)(11.hearth)
+        val initDeposit = Numbers.when(hasDeposit)(CommitToGenerationTransaction.DepositInEmbers)
         val initBalance = (spendingAmount - 1) + txFee + // Less, than required
           Numbers.when(initLeasing > 0)(initLeasing + txFee) + Numbers.when(initDeposit > 0)(initDeposit + txFee)
 
@@ -54,7 +54,7 @@ class SpendingTableTest extends FreeSpec with WithState {
           ),
           TestBlock.create(miner, Seq(spendingTx)),
           settings,
-          Seq(AddrWithBalance(minerAddr, 10_000.waves), AddrWithBalance(spenderAddr, initBalance))
+          Seq(AddrWithBalance(minerAddr, 10_000.hearth), AddrWithBalance(spenderAddr, initBalance))
         ) { snapshotEi =>
           snapshotEi.resultE should produce(expectedError)
         }
@@ -66,7 +66,7 @@ class SpendingTableTest extends FreeSpec with WithState {
       // CommitToGenerationTransactionDiff
       (false, false, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required for block generation"),
       // CommonValidation
-      (false, false, Spending.Transfer, "Transaction application leads to negative waves balance to (at least) temporary negative state"),
+      (false, false, Spending.Transfer, "Transaction application leads to negative hearth balance to (at least) temporary negative state"),
       (false, true, Spending.Leasing, "negative effective balance"), // BalanceDiffValidation
       // CommitToGenerationTransactionDiff
       (false, true, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required"),
@@ -87,7 +87,7 @@ class SpendingTableTest extends FreeSpec with WithState {
       // CommitToGenerationTransactionDiff
       (false, false, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required for block generation"),
       // CommonValidation
-      (false, false, Spending.Transfer, "Transaction application leads to negative waves balance to (at least) temporary negative state"),
+      (false, false, Spending.Transfer, "Transaction application leads to negative hearth balance to (at least) temporary negative state"),
       (false, true, Spending.Leasing, "negative effective balance"), // BalanceDiffValidation
       // CommitToGenerationTransactionDiff
       (false, true, Spending.Deposit, "Generating balance 99999999999 is less than 100000000000 required"),

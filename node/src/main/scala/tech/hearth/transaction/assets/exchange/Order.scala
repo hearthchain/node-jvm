@@ -4,7 +4,7 @@ import tech.hearth.account.{Address, PrivateKey, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
 import tech.hearth.transaction.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.assets.exchange.Validation.booleanOperators
 import tech.hearth.transaction.serialization.impl.OrderSerializer
@@ -31,7 +31,7 @@ case class Order(
     timestamp: TxTimestamp,
     expiration: TxTimestamp,
     matcherFee: TxMatcherFee,
-    matcherFeeAssetId: Asset = Waves,
+    matcherFeeAssetId: Asset = Hearth,
     priceMode: OrderPriceMode = OrderPriceMode.Default,
     attachment: Option[ByteStr] = None
 ) extends Proven {
@@ -57,7 +57,7 @@ case class Order(
     (timestamp > 0) :| "timestamp should be > 0" &&
     (expiration - atTime <= MaxLiveTime) :| "expiration should be earlier than 30 days" &&
     (expiration >= atTime) :| "expiration should be > currentTime" &&
-    (matcherFeeAssetId == Waves || version >= Order.V3) :| "matcherFeeAssetId should be waves" &&
+    (matcherFeeAssetId == Hearth || version >= Order.V3) :| "matcherFeeAssetId should be hearth" &&
     (version > 0 && version < 5) :| "invalid version" &&
     (version >= Order.V4 || priceMode == OrderPriceMode.Default) :| s"price mode should be default for V$version" &&
     (orderAuthentication match {
@@ -89,7 +89,7 @@ case class Order(
     super.verifyFirstProof()
 
   override def toString: String = {
-    val matcherFeeAssetIdStr = if (version == 3) s" matcherFeeAssetId=${matcherFeeAssetId.fold("Waves")(_.toString)}," else ""
+    val matcherFeeAssetIdStr = if (version == 3) s" matcherFeeAssetId=${matcherFeeAssetId.fold("Hearth")(_.toString)}," else ""
     s"OrderV$version(id=${idStr()}, sender=$senderPublicKey, matcher=$matcherPublicKey, pair=$assetPair, type=$orderType, amount=$amount, " +
       s"price=$price, priceMode=$priceMode, ts=$timestamp, exp=$expiration, fee=$matcherFee,$matcherFeeAssetIdStr, proofs=$proofs)"
   }

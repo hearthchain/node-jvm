@@ -4,7 +4,7 @@ import tech.hearth.block.Block.BlockId
 import tech.hearth.block.{Block, FinalizationVoting}
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.test.{NumericExt, produce}
@@ -75,7 +75,7 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
               TxHelpers.transfer(
                 from = committedGenerator2,
                 to = committedGenerator1Addr,
-                amount = d.blockchain.balance(committedGenerator2Addr) - CommitToGenerationTransaction.DepositInWavelets - 2.waves
+                amount = d.blockchain.balance(committedGenerator2Addr) - CommitToGenerationTransaction.DepositInEmbers - 2.hearth
               )
             ),
             generator = committedGenerator1,
@@ -128,7 +128,7 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
       val committedGenerator5          = TxHelpers.signer(4)
       override def committedGenerators = Seq(committedGenerator1, committedGenerator2, committedGenerator3, committedGenerator4, committedGenerator5)
 
-      override def settings: WavesSettings = super.settings.configure(_.copy(maxValidEndorsers = 1))
+      override def settings: HearthSettings = super.settings.configure(_.copy(maxValidEndorsers = 1))
 
       override def continue(d: Domain): Unit = {
         val block3WithVotes = d.createBlock(
@@ -260,7 +260,7 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
     def committedGenerators = Seq(committedGenerator1, committedGenerator2, committedGenerator3)
     def allGenerators       = notCommittedGenerator +: committedGenerators
 
-    def settings: WavesSettings = defaultSettings
+    def settings: HearthSettings = defaultSettings
 
     def continue(d: Domain): Unit
 

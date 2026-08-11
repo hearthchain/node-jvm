@@ -5,25 +5,25 @@ import java.io.File
 import com.typesafe.config.ConfigFactory
 import tech.hearth.test.FlatSpec
 
-class WavesSettingsSpecification extends FlatSpec {
+class HearthSettingsSpecification extends FlatSpec {
 
   private def config(configName: String) = {
-    WavesSettings.fromRootConfig(
+    HearthSettings.fromRootConfig(
       tech.hearth.settings.loadConfig(
-        ConfigFactory.parseFile(new File(s"waves-$configName.conf"))
+        ConfigFactory.parseFile(new File(s"hearth-$configName.conf"))
       )
     )
   }
 
-  def testConfig(configName: String)(additionalChecks: WavesSettings => Unit = _ => ()): Unit = {
-    "WavesSettings" should s"read values from default config with $configName overrides" in {
+  def testConfig(configName: String)(additionalChecks: HearthSettings => Unit = _ => ()): Unit = {
+    "HearthSettings" should s"read values from default config with $configName overrides" in {
       val settings = config(configName)
 
       val expected = ConfigFactory
-        .parseString(s"waves.directory = ${tech.hearth.settings.defaultDirectory(settings.config)}")
+        .parseString(s"hearth.directory = ${tech.hearth.settings.defaultDirectory(settings.config)}")
         .withFallback(ConfigFactory.load())
         .resolve()
-        .getString("waves.directory")
+        .getString("hearth.directory")
 
       settings.directory should be(expected)
       settings.networkSettings should not be null
@@ -41,14 +41,14 @@ class WavesSettingsSpecification extends FlatSpec {
   testConfig("testnet")()
   testConfig("devnet")()
 
-  "WavesSettings" should "resolve folders correctly" in {
-    val config = loadConfig(ConfigFactory.parseString(s"""waves {
+  "HearthSettings" should "resolve folders correctly" in {
+    val config = loadConfig(ConfigFactory.parseString(s"""hearth {
                                                          |  directory = "/xxx"
                                                          |  data-directory = "/xxx/data"
                                                          |  ntp-server = "example.com"
                                                          |}""".stripMargin))
 
-    val settings = WavesSettings.fromRootConfig(config.resolve())
+    val settings = HearthSettings.fromRootConfig(config.resolve())
 
     settings.directory should be("/xxx")
     settings.dbSettings.directory should be("/xxx/data")

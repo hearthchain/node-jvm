@@ -8,7 +8,7 @@ import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.sync.*
 import tech.hearth.it.transactions.BaseTransactionSuite
 import tech.hearth.network.{PBTransactionSpec, RawBytes}
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 
 import java.nio.charset.StandardCharsets
@@ -21,7 +21,7 @@ class SimpleTransactionsSuite extends BaseTransactionSuite {
   private def node = nodes.head
 
   test("valid tx send by network to node should be in blockchain") {
-    val tx = TxHelpers.transfer(node.keyPair, Address.fromString(node.address).explicitGet(), 1L, Waves, minFee, Waves)
+    val tx = TxHelpers.transfer(node.keyPair, Address.fromString(node.address).explicitGet(), 1L, Hearth, minFee, Hearth)
 
     node.sendByNetwork(RawBytes.fromTransaction(tx))
     node.waitForTransaction(tx.id().toString)
@@ -33,9 +33,9 @@ class SimpleTransactionsSuite extends BaseTransactionSuite {
       node.keyPair,
       Address.fromString(node.address).explicitGet(),
       1L,
-      Waves,
+      Hearth,
       minFee,
-      Waves,
+      Hearth,
       timestamp = System.currentTimeMillis() + (1 days).toMillis
     )
 

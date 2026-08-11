@@ -3,12 +3,13 @@ package tech.hearth.test
 import tech.hearth.db.WithState
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.features.BlockchainFeature
+import tech.hearth.history.DefaultRewardsSettings
 import tech.hearth.settings.{
   FunctionalitySettings,
   GenesisAssetSettings,
   GenesisBalanceSettings,
   PredefinedSnapshotSettings,
-  WavesSettings,
+  HearthSettings,
   loadConfig
 }
 import tech.hearth.state.GenesisBlockHeight
@@ -19,18 +20,18 @@ import scala.concurrent.duration.DurationInt
 object DomainPresets {
   given Conversion[AddrWithBalance, GenesisBalanceSettings] = (b: AddrWithBalance) => GenesisBalanceSettings(b.address.toBech32, b.balance)
 
-  extension (ws: WavesSettings) {
-    def withFunctionalitySettings(fs: FunctionalitySettings): WavesSettings =
+  extension (ws: HearthSettings) {
+    def withFunctionalitySettings(fs: FunctionalitySettings): HearthSettings =
       ws.copy(blockchainSettings = ws.blockchainSettings.copy(functionalitySettings = fs))
 
     // Finds-or-creates the PredefinedSnapshotSettings entry at `height` and replaces it in the list.
-    private def updatePredefinedSnapshot(height: Int)(f: PredefinedSnapshotSettings => PredefinedSnapshotSettings): WavesSettings = {
+    private def updatePredefinedSnapshot(height: Int)(f: PredefinedSnapshotSettings => PredefinedSnapshotSettings): HearthSettings = {
       val current  = ws.blockchainSettings.predefinedSnapshots
       val existing = current.find(_.height == height).getOrElse(PredefinedSnapshotSettings(height))
       ws.copy(blockchainSettings = ws.blockchainSettings.copy(predefinedSnapshots = f(existing) +: current.filterNot(_.height == height)))
     }
 
-    def withGenesisBalances(balances: AddrWithBalance*): WavesSettings =
+    def withGenesisBalances(balances: AddrWithBalance*): HearthSettings =
       if (balances.isEmpty) ws
       else
         updatePredefinedSnapshot(GenesisBlockHeight.toInt) { s =>
@@ -43,7 +44,7 @@ object DomainPresets {
           )
         }
 
-    def withGenesisGenerators(generators: SigningKey*): WavesSettings =
+    def withGenesisGenerators(generators: SigningKey*): HearthSettings =
       if (generators.isEmpty) ws
       else
         updatePredefinedSnapshot(GenesisBlockHeight.toInt) { s =>
@@ -54,32 +55,32 @@ object DomainPresets {
           )
         }
 
-    def withGenesisAssets(assets: GenesisAssetSettings*): WavesSettings =
+    def withGenesisAssets(assets: GenesisAssetSettings*): HearthSettings =
       if (assets.isEmpty) ws
       else updatePredefinedSnapshot(GenesisBlockHeight.toInt)(_.copy(assets = assets))
 
-    def configure(transformF: FunctionalitySettings => FunctionalitySettings): WavesSettings = {
+    def configure(transformF: FunctionalitySettings => FunctionalitySettings): HearthSettings = {
       val functionalitySettings = transformF(ws.blockchainSettings.functionalitySettings)
       ws.copy(blockchainSettings = ws.blockchainSettings.copy(functionalitySettings = functionalitySettings))
     }
 
-    def withFeatures(fs: BlockchainFeature*): WavesSettings =
+    def withFeatures(fs: BlockchainFeature*): HearthSettings =
       configure(_.copy(preActivatedFeatures = fs.map(_.id -> 0).toMap))
 
-    def addFeatures(fs: BlockchainFeature*): WavesSettings = configure { functionalitySettings =>
+    def addFeatures(fs: BlockchainFeature*): HearthSettings = configure { functionalitySettings =>
       val newFeatures = functionalitySettings.preActivatedFeatures ++ fs.map(_.id -> 0)
       functionalitySettings.copy(preActivatedFeatures = newFeatures)
     }
 
-    def setFeaturesHeight(fs: (BlockchainFeature, Int)*): WavesSettings = configure { functionalitySettings =>
+    def setFeaturesHeight(fs: (BlockchainFeature, Int)*): HearthSettings = configure { functionalitySettings =>
       val newFeatures = functionalitySettings.preActivatedFeatures ++ fs.map { case (f, height) => (f.id, height) }
       functionalitySettings.copy(preActivatedFeatures = newFeatures)
     }
 
-    def withActivationPeriod(period: Int): WavesSettings =
+    def withActivationPeriod(period: Int): HearthSettings =
       configure(_.copy(featureCheckBlocksPeriod = period, blocksForFeatureActivation = period))
 
-    def noFeatures(): WavesSettings = {
+    def noFeatures(): HearthSettings = {
       ws.copy(
         blockchainSettings = ws.blockchainSettings.copy(
           functionalitySettings = ws.blockchainSettings.functionalitySettings
@@ -96,27 +97,31 @@ object DomainPresets {
     */
   private lazy val genesisTimestamp: Long = System.currentTimeMillis() - 1.hour.toMillis
 
-  lazy val SettingsFromDefaultConfig: WavesSettings = {
-    val settings = WavesSettings.fromRootConfig(loadConfig(None))
+  lazy val SettingsFromDefaultConfig: HearthSettings = {
+    val settings = HearthSettings.fromRootConfig(loadConfig(None))
     // The default config is TESTNET, but genesis balances are now part of a predefined snapshot built from the
     // settings, and tests declare their own via withDomain(balances = ...). So start with an empty genesis snapshot.
+    // Reward is pinned flat too (see DefaultRewardsSettings): TESTNET's own RewardsSettings is tuned for observing
+    // the emission curve decay on a running testnet (short half-life, large reward), not for tests that want a
+    // small, exactly predictable value to assert on - the same reasoning as history.DefaultBlockchainSettings.
     settings.copy(blockchainSettings =
       settings.blockchainSettings.copy(
         genesisSettings = settings.blockchainSettings.genesisSettings.copy(timestamp = genesisTimestamp),
-        predefinedSnapshots = Seq(PredefinedSnapshotSettings(GenesisBlockHeight.toInt))
+        predefinedSnapshots = Seq(PredefinedSnapshotSettings(GenesisBlockHeight.toInt)),
+        rewardsSettings = DefaultRewardsSettings
       )
     )
   }
 
-  def domainSettingsWithFS(fs: FunctionalitySettings): WavesSettings =
+  def domainSettingsWithFS(fs: FunctionalitySettings): HearthSettings =
     SettingsFromDefaultConfig.copy(
       blockchainSettings = SettingsFromDefaultConfig.blockchainSettings.copy(functionalitySettings = fs)
     )
 
-  def domainSettingsWithPreactivatedFeatures(fs: BlockchainFeature*): WavesSettings =
+  def domainSettingsWithPreactivatedFeatures(fs: BlockchainFeature*): HearthSettings =
     domainSettingsWithFeatures(fs.map(_ -> 0)*)
 
-  def domainSettingsWithFeatures(fs: (BlockchainFeature, Int)*): WavesSettings = {
+  def domainSettingsWithFeatures(fs: (BlockchainFeature, Int)*): HearthSettings = {
     val defaultFS = SettingsFromDefaultConfig
       .noFeatures()
       .blockchainSettings
@@ -127,27 +132,27 @@ object DomainPresets {
     }.toMap))
   }
 
-  val NG: WavesSettings = domainSettingsWithPreactivatedFeatures()
+  val NG: HearthSettings = domainSettingsWithPreactivatedFeatures()
 
-  val ScriptsAndSponsorship: WavesSettings = NG
+  val ScriptsAndSponsorship: HearthSettings = NG
 
-  val RideV3: WavesSettings = ScriptsAndSponsorship
+  val RideV3: HearthSettings = ScriptsAndSponsorship
 
-  val RideV4: WavesSettings = RideV3
+  val RideV4: HearthSettings = RideV3
 
-  val RideV4WithRewards: WavesSettings = RideV4
+  val RideV4WithRewards: HearthSettings = RideV4
 
-  val RideV5: WavesSettings = RideV4
+  val RideV5: HearthSettings = RideV4
 
-  val RideV6: WavesSettings = RideV5
+  val RideV6: HearthSettings = RideV5
 
-  val ConsensusImprovements: WavesSettings = RideV6
+  val ConsensusImprovements: HearthSettings = RideV6
 
-  val BlockRewardDistribution: WavesSettings = ConsensusImprovements
+  val BlockRewardDistribution: HearthSettings = ConsensusImprovements
 
-  val TransactionStateSnapshot: WavesSettings = BlockRewardDistribution
+  val TransactionStateSnapshot: HearthSettings = BlockRewardDistribution
 
-  val DeterministicFinality: WavesSettings = TransactionStateSnapshot
+  val DeterministicFinality: HearthSettings = TransactionStateSnapshot
 
-  def mostRecent: WavesSettings = RideV6
+  def mostRecent: HearthSettings = RideV6
 }

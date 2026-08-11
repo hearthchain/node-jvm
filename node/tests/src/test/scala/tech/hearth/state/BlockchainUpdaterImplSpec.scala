@@ -1,12 +1,13 @@
 package tech.hearth.state
 
+import tech.hearth.history.withFlatReward
 import tech.hearth.account.Address
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.db.{DBCacheSettings, WithDomain}
 import tech.hearth.events.BlockchainUpdateTriggers
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.appender.BlockAppender
 import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.test.*
@@ -29,8 +30,8 @@ class BlockchainUpdaterImplSpec extends FreeSpec, EitherMatchers, WithDomain, NT
   /** These assertions are about how transaction fees reach the miner, so the block reward is zeroed out to keep it from
     * showing up in the same balances.
     */
-  private def withoutReward(ws: WavesSettings): WavesSettings =
-    ws.copy(blockchainSettings = ws.blockchainSettings.copy(rewardsSettings = ws.blockchainSettings.rewardsSettings.copy(initial = 0)))
+  private def withoutReward(ws: HearthSettings): HearthSettings =
+    ws.copy(blockchainSettings = ws.blockchainSettings.copy(rewardsSettings = withFlatReward(ws.blockchainSettings.rewardsSettings, 0)))
 
   /** `setup` yields the transactions of each block rather than the blocks themselves: only the domain can build one
     * that references the chain head *and* carries a VRF proof made with the generator's committed key, so the blocks

@@ -19,7 +19,7 @@ final case class LeaseCancelTransaction(
     chainId: Byte
 ) extends Transaction(TransactionType.LeaseCancel),
       ProvenTransaction,
-      TxWithFee.InWaves,
+      TxWithFee.InHearth,
       FastHashId {
   override type T = LeaseCancelTransaction
 

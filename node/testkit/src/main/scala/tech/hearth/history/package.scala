@@ -7,6 +7,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.features.BlockchainFeature
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.settings.*
+import tech.hearth.state.EmissionCurve
 import tech.hearth.transaction.Transaction
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.crypto.SigningKey
@@ -15,6 +16,26 @@ package object history {
   val MaxTransactionsPerBlockDiff = 10
   val MaxBlocksInMemory           = 5
   val DefaultBaseTarget           = 1000L
+
+  /** A flat, non-decaying reward (decayRatioFixed = 1.0 in Q(EmissionCurve.FixedPointBits) fixed point, so
+    * EmissionCurve.rewardAt returns exactly initialReward at every height): most unit tests want a small, exactly
+    * predictable reward to assert on, not to exercise the emission curve itself (see EmissionCurveTest for that).
+    * Decoupled from any real network's RewardsSettings, which now differ (see RewardsSettings.MAINNET/TESTNET/
+    * STAGENET) - this used to just be RewardsSettings.TESTNET, back when all three networks shared one flat value.
+    */
+  val DefaultRewardsSettings: RewardsSettings = RewardsSettings(
+    cEmit = 95_000_000L * Constants.UnitsInHearth,
+    initialReward = 6 * Constants.UnitsInHearth,
+    decayRatioFixed = BigInt(1) << EmissionCurve.FixedPointBits,
+    halfLifeBlocks = 1
+  )
+
+  /** `settings`, with its reward pinned flat at exactly `reward` (no decay - see `DefaultRewardsSettings`), for
+    * tests that want a specific, exactly predictable reward value rather than the default 6 HRTH.
+    */
+  def withFlatReward(settings: RewardsSettings, reward: Long): RewardsSettings =
+    settings.copy(initialReward = reward, decayRatioFixed = BigInt(1) << EmissionCurve.FixedPointBits)
+
   val DefaultBlockchainSettings = BlockchainSettings(
     addressSchemeCharacter = 'N',
     functionalitySettings = TestFunctionalitySettings.Enabled,
@@ -24,22 +45,22 @@ package object history {
     // blocks are timestamped from their transactions (see buildBlockOfTxs) - a 2016 genesis would put every one of
     // those transactions hours "in the past" relative to it.
     genesisSettings = GenesisSettings.TESTNET.copy(timestamp = 0L),
-    rewardsSettings = RewardsSettings.TESTNET
+    rewardsSettings = DefaultRewardsSettings
   )
 
   val config   = ConfigFactory.load()
-  val settings = WavesSettings.fromRootConfig(config)
+  val settings = HearthSettings.fromRootConfig(config)
 
-  val MicroblocksActivatedAt0WavesSettings: WavesSettings = settingsWithFeatures()
+  val MicroblocksActivatedAt0HearthSettings: HearthSettings = settingsWithFeatures()
 
-  def settingsWithFeatures(features: BlockchainFeature*): WavesSettings = {
+  def settingsWithFeatures(features: BlockchainFeature*): HearthSettings = {
     val blockchainSettings = DefaultBlockchainSettings.copy(
       functionalitySettings = DefaultBlockchainSettings.functionalitySettings.copy(preActivatedFeatures = features.map(_.id -> 0).toMap)
     )
     settings.copy(blockchainSettings = blockchainSettings)
   }
 
-  val DefaultWavesSettings: WavesSettings = settings.copy(
+  val DefaultHearthSettings: HearthSettings = settings.copy(
     blockchainSettings = DefaultBlockchainSettings,
     autoShutdownOnUnsupportedFeature = false
   )

@@ -1,3 +1,3 @@
 ARG baseImage=wavesplatform/wavesnode:latest
 FROM $baseImage
-COPY waves.custom.conf /etc/waves/waves.conf
+COPY hearth.custom.conf /etc/hearth/hearth.conf

@@ -79,7 +79,7 @@ class Docker(
   private val networkPrefix = s"${InetAddress.getByAddress(toByteArray(networkSeed)).getHostAddress}/28"
 
   private val logDir: Coeval[Path] = Coeval.evalOnce {
-    val r = Option(System.getProperty("waves.it.logging.dir"))
+    val r = Option(System.getProperty("hearth.it.logging.dir"))
       .map(Paths.get(_))
       .getOrElse(Paths.get(System.getProperty("user.dir"), "logs", RunId, tag.replaceAll("""(\w)\w*\.""", "$1.")))
 
@@ -91,9 +91,9 @@ class Docker(
 
   private def ipForNode(nodeId: Int) = InetAddress.getByAddress(toByteArray(nodeId & 0xf | networkSeed)).getHostAddress
 
-  private lazy val wavesNetwork: Network = {
+  private lazy val hearthNetwork: Network = {
     val id          = Random.nextInt(Int.MaxValue)
-    val networkName = s"waves-$id"
+    val networkName = s"hearth-$id"
 
     def network: Option[Network] =
       try {
@@ -144,7 +144,7 @@ class Docker(
     attempt(5)
   }
 
-  def createNetwork: Network = wavesNetwork
+  def createNetwork: Network = hearthNetwork
 
   def startNodes(nodeConfigs: Seq[Config]): Seq[DockerNode] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
@@ -202,13 +202,13 @@ class Docker(
 
   private def startNodeInternal(nodeConfig: Config, autoConnect: Boolean = true): DockerNode =
     try {
-      val nodeName = nodeConfig.getString("waves.network.node-name")
+      val nodeName = nodeConfig.getString("hearth.network.node-name")
       val peersOverrides = if (autoConnect) {
         val otherAddrs = peersFor(nodeName)
 
         ConfigFactory
           .parseMap(Map("known-peers" -> otherAddrs.map(addr => s"${addr.getHostString}:${addr.getPort}").asJava).asJava)
-          .atPath("waves.network")
+          .atPath("hearth.network")
       } else ConfigFactory.empty()
 
       val overrides = peersOverrides
@@ -222,7 +222,7 @@ class Docker(
         .withFallback(defaultReference())
         .resolve()
 
-      val networkPort          = actualConfig.getString("waves.network.port")
+      val networkPort          = actualConfig.getString("hearth.network.port")
       val internalDebuggerPort = 5005
 
       val nodeNumber = nodeName.replace("node", "").toInt
@@ -230,11 +230,11 @@ class Docker(
 
       val javaOptions = Option(System.getenv("CONTAINER_JAVA_OPTS")).getOrElse("")
       val configOverrides: String = {
-        val ntpServer    = Option(System.getenv("NTP_SERVER")).fold("")(x => s"-Dwaves.ntp-server=$x ")
-        val maxCacheSize = Option(System.getenv("MAX_CACHE_SIZE")).fold("")(x => s"-Dwaves.max-cache-size=$x ")
+        val ntpServer    = Option(System.getenv("NTP_SERVER")).fold("")(x => s"-Dhearth.ntp-server=$x ")
+        val maxCacheSize = Option(System.getenv("MAX_CACHE_SIZE")).fold("")(x => s"-Dhearth.max-cache-size=$x ")
 
         var config = s"$javaOptions ${renderProperties(asProperties(overrides))} " +
-          s"-Dlogback.stdout.level=TRACE -Dlogback.file.level=OFF -Dwaves.network.declared-address=$ip:$networkPort -Dhearth.hrp=thrth $ntpServer $maxCacheSize"
+          s"-Dlogback.stdout.level=TRACE -Dlogback.file.level=OFF -Dhearth.network.declared-address=$ip:$networkPort -Dhearth.hrp=thrth $ntpServer $maxCacheSize"
 
         // Debugger
         if (enableDebugger) config += s"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$internalDebuggerPort "
@@ -244,7 +244,7 @@ class Docker(
 
       val profilerConfigEnv = if (enableProfiling) {
         // https://www.yourkit.com/docs/java/help/startup_options.jsp
-        s"YOURKIT_OPTS=port=$ProfilerPort,listen=all,sampling,monitors,sessionname=WavesNode,dir=$ContainerRoot/profiler,logdir=$ContainerRoot,onexit=snapshot"
+        s"YOURKIT_OPTS=port=$ProfilerPort,listen=all,sampling,monitors,sessionname=HearthNode,dir=$ContainerRoot/profiler,logdir=$ContainerRoot,onexit=snapshot"
       } else ""
 
       val debuggerPort = if (enableDebugger) Docker.freeDebuggerPort() else 0
@@ -262,7 +262,7 @@ class Docker(
 
       val exposedPorts = new java.util.HashSet[String]()
       exposedPorts.add(s"$internalDebuggerPort")
-      if (Try(nodeConfig.getStringList("waves.extensions").contains("tech.hearth.events.BlockchainUpdates")).getOrElse(false)) {
+      if (Try(nodeConfig.getStringList("hearth.extensions").contains("tech.hearth.events.BlockchainUpdates")).getOrElse(false)) {
         exposedPorts.add("6881")
       }
 
@@ -270,14 +270,14 @@ class Docker(
         .builder()
         .image(imageName)
         .exposedPorts(exposedPorts)
-        .networkingConfig(ContainerConfig.NetworkingConfig.create(Map(wavesNetwork.name() -> endpointConfigFor(nodeName)).asJava))
+        .networkingConfig(ContainerConfig.NetworkingConfig.create(Map(hearthNetwork.name() -> endpointConfigFor(nodeName)).asJava))
         .hostConfig(hostConfig)
         .env(envs*)
         .build()
 
       val containerId = {
         val jenkinsJobIdFromEnv = sys.env.get("JENKINS_JOB_ID").fold("")(s => s"-$s")
-        val containerName       = s"${wavesNetwork.name()}-$nodeName$jenkinsJobIdFromEnv"
+        val containerName       = s"${hearthNetwork.name()}-$nodeName$jenkinsJobIdFromEnv"
         dumpContainers(
           client.listContainers(DockerClient.ListContainersParam.filter("name", containerName)),
           "Containers with same name"
@@ -291,7 +291,7 @@ class Docker(
 
       client.startContainer(containerId)
 
-      val node = new DockerNode(actualConfig, containerId, getNodeInfo(containerId, WavesSettings.fromRootConfig(actualConfig)))
+      val node = new DockerNode(actualConfig, containerId, getNodeInfo(containerId, HearthSettings.fromRootConfig(actualConfig)))
       nodes.add(node)
       log.debug(s"Started $containerId -> ${node.name}: ${node.nodeInfo}${if (enableDebugger) s", debugger port = $debuggerPort" else ""}")
       node
@@ -302,23 +302,23 @@ class Docker(
         throw e
     }
 
-  private def getNodeInfo(containerId: String, settings: WavesSettings): NodeInfo = {
+  private def getNodeInfo(containerId: String, settings: HearthSettings): NodeInfo = {
     val restApiPort = settings.restAPISettings.port
     // assume test nodes always have an open port
     val networkPort = settings.networkSettings.derivedBindAddress.get.getPort
 
-    val containerInfo  = inspectContainer(containerId)
-    val wavesIpAddress = containerInfo.networkSettings().networks().get(wavesNetwork.name()).ipAddress()
+    val containerInfo   = inspectContainer(containerId)
+    val hearthIpAddress = containerInfo.networkSettings().networks().get(hearthNetwork.name()).ipAddress()
 
-    NodeInfo(restApiPort, networkPort, wavesIpAddress, containerInfo.networkSettings().ports())
+    NodeInfo(restApiPort, networkPort, hearthIpAddress, containerInfo.networkSettings().ports())
   }
 
   @tailrec
   private def inspectContainer(containerId: String): ContainerInfo = {
     val containerInfo = client.inspectContainer(containerId)
-    if (containerInfo.networkSettings().networks().asScala.contains(wavesNetwork.name())) containerInfo
+    if (containerInfo.networkSettings().networks().asScala.contains(hearthNetwork.name())) containerInfo
     else {
-      log.debug(s"Container $containerId has not connected to the network ${wavesNetwork.name()} yet, retry")
+      log.debug(s"Container $containerId has not connected to the network ${hearthNetwork.name()} yet, retry")
       Thread.sleep(1000)
       inspectContainer(containerId)
     }
@@ -376,7 +376,7 @@ class Docker(
 
       // Docker do not allow updating ENV https://github.com/moby/moby/issues/8838 :(
       log.debug("Set new config directly in the entrypoint.sh script")
-      val shPath = "/usr/share/waves/bin/entrypoint.sh"
+      val shPath = "/usr/share/hearth/bin/entrypoint.sh"
       val scriptCmd: Array[String] =
         Array("sh", "-c", s"sed -i 's|$${JAVA_OPTS}|$${JAVA_OPTS} $renderedConfig|' $shPath && cat $shPath")
 
@@ -422,11 +422,11 @@ class Docker(
       }
 
       try {
-        client.removeNetwork(wavesNetwork.id)
+        client.removeNetwork(hearthNetwork.id)
       } catch {
         case NonFatal(e) =>
           // https://github.com/moby/moby/issues/17217
-          log.warn(s"Can not remove network ${wavesNetwork.name()}", e)
+          log.warn(s"Can not remove network ${hearthNetwork.name()}", e)
       }
 
       http.close()
@@ -494,7 +494,7 @@ class Docker(
 
   private def disconnectFromNetwork(containerId: String): Unit = {
     log.info(s"Trying to disconnect container $containerId from network ...")
-    client.disconnectFromNetwork(containerId, wavesNetwork.id())
+    client.disconnectFromNetwork(containerId, hearthNetwork.id())
   }
 
   def restartContainer(node: DockerNode): DockerNode = {
@@ -528,7 +528,7 @@ class Docker(
   private def connectToNetwork(node: DockerNode): Unit = {
     log.info(s"Trying to connect node $node to network ...")
     client.connectToNetwork(
-      wavesNetwork.id(),
+      hearthNetwork.id(),
       NetworkConnection
         .builder()
         .containerId(node.containerId)
@@ -567,9 +567,9 @@ class Docker(
 }
 
 object Docker {
-  val NodeImageName: String = "com.wavesplatform/node-it:latest"
+  val NodeImageName: String = "hearth/node-it:latest"
 
-  private val ContainerRoot = Paths.get("/usr/share/waves")
+  private val ContainerRoot = Paths.get("/usr/share/hearth")
   private val ProfilerPort  = 10001
 
   private val RunId = Option(System.getenv("RUN_ID")).getOrElse(DateTimeFormatter.ofPattern("MM-dd--HH_mm_ss").format(LocalDateTime.now()))
@@ -578,14 +578,14 @@ object Docker {
   private val propsMapper = new JavaPropsMapper
 
   val configTemplate: Config = parseResources("template.conf")
-  val initialWavesAmount: Long =
+  val initialHearthAmount: Long =
     ConfigSource
       .fromConfig(configTemplate)
-      .at("waves.blockchain.custom.predefined-snapshots")
+      .at("hearth.blockchain.custom.predefined-snapshots")
       .loadOrThrow[Seq[PredefinedSnapshotSettings]]
       .find(_.height == GenesisBlockHeight.toInt)
       .fold(Seq.empty[GenesisBalanceSettings])(_.balances)
-      .map(_.waves)
+      .map(_.hearth)
       .sum
 
   def genesisOverride(): Config = {
@@ -605,7 +605,7 @@ object Docker {
 
     // state-hash/block-id are also unpinned here so Block.genesis computes them fresh below, instead of validating
     // them against custom-defaults.conf's placeholder values (which this custom network doesn't match).
-    val timestampOverrides = parseString(s"""waves.blockchain.custom.genesis {
+    val timestampOverrides = parseString(s"""hearth.blockchain.custom.genesis {
                                             |  timestamp = $genesisTs
                                             |  block-timestamp = $genesisTs
                                             |  signature = null # To calculate it in Block.genesis
@@ -614,14 +614,14 @@ object Docker {
                                             |}""".stripMargin)
 
     val genesisConfig = timestampOverrides.withFallback(configTemplate)
-    val bs            = ConfigSource.fromConfig(genesisConfig).at("waves.blockchain").loadOrThrow[BlockchainSettings]
+    val bs            = ConfigSource.fromConfig(genesisConfig).at("hearth.blockchain").loadOrThrow[BlockchainSettings]
     // The final config sent to a container is flattened into -D system properties (see startNodeInternal), which
     // cannot represent an absent/null value, so all three commitments are pinned here to the concrete values this
     // genesis block actually computes, rather than left null and risking custom-defaults.conf's placeholders (or an
     // empty string from the properties round-trip) leaking through as a mismatched commitment.
     val genesisBlock = Block.genesis(bs).explicitGet()
 
-    parseString(s"""waves.blockchain.custom.genesis {
+    parseString(s"""hearth.blockchain.custom.genesis {
                    |  signature = ${genesisBlock.signature}
                    |  state-hash = ${genesisBlock.header.stateHash.get}
                    |  block-id = ${genesisBlock.id()}
@@ -630,7 +630,7 @@ object Docker {
 
   AddressScheme.current = new AddressScheme {
     override val chainId: Byte =
-      ConfigSource.fromConfig(configTemplate).at("waves.blockchain.custom.address-scheme-character").loadOrThrow[String].charAt(0).toByte
+      ConfigSource.fromConfig(configTemplate).at("hearth.blockchain.custom.address-scheme-character").loadOrThrow[String].charAt(0).toByte
   }
 
   // Addresses are bech32m, keyed by a process-wide default HRP rather than the chain id above (see
@@ -654,10 +654,10 @@ object Docker {
       .map { case (k, v) => s"-D$k=$v" }
       .mkString(" ")
 
-  case class NodeInfo(restApiPort: Int, networkPort: Int, wavesIpAddress: String, ports: JMap[String, JList[PortBinding]]) {
+  case class NodeInfo(restApiPort: Int, networkPort: Int, hearthIpAddress: String, ports: JMap[String, JList[PortBinding]]) {
     val nodeApiEndpoint: URL                       = URI.create(s"http://localhost:${externalPort(restApiPort)}").toURL
     val hostNetworkAddress: InetSocketAddress      = new InetSocketAddress("localhost", externalPort(networkPort))
-    val containerNetworkAddress: InetSocketAddress = new InetSocketAddress(wavesIpAddress, networkPort)
+    val containerNetworkAddress: InetSocketAddress = new InetSocketAddress(hearthIpAddress, networkPort)
 
     def externalPort(internalPort: Int): Int = ports.get(s"$internalPort/tcp").get(0).hostPort().toInt
   }

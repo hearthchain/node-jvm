@@ -6,7 +6,7 @@ import tech.hearth.api.http.{AddressApiRoute, RouteTimeout}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.{WalletSettings, WavesSettings}
+import tech.hearth.settings.{WalletSettings, HearthSettings}
 import tech.hearth.test.*
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.utils.{Schedulers, SharedSchedulerMixin}
@@ -23,11 +23,11 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
   private val richAccount = TxHelpers.signer(0xaaff)
 
   // signer(500) is one of this node's generators, so that /addresses/bls has something to answer with
-  override def settings: WavesSettings = {
+  override def settings: HearthSettings = {
     val base = DomainPresets.RideV6.copy(restAPISettings = restAPISettings)
     base.copy(minerSettings = base.minerSettings.copy(accounts = Seq(TxHelpers.miningAccountSettings(500))))
   }
-  override def genesisBalances: Seq[WithState.AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 10_000.waves))
+  override def genesisBalances: Seq[WithState.AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 10_000.hearth))
 
   private val wallet = Wallet(WalletSettings(None, Some("123"), Some(ByteStr(Longs.toByteArray(System.nanoTime())))))
   wallet.generateNewAccounts(10)
@@ -142,7 +142,7 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
   }
 
   routePath("/bls/{address}") in {
-    // The endorser key of one of this node's generators, which come from waves.miner.accounts - the wallet holds none
+    // The endorser key of one of this node's generators, which come from hearth.miner.accounts - the wallet holds none
     val address              = domain.generatorKeys.accounts.head.address
     val expectedBlsPublicKey = domain.generatorKeys.endorserPublicKey(address).value
 

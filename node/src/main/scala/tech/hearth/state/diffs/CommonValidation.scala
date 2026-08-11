@@ -6,7 +6,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.settings.FunctionalitySettings
 import tech.hearth.state.*
 import tech.hearth.state.diffs.invoke.InvokeDiffsCommon
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.*
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.{Asset, *}
@@ -25,31 +25,31 @@ object CommonValidation {
     ): Either[ValidationError, T] = {
       val amountPortfolio = assetId match {
         case aid @ IssuedAsset(_) => Portfolio.build(aid -> -amount)
-        case Waves                => Portfolio(-amount)
+        case Hearth               => Portfolio(-amount)
       }
       val feePortfolio = feeAssetId match {
         case aid @ IssuedAsset(_) => Portfolio.build(aid -> -feeAmount)
-        case Waves                => Portfolio(-feeAmount)
+        case Hearth               => Portfolio(-feeAmount)
       }
 
       val checkedTx = for {
         _ <- assetId match {
           case IssuedAsset(id) => InvokeDiffsCommon.checkAsset(blockchain, id)
-          case Waves           => Right(())
+          case Hearth          => Right(())
         }
         spendings <- amountPortfolio.combine(feePortfolio)
-        oldWavesBalance = blockchain.balance(sender, Waves)
+        oldHearthBalance = blockchain.balance(sender, Hearth)
 
-        newWavesBalance     <- safeSum(oldWavesBalance, spendings.balance, "Spendings")
-        feeUncheckedBalance <- safeSum(oldWavesBalance, amountPortfolio.balance, "Transfer amount")
+        newHearthBalance    <- safeSum(oldHearthBalance, spendings.balance, "Spendings")
+        feeUncheckedBalance <- safeSum(oldHearthBalance, amountPortfolio.balance, "Transfer amount")
 
         overdraftFilter = allowFeeOverdraft && feeUncheckedBalance >= 0
         _ <- Either.cond(
-          overdraftFilter || newWavesBalance >= 0,
+          overdraftFilter || newHearthBalance >= 0,
           (),
           "Attempt to transfer unavailable funds: Transaction application leads to " +
-            s"negative waves balance to (at least) temporary negative state, current balance equals $oldWavesBalance, " +
-            s"spends equals ${spendings.balance}, result is $newWavesBalance"
+            s"negative hearth balance to (at least) temporary negative state, current balance equals $oldHearthBalance, " +
+            s"spends equals ${spendings.balance}, result is $newHearthBalance"
         )
         _ <- spendings.assets
           .collectFirst {
@@ -68,7 +68,7 @@ object CommonValidation {
     tx match {
       case ttx: TransferTransaction => checkTransfer(ttx.sender.toAddress, ttx.assetId, ttx.amount.value, ttx.feeAssetId, ttx.fee.value)
       case mtx: MassTransferTransaction =>
-        checkTransfer(mtx.sender.toAddress, mtx.assetId, mtx.transfers.map(_.amount.value).sum, Waves, mtx.fee.value)
+        checkTransfer(mtx.sender.toAddress, mtx.assetId, mtx.transfers.map(_.amount.value).sum, Hearth, mtx.fee.value)
       case _ => Right(tx)
     }
   }

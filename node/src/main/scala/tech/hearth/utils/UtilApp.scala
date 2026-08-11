@@ -90,8 +90,8 @@ object UtilApp {
     import builder.*
 
     OParser.sequence(
-      programName("waves util"),
-      head("Waves Util", Version.VersionString),
+      programName("hearth util"),
+      head("Hearth Util", Version.VersionString),
       OParser.sequence(
         opt[String](name = "input-str")
           .abbr("is")

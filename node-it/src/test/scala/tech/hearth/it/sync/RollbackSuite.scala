@@ -19,7 +19,7 @@ class RollbackSuite extends BaseFunSuite with TransferSending with TableDrivenPr
   override def nodeConfigs: Seq[Config] = Seq(
     BiggestMiner.quorum(0),
     NotMiner
-  ).map(_.overrides("waves.blockchain.custom.rewards.initial = 0"))
+  ).map(_.overrides("hearth.blockchain.custom.rewards.initial = 0"))
 
   private lazy val nodeAddresses = nodeConfigs.map(_.getString("address")).toSet
 

@@ -22,7 +22,7 @@ import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.state.{Height, StateSnapshot, TxMeta}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxHelpers.*
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}
 import tech.hearth.transaction.{CommitToGenerationTransaction, TxHelpers}
@@ -86,7 +86,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
   "GetTransactionSnapshots" in {
     // an explicit balance wins over withDomain's auto-fund-the-committed-generator default (ENOUGH_AMT), so
     // defaultSigner's balance below stays exactly (this deposit-sized baseline) + reward + fee, not ENOUGH_AMT + that
-    val defaultSignerBalance = 1200.waves
+    val defaultSignerBalance = 1200.hearth
     withDomain(
       TransactionStateSnapshot,
       AddrWithBalance.enoughBalances(secondSigner) :+ AddrWithBalance(defaultAddress, defaultSignerBalance)
@@ -97,23 +97,23 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
       val firstThreeSnapshots = Seq(
         StateSnapshot(balances =
           VectorMap(
-            (secondAddress, Waves)  -> (ENOUGH_AMT - 100_001),
-            (recipient, Waves)      -> 1,
-            (defaultAddress, Waves) -> (defaultSignerBalance + 400_040_000) // reward (4 waves) and 40% fee
+            (secondAddress, Hearth)  -> (ENOUGH_AMT - 100_001),
+            (recipient, Hearth)      -> 1,
+            (defaultAddress, Hearth) -> (defaultSignerBalance + 400_040_000) // reward (4 hearth) and 40% fee
           )
         ),
         StateSnapshot(balances =
           VectorMap(
-            (secondAddress, Waves)  -> (ENOUGH_AMT - 200_002),
-            (recipient, Waves)      -> 2,
-            (defaultAddress, Waves) -> (defaultSignerBalance + 400_080_000)
+            (secondAddress, Hearth)  -> (ENOUGH_AMT - 200_002),
+            (recipient, Hearth)      -> 2,
+            (defaultAddress, Hearth) -> (defaultSignerBalance + 400_080_000)
           )
         ),
         StateSnapshot(balances =
           VectorMap(
-            (secondAddress, Waves)  -> (ENOUGH_AMT - 300_003),
-            (recipient, Waves)      -> 3,
-            (defaultAddress, Waves) -> (defaultSignerBalance + 400_120_000)
+            (secondAddress, Hearth)  -> (ENOUGH_AMT - 300_003),
+            (recipient, Hearth)      -> 3,
+            (defaultAddress, Hearth) -> (defaultSignerBalance + 400_120_000)
           )
         )
       )
@@ -136,19 +136,19 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
       getSnapshots() shouldBe firstThreeSnapshots ++ Seq(
         StateSnapshot(balances =
           VectorMap(
-            (secondAddress, Waves) -> (ENOUGH_AMT - 400_004),
-            (recipient, Waves)     -> 4,
+            (secondAddress, Hearth) -> (ENOUGH_AMT - 400_004),
+            (recipient, Hearth)     -> 4,
             (
               defaultAddress,
-              Waves
-            ) -> (defaultSignerBalance + 800_340_000) // 2 blocks reward (4 waves each), 100% fee from previous block and 40% fee from current
+              Hearth
+            ) -> (defaultSignerBalance + 800_340_000) // 2 blocks reward (4 hearth each), 100% fee from previous block and 40% fee from current
           )
         ),
         StateSnapshot(balances =
           VectorMap(
-            (secondAddress, Waves)  -> (ENOUGH_AMT - 500_005),
-            (recipient, Waves)      -> 5,
-            (defaultAddress, Waves) -> (defaultSignerBalance + 800_380_000)
+            (secondAddress, Hearth)  -> (ENOUGH_AMT - 500_005),
+            (recipient, Hearth)      -> 5,
+            (defaultAddress, Hearth) -> (defaultSignerBalance + 800_380_000)
           )
         )
       )
@@ -181,7 +181,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
         TxHelpers.exchangeFromOrders(
           TxHelpers.order(
             OrderType.BUY,
-            Waves,
+            Hearth,
             asset,
             amount = 2,
             version = Order.V4,
@@ -189,7 +189,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
             matcher = matcher,
             attachment = Some(attachment)
           ),
-          TxHelpers.order(OrderType.SELL, Waves, asset, amount = 2, version = Order.V4, sender = issuer, matcher = matcher),
+          TxHelpers.order(OrderType.SELL, Hearth, asset, amount = 2, version = Order.V4, sender = issuer, matcher = matcher),
           matcher = matcher
         )
 
@@ -232,10 +232,10 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
     val resender         = TxHelpers.signer(3)
     val recipient        = TxHelpers.signer(4)
     val challengingMiner = TxHelpers.signer(5)
-    val deposit          = CommitToGenerationTransaction.DepositInWavelets
+    val deposit          = CommitToGenerationTransaction.DepositInEmbers
     // enough for a committed generator to still clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2
-    // (1000 waves) net of its deposit; matches the convention in node/tests' BlockChallengeTest
-    val challengerBalance = 1000.waves + deposit
+    // (1000 hearth) net of its deposit; matches the convention in node/tests' BlockChallengeTest
+    val challengerBalance = 1000.hearth + deposit
     withDomain(
       TransactionStateSnapshot,
       generators = Seq(TxHelpers.defaultSigner, challengedMiner, challengingMiner),
@@ -249,12 +249,12 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
       (1 to 1000).foreach(_ => d.appendBlock())
 
       val invalidStateHash = ByteStr.fill(DigestLength)(1)
-      val resenderTxs = Seq(TxHelpers.transfer(resender, recipient.toAddress, 1.waves), TxHelpers.transfer(resender, recipient.toAddress, 2.waves))
+      val resenderTxs = Seq(TxHelpers.transfer(resender, recipient.toAddress, 1.hearth), TxHelpers.transfer(resender, recipient.toAddress, 2.hearth))
       // affordable when challengedMiner mines it for real (block reward covers the gap) but not once the challenge
       // redirects that reward to challengingMiner instead - which is what makes it (and the resenderTxs relying on
       // its proceeds) become elided rather than making the challenging block unappendable. See BlockChallengeTest's
       // "NODE-899" for the same recipe: build+append a validly-hashed version first, roll back, then challenge it.
-      val challengedBlockTx = TxHelpers.transfer(challengedMiner, resender.toAddress, 1001.waves)
+      val challengedBlockTx = TxHelpers.transfer(challengedMiner, resender.toAddress, 1001.hearth)
       val validOriginalBlock = d.createBlock(
         challengedBlockTx +: resenderTxs,
         strictTime = true,

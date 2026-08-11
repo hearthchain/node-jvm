@@ -1,5 +1,6 @@
 package tech.hearth.api.grpc.test
 
+import tech.hearth.history.withFlatReward
 import com.google.protobuf.ByteString
 import tech.hearth.account.Address
 import tech.hearth.api.grpc.{BlockRangeRequest, BlockRequest, BlockWithHeight, BlocksApiGrpcImpl}
@@ -17,7 +18,7 @@ import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.state.{BlockRewardCalculator, Blockchain}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}
 import tech.hearth.transaction.{CommitToGenerationTransaction, TxHelpers}
 import tech.hearth.utils.{DiffMatchers, Schedulers, byteStrOrdering}
@@ -115,8 +116,8 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
       val attachment = ByteStr.fill(32)(1)
       val exchange =
         TxHelpers.exchangeFromOrders(
-          TxHelpers.order(OrderType.BUY, Waves, asset, version = Order.V4, attachment = Some(attachment)),
-          TxHelpers.order(OrderType.SELL, Waves, asset, version = Order.V4, sender = issuer)
+          TxHelpers.order(OrderType.BUY, Hearth, asset, version = Order.V4, attachment = Some(attachment)),
+          TxHelpers.order(OrderType.SELL, Hearth, asset, version = Order.V4, sender = issuer)
         )
 
       val exchangeBlock = d.appendBlock(exchange)
@@ -151,7 +152,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     blockRewardSharesTestCase { case (daoAddress, d, grpcApi) =>
       val block = d.appendBlock()
 
-      val minerReward = d.blockchain.settings.rewardsSettings.initial - BlockRewardCalculator.MaxAddressReward
+      val minerReward = d.blockchain.settings.rewardsSettings.initialReward - BlockRewardCalculator.MaxAddressReward
 
       checkBlockRewards(
         block.id(),
@@ -175,7 +176,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
       )
       val blocks = result.runSyncUnsafe()
 
-      val minerReward = d.blockchain.settings.rewardsSettings.initial - BlockRewardCalculator.MaxAddressReward
+      val minerReward = d.blockchain.settings.rewardsSettings.initialReward - BlockRewardCalculator.MaxAddressReward
 
       blocks.head.rewardShares shouldBe Seq(
         RewardShare(ByteString.copyFrom(block.sender.toAddress.toBytes()), minerReward),
@@ -190,7 +191,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     // makeStateSolid()/liquidAndSolidAssert would otherwise fail appending its own empty block with defaultSigner
     val challengedMiner  = TxHelpers.signer(5)
     val challengingMiner = TxHelpers.signer(4)
-    val deposit          = CommitToGenerationTransaction.DepositInWavelets
+    val deposit          = CommitToGenerationTransaction.DepositInEmbers
     withDomain(
       TransactionStateSnapshot,
       generators = Seq(defaultSigner, challengedMiner, challengingMiner),
@@ -198,9 +199,9 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
-      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 waves)
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth)
       d.appendBlock(
-        TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.waves - deposit)
+        TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.hearth - deposit)
       )
 
       (1 to 999).foreach(_ => d.appendBlock())
@@ -250,7 +251,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     // makeStateSolid()/liquidAndSolidAssert would otherwise fail appending its own empty block with defaultSigner
     val challengedMiner  = TxHelpers.signer(5)
     val challengingMiner = TxHelpers.signer(4)
-    val deposit          = CommitToGenerationTransaction.DepositInWavelets
+    val deposit          = CommitToGenerationTransaction.DepositInEmbers
     withDomain(
       TransactionStateSnapshot,
       generators = Seq(defaultSigner, challengedMiner, challengingMiner),
@@ -258,9 +259,9 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
-      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 waves)
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth)
       d.appendBlock(
-        TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.waves - deposit)
+        TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.hearth - deposit)
       )
 
       (1 to 999).foreach(_ => d.appendBlock())
@@ -329,7 +330,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
       .copy(blockchainSettings =
         settings.blockchainSettings.copy(
           functionalitySettings = settings.blockchainSettings.functionalitySettings.copy(daoAddress = Some(daoAddress.toString)),
-          rewardsSettings = settings.blockchainSettings.rewardsSettings.copy(initial = BlockRewardCalculator.FullRewardInit + 1.waves)
+          rewardsSettings = withFlatReward(settings.blockchainSettings.rewardsSettings, BlockRewardCalculator.FullRewardInit + 1.hearth)
         )
       )
 

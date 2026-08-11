@@ -12,7 +12,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
 import tech.hearth.state.{Height, TransactionId}
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
@@ -78,10 +78,10 @@ object TxHelpers {
   def transfer(
       from: SigningKey = defaultSigner,
       to: Address = secondAddress,
-      amount: Long = 1.waves,
-      asset: Asset = Waves,
+      amount: Long = 1.hearth,
+      asset: Asset = Hearth,
       fee: Long = TestValues.fee,
-      feeAsset: Asset = Waves,
+      feeAsset: Asset = Hearth,
       attachment: ByteStr = ByteStr.empty,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
@@ -94,10 +94,10 @@ object TxHelpers {
   def transferUnsigned(
       from: SigningKey = defaultSigner,
       to: Address = secondAddress,
-      amount: Long = 1.waves,
-      asset: Asset = Waves,
+      amount: Long = 1.hearth,
+      asset: Asset = Hearth,
       fee: Long = TestValues.fee,
-      feeAsset: Asset = Waves,
+      feeAsset: Asset = Hearth,
       chainId: Byte = AddressScheme.current.chainId
   ): TransferTransaction =
     TransferTransaction(
@@ -115,10 +115,10 @@ object TxHelpers {
 
   def massTransfer(
       from: SigningKey = defaultSigner,
-      to: Seq[(Address, Long)] = Seq(secondAddress -> 1.waves),
-      asset: Asset = Waves,
+      to: Seq[(Address, Long)] = Seq(secondAddress -> 1.hearth),
+      asset: Asset = Hearth,
       fee: Long = FeeConstants(TransactionType.MassTransfer) * FeeUnit,
-      feeAsset: Asset = Waves,
+      feeAsset: Asset = Hearth,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
   ): MassTransferTransaction =
@@ -137,8 +137,8 @@ object TxHelpers {
       .map(_.signWith(from))
       .explicitGet()
 
-  def orderV3(orderType: OrderType, asset: Asset, feeAsset: Asset = Waves): Order = {
-    order(orderType, asset, Waves, feeAsset)
+  def orderV3(orderType: OrderType, asset: Asset, feeAsset: Asset = Hearth): Order = {
+    order(orderType, asset, Hearth, feeAsset)
   }
 
   def selfSigned(
@@ -152,7 +152,7 @@ object TxHelpers {
       timestamp: TxTimestamp,
       expiration: TxTimestamp,
       matcherFee: Long,
-      matcherFeeAssetId: Asset = Asset.Waves,
+      matcherFeeAssetId: Asset = Asset.Hearth,
       priceMode: OrderPriceMode = OrderPriceMode.Default,
       attachment: Option[ByteStr] = None
   ): Either[ValidationError, Order] =
@@ -189,7 +189,7 @@ object TxHelpers {
       timestamp: TxTimestamp,
       expiration: TxTimestamp,
       matcherFee: Long,
-      matcherFeeAssetId: Asset = Waves,
+      matcherFeeAssetId: Asset = Hearth,
       priceMode: OrderPriceMode = OrderPriceMode.Default,
       attachment: Option[ByteStr] = None
   ): Either[ValidationError, Order] =
@@ -219,7 +219,7 @@ object TxHelpers {
       timestamp: TxTimestamp,
       expiration: TxTimestamp,
       matcherFee: Long,
-      matcherFeeAssetId: Asset = Waves,
+      matcherFeeAssetId: Asset = Hearth,
       priceMode: OrderPriceMode = OrderPriceMode.Default,
       attachment: Option[ByteStr] = None
   ): Either[ValidationError, Order] =
@@ -243,7 +243,7 @@ object TxHelpers {
       orderType: OrderType,
       amountAsset: Asset,
       priceAsset: Asset,
-      feeAsset: Asset = Waves,
+      feeAsset: Asset = Hearth,
       amount: Long = 1L,
       price: Long = 1L,
       priceMode: OrderPriceMode = OrderPriceMode.Default,
@@ -335,7 +335,7 @@ object TxHelpers {
   def lease(
       sender: SigningKey = defaultSigner,
       recipient: Address = secondAddress,
-      amount: Long = 10.waves,
+      amount: Long = 10.hearth,
       fee: Long = FeeConstants(TransactionType.Lease) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
@@ -376,7 +376,7 @@ object TxHelpers {
 
   def blsKeyOf(sender: SigningKey): BlsKeyPair = BlsKeyPair.fromSeed(blsSeedOf(sender))
 
-  /** The `waves.miner.accounts` entry for one of these signers: the seeds a node has to be configured with for its
+  /** The `hearth.miner.accounts` entry for one of these signers: the seeds a node has to be configured with for its
     * miner, endorser and API to act as `signer(i)`. `MinerImpl` builds its accounts from settings and nothing else, so
     * a test that expects a node to generate, endorse or commit as this account has to configure it here.
     */

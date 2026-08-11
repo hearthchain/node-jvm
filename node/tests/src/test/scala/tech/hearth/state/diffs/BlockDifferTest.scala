@@ -9,8 +9,7 @@ import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.mining.MiningConstraint
-import tech.hearth.history.{DefaultBlockchainSettings, settings}
-import tech.hearth.settings.RewardsSettings
+import tech.hearth.history.{DefaultBlockchainSettings, settings, withFlatReward}
 import tech.hearth.state.diffs.BlockDiffer.Result
 import tech.hearth.state.{Blockchain, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
 import tech.hearth.test.*
@@ -26,15 +25,15 @@ class BlockDifferTest extends FreeSpec with WithDomain {
 
   private val master, recipient = randomKeyPair()
 
-  private val InitialMinerBalance = 10000.waves
+  private val InitialMinerBalance = 10000.hearth
 
   // Zero block reward, so that the only thing moving the miners' balances is the fee distribution under test
   private val noRewardSettings = settings.copy(
-    blockchainSettings = DefaultBlockchainSettings.copy(rewardsSettings = RewardsSettings(100000, 50000, 0, 50000000, 10000))
+    blockchainSettings = DefaultBlockchainSettings.copy(rewardsSettings = withFlatReward(DefaultBlockchainSettings.rewardsSettings, 0))
   )
 
   private val minerBalances = Seq(
-    AddrWithBalance(master.toAddress, 1000000.waves),
+    AddrWithBalance(master.toAddress, 1000000.hearth),
     AddrWithBalance(signerA.toAddress, InitialMinerBalance),
     AddrWithBalance(signerB.toAddress, InitialMinerBalance)
   )
@@ -80,7 +79,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
       // The genesis block has no transactions, so its state hash covers the predefined snapshot built from the settings.
       // withDomain appends it, which only succeeds if BlockDiffer agrees with the state hash the block carries.
       "genesis block" in {
-        val balances = (1 to 10).map(idx => AddrWithBalance(TxHelpers.address(idx), 100.waves))
+        val balances = (1 to 10).map(idx => AddrWithBalance(TxHelpers.address(idx), 100.hearth))
 
         val withMiner = AddrWithBalance(TxHelpers.defaultSigner.toAddress) +: balances
 
@@ -106,11 +105,11 @@ class BlockDifferTest extends FreeSpec with WithDomain {
         ) { d =>
           val genesis = d.lastBlock
 
-          val txs = (1 to 10).map(idx => TxHelpers.transfer(TxHelpers.signer(idx), TxHelpers.address(idx + 1), (100 - idx).waves))
+          val txs = (1 to 10).map(idx => TxHelpers.transfer(TxHelpers.signer(idx), TxHelpers.address(idx + 1), (100 - idx).hearth))
 
           val blockTs    = txs.map(_.timestamp).max
           val signer     = TxHelpers.signer(2)
-          val blockchain = SnapshotBlockchain(d.blockchain, Some(d.settings.blockchainSettings.rewardsSettings.initial))
+          val blockchain = SnapshotBlockchain(d.blockchain, Some(d.settings.blockchainSettings.rewardsSettings.initialReward))
           val initSnapshot = BlockDiffer
             .createInitialBlockSnapshot(d.blockchain, d.lastBlock.id(), signer.toAddress, Some(d.lastBlock.signedHeader))
             .explicitGet()
@@ -209,7 +208,7 @@ class BlockDifferTest extends FreeSpec with WithDomain {
             Some(liquid.data.liquidStateHash)
           )
 
-          val block              = d.createBlock(Seq(TxHelpers.transfer(sender, amount = idx.waves, fee = TestValues.fee * idx)))
+          val block              = d.createBlock(Seq(TxHelpers.transfer(sender, amount = idx.hearth, fee = TestValues.fee * idx)))
           val hs                 = d.posSelector.validateGenerationSignature(block).explicitGet()
           val txValidationResult = BlockDiffer.fromBlock(refBlockchain, Some(liquid.block.signedHeader), block, None, MiningConstraint.Unlimited, hs)
 

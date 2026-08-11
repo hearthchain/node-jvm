@@ -7,7 +7,7 @@ import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.http.{ApiErrorMatchers, DummyTransactionPublisher, RestAPISettingsHelper}
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.test.*
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.utils.SharedSchedulerMixin
@@ -29,8 +29,8 @@ class CustomJsonMarshallerSpec
   private val numberFormat = Accept(`application/json`.withParams(Map("large-significand-format" -> "string")))
   private val richAccount  = TxHelpers.signer(55)
 
-  override def genesisBalances: Seq[AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 50000.waves))
-  override def settings: WavesSettings               = DomainPresets.BlockRewardDistribution
+  override def genesisBalances: Seq[AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 50000.hearth))
+  override def settings: HearthSettings              = DomainPresets.BlockRewardDistribution
 
   private def ensureFieldsAre[A: ClassTag](v: JsObject, fields: String*)(implicit pos: Position): Unit =
     for (f <- fields) (v \ f).get shouldBe a[A]
@@ -61,23 +61,23 @@ class CustomJsonMarshallerSpec
 
   property("/transactions/info/{id}") {
     // todo: add other transaction types
-    val leaseTx = TxHelpers.lease(sender = richAccount, TxHelpers.address(80), 25.waves)
+    val leaseTx = TxHelpers.lease(sender = richAccount, TxHelpers.address(80), 25.hearth)
     domain.appendBlock(leaseTx)
     checkRoute(Get(s"/transactions/info/${leaseTx.id()}"), transactionsRoute, "amount")
   }
 
   property("/transactions/calculateFee") {
-    val tx = TxHelpers.transfer(richAccount, TxHelpers.address(81), 5.waves)
+    val tx = TxHelpers.transfer(richAccount, TxHelpers.address(81), 5.hearth)
     checkRoute(Post("/transactions/calculateFee", tx.json()), transactionsRoute, "feeAmount")
   }
 
   private val rewardRoute = RewardApiRoute(domain.blockchain).route
 
   property("/blockchain/rewards") {
-    checkRoute(Get("/blockchain/rewards/2"), rewardRoute, "totalWavesAmount", "currentReward", "minIncrement")
+    checkRoute(Get("/blockchain/rewards/2"), rewardRoute, "totalHearthAmount", "currentReward", "cEmit")
   }
 
-  property("/debug/stateWaves") {
+  property("/debug/stateHearth") {
     pending // todo: fix when distributions/portfolio become testable
   }
 

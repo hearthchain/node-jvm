@@ -13,7 +13,7 @@ import tech.hearth.state.diffs.BlockDiffer.CurrentBlockFeePart
 import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.test.{NumericExt, PropSpec}
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxHelpers.*
 import tech.hearth.transaction.assets.exchange.OrderType.{BUY, SELL}
 import tech.hearth.transaction.{Transaction, TxHelpers}
@@ -36,14 +36,14 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
       val recipient        = recipientSigner.toAddress
       val recipientSigner2 = TxHelpers.signer(3)
       val recipient2       = recipientSigner2.toAddress
-      val reward           = d.blockchain.settings.rewardsSettings.initial
+      val reward           = d.blockchain.settings.rewardsSettings.initialReward
 
       def assertSnapshot(tx: Transaction, expected: StateSnapshot, failed: Boolean = false): Unit = {
         val expectedSnapshotWithMiner =
           expected
             .addBalances(
               Map(
-                defaultAddress -> Portfolio.waves(CurrentBlockFeePart(tx.fee) + reward + d.carryFee(d.lastBlockId).map(_.wavesAmount).getOrElse(0L))
+                defaultAddress -> Portfolio.hearth(CurrentBlockFeePart(tx.fee) + reward + d.carryFee(d.lastBlockId).map(_.hearthAmount).getOrElse(0L))
               )
                 .filter(_ => tx.fee != 0),
               d.blockchain
@@ -60,30 +60,30 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
         transfer(sender, recipient),
         StateSnapshot(
           balances = VectorMap(
-            (recipient, Waves)     -> 1.waves,
-            (senderAddress, Waves) -> (d.balance(senderAddress) - 1.waves - fee)
+            (recipient, Hearth)     -> 1.hearth,
+            (senderAddress, Hearth) -> (d.balance(senderAddress) - 1.hearth - fee)
           )
         )
       )
 
       // Exchange
       d.appendBlock(
-        transfer(to = recipient2, amount = 1.waves),
-        transfer(to = senderAddress, amount = 1.waves, asset = asset),
-        transfer(from = sender, to = recipient2, amount = 1.waves, asset = asset, fee = fee)
+        transfer(to = recipient2, amount = 1.hearth),
+        transfer(to = senderAddress, amount = 1.hearth, asset = asset),
+        transfer(from = sender, to = recipient2, amount = 1.hearth, asset = asset, fee = fee)
       )
-      val order1         = order(BUY, asset, Waves, matcher = sender, sender = recipientSigner, amount = 123, price = 40_000_000, fee = 777)
-      val order2         = order(SELL, asset, Waves, matcher = sender, sender = recipientSigner2, amount = 123, price = 40_000_000, fee = 888)
+      val order1         = order(BUY, asset, Hearth, matcher = sender, sender = recipientSigner, amount = 123, price = 40_000_000, fee = 777)
+      val order2         = order(SELL, asset, Hearth, matcher = sender, sender = recipientSigner2, amount = 123, price = 40_000_000, fee = 888)
       val priceAssetDiff = ((order1.amount.value * order1.price.value) / pow(10, 8)).toLong
       assertSnapshot(
         exchange(order1, order2, sender, amount = 123, price = 40_000_000, buyMatcherFee = 777, sellMatcherFee = 888),
         StateSnapshot(
           balances = VectorMap(
-            (senderAddress, Waves) -> (d.balance(senderAddress) - fee + order1.matcherFee.value + order2.matcherFee.value),
-            (recipient, asset)     -> (d.balance(recipient, asset) + order1.amount.value),
-            (recipient, Waves)     -> (d.balance(recipient) - order1.matcherFee.value - priceAssetDiff),
-            (recipient2, asset)    -> (d.balance(recipient2, asset) - order1.amount.value),
-            (recipient2, Waves)    -> (d.balance(recipient2) - order2.matcherFee.value + priceAssetDiff)
+            (senderAddress, Hearth) -> (d.balance(senderAddress) - fee + order1.matcherFee.value + order2.matcherFee.value),
+            (recipient, asset)      -> (d.balance(recipient, asset) + order1.amount.value),
+            (recipient, Hearth)     -> (d.balance(recipient) - order1.matcherFee.value - priceAssetDiff),
+            (recipient2, asset)     -> (d.balance(recipient2, asset) - order1.amount.value),
+            (recipient2, Hearth)    -> (d.balance(recipient2) - order2.matcherFee.value + priceAssetDiff)
           ),
           orderFills = Map(
             order1.id() -> VolumeAndFee(order1.amount.value, order1.matcherFee.value),
@@ -98,7 +98,7 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
         leaseTx,
         StateSnapshot(
           balances = VectorMap(
-            (senderAddress, Waves) -> (d.balance(senderAddress) - fee)
+            (senderAddress, Hearth) -> (d.balance(senderAddress) - fee)
           ),
           leaseBalances = Map(
             senderAddress -> LeaseBalance(0, leaseTx.amount.value),
@@ -116,7 +116,7 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
         leaseCancelTx,
         StateSnapshot(
           balances = VectorMap(
-            (senderAddress, Waves) -> (d.balance(senderAddress) - fee)
+            (senderAddress, Hearth) -> (d.balance(senderAddress) - fee)
           ),
           leaseBalances = Map(
             senderAddress -> LeaseBalance(0, 0),
@@ -140,9 +140,9 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
         ),
         StateSnapshot(
           balances = VectorMap(
-            (senderAddress, Waves)                 -> (d.balance(senderAddress) - fee - 123 - 456),
-            (TxHelpers.signer(4).toAddress, Waves) -> 123,
-            (TxHelpers.signer(5).toAddress, Waves) -> 456
+            (senderAddress, Hearth)                 -> (d.balance(senderAddress) - fee - 123 - 456),
+            (TxHelpers.signer(4).toAddress, Hearth) -> 123,
+            (TxHelpers.signer(5).toAddress, Hearth) -> 456
           )
         )
       )

@@ -26,7 +26,7 @@ class BlockHeadersTestSuite
     NodeConfigs.newBuilder
       .overrideBase(
         _.raw(
-          s"""waves {
+          s"""hearth {
              |  blockchain.custom.rewards {
              |    initial = $initialReward
              |  }

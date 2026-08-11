@@ -8,7 +8,7 @@ import tech.hearth.network.TransactionPublisher
 import tech.hearth.settings.RestAPISettings
 import tech.hearth.state.Blockchain
 import tech.hearth.transaction.Asset
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.utils.Time
 import tech.hearth.mining.GeneratorKeys
@@ -57,7 +57,7 @@ case class AddressApiRoute(
       val height = maybeHeight.getOrElse(blockchain.height)
       validateBalanceDepth(height)(
         complete(
-          balancesJson(height, addresses.toSeq, assetId.fold(Waves: Asset)(a => IssuedAsset(ByteStr.decodeBase16(a).get)))
+          balancesJson(height, addresses.toSeq, assetId.fold(Hearth: Asset)(a => IssuedAsset(ByteStr.decodeBase16(a).get)))
         )
       )
   }
@@ -66,7 +66,9 @@ case class AddressApiRoute(
     val height    = (request \ "height").asOpt[Int].getOrElse(blockchain.height)
     val addresses = (request \ "addresses").as[Seq[String]]
     val assetId   = (request \ "asset").asOpt[String]
-    validateBalanceDepth(height)(complete(balancesJson(height, addresses, assetId.fold(Waves: Asset)(a => IssuedAsset(ByteStr.decodeBase16(a).get)))))
+    validateBalanceDepth(height)(
+      complete(balancesJson(height, addresses, assetId.fold(Hearth: Asset)(a => IssuedAsset(ByteStr.decodeBase16(a).get))))
+    )
   }
 
   def balanceDetails: Route = (path("balance" / "details" / AddrSegment) & get) { address =>
@@ -112,7 +114,7 @@ case class AddressApiRoute(
   }
 
   /** The endorser public key of one of this node's generators, so that an operator can see what a commitment from this
-    * node would register. Only the accounts in `waves.miner.accounts` have one - the wallet holds no BLS keys.
+    * node would register. Only the accounts in `hearth.miner.accounts` have one - the wallet holds no BLS keys.
     */
   def blsPublicKey: Route = (path("bls" / AddrSegment) & get) { address =>
     complete(

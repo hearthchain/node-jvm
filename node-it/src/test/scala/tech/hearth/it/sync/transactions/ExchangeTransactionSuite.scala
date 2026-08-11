@@ -8,7 +8,7 @@ import tech.hearth.it.sync.*
 import tech.hearth.it.transactions.BaseTransactionSuite
 import tech.hearth.it.{NTPTime, NodeConfigs}
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.{TxExchangeAmount, TxExchangePrice, TxHelpers}
 import play.api.libs.json.JsObject
@@ -45,7 +45,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       val sellAmount = 1
       val amount     = 1
 
-      val pair = AssetPair.createAssetPair("WAVES", neverIssuedAssetId).get
+      val pair = AssetPair.createAssetPair("HRTH", neverIssuedAssetId).get
       val buy = TxHelpers.order(
         OrderType.BUY,
         pair.amountAsset,
@@ -137,12 +137,12 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
 
     for (
       (o1ver, o2ver, matcherFeeOrder1, matcherFeeOrder2) <- Seq(
-        (1: Byte, 3: Byte, Waves, GenesisAssets.TestAsset),
-        (1: Byte, 3: Byte, Waves, Waves),
-        (2: Byte, 3: Byte, Waves, GenesisAssets.TestAsset),
-        (3: Byte, 1: Byte, GenesisAssets.TestAsset, Waves),
-        (2: Byte, 3: Byte, Waves, Waves),
-        (3: Byte, 2: Byte, GenesisAssets.TestAsset, Waves)
+        (1: Byte, 3: Byte, Hearth, GenesisAssets.TestAsset),
+        (1: Byte, 3: Byte, Hearth, Hearth),
+        (2: Byte, 3: Byte, Hearth, GenesisAssets.TestAsset),
+        (3: Byte, 1: Byte, GenesisAssets.TestAsset, Hearth),
+        (2: Byte, 3: Byte, Hearth, Hearth),
+        (3: Byte, 2: Byte, GenesisAssets.TestAsset, Hearth)
       )
     ) {
 
@@ -151,7 +151,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       val expirationTimestamp      = ts + Order.MaxLiveTime / 2
       var assetBalanceBefore: Long = 0L
 
-      if (matcherFeeOrder1 == Waves && matcherFeeOrder2 != Waves) {
+      if (matcherFeeOrder1 == Hearth && matcherFeeOrder2 != Hearth) {
         assetBalanceBefore = sender.assetBalance(secondKeyPair.toAddress.toString, assetId.toString).balance
         sender.transfer(buyer, seller.toAddress.toString, 100000, minFee, Some(assetId.toString), waitForTx = true)
       }
@@ -162,7 +162,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       val sellAmount = 40000000
       val buy = TxHelpers.order(
         OrderType.BUY,
-        Waves,
+        Hearth,
         GenesisAssets.TestAsset,
         matcherFeeOrder1,
         buyAmount,
@@ -176,7 +176,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       )
       val sell = TxHelpers.order(
         OrderType.SELL,
-        Waves,
+        Hearth,
         GenesisAssets.TestAsset,
         matcherFeeOrder2,
         sellAmount,
@@ -207,7 +207,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
 
       nodes.waitForHeightAriseAndTxPresent(tx.id().toString)
 
-      if (matcherFeeOrder1 == Waves && matcherFeeOrder2 != Waves) {
+      if (matcherFeeOrder1 == Hearth && matcherFeeOrder2 != Hearth) {
         sender.assetBalance(secondAddress, assetId.toString).balance shouldBe assetBalanceBefore
       }
     }
@@ -215,7 +215,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
 
   test("exchange tx with orders v4 can use price that is impossible for orders v3/v2/v1") {
     // The genesis NFT (quantity 1) is held entirely by firstKeyPair (see template.conf), so it must be the seller.
-    sender.transfer(sender.keyPair, secondAddress, 1000.waves, waitForTx = true)
+    sender.transfer(sender.keyPair, secondAddress, 1000.hearth, waitForTx = true)
 
     val seller        = acc0
     val buyer         = acc1
@@ -228,29 +228,29 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
     val ts                  = ntpTime.correctedTime()
     val expirationTimestamp = ts + Order.MaxLiveTime / 2
     val amount              = 1
-    val nftWavesPrice       = 1000 * math.pow(10, 8).toLong
+    val nftHearthPrice      = 1000 * math.pow(10, 8).toLong
 
-    val sellNftForWaves = TxHelpers.order(
+    val sellNftForHearth = TxHelpers.order(
       OrderType.SELL,
       GenesisAssets.TestNftAsset,
-      Waves,
+      Hearth,
       sender = seller,
       matcher = matcher,
       amount = amount,
-      price = nftWavesPrice,
+      price = nftHearthPrice,
       fee = matcherFee,
       timestamp = ts,
       expiration = expirationTimestamp,
       version = 4.toByte
     )
-    val buyNftForWaves = TxHelpers.order(
+    val buyNftForHearth = TxHelpers.order(
       OrderType.BUY,
       GenesisAssets.TestNftAsset,
-      Waves,
+      Hearth,
       sender = buyer,
       matcher = matcher,
       amount = amount,
-      price = nftWavesPrice,
+      price = nftHearthPrice,
       fee = matcherFee,
       timestamp = ts,
       expiration = expirationTimestamp,
@@ -265,12 +265,12 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
     val tx =
       TxHelpers.exchange(
         matcher = matcher,
-        order1 = buyNftForWaves,
-        order2 = sellNftForWaves,
+        order1 = buyNftForHearth,
+        order2 = sellNftForHearth,
         amount = amount,
-        price = nftWavesPrice,
-        buyMatcherFee = (BigInt(matcherFee) * amount / sellNftForWaves.amount.value).toLong,
-        sellMatcherFee = (BigInt(matcherFee) * amount / sellNftForWaves.amount.value).toLong,
+        price = nftHearthPrice,
+        buyMatcherFee = (BigInt(matcherFee) * amount / sellNftForHearth.amount.value).toLong,
+        sellMatcherFee = (BigInt(matcherFee) * amount / sellNftForHearth.amount.value).toLong,
         fee = matcherFee,
         timestamp = ntpTime.correctedTime()
       )
@@ -279,8 +279,8 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
     nodes.waitForHeightAriseAndTxPresent(tx.id().toString)
 
     sender.assetBalance(buyerAddress, nftAsset).balance shouldBe 1L
-    sender.balanceDetails(sellerAddress).regular shouldBe sellerBalance + nftWavesPrice - matcherFee
-    sender.balanceDetails(buyerAddress).regular shouldBe buyerBalance - nftWavesPrice - matcherFee
+    sender.balanceDetails(sellerAddress).regular shouldBe sellerBalance + nftHearthPrice - matcherFee
+    sender.balanceDetails(buyerAddress).regular shouldBe buyerBalance - nftHearthPrice - matcherFee
   }
 
   import NodeConfigs.*

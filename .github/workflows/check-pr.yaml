@@ -12,6 +12,7 @@ permissions:
 
 env:
   JAVA_OPTS: --enable-native-access=ALL-UNNAMED
+  COURSIER_TTL: 0s
 
 jobs:
   check-pr:

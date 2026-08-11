@@ -1,6 +1,6 @@
 FROM eclipse-temurin:11-jdk-jammy
 
-ARG WAVES_VERSION
+ARG HEARTH_VERSION
 ARG SBT_VERSION
 
 ENV PATH="/opt/sbt/bin:$PATH"
@@ -12,6 +12,6 @@ RUN apt-get update && apt-get -y install git
 
 VOLUME /src
 
-RUN git clone --depth 1 -b v$WAVES_VERSION https://github.com/wavesplatform/Waves.git /src && \
+RUN git clone --depth 1 -b v$HEARTH_VERSION https://github.com/wavesplatform/Waves.git /src && \
   cd /src && \
   sbt --batch ";node/compile;grpc-server/compile"

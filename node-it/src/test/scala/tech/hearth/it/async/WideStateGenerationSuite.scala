@@ -21,7 +21,7 @@ class WideStateGenerationSuite extends BaseFreeSpec with TransferSending {
         |  request-timeout = 60s
         |}
         |
-        |waves {
+        |hearth {
         |  network.traffic-logger {
         |    ignore-tx-messages = [1, 2, 23, 25]
         |    ignore-rx-messages = [1, 2, 25]

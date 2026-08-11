@@ -6,7 +6,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.protobuf.transaction.{PBTransactions, SignedTransaction as PBSignedTransaction}
 import tech.hearth.state.Height
 import tech.hearth.test.PropSpec
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.{AssetPair, ExchangeTransaction, Order}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
@@ -45,9 +45,9 @@ class ChainIdSpecification extends PropSpec {
         TransferTransaction(
           PublicKey(sender.publicKey),
           sender.toAddress,
-          Waves,
+          Hearth,
           amount,
-          Waves,
+          Hearth,
           fee,
           ByteStr.empty,
           ts,
@@ -73,7 +73,7 @@ class ChainIdSpecification extends PropSpec {
 
   property("ExchangeTransaction validation") {
     forAll(txParams) { case (sender, amount, fee, ts) =>
-      val pair = AssetPair(Waves, IssuedAsset(ByteStr(bytes32gen.sample.get)))
+      val pair = AssetPair(Hearth, IssuedAsset(ByteStr(bytes32gen.sample.get)))
       validateFromOtherNetwork(
         ExchangeTransaction(
           TxHelpers.sell(Order.V3, sender, PublicKey(sender.publicKey), pair, amount.value, amount.value, ts, ts + ts, fee.value).explicitGet(),
@@ -111,10 +111,10 @@ class ChainIdSpecification extends PropSpec {
       validateFromOtherNetwork(
         MassTransferTransaction(
           PublicKey(sender.publicKey),
-          Waves,
+          Hearth,
           Seq(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(amount.value))),
           fee,
-          Waves,
+          Hearth,
           ts,
           ByteStr.empty,
           Proofs.empty,

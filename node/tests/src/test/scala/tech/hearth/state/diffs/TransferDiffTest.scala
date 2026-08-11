@@ -26,12 +26,12 @@ class TransferDiffTest extends PropSpec with WithDomain {
     Seq(transferV1, transferV2)
   }
 
-  property("transfers to recipient preserving waves invariant") {
+  property("transfers to recipient preserving hearth invariant") {
     preconditionsAndTransfer.foreach { transfer =>
       withDomain(ScriptsAndSponsorship, AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, master)) { d =>
         d.appendBlock(transfer)
 
-        val carryFee = -transfer.fee.value * 3 / 5 + 6.waves
+        val carryFee = -transfer.fee.value * 3 / 5 + 6.hearth
         assertBalanceInvariant(d.liquidSnapshot, d.rocksDBWriter, carryFee)
 
         val recipient = transfer.recipient

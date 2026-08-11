@@ -10,7 +10,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.mining.TestMiner
 import tech.hearth.network.PeerDatabase
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.StateHash.Section
 import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.state.{Height, StateHash}
@@ -36,7 +36,7 @@ class DebugApiRouteSpec
     with OptionValues
     with SharedSchedulerMixin {
 
-  override def settings: WavesSettings = DomainPresets.RideV6.copy(
+  override def settings: HearthSettings = DomainPresets.RideV6.copy(
     dbSettings = DomainPresets.RideV6.dbSettings.copy(storeStateHashes = true),
     restAPISettings = restAPISettings
   )
@@ -45,7 +45,7 @@ class DebugApiRouteSpec
 
   private val richAccount = TxHelpers.signer(905)
 
-  override def genesisBalances: Seq[AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 50_000.waves))
+  override def genesisBalances: Seq[AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 50_000.hearth))
 
   val block: Block = TestBlock.create(Nil).block
   val testStateHash: StateHash = {
@@ -91,13 +91,13 @@ class DebugApiRouteSpec
     val acc1 = TxHelpers.signer(1001)
     val acc2 = TxHelpers.signer(1002)
 
-    val initBalance = 10.waves
+    val initBalance = 10.hearth
 
     "works" in {
-      val tx1 = TxHelpers.transfer(acc2, acc1.toAddress, 1.waves)
-      val tx2 = TxHelpers.transfer(acc1, acc2.toAddress, 3.waves)
-      val tx3 = TxHelpers.transfer(acc2, acc1.toAddress, 4.waves)
-      val tx4 = TxHelpers.transfer(acc1, acc2.toAddress, 5.waves)
+      val tx1 = TxHelpers.transfer(acc2, acc1.toAddress, 1.hearth)
+      val tx2 = TxHelpers.transfer(acc1, acc2.toAddress, 3.hearth)
+      val tx3 = TxHelpers.transfer(acc2, acc1.toAddress, 4.hearth)
+      val tx4 = TxHelpers.transfer(acc1, acc2.toAddress, 5.hearth)
 
       domain.appendBlock(
         TxHelpers.massTransfer(
@@ -106,7 +106,7 @@ class DebugApiRouteSpec
             acc1.toAddress -> initBalance,
             acc2.toAddress -> initBalance
           ),
-          fee = 0.002.waves
+          fee = 0.002.hearth
         )
       )
       val initialHeight = domain.blockchain.height
@@ -160,7 +160,7 @@ class DebugApiRouteSpec
 
         val expectedResponse = Json.obj(
           "stateHash"                      -> field("stateHash"),
-          "wavesBalanceHash"               -> field("wavesBalanceHash"),
+          "hearthBalanceHash"              -> field("hearthBalanceHash"),
           "assetBalanceHash"               -> field("assetBalanceHash"),
           "leaseBalanceHash"               -> field("leaseBalanceHash"),
           "leaseStatusHash"                -> field("leaseStatusHash"),
@@ -191,9 +191,9 @@ class DebugApiRouteSpec
       Post(routePath("/validate"), HttpEntity(ContentTypes.`application/json`, tx.json().toString()))
 
     "takes the priority pool into account" in {
-      domain.appendBlock(TxHelpers.transfer(to = TxHelpers.secondAddress, amount = 1.waves + TestValues.fee))
+      domain.appendBlock(TxHelpers.transfer(to = TxHelpers.secondAddress, amount = 1.hearth + TestValues.fee))
 
-      val tx = TxHelpers.transfer(TxHelpers.secondSigner, TestValues.address, 1.waves)
+      val tx = TxHelpers.transfer(TxHelpers.secondSigner, TestValues.address, 1.hearth)
       validatePost(tx) ~> route ~> check {
         val json = responseAs[JsValue]
         (json \ "valid").as[Boolean] shouldBe true
@@ -202,7 +202,7 @@ class DebugApiRouteSpec
     }
 
     "valid tx" in {
-      val tx = TxHelpers.transfer(TxHelpers.defaultSigner, TestValues.address, 1.waves)
+      val tx = TxHelpers.transfer(TxHelpers.defaultSigner, TestValues.address, 1.hearth)
       validatePost(tx) ~> route ~> check {
         val json = responseAs[JsValue]
         (json \ "valid").as[Boolean] shouldBe true

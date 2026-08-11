@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.Logger
 import tech.hearth.block.Block
 import tech.hearth.lang.ValidationError
 import tech.hearth.mining.Miner
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.Blockchain
 import tech.hearth.transaction.BlockchainUpdater
 import tech.hearth.transaction.TxValidationError.GenericError
@@ -34,7 +34,7 @@ package object hearth {
         )(GenericError("Mismatched genesis blocks in configuration and blockchain"))
         .map(_ => miner.scheduleMining())
 
-  def checkGenesis(settings: WavesSettings, blockchainUpdater: Blockchain & BlockchainUpdater, miner: Miner): Unit = {
+  def checkGenesis(settings: HearthSettings, blockchainUpdater: Blockchain & BlockchainUpdater, miner: Miner): Unit = {
     (for {
       block <- Block.genesis(settings.blockchainSettings)
       _     <- checkOrAppend(block, blockchainUpdater, miner)

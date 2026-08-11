@@ -28,9 +28,9 @@ object Asset {
       }
   }
 
-  case object Waves extends Asset
+  case object Hearth extends Asset
 
-  val WavesName = "WAVES"
+  val HearthName = "HRTH"
 
   implicit val assetReads: Reads[IssuedAsset] = Reads {
     case JsString(str) => IssuedAsset.fromString(str, JsSuccess(_), JsError(_))
@@ -42,7 +42,7 @@ object Asset {
 
   implicit val assetIdReads: Reads[Asset] = assetReads(false)
   implicit val assetIdWrites: Writes[Asset] = Writes {
-    case Waves           => JsNull
+    case Hearth          => JsNull
     case IssuedAsset(id) => JsString(id.toString)
   }
 
@@ -55,39 +55,39 @@ object Asset {
     ConfigReader[String].emap(s => AssetPair.extractAssetId(s).fold(ex => Left(CannotConvert(s, "Asset", ex.getMessage)), Right(_)))
 
   def fromString(maybeStr: Option[String]): Asset = {
-    maybeStr.map(x => IssuedAsset(ByteStr.decodeBase16(x).get)).getOrElse(Waves)
+    maybeStr.map(x => IssuedAsset(ByteStr.decodeBase16(x).get)).getOrElse(Hearth)
   }
 
   def fromCompatId(maybeBStr: Option[ByteStr]): Asset = {
-    maybeBStr.fold[Asset](Waves)(IssuedAsset(_))
+    maybeBStr.fold[Asset](Hearth)(IssuedAsset(_))
   }
 
   implicit class AssetIdOps(private val ai: Asset) extends AnyVal {
     def byteRepr: Array[Byte] = ai match {
-      case Waves           => Array(0: Byte)
+      case Hearth          => Array(0: Byte)
       case IssuedAsset(id) => (1: Byte) +: id.arr
     }
 
     def compatId: Option[ByteStr] = ai match {
-      case Waves           => None
+      case Hearth          => None
       case IssuedAsset(id) => Some(id)
     }
 
     def maybeBase16Repr: Option[String] = ai match {
-      case Waves           => None
+      case Hearth          => None
       case IssuedAsset(id) => Some(id.toString)
     }
 
-    def fold[A](onWaves: => A)(onAsset: IssuedAsset => A): A = ai match {
-      case Waves                  => onWaves
+    def fold[A](onHearth: => A)(onAsset: IssuedAsset => A): A = ai match {
+      case Hearth                 => onHearth
       case asset @ IssuedAsset(_) => onAsset(asset)
     }
   }
 
-  def assetReads(allowWavesStr: Boolean): Reads[Asset] = Reads {
+  def assetReads(allowHearthStr: Boolean): Reads[Asset] = Reads {
     case json: JsString =>
-      if (json.value.isEmpty || (allowWavesStr && json.value == WavesName)) JsSuccess(Waves) else assetReads.reads(json)
-    case JsNull => JsSuccess(Waves)
+      if (json.value.isEmpty || (allowHearthStr && json.value == HearthName)) JsSuccess(Hearth) else assetReads.reads(json)
+    case JsNull => JsSuccess(Hearth)
     case _      => JsError("Expected base16-encoded assetId or null")
   }
 }

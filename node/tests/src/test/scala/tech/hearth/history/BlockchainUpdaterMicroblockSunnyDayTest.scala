@@ -3,7 +3,7 @@ package tech.hearth.history
 import tech.hearth.account.Address
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.WavesSettings
+import tech.hearth.settings.HearthSettings
 import tech.hearth.state.diffs.*
 import tech.hearth.test.*
 import tech.hearth.transaction.*
@@ -25,9 +25,9 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
     fee    <- smallFeeGen
     // More than the fee, or the transfers below would be for a negative amount: Alice has to afford exactly one of them
     amount <- Gen.choose(fee + 2, ENOUGH_AMT / 100)
-    masterToAlice: TransferTransaction = createWavesTransfer(master, alice.toAddress, amount, fee, ts).explicitGet()
-    aliceToBob                         = createWavesTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts).explicitGet()
-    aliceToBob2                        = createWavesTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts + 1).explicitGet()
+    masterToAlice: TransferTransaction = createHearthTransfer(master, alice.toAddress, amount, fee, ts).explicitGet()
+    aliceToBob                         = createHearthTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts).explicitGet()
+    aliceToBob2                        = createHearthTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts + 1).explicitGet()
   } yield (master, masterToAlice, aliceToBob, aliceToBob2)
 
   private def fundMaster(s: Setup): Seq[AddrWithBalance] = Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
@@ -40,18 +40,18 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
   // Its deposit is locked, so a generating balance has to come on top of it - a generator with nothing to generate on
   // is not among the ones a block is allowed to come from
   private def fundMasterAndCompetitor(s: Setup): Seq[AddrWithBalance] =
-    fundMaster(s) :+ AddrWithBalance(competitor.toAddress, CommitToGenerationTransaction.DepositInWavelets + 1000.waves)
+    fundMaster(s) :+ AddrWithBalance(competitor.toAddress, CommitToGenerationTransaction.DepositInEmbers + 1000.hearth)
 
-  private val withoutReward: WavesSettings = {
-    val bs = MicroblocksActivatedAt0WavesSettings.blockchainSettings
-    MicroblocksActivatedAt0WavesSettings.copy(blockchainSettings = bs.copy(rewardsSettings = bs.rewardsSettings.copy(initial = 0)))
+  private val withoutReward: HearthSettings = {
+    val bs = MicroblocksActivatedAt0HearthSettings.blockchainSettings
+    MicroblocksActivatedAt0HearthSettings.copy(blockchainSettings = bs.copy(rewardsSettings = withFlatReward(bs.rewardsSettings, 0)))
   }
 
   property("all txs in different blocks: B0 <- B1 <- B2 <- B3!") {
-    scenario(preconditionsAndPayments, DefaultWavesSettings, fundMaster) { case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
+    scenario(preconditionsAndPayments, DefaultHearthSettings, fundMaster) { case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
       domain.appendBlockAt(masterToAlice.timestamp)(masterToAlice)
       domain.appendBlockAt(aliceToBob.timestamp)(aliceToBob)
-      domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative waves balance")
+      domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative hearth balance")
 
       effBalance(master.toAddress, domain) > 0 shouldBe true
       effBalance(masterToAlice.recipient, domain) shouldBe 0L
@@ -63,11 +63,11 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
    * of the property below and is gone.
    */
   property("all txs in one block: B0 <- B0m1 <- B0m2 <- B0m3!") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings, fundMaster) {
+    scenario(preconditionsAndPayments, MicroblocksActivatedAt0HearthSettings, fundMaster) {
       case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
         domain.appendBlockAt(masterToAlice.timestamp)(masterToAlice)
         domain.appendMicroBlock(aliceToBob)
-        domain.appendMicroBlockE(aliceToBob2) should produce("negative waves balance")
+        domain.appendMicroBlockE(aliceToBob2) should produce("negative hearth balance")
 
         // effBalance is the minimum over the generating window, so an account credited in the liquid block is still
         // at zero there; what the micro block did shows up in the balances
@@ -78,12 +78,12 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
   }
 
   property("discards some of microBlocks: B0 <- B0m1 <- B0m2; B0m1 <- B1") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings, fundMaster) {
+    scenario(preconditionsAndPayments, MicroblocksActivatedAt0HearthSettings, fundMaster) {
       case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
         domain.appendBlockAt(masterToAlice.timestamp)(masterToAlice)
         domain.appendMicroBlock(aliceToBob)
         // On top of the micro block, so what it carries stays and the competing transfer cannot be paid for
-        domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative waves balance")
+        domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative hearth balance")
 
         effBalance(master.toAddress, domain) > 0 shouldBe true
         domain.balance(masterToAlice.recipient) shouldBe 1L
@@ -92,7 +92,7 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
   }
 
   property("discards all microBlocks: B0 <- B1 <- B1m1; B1 <- B2") {
-    scenario(preconditionsAndPayments, MicroblocksActivatedAt0WavesSettings, fundMaster) {
+    scenario(preconditionsAndPayments, MicroblocksActivatedAt0HearthSettings, fundMaster) {
       case (domain, (master, masterToAlice, aliceToBob, aliceToBob2)) =>
         val block1 = domain.appendBlockAt(masterToAlice.timestamp)(masterToAlice)
         // Built while the key block is still the head, so its state hash is the one that branch leads to

@@ -2,23 +2,23 @@ package tech.hearth.consensus
 
 import tech.hearth.state.Blockchain
 import tech.hearth.state.diffs.FeeValidation
-import tech.hearth.transaction.Asset.{IssuedAsset, Waves}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
 import tech.hearth.transaction.{Authorized, Transaction}
 
 object TransactionsOrdering {
-  trait WavesOrdering extends Ordering[Transaction] {
+  trait HearthOrdering extends Ordering[Transaction] {
     def isWhitelisted(t: Transaction): Boolean = false
     def transactionSize(tx: Transaction): Int  = tx.bytesSize
     def txTimestampOrder(ts: Long): Long
-    protected def feeInWaves(t: Transaction): Long = t.assetFee match {
-      case (Waves, fee) => fee
-      case _            => 0
+    protected def feeInHearth(t: Transaction): Long = t.assetFee match {
+      case (Hearth, fee) => fee
+      case _             => 0
     }
     private def orderBy(t: Transaction): (Boolean, Double, Long, Long) = {
       val byWhiteList = !isWhitelisted(t) // false < true
       val size        = transactionSize(t)
-      val byFee       = -feeInWaves(t)
+      val byFee       = -feeInHearth(t)
       val byTimestamp = txTimestampOrder(t.timestamp)
 
       (byWhiteList, byFee.toDouble / size.toDouble, byFee, byTimestamp)
@@ -29,12 +29,12 @@ object TransactionsOrdering {
     }
   }
 
-  object InBlock extends WavesOrdering {
+  object InBlock extends HearthOrdering {
     // sorting from network start
     override def txTimestampOrder(ts: Long): Long = -ts
   }
 
-  case class InUTXPool(whitelistAddresses: Set[String], blockchain: Blockchain) extends WavesOrdering {
+  case class InUTXPool(whitelistAddresses: Set[String], blockchain: Blockchain) extends HearthOrdering {
 
     override def transactionSize(tx: Transaction): Int = tx match {
       case _: ExchangeTransaction => 676 // order v3 with matcher fee in custom assets, tx V2
@@ -49,13 +49,13 @@ object TransactionsOrdering {
       }
     override def txTimestampOrder(ts: Long): Long = ts
 
-    override protected def feeInWaves(t: Transaction): Long = t.assetFee match {
-      case (Waves, fee)              => fee
+    override protected def feeInHearth(t: Transaction): Long = t.assetFee match {
+      case (Hearth, fee)             => fee
       case (asset: IssuedAsset, fee) =>
         // defensive fallback only - a tx admitted into the pool already passed feePortfolios, so the asset
         // necessarily exists and has a minAssetFee; None here would mean the asset vanished after admission
         blockchain.assetDescription(asset).fold(0L) { info =>
-          // fee is attacker-chosen and only bounded below (by minAssetFee), so the waves-equivalent can exceed
+          // fee is attacker-chosen and only bounded below (by minAssetFee), so the hearth-equivalent can exceed
           // Long range - this is purely a sort key, so saturate instead of throwing on overflow
           val normalized = BigInt(fee) * FeeValidation.FeeUnit / info.minAssetFee.value
           if (normalized.isValidLong) normalized.toLong else Long.MaxValue

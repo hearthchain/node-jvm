@@ -4,14 +4,14 @@ import tech.hearth.TestValues.fee
 import tech.hearth.account.AddressScheme
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.api.grpc.protobuf.GetBlockUpdateResponse
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order, OrderType}
 
 class BlockchainUpdatesGetBlockUpdatesSpec extends BlockchainUpdatesTestBase {
   "BlockchainUpdates getBlockUpdate tests" - {
     "BU-207. Return correct data for transfer" in {
-      val transferTx = TxHelpers.transfer(firstTxParticipant, secondTxParticipantAddress, amount, Waves, customFee)
+      val transferTx = TxHelpers.transfer(firstTxParticipant, secondTxParticipantAddress, amount, Hearth, customFee)
       withGenerateGetBlockUpdate(
         height = 2,
         settings = currentSettings,

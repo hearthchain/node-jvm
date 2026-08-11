@@ -138,7 +138,7 @@ object GenesisBlockGenerator {
             .mkString(",\n      ")}
            |    ]
            |    balances = [
-           |      ${snapshot.balances.map(x => s"""{recipient = "${x.recipient}", waves = ${x.waves}}""").mkString(",\n      ")}
+           |      ${snapshot.balances.map(x => s"""{recipient = "${x.recipient}", hearth = ${x.hearth}}""").mkString(",\n      ")}
            |    ]
            |  }
            |]

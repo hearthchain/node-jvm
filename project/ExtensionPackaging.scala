@@ -54,7 +54,7 @@ object ExtensionPackaging extends AutoPlugin {
       nodePackageName := (LocalProject("node") / Linux / packageName).value,
       debianPackageDependencies +=
         s"${(LocalProject("node") / Debian / packageName).value} (= ${(LocalProject("node") / version).value})",
-      // To write files to Waves NODE directory
+      // To write files to Hearth NODE directory
       linuxPackageMappings := getUniversalFolderMappings(
         nodePackageName.value,
         defaultLinuxInstallLocation.value,
@@ -66,13 +66,13 @@ object ExtensionPackaging extends AutoPlugin {
              |set -e
              |chown -R ${nodePackageName.value}:${nodePackageName.value} /usr/share/${nodePackageName.value}""".stripMargin
       ),
-      Linux / maintainer := "wavesplatform.com",
-      Linux / packageSummary := s"Waves node ${name.value}${network.value.packageSuffix} extension",
-      Linux / packageDescription := s"Waves node ${name.value}${network.value.packageSuffix} extension",
+      Linux / maintainer := "tech.hearth",
+      Linux / packageSummary := s"Hearth node ${name.value}${network.value.packageSuffix} extension",
+      Linux / packageDescription := s"Hearth node ${name.value}${network.value.packageSuffix} extension",
       Debian / normalizedName := s"${name.value}${network.value.packageSuffix}",
       Debian / packageName := s"${name.value}${network.value.packageSuffix}",
       libraryDependencies ++= Dependencies.logDeps,
-      run / javaOptions ++= extensionClasses.value.zipWithIndex.map { case (extension, index) => s"-Dwaves.extensions.$index=$extension" }
+      run / javaOptions ++= extensionClasses.value.zipWithIndex.map { case (extension, index) => s"-Dhearth.extensions.$index=$extension" }
     )
 
   // A copy of com.typesafe.sbt.packager.linux.LinuxPlugin.getUniversalFolderMappings

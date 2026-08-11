@@ -8,7 +8,7 @@ import tech.hearth.state.diffs.ENOUGH_AMT
 import tech.hearth.state.{BalanceSnapshot, GeneratorIndex, Height, Portfolio}
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.test.NumericExt
-import tech.hearth.transaction.CommitToGenerationTransaction.DepositInWavelets
+import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
 import tech.hearth.transaction.TxHelpers
 import org.scalactic.source.Position
 import org.scalatest.Assertion
@@ -48,28 +48,28 @@ class ConflictEndorserBlocksBasicSuite extends BaseFinalizationSpec {
     override def after5WithNewPeriodCheck                = notRemoved
   }.run()
 
-  "waves amount" in new Scenario[Long] {
-    override def getData = d => d.blockchain.wavesAmount(d.blockchain.height).toLong
+  "hearth amount" in new Scenario[Long] {
+    override def getData = d => d.blockchain.hearthAmount(d.blockchain.height).toLong
 
-    def base(height: Int): IgnorePosition[Long] = 200_000.waves + (height - 1) * 6.waves // init + n * mining rewards
+    def base(height: Int): IgnorePosition[Long] = 200_000.hearth + (height - 1) * 6.hearth // init + n * mining rewards
 
     override def after2WithCommitmentsCheck              = _ shouldBe base(2)
     override def after3WithNewPeriodAndEndorsementsCheck = _ shouldBe base(3)
-    override def after4WithPunishmentCheck               = _ shouldBe (base(4) - DepositInWavelets)
-    override def after5WithNewPeriodCheck                = _ shouldBe (base(5) - DepositInWavelets)
+    override def after4WithPunishmentCheck               = _ shouldBe (base(4) - DepositInEmbers)
+    override def after5WithNewPeriodCheck                = _ shouldBe (base(5) - DepositInEmbers)
   }.run()
 
-  "waves portfolio" in new Scenario[Portfolio] {
-    override def getData = d => d.blockchain.wavesPortfolio(conflictGeneratorAddr)
+  "hearth portfolio" in new Scenario[Portfolio] {
+    override def getData = d => d.blockchain.hearthPortfolio(conflictGeneratorAddr)
 
     val after1          = ENOUGH_AMT
     val after2          = after1 - TestValues.commitToGenerationFee
-    val portfolioAfter2 = Portfolio(balance = after2, generationDeposit = DepositInWavelets)
+    val portfolioAfter2 = Portfolio(balance = after2, generationDeposit = DepositInEmbers)
 
     override def after2WithCommitmentsCheck              = _ shouldBe portfolioAfter2
     override def after3WithNewPeriodAndEndorsementsCheck = _ shouldBe portfolioAfter2
-    override def after4WithPunishmentCheck               = _ shouldBe Portfolio(balance = after2 - DepositInWavelets)
-    override def after5WithNewPeriodCheck                = _ shouldBe Portfolio(balance = after2 - DepositInWavelets)
+    override def after4WithPunishmentCheck               = _ shouldBe Portfolio(balance = after2 - DepositInEmbers)
+    override def after5WithNewPeriodCheck                = _ shouldBe Portfolio(balance = after2 - DepositInEmbers)
   }.run()
 
   "balance at height" in new Scenario[(Int, Long)] {
@@ -80,8 +80,8 @@ class ConflictEndorserBlocksBasicSuite extends BaseFinalizationSpec {
 
     override def after2WithCommitmentsCheck              = _ shouldBe (2, after2)
     override def after3WithNewPeriodAndEndorsementsCheck = _ shouldBe (2, after2)
-    override def after4WithPunishmentCheck               = _ shouldBe (4, after2 - DepositInWavelets)
-    override def after5WithNewPeriodCheck                = _ shouldBe (4, after2 - DepositInWavelets)
+    override def after4WithPunishmentCheck               = _ shouldBe (4, after2 - DepositInEmbers)
+    override def after5WithNewPeriodCheck                = _ shouldBe (4, after2 - DepositInEmbers)
   }.run()
 
   "generator balance from API" in new Scenario[Option[Long]] { // Collected before applying block
@@ -101,7 +101,7 @@ class ConflictEndorserBlocksBasicSuite extends BaseFinalizationSpec {
     override def getData = d => d.blockchain.generatingBalance(conflictGeneratorAddr)
 
     val after1 = ENOUGH_AMT
-    val after2 = after1 - TestValues.commitToGenerationFee - DepositInWavelets
+    val after2 = after1 - TestValues.commitToGenerationFee - DepositInEmbers
 
     override def after2WithCommitmentsCheck              = _ shouldBe after2
     override def after3WithNewPeriodAndEndorsementsCheck = _ shouldBe after2
@@ -114,7 +114,7 @@ class ConflictEndorserBlocksBasicSuite extends BaseFinalizationSpec {
 
     val after1 = ENOUGH_AMT
     val after2 = after1 - TestValues.commitToGenerationFee
-    val after4 = after2 - DepositInWavelets
+    val after4 = after2 - DepositInEmbers
 
     override def after2WithCommitmentsCheck = _ should contain theSameElementsInOrderAs Seq(
       bs(height = 2, regularBalance = after2, deposits = 1) // Sent CommitToGeneration

@@ -1,21 +1,19 @@
-# Waves Node in Docker
+# Hearth Node in Docker
 
-## About Waves
-Waves is a decentralized platform that allows any user to issue, transfer, swap and trade custom blockchain tokens on an integrated peer-to-peer exchange. You can find more information about Waves at [waves.tech](https://waves.tech/) and in the official [documentation](https://docs.waves.tech).
+## About Hearth
+Hearth is a decentralized platform that allows any user to issue, transfer, swap and trade custom blockchain tokens on an integrated peer-to-peer exchange. You can find more information about Waves (the platform this project is forked from) at [waves.tech](https://waves.tech/) and in the official [documentation](https://docs.waves.tech).
 
 
 ## About the image
-This Docker image is focused on fast and convenient deployment of Waves Node.
-The image contains scripts and configs to run Waves Node for `mainnet`, `testnet` or `stagenet` networks.
-If you need to run node in private network, see [Waves private node](https://github.com/wavesplatform/Waves/tree/master/docker#waves-private-node) section.
-
-GitHub repository: https://github.com/wavesplatform/Waves/tree/master/docker
+This Docker image is focused on fast and convenient deployment of Hearth Node.
+The image contains scripts and configs to run Hearth Node for `mainnet`, `testnet` or `stagenet` networks.
+If you need to run node in private network, see [Hearth private node](#hearth-private-node) section.
 
 ## Prerequisites
-It is highly recommended to read more about [Waves Node configuration](https://docs.waves.tech/en/waves-node/node-configuration) before running the container.
+It is highly recommended to read more about [Waves Node configuration](https://docs.waves.tech/en/waves-node/node-configuration) before running the container, since Hearth Node's configuration format is derived from it.
 
 ## Building Docker image
-`./build-with-docker.sh && docker build -t wavesplatform/wavesnode docker` (from the repository root) - builds an image with the current local repository
+`./build-with-docker.sh && docker build -t hearth-node docker` (from the repository root) - builds an image with the current local repository
 
 **You can specify following arguments when building the image:**
 
@@ -32,106 +30,86 @@ It is highly recommended to read more about [Waves Node configuration](https://d
 
 ### Configuration options
 
-1. The image supports Waves Node config customization. To change a config field use corresponding JVM options. JVM options can be sent to JVM using `JAVA_OPTS` environment variable. Please refer to ([complete configuration file](https://github.com/wavesplatform/Waves/blob/master/node/src/main/resources/application.conf)) to get the full path of the configuration item you want to change.
+1. The image supports Hearth Node config customization. To change a config field use corresponding JVM options. JVM options can be sent to JVM using `JAVA_OPTS` environment variable.
 
     ```
-    docker run -v /docker/waves/waves-data:/var/lib/waves -v /docker/waves/waves-config:/etc/waves -p 6869:6869 -p 6862:6862 -e JAVA_OPTS="-Dwaves.rest-api.enable=yes -Dwaves.wallet.password=myWalletSuperPassword" -ti wavesplatform/wavesnode
+    docker run -v /docker/hearth/hearth-data:/var/lib/hearth -v /docker/hearth/hearth-config:/etc/hearth -p 6869:6869 -p 6862:6862 -e JAVA_OPTS="-Dhearth.rest-api.enable=yes -Dhearth.wallet.password=myWalletSuperPassword" -ti hearth-node
     ```
 
-2. Waves Node is looking for a config in the directory `/etc/waves/waves.conf` which can be mounted using Docker volumes. For custom networks, correct configuration file must be provided when running container. If you use `CUSTOM` network and `/etc/waves/waves.conf` is NOT found Waves Node container will exit.
+2. Hearth Node is looking for a config in the directory `/etc/hearth/hearth.conf` which can be mounted using Docker volumes. For custom networks, correct configuration file must be provided when running container. If you use `CUSTOM` network and `/etc/hearth/hearth.conf` is NOT found Hearth Node container will exit.
 
 3. You can use custom config  to override or the whole configuration. For additional information about Docker volumes mapping please refer to `Managing data` item.
 
 4. You can override the default executable by using the following syntax:
     ```
-    docker run -it wavesplatform/wavesnode [command] [args]
+    docker run -it hearth-node [command] [args]
     ```
 
 ### Environment variables
 
 The following environment variables can be passed to the container:
 
-| Env variable            | Description                                                                                                                                                                                                  |
-|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `WAVES_WALLET_SEED`     | Hex encoded seed, sets `-Dwaves.wallet.seed` system property.                                                                                                                                                |
-| `WAVES_WALLET_PASSWORD` | Password for the wallet file, sets `-Dwaves.wallet.password` system property.                                                                                                                                |
-| `WAVES_LOG_LEVEL`       | Node stdout logging level. Available values: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`. More details about logging are available [here](https://docs.waves.tech/en/waves-node/logging-configuration). |
-| `WAVES_HEAP_SIZE`       | Default Java Heap Size limit in -X Command-line Options notation (`-Xmx=[your value]`). More details [here](https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html).            |
-| `WAVES_NETWORK`         | Waves Blockchain network. Available values are `mainnet`, `testnet`, `stagenet`.                                                                                                                             |
-| `JAVA_OPTS`             | Additional Waves Node JVM configuration options. 	                                                                                                                                                           |
+| Env variable              | Description                                                                                                                                                                                                  |
+|---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `HEARTH_WALLET_SEED`      | Hex encoded seed, sets `-Dhearth.wallet.seed` system property.                                                                                                                                               |
+| `HEARTH_WALLET_PASSWORD`  | Password for the wallet file, sets `-Dhearth.wallet.password` system property.                                                                                                                               |
+| `HEARTH_LOG_LEVEL`        | Node stdout logging level. Available values: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`.                                                                                                               |
+| `HEARTH_HEAP_SIZE`        | Default Java Heap Size limit in -X Command-line Options notation (`-Xmx=[your value]`). More details [here](https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html).           |
+| `HEARTH_NETWORK`          | Hearth Blockchain network. Available values are `mainnet`, `testnet`, `stagenet`.                                                                                                                            |
+| `JAVA_OPTS`                | Additional Hearth Node JVM configuration options. 	                                                                                                                                                          |
 
 All environment variables are optional, however you need to specify at least the desired network and wallet password (via environment variables, additional system properties defined in the `JAVA_OPTS` environment variable, or in the config file). 
 
 ### Managing data
-We recommend to store the blockchain state as well as Waves configuration on the host side. As such, consider using Docker volumes mapping to map host directories inside the container:
+We recommend to store the blockchain state as well as Hearth configuration on the host side. As such, consider using Docker volumes mapping to map host directories inside the container:
 
 **Example:**
 
-1. Create a directory to store Waves data:
+1. Create a directory to store Hearth data:
 
 ```
-mkdir -p /docker/waves
-mkdir /docker/waves/waves-data
-mkdir /docker/waves/waves-config
+mkdir -p /docker/hearth
+mkdir /docker/hearth/hearth-data
+mkdir /docker/hearth/hearth-config
 ```
 
 Once container is launched it will create:
 
-- three subdirectories in `/docker/waves/waves-data`:
+- three subdirectories in `/docker/hearth/hearth-data`:
 ```
-/docker/waves/waves-data/log    - Waves Node logs
-/docker/waves/waves-data/data   - Waves Blockchain state
-/docker/waves/waves-data/wallet - Waves Wallet data
+/docker/hearth/hearth-data/log    - Hearth Node logs
+/docker/hearth/hearth-data/data   - Hearth Blockchain state
+/docker/hearth/hearth-data/wallet - Hearth Wallet data
 ```
-- `/docker/waves/waves-config/waves.conf` - default Waves config
+- `/docker/hearth/hearth-config/hearth.conf` - default Hearth config
 
 
-3. If you already have Waves Node configuration/data - place it in the corresponding directories
+3. If you already have Hearth Node configuration/data - place it in the corresponding directories
 
 4. Add the appropriate arguments to ```docker run``` command: 
 ```
-docker run -v /docker/waves/waves-data:/var/lib/waves -v /docker/waves/waves-config:/etc/waves -e WAVES_NETWORK=stagenet -e WAVES_WALLET_PASSWORD=myWalletSuperPassword -ti wavesplatform/wavesnode
+docker run -v /docker/hearth/hearth-data:/var/lib/hearth -v /docker/hearth/hearth-config:/etc/hearth -e HEARTH_NETWORK=stagenet -e HEARTH_WALLET_PASSWORD=myWalletSuperPassword -ti hearth-node
 ```
 
 ### Blockchain state
 
-If you are a Waves Blockchain newbie and launching Waves Node for the first time be aware that after launch it will start downloading the whole blockchain state from the other nodes. During this download it will be verifying all blocks one after another. This procedure can take some time.
-
-You can speed this process up by downloading a compressed blockchain state from our official resources, extract it and mount inside the container (as discussed in the previous section). In this scenario Waves Node skips block verifying. This is a reason why it takes less time. This is also a reason why you must download blockchain state *only from our official resources*.
-
-**Note**: We do not guarantee the state consistency if it's downloaded from third-parties.
-
-|Network     |Link          |
-|------------|--------------|
-|`mainnet`   | http://blockchain.wavesnodes.com/blockchain_last.tar |
-|`testnet`   | http://blockchain-testnet.wavesnodes.com/blockchain_last.tar  |
-|`stagenet`  | http://blockchain-stagenet.wavesnodes.com/blockchain_last.tar |
-
-
-**Example:**
-```
-mkdir -p /docker/waves/waves-data
-
-wget -qO- http://blockchain-stagenet.wavesnodes.com/blockchain_last.tar --show-progress | tar -xvf - -C /docker/waves/waves-data
-
-docker run -v /docker/waves/waves-data:/var/lib/waves wavesplatform/Node -e WAVES_NETWORK=stagenet -e WAVES_WALLET_PASSWORD=myWalletSuperPassword -ti wavesplatform/wavesnode
-```
+If you are launching Hearth Node for the first time be aware that after launch it will start downloading the whole blockchain state from the other nodes. During this download it will be verifying all blocks one after another. This procedure can take some time.
 
 ### Network Ports
 
-1. REST-API interaction with Node. Details are available [here](https://docs.waves.tech/en/waves-node/node-configuration#rest-api-settings).
+1. REST-API interaction with Node.
 
-2. Waves Node communication port for incoming connections. Details are available [here](https://docs.waves.tech/en/waves-node/node-configuration#network-settings).
+2. Hearth Node communication port for incoming connections.
 
 
 **Example:**
 Below command will launch a container:
 - with REST-API port enabled and configured on the socket `0.0.0.0:6870`
-- Waves node communication port enabled and configured on the socket `0.0.0.0:6868`
+- Hearth node communication port enabled and configured on the socket `0.0.0.0:6868`
 - Ports `6868` and `6870` mapped from the host to the container
 
 ```
-docker run -v /docker/waves/waves-data:/var/lib/waves -v /docker/waves/waves-config:/etc/waves -p 6870:6870 -p 6868:6868 -e JAVA_OPTS="-Dwaves.network.declared-address=0.0.0.0:6868 -Dwaves.rest-api.port=6870 -Dwaves.rest-api.bind-address=0.0.0.0 -Dwaves.rest-api.enable=yes" -e WAVES_WALLET_PASSWORD=myWalletSuperPassword -e WAVES_NETWORK=stagenet -ti wavesplatform/wavesnode
+docker run -v /docker/hearth/hearth-data:/var/lib/hearth -v /docker/hearth/hearth-config:/etc/hearth -p 6870:6870 -p 6868:6868 -e JAVA_OPTS="-Dhearth.network.declared-address=0.0.0.0:6868 -Dhearth.rest-api.port=6870 -Dhearth.rest-api.bind-address=0.0.0.0 -Dhearth.rest-api.enable=yes" -e HEARTH_WALLET_PASSWORD=myWalletSuperPassword -e HEARTH_NETWORK=stagenet -ti hearth-node
 ```
 
 Check that REST API is up by navigating to the following URL from the host side:
@@ -140,28 +118,28 @@ http://localhost:6870/api-docs/index.html
 ### Extensions
 You can run custom extensions in this way:
 1. Copy all lib/*.jar files from extension to any directory, lets say `plugins`
-2. Add extension class to configuration file, lets say `local.conf`, located in `config` directory containing also `waves.conf`:
+2. Add extension class to configuration file, lets say `local.conf`, located in `config` directory containing also `hearth.conf`:
 ```hocon
-waves.extensions += com.johndoe.WavesExtension
+hearth.extensions += com.johndoe.HearthExtension
 ```
-3. Run `docker run -v "$(pwd)/plugins:/usr/share/waves/lib/plugins" -v "$(pwd)/config:/etc/waves" -i wavesplatform/wavesnode`
+3. Run `docker run -v "$(pwd)/plugins:/usr/share/hearth/lib/plugins" -v "$(pwd)/config:/etc/hearth" -i hearth-node`
 
-## Waves private node
+## Hearth private node
 
-The image is useful for developing dApps and other smart contracts on Waves blockchain.
+The image is useful for developing dApps and other smart contracts on the Hearth blockchain.
 
 ### Getting started
 
 To run the node,\
-`docker run -d --name waves-private-node -p 6869:6869 wavesplatform/waves-private-node`
+`docker run -d --name hearth-private-node -p 6869:6869 hearth-private-node`
 
 To view node API documentation, open http://localhost:6869/
 
 ### Preserve blockchain state
 
 If you want to keep the blockchain state, then just stop the container instead of killing it, and start it again when needed:\
-`docker stop waves-private-node`
-`docker start waves-private-node`
+`docker stop hearth-private-node`
+`docker start hearth-private-node`
 
 ### Configuration details
 
@@ -170,23 +148,13 @@ The node is configured with:
 - faster generation of blocks (**10 sec** interval)
 - all features pre-activated
 - custom chain id - **R**
-- api_key `waves-private-node`
-- default miner account with all Waves tokens (you can distribute these tokens to other accounts as you wish):
-  ```
-  rich account:
-      Seed text:           waves private node seed with waves tokens
-      Seed:                TBXHUUcVx2n3Rgszpu5MCybRaR86JGmqCWp7XKh7czU57ox5dgjdX4K4
-      Account seed:        HewBh5uTNEGLVpmDPkJoHEi5vbZ6uk7fjKdP5ghiXKBs
-      Private account key: 83M4HnCQxrDMzUQqwmxfTVJPTE9WdE7zjAooZZm2jCyV
-      Public account key:  AXbaBkJNocyrVpwqTzD4TpUY8fQ6eeRto9k1m2bNCzXV
-      Account address:     3M4qwDomRabJKLZxuXhwfqLApQkU592nWxF
-  ```
+- api_key `hearth-private-node`
 
-Full node configuration is available on Github in `waves.custom.conf`: https://github.com/wavesplatform/Waves/blob/master/docker/private/waves.custom.conf
+Full node configuration is available in [`docker/private/hearth.custom.conf`](./private/hearth.custom.conf).
 
 ### Image tags
 
 You can use the following tags:
 
 - `latest` - current version of Mainnet
-- `vX.X.X` - specific version of Waves Node
+- `vX.X.X` - specific version of Hearth Node

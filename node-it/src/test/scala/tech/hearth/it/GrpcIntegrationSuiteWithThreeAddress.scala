@@ -28,12 +28,12 @@ trait GrpcIntegrationSuiteWithThreeAddress extends BaseSuite with ScalaFutures w
   abstract protected override def beforeAll(): Unit = {
     super.beforeAll()
 
-    val defaultBalance: Long = 100.waves
+    val defaultBalance: Long = 100.hearth
 
     def dumpBalances(node: Node, accounts: Seq[ByteString], label: String): Unit = {
       accounts.foreach(acc => {
-        val balance = node.wavesBalance(acc).available
-        val eff     = node.wavesBalance(acc).effective
+        val balance = node.hearthBalance(acc).available
+        val eff     = node.hearthBalance(acc).effective
 
         val formatted = s"$acc: balance = $balance, effective = $eff"
         log.debug(s"$label account balance:\n$formatted")
@@ -78,8 +78,8 @@ trait GrpcIntegrationSuiteWithThreeAddress extends BaseSuite with ScalaFutures w
       }
 
       dumpBalances(sender, accounts, "after transfer")
-      accounts.foreach(acc => miner.wavesBalance(acc).available shouldBe defaultBalance)
-      accounts.foreach(acc => miner.wavesBalance(acc).effective shouldBe defaultBalance)
+      accounts.foreach(acc => miner.hearthBalance(acc).available shouldBe defaultBalance)
+      accounts.foreach(acc => miner.hearthBalance(acc).effective shouldBe defaultBalance)
     }
 
     withClue("beforeAll") {

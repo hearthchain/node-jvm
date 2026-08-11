@@ -7,7 +7,7 @@ import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.sync.*
 import tech.hearth.it.transactions.BaseTransactionSuite
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Waves
+import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
@@ -26,10 +26,10 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     Order.V2,
     OrderAuthentication(PublicKey.fromBase16String("a10aed0ecba98e825c9a7eeeca56765e167fbf007d8125c39726b49bed267a6e").explicitGet()),
     PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-    AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+    AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
     OrderType.BUY,
     TxExchangeAmount.unsafeFrom(2),
-    TxOrderPrice.unsafeFrom(60.waves),
+    TxOrderPrice.unsafeFrom(60.hearth),
     tsOrderFrom,
     tsOrderTo,
     TxMatcherFee.unsafeFrom(1)
@@ -39,10 +39,10 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     Order.V1,
     OrderAuthentication(PublicKey.fromBase16String("5c845a492f0442dc2436d2fc6ff81135ea2b0303fde95c73a8fcbb8a03104f60").explicitGet()),
     PublicKey.fromBase16String("ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716").explicitGet(),
-    AssetPair.createAssetPair("WAVES", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
+    AssetPair.createAssetPair("HRTH", "7f1e3bff006ffd7f80fdb1a0f4008765faff2c8080ff01ff017f807fffff0100").get,
     OrderType.SELL,
     TxExchangeAmount.unsafeFrom(3),
-    TxOrderPrice.unsafeFrom(50.waves),
+    TxOrderPrice.unsafeFrom(50.hearth),
     tsOrderFrom,
     tsOrderTo,
     TxMatcherFee.unsafeFrom(2)
@@ -53,7 +53,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
       buyV2,
       sell,
       2,
-      50.waves,
+      50.hearth,
       1,
       1,
       1,
@@ -111,11 +111,11 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
   private lazy val mass = MassTransferTransaction
     .create(
       publicKey,
-      Waves,
+      Hearth,
       MassTransferTransaction
-        .parseTransfersList(List(Transfer(firstKeyPair.toAddress.toString, 1.waves), Transfer(secondKeyPair.toAddress.toString, 2.waves)))
+        .parseTransfersList(List(Transfer(firstKeyPair.toAddress.toString, 1.hearth), Transfer(secondKeyPair.toAddress.toString, 2.hearth)))
         .explicitGet(),
-      2.waves,
+      2.hearth,
       ts,
       ByteStr.decodeBase16("6d617373706179").get,
       Proofs(
@@ -135,9 +135,9 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     .create(
       publicKey,
       recipient,
-      Waves,
+      Hearth,
       100000000,
-      Waves,
+      Hearth,
       minFee,
       ByteStr.empty,
       ts,

@@ -24,7 +24,7 @@ message BlockMeta {
   int64 reward = 9;
   bytes vrf = 10;
   bytes total_score = 11;
-  int64 total_waves_amount = 12;
+  int64 total_hearth_amount = 12;
 }
 
 message TransactionMeta {
@@ -54,7 +54,7 @@ message EthereumTransactionMeta {
 message TransactionData {
   oneof transaction {
     bytes legacy_bytes = 1;
-    SignedTransaction waves_transaction = 2;
+    SignedTransaction hearth_transaction = 2;
     bytes ethereum_transaction = 5;
   }
   TransactionStatus status = 3;
