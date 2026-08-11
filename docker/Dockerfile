@@ -17,7 +17,6 @@ SHELL ["/bin/bash", "-c"]
 ENV HEARTH_DATA=/var/lib/hearth
 ENV HEARTH_LOG=/var/log/hearth
 ENV HEARTH_INSTALL_PATH=/usr/share/hearth
-ENV HEARTH_CONFIG=/etc/hearth/hearth.conf
 
 RUN apt-get update && apt-get install -y --no-install-recommends wget curl ca-certificates
 

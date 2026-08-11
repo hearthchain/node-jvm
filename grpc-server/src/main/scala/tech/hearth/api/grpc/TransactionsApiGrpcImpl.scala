@@ -95,13 +95,6 @@ class TransactionsApiGrpcImpl(blockchain: Blockchain, commonApi: CommonTransacti
       )
     }
 
-  // Invoke script results no longer exist (no InvokeScript transaction type); this RPC is deprecated in the proto
-  // and kept only so the service still binds, always streaming nothing.
-  override def getStateChanges(request: TransactionsRequest, responseObserver: StreamObserver[InvokeScriptResultResponse]): Unit =
-    responseObserver.interceptErrors {
-      responseObserver.completeWith(Observable.empty)
-    }
-
   override def getStatuses(request: TransactionsByIdRequest, responseObserver: StreamObserver[TransactionStatus]): Unit =
     responseObserver.interceptErrors {
       val result = Observable(request.transactionIds*).map { txId =>

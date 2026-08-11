@@ -4,6 +4,7 @@ JAVA_OPTS="-XX:+ExitOnOutOfMemoryError
   -Xmx${HEARTH_HEAP_SIZE}
   --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
   --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+  --enable-native-access=ALL-UNNAMED
   -Dlogback.stdout.level=${HEARTH_LOG_LEVEL}
   -Dlogback.file.directory=${HEARTH_LOG}
   -Dlogback.file.level=TRACE
