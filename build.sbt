@@ -132,7 +132,12 @@ commands += Command.command("packageAll") { state =>
 }
 
 lazy val buildTarballsForDocker = taskKey[Unit]("Package node and grpc-server tarballs and copy them to docker/target")
-buildTarballsForDocker := {
+// Writes outside sbt2's tracked output paths (docker/target/*.tgz), so ActionCache has no way to know
+// those files are this task's real output; on a cache hit it replays success without re-running
+// IO.copyFile, silently leaving docker/target empty (see "SBT 2 action-cache: buildTarballsForDocker"
+// in CLAUDE.md). Def.uncached forces this task to actually run its body every time, like every other
+// filesystem-side-effecting task in this build.
+buildTarballsForDocker := Def.uncached {
   val conv = fileConverter.value
   IO.copyFile(
     conv.toPath((node / Universal / packageZipTarball).value).toFile,

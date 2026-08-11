@@ -537,6 +537,38 @@ defined`) is unrelated and pre-existing — confirmed by running the pre-migrati
 picked up from `~/.m2`/mavenLocal between whenever `TransactionsApiGrpcImpl` was last touched and now, not anything
 either this pass or the SBT 2 migration changed.
 
+## SBT 2 action-cache: `buildTarballsForDocker`
+
+`run-integration-tests` (`.github/workflows/check-pr.yaml`) failed `sbt --batch "node-it/docker;node-it/test"` with
+`ERROR: failed to calculate checksum of ref ...: "/target": not found` the moment `docker build` hit its
+`RUN --mount=type=bind,source=target,target=/tmp/` step. `node-it/build.sbt`'s `docker` task depends on the root
+`buildTarballsForDocker` (`build.sbt`) specifically to populate `docker/target/{hearth,hearth-grpc-server}.tgz`
+before invoking `docker build` from the `docker/` directory, and the CI log's own `[internal] load build context`
+step confirms the bug directly: it transferred only `1.15kB`, not the ~196MB the two tarballs total, so
+`docker/target/` was empty when the build context was captured, despite `buildTarballsForDocker` having reported
+success moments earlier in the same log.
+
+Root cause, reproduced locally: `buildTarballsForDocker` writes its output via `IO.copyFile` straight to
+`docker/target/*.tgz`, a path sbt's dependency/output tracking has no visibility into (it isn't a declared task
+output, just an out-of-band filesystem write). Under sbt 1 every run of a task like this just re-executes its body;
+sbt 2's `ActionCache` instead treats every task as cacheable by default and, on a cache hit, replays the cached
+result *without re-running the body* — for a `Unit`-returning task whose entire purpose is a side effect, that
+means the copy silently never happens. Confirmed by deleting `docker/target/` and running
+`sbt buildTarballsForDocker` twice in a row with no source changes: the first run recreates the tarballs, the
+second reports `[success]` in a few seconds (upstream tasks' log lines even replay) but leaves `docker/target/`
+missing entirely - the exact shape of the CI failure. `setup-java`'s `cache: 'sbt'` in the workflow persists this
+action-cache directory *across* CI runs for the same PR, which is what lets a stale hit strike on a fresh checkout
+where the actual `docker/target/` directory obviously doesn't exist yet.
+
+This is the same class of problem the SBT 2 migration already had to fix for `classpathOrdering`,
+`compilePRRaw`, `IntegrationTestsPlugin`'s `logDirectory`/`testGrouping`, and `benchmark/build.sbt`'s `Jmh / compile`
+(all wrapped in `Def.uncached` in the migration commit, see their entries elsewhere in this file for why each one
+needed it) - `buildTarballsForDocker` just wasn't caught at the time since it only got the mandatory
+`FileConverter`/`toFileRef` syntax updates to compile under sbt 2, not an audit for cacheability. Fixed the same
+way: wrapped its body in `Def.uncached`, which forces the task to actually run every time regardless of what the
+action-cache thinks it already knows. Any other task in this build that performs a filesystem write to a path
+outside its own declared outputs is a candidate for the same bug and needs the same treatment.
+
 ## node-it fixtures
 
 `template.conf`'s genesis section is on the current `balances`/`generators` schema (bech32 addresses), not the old
