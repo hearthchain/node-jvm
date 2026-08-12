@@ -470,6 +470,105 @@ commit-to-generation). Constructing one directly no longer takes a version argum
 `StateUpdate`/`TransactionMetadata` lost their data-entry, script and alias fields and oneof branches along with the
 features that produced them.
 
+## SBT 2 unused-settings lint
+
+`sbt compile`/`sbt compilePR` surfaced a fresh "there are 24 keys that are not used by any other settings/tasks"
+warning right after the SBT 2 migration. Checking out the pre-migration commit and running the exact same
+`node`/`grpc-server`/`build.sbt` files under a real sbt 1.12.14 shows zero such warnings, so this looked at first
+like new dead weight from the migration — it isn't. `sbt-native-packager 1.11.7` cross-publishes separate jars for
+sbt 1 (`sbt-native-packager_2.12_1.0`) and sbt 2 (`sbt-native-packager_sbt2_3`), but its GitHub source tree shows
+`DebianPlugin.scala`/`LinuxPlugin.scala`/`JavaServerApplication.scala` living under the *shared* `src/main/scala`
+directory, identical in both builds — only two small `xsbti.FileConverter` compat shims differ, under
+`src/main/scala-2.12`/`scala-3`. The settings graph these plugins wire up — which key's value feeds which other
+key's `.value` call — is therefore byte-for-byte the same on both sbt versions; sbt 1's own lint just never caught
+these particular keys, and sbt 2's is more thorough at the same check (plausibly a side effect of its
+action-cache rearchitecture needing a much more precise live/dead distinction across the settings graph than sbt 1
+ever needed). All 24 keys were confirmed dead by reading the plugin source directly and cross-checking with
+`inspect tree`/`inspect uses` against this build, not by assumption:
+
+- `Rpm/*` (`node`): `RpmPlugin` cannot be disabled — `JavaAppPackaging` has it as a hard `requires`, not a trigger;
+  `disablePlugins(RpmPlugin)` fails project load outright with `Failed to sort ... topologically`. This repo never
+  runs an Rpm packaging task regardless (only Debian + Universal tarballs, see `packageAll`/`buildDebPackages`/
+  `buildTarballsForDocker`). Separately, `JavaServerApplication.scala`'s "Daemon User and Group" block
+  (`Rpm / daemonUser := (Linux / daemonUser).value` etc.) and `RpmPlugin`'s own `Rpm / executableScriptName`/
+  `Rpm / name` bridges are dead **even when Rpm packaging is used**, on any project: the actual mustache-replacement
+  machinery (`linuxScriptReplacements`) reads the `Linux`-scoped settings directly and never touches these
+  Rpm-scoped copies — a real (harmless) gap in the plugin itself, not something specific to this repo's config.
+- `node / Linux / javaOptions`: `JavaServerAppPackaging` unconditionally derives
+  `Linux / javaOptions := (Universal / javaOptions).value`. The JVM options this repo actually cares about
+  (`-J-Xmx2g` etc., `node/build.sbt`) are defined exactly once, at `Universal` scope, and baked into the Universal
+  launcher script that node's own `systemd.service` template invokes via `ExecStart`. The `Linux`-scoped copy exists
+  only to feed a classic SysV init script's inline JVM flags (`SystemVPlugin`), which node never uses (it uses
+  `SystemdPlugin`) — so options aren't really defined twice by this repo, just once here plus one unused
+  plugin-provided derived copy.
+- `Debian/executableScriptName`, `Universal/executableScriptName`, `Universal-src/name`, and (for `grpc-server` only)
+  `Debian/sourceDirectory`: `DebianPlugin`/`UniversalPlugin` define these as bridges from `Linux`/`Universal` scope,
+  same dead-by-design pattern as the Rpm ones above — confirmed with `inspect tree Debian/linuxScriptReplacements`,
+  which resolves through scope delegation straight to `Linux/linuxScriptReplacements` and never touches the
+  Debian-scoped copies.
+- `node / Debian / daemonUser`/`daemonUserUid`/`daemonGroup`/`daemonGroupGid`: `JavaServerApplication.scala`'s
+  "Daemon User and Group" block, Debian side — same dead bridge as the Rpm ones above. Separately, this repo's own
+  `node/src/package/debian/{postinst,postrm,prerm}` hardcode the account name from `${{app_name}}` rather than
+  reading `daemon_user`/`daemon_group` replacements at all (see "node-it fixtures" for the analogous
+  `${{app_name}}` mustache convention), since `maintainerScripts` there is fully hand-authored, not templated — so
+  even a hypothetical upstream fix wiring these settings up would still find no consumer here.
+- `node / debianControlScriptsDirectory`: unused only for `node`, not `grpc-server`. `node/build.sbt`'s
+  `Debian / maintainerScripts := maintainerScriptsFromDirectory(...)` is a plain `:=` that fully replaces
+  `DebianPlugin`'s default `Debian / maintainerScripts` — the only setting that ever reads
+  `debianControlScriptsDirectory` — with hand-authored scripts. `grpc-server`'s `ExtensionPackaging` instead does
+  `maintainerScripts := maintainerScriptsAppend((Debian / maintainerScripts).value - Postinst)(...)`, which reads
+  the *old* value first and so keeps that default (and `debianControlScriptsDirectory`) reachable — confirmed with
+  `inspect tree node/Debian/maintainerScripts` (stops at `Debian/packageSource`, no plugin default in the tree) vs.
+  `inspect tree grpc-server/Debian/maintainerScripts` (does include it).
+- `gitDescribedVersion` (every subproject): `sbt-git`'s `GitPlugin` injects this per-project unconditionally, but
+  only the root's `enablePlugins(GitVersioning)` wires `version := gitDescribedVersion.value` — this repo
+  deliberately versions every module from one root git descriptor rather than per-module, confirmed with
+  `inspect uses gitDescribedVersion` (only `ThisBuild/version` and `hearth-node/version` show up as consumers). Its
+  key reference needs the `git.` prefix (`git.gitDescribedVersion`) in `excludeLintKeys`, unlike the other keys
+  here — it lives under `SbtGit.GitKeys`, exposed via the `git` settings object already used elsewhere in
+  `build.sbt` (`git.useGitDescribe`), not as a bare top-level import.
+
+None of the above are fixable from this repo's side beyond `excludeLintKeys` (`build.sbt`): the keys are defined the
+moment their owning plugin is enabled, sbt has no API to retract a key another plugin's `AutoPlugin.projectSettings`
+already added, and overriding a dead key's *value* doesn't remove it from the graph or change whether anything reads
+it. `TransactionsApiGrpcImpl` failing to compile (`needs to be abstract, since def getStateChanges ... is not
+defined`) is unrelated and pre-existing — confirmed by running the pre-migration commit's unmodified
+`grpc-server` sources under sbt 1.12.14 too; almost certainly a `tech.hearth:protobuf-schemas:0.1.0-SNAPSHOT` drift
+picked up from `~/.m2`/mavenLocal between whenever `TransactionsApiGrpcImpl` was last touched and now, not anything
+either this pass or the SBT 2 migration changed.
+
+## SBT 2 action-cache: `buildTarballsForDocker`
+
+`run-integration-tests` (`.github/workflows/check-pr.yaml`) failed `sbt --batch "node-it/docker;node-it/test"` with
+`ERROR: failed to calculate checksum of ref ...: "/target": not found` the moment `docker build` hit its
+`RUN --mount=type=bind,source=target,target=/tmp/` step. `node-it/build.sbt`'s `docker` task depends on the root
+`buildTarballsForDocker` (`build.sbt`) specifically to populate `docker/target/{hearth,hearth-grpc-server}.tgz`
+before invoking `docker build` from the `docker/` directory, and the CI log's own `[internal] load build context`
+step confirms the bug directly: it transferred only `1.15kB`, not the ~196MB the two tarballs total, so
+`docker/target/` was empty when the build context was captured, despite `buildTarballsForDocker` having reported
+success moments earlier in the same log.
+
+Root cause, reproduced locally: `buildTarballsForDocker` writes its output via `IO.copyFile` straight to
+`docker/target/*.tgz`, a path sbt's dependency/output tracking has no visibility into (it isn't a declared task
+output, just an out-of-band filesystem write). Under sbt 1 every run of a task like this just re-executes its body;
+sbt 2's `ActionCache` instead treats every task as cacheable by default and, on a cache hit, replays the cached
+result *without re-running the body* — for a `Unit`-returning task whose entire purpose is a side effect, that
+means the copy silently never happens. Confirmed by deleting `docker/target/` and running
+`sbt buildTarballsForDocker` twice in a row with no source changes: the first run recreates the tarballs, the
+second reports `[success]` in a few seconds (upstream tasks' log lines even replay) but leaves `docker/target/`
+missing entirely - the exact shape of the CI failure. `setup-java`'s `cache: 'sbt'` in the workflow persists this
+action-cache directory *across* CI runs for the same PR, which is what lets a stale hit strike on a fresh checkout
+where the actual `docker/target/` directory obviously doesn't exist yet.
+
+This is the same class of problem the SBT 2 migration already had to fix for `classpathOrdering`,
+`compilePRRaw`, `IntegrationTestsPlugin`'s `logDirectory`/`testGrouping`, and `benchmark/build.sbt`'s `Jmh / compile`
+(all wrapped in `Def.uncached` in the migration commit, see their entries elsewhere in this file for why each one
+needed it) - `buildTarballsForDocker` just wasn't caught at the time since it only got the mandatory
+`FileConverter`/`toFileRef` syntax updates to compile under sbt 2, not an audit for cacheability. Fixed the same
+way: wrapped its body in `Def.uncached`, which forces the task to actually run every time regardless of what the
+action-cache thinks it already knows. Any other task in this build that performs a filesystem write to a path
+outside its own declared outputs is a candidate for the same bug and needs the same treatment.
+
 ## node-it fixtures
 
 `template.conf`'s genesis section is on the current `balances`/`generators` schema (bech32 addresses), not the old

@@ -2,7 +2,7 @@ enablePlugins(JmhPlugin)
 
 Jmh / version := "1.37"
 
-incOptions := incOptions.value.withEnabled(false)
+incOptions := Def.uncached(incOptions.value.withEnabled(false))
 exportPipelining := false
 
 Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
@@ -10,7 +10,7 @@ Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
 libraryDependencies ++= Seq(
   "org.scodec"             %% "scodec-core"         % "2.3.3",
   "org.eclipse.collections" % "eclipse-collections" % "13.0.0",
-  "commons-codec"           % "commons-codec"       % "1.22.0",
+  "commons-codec"           % "commons-codec"       % "1.22.1",
   "org.apache.commons"      % "commons-lang3"       % "3.20.0"
 ) ++ Dependencies.logDeps
 
@@ -21,7 +21,7 @@ inConfig(Jmh)(
     classDirectory      := (Test / classDirectory).value,
     dependencyClasspath := (Test / dependencyClasspath).value,
     // rewire tasks, so that 'jmh:run' automatically invokes 'jmh:compile' (otherwise a clean 'jmh:run' would fail)
-    compile := compile.dependsOn(Test / compile).value,
+    compile := Def.uncached(compile.dependsOn(Test / compile).value),
     run     := run.dependsOn(compile).evaluated
   )
 )

@@ -1,5 +1,6 @@
 import sbt.*
 import sbt.Keys.{test, version, name}
+import sbt.protocol.testing.TestResult
 import sbtassembly.AssemblyKeys.{assembly, assemblyMergeStrategy}
 import sbtassembly.AssemblyPlugin.autoImport.assemblyJarName
 import sbtassembly.{MergeStrategy, PathList}
@@ -9,12 +10,11 @@ object CommonSettings extends AutoPlugin {
 
   override def trigger: PluginTrigger = allRequirements
 
-  // These options doesn't work for ScalaJS
   override def projectSettings: Seq[Def.Setting[?]] = Seq()
 
   val assemblySettings: Seq[Def.Setting[?]] = Seq(
     assemblyJarName := s"${name.value}-all-${version.value}.jar",
-    test            := {},
+    test            := TestResult.Passed,
     assemblyMergeStrategy := {
       case p
           if p.endsWith(".proto") ||

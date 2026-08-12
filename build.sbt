@@ -1,11 +1,3 @@
-/* IDEA notes
- * May require to delete .idea and re-import with all checkboxes
- * Worksheets may not work: https://youtrack.jetbrains.com/issue/SCL-6726
- * To work with worksheets, make sure:
-   1. You've selected the appropriate project
-   2. You've checked "Make project before run"
- */
-
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 enablePlugins(GitVersioning)
@@ -62,8 +54,8 @@ inScope(Global)(
     scalaVersion         := "3.8.4",
     organization         := "tech.hearth",
     organizationName     := "Hearth Chain",
-    organizationHomepage := Some(url("https://hearth.tech")),
-    licenses             := Seq(("MIT", url("https://github.com/hearthchain/node-jvm/blob/main/LICENSE"))),
+    organizationHomepage := Some(uri("https://hearth.tech")),
+    licenses             := Seq(("MIT", uri("https://github.com/hearthchain/node-jvm/blob/main/LICENSE"))),
     publish / skip       := true,
     scalacOptions ++= Seq(
       "-feature",
@@ -87,16 +79,42 @@ inScope(Global)(
      * u - select the JUnit XML reporter with output directory
      */
     testOptions += Tests.Argument("-oIDOF", "-u", "target/test-reports"),
-    testOptions += Tests.Setup(_ => sys.props("sbt-testing") = "true"),
+    testOptions += Tests.Setup(() => sys.props("sbt-testing") = "true"),
     network := Network.default(),
     resolvers ++= Resolver.sonatypeCentralSnapshots +: Seq(Resolver.mavenLocal),
     Compile / packageDoc / publishArtifact := false,
     concurrentRestrictions                 := Seq(Tags.limit(Tags.Test, math.min(EvaluateTask.SystemProcessors, 8))),
+    // Dead settings sbt 2's project-load lint now catches that sbt 1 missed (same keys, same plugin
+    // wiring, unused under sbt 1 too - see "SBT 2 unused-settings lint" in CLAUDE.md for the investigation).
     excludeLintKeys ++= Set(
       node / Universal / configuration,
       node / Linux / configuration,
       node / Debian / configuration,
-      Global / maxParallelSuites
+      Global / maxParallelSuites,
+      node / Rpm / daemonGroupGid,
+      node / Rpm / daemonUserUid,
+      node / Rpm / executableScriptName,
+      node / Rpm / name,
+      node / Linux / javaOptions,
+      node / Debian / executableScriptName,
+      node / Debian / daemonUser,
+      node / Debian / daemonUserUid,
+      node / Debian / daemonGroup,
+      node / Debian / daemonGroupGid,
+      node / debianControlScriptsDirectory,
+      node / Universal / executableScriptName,
+      node / UniversalSrc / name,
+      `grpc-server` / Debian / executableScriptName,
+      `grpc-server` / Debian / sourceDirectory,
+      `grpc-server` / Universal / executableScriptName,
+      `grpc-server` / UniversalSrc / name,
+      node / git.gitDescribedVersion,
+      `grpc-server` / git.gitDescribedVersion,
+      benchmark / git.gitDescribedVersion,
+      `node-generator` / git.gitDescribedVersion,
+      `node-it` / git.gitDescribedVersion,
+      `node-testkit` / git.gitDescribedVersion,
+      `node-tests` / git.gitDescribedVersion
     )
   )
 )
@@ -106,32 +124,40 @@ commands += Command.command("packageAll") { state =>
 }
 
 lazy val buildTarballsForDocker = taskKey[Unit]("Package node and grpc-server tarballs and copy them to docker/target")
-buildTarballsForDocker := {
+// Writes outside sbt2's tracked output paths (docker/target/*.tgz), so ActionCache has no way to know
+// those files are this task's real output; on a cache hit it replays success without re-running
+// IO.copyFile, silently leaving docker/target empty (see "SBT 2 action-cache: buildTarballsForDocker"
+// in CLAUDE.md). Def.uncached forces this task to actually run its body every time, like every other
+// filesystem-side-effecting task in this build.
+buildTarballsForDocker := Def.uncached {
+  val conv = fileConverter.value
   IO.copyFile(
-    (node / Universal / packageZipTarball).value,
+    conv.toPath((node / Universal / packageZipTarball).value).toFile,
     baseDirectory.value / "docker" / "target" / "hearth.tgz"
   )
   IO.copyFile(
-    (`grpc-server` / Universal / packageZipTarball).value,
+    conv.toPath((`grpc-server` / Universal / packageZipTarball).value).toFile,
     baseDirectory.value / "docker" / "target" / "hearth-grpc-server.tgz"
   )
 }
 
 lazy val compilePRRaw = taskKey[Unit]("Compile the project")
-compilePRRaw := Def
-  .sequential(
-    clean.all(ScopeFilter(inAnyProject)),
-    scalafmtCheck.all(ScopeFilter(inAnyProject, inConfigurations(Compile))),
-    compile.all(ScopeFilter(inAnyProject, inConfigurations(Test)))
-  )
-  .value
+compilePRRaw := Def.uncached(
+  Def
+    .sequential(
+      clean.all(ScopeFilter(inAnyProject)),
+      scalafmtCheck.all(ScopeFilter(inAnyProject, inConfigurations(Compile))),
+      compile.all(ScopeFilter(inAnyProject, inConfigurations(Test)))
+    )
+    .value
+)
 
 lazy val checkPRRaw = taskKey[Unit]("Compile the project and run unit tests")
 checkPRRaw := Def
   .sequential(
     compilePRRaw,
     Def.sequential(
-      test.all(
+      testFull.all(
         ScopeFilter(inProjects(`grpc-server`, `node-tests`), inConfigurations(Test))
       ),
       assembly.all(ScopeFilter(inProjects(node))),
@@ -165,7 +191,7 @@ commands += Command.command("buildDebPackages") { state =>
 }
 
 lazy val buildPlatformIndependentArtifacts = taskKey[Unit]("Build fat JARs for node and TGZ for grpc-server")
-buildPlatformIndependentArtifacts := {
+buildPlatformIndependentArtifacts := Def.uncached {
   (node / assembly).value
   (`grpc-server` / Universal / packageZipTarball).value
 }

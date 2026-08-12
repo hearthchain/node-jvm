@@ -17,7 +17,7 @@ inConfig(Compile)(
         ((** / "hearth" / "node" / "grpc" / ** / "*.proto") || (** / "hearth" / "events" / ** / "*.proto"))
           .accept(f.toPath, FileAttributes(f.toPath).getOrElse(FileAttributes.NonExistent))
     ),
-    PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value
+    PB.targets += PB.Target(scalapb.gen(flatPackage = true), sourceManaged.value)
   )
 )
 
