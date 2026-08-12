@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
-      - uses: regclient/actions/regctl-installer@4b4db1dcc7dad75ad67a788a380f75a20cc8a040 # v0.1.0
+      - uses: regclient/actions/regctl-installer@78eb729dbdb4ef6480e85ff697b4410e22112583 # v0.1.0
       - uses: proudust/gh-describe@80412be8ce0e77d8afba6b340e34790bc772aa45 # v2.2.0
         id: ghd
         with:
