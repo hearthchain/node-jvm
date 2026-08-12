@@ -39,7 +39,7 @@ jobs:
       - uses: ScalableCapital/action-surefire-report@3b3f3f1178bc72d43fe062d5eb7fc316ee1663eb # v2.0.4
         if: always()
         with:
-          report_paths: '**/target/test-reports/*.xml'
+          report_paths: 'target/out/jvm/u/**/test-reports/*.xml'
           create_check: false
           check_name: 'Check PR'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -103,8 +103,8 @@ jobs:
           if-no-files-found: ignore
           name: test-logs
           path: |
-            node-it/target/logs/*/
-            node-it/target/test-reports
+            target/out/jvm/u/node-it/logs/*/
+            target/out/jvm/u/node-it/test-reports
 
   publish-snapshots:
     name: Publish snapshot packages

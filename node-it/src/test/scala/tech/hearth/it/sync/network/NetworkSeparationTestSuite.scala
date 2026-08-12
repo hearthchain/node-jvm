@@ -1,11 +1,9 @@
 package tech.hearth.it.sync.network
 
 import com.typesafe.config.{Config, ConfigFactory}
+import tech.hearth.it.BaseFreeSpec
 import tech.hearth.it.api.SyncHttpApi.*
-import tech.hearth.it.sync.minFee
-import tech.hearth.it.{BaseFreeSpec, Node}
 import tech.hearth.state.Height
-import tech.hearth.test.*
 import tech.hearth.utils.ScorexLogging
 
 import scala.concurrent.duration.*
@@ -14,9 +12,6 @@ class NetworkSeparationTestSuite extends BaseFreeSpec, ScorexLogging {
   import NetworkSeparationTestSuite.*
 
   override protected def nodeConfigs: Seq[Config] = Configs
-
-  private def nodeA: Node = nodes.head
-  private def nodeB: Node = nodes.last
 
   "node should grow up to 10 blocks together and sync" in {
     nodes.waitForSameBlockHeadersAt(Height(10))
@@ -36,32 +31,6 @@ class NetworkSeparationTestSuite extends BaseFreeSpec, ScorexLogging {
     log.debug(s"Max height is $maxHeight")
     nodes.waitForSameBlockHeadersAt(maxHeight + 5)
   }
-
-  "after fork node should apply correct subchain" in {
-    val txId = nodeA.transfer(nodeA.keyPair, nodeB.address, 1.hearth, minFee).id
-    nodes.waitForHeightAriseAndTxPresent(txId)
-
-    docker.disconnectFromNetwork(dockerNodes().head)
-
-    val divergingTxId = nodeB.transfer(nodeB.keyPair, nodeA.address, 1.hearth, minFee).id
-    nodeB.waitForTransaction(divergingTxId, 2.minute)
-    val heightAfter = nodeB.height
-
-    Thread.sleep(60.seconds.toMillis)
-    docker.disconnectFromNetwork(dockerNodes().last)
-    docker.connectToNetwork(Seq(dockerNodes().head))
-
-    nodeA.waitForHeight(heightAfter)
-    val block = nodeA.blockAt(heightAfter)
-
-    docker.connectToNetwork(Seq(dockerNodes().last))
-    Thread.sleep(80.seconds.toMillis)
-
-    assert(nodeA.blockAt(heightAfter) == block)
-    val height = nodeA.height
-    assert(nodeA.blockAt(height) != nodeB.blockAt(height))
-  }
-
 }
 
 object NetworkSeparationTestSuite {

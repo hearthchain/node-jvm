@@ -9,16 +9,16 @@ object Dependencies {
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
   val overrides = Def.setting(
     Seq(
-      "org.scala-lang"           %% "scala3-library" % scalaVersion.value,
+      "org.scala-lang" %% "scala3-library" % scalaVersion.value,
       // monix 3.4.1 -> cats-effect 2.5.4 drags in cats-core 2.6.1, which predates
       // Either.raiseWhen/raiseUnless (added in cats 2.10.0). Force the version used by `lang`.
-      "org.typelevel"            %% "cats-core"      % "2.13.0",
-      "org.typelevel"            %% "cats-kernel"    % "2.13.0",
-      "com.google.code.gson"      % "gson"           % "2.14.0",
-      "com.squareup.okio"         % "okio-jvm"       % "3.17.0",
-      "org.apache.httpcomponents" % "httpclient"     % "4.5.14",
-      "org.slf4j"                 % "slf4j-api"      % "2.0.18",
-      "org.msgpack"               % "msgpack-core"   % "0.9.12",
+      "org.typelevel"            %% "cats-core"    % "2.13.0",
+      "org.typelevel"            %% "cats-kernel"  % "2.13.0",
+      "com.google.code.gson"      % "gson"         % "2.14.0",
+      "com.squareup.okio"         % "okio-jvm"     % "3.17.0",
+      "org.apache.httpcomponents" % "httpclient"   % "4.5.14",
+      "org.slf4j"                 % "slf4j-api"    % "2.0.18",
+      "org.msgpack"               % "msgpack-core" % "0.9.12",
       nettyModule("codec-http2"),
       nettyModule("codec-http"),
       nettyModule("handler-proxy"),
@@ -44,7 +44,8 @@ object Dependencies {
 
   private def kamonModule(module: String) = "io.kamon" %% s"kamon-$module" % "2.8.1"
 
-  private def jacksonModule(group: String, module: String, version: String = "2.21.4") = s"com.fasterxml.jackson.$group" % s"jackson-$module" % version
+  private def jacksonModule(group: String, module: String, version: String = "2.21.4") =
+    s"com.fasterxml.jackson.$group" % s"jackson-$module" % version
 
   def monixModule(module: String): ModuleID = "io.monix" %% s"monix-$module" % "3.4.1"
 
@@ -65,7 +66,7 @@ object Dependencies {
 
   val cli = Seq("com.github.scopt" %% "scopt" % "4.1.0")
 
-  def amazonCorretto(c: String): ModuleID = "software.amazon.cryptools" % "AmazonCorrettoCryptoProvider" % "2.5.0" classifier c
+  def amazonCorretto(c: String): ModuleID = ("software.amazon.cryptools" % "AmazonCorrettoCryptoProvider" % "2.5.0").classifier(c)
 
   val cryptoProviders = Seq(
     // Windows x86_64, Windows x86, macOS x86_64, linux x86_64
@@ -74,7 +75,7 @@ object Dependencies {
     amazonCorretto("osx-aarch_64"),
     // fallback Java
     "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
-    "tech.hearth" % "crypto" % "0.1.0-SNAPSHOT"
+    "tech.hearth"      % "crypto"         % "0.1.0-SNAPSHOT"
   )
 
   lazy val it = scalaTest +: Seq(
@@ -123,10 +124,10 @@ object Dependencies {
       monixModule("reactive"),
       nettyHandler,
       scalaLogging,
-      "eu.timepit"        %% "refined"  % "0.11.4" exclude ("org.scala-lang.modules", "scala-xml_2.13"),
-      "com.esaulpaugh"     % "headlong" % "13.3.1",
-      amazonCorretto("linux-x86_64") % Optional,
-      amazonCorretto("linux-aarch_64") % Optional,
+      ("eu.timepit"                   %% "refined"  % "0.11.4").exclude("org.scala-lang.modules", "scala-xml_2.13"),
+      "com.esaulpaugh"                 % "headlong" % "13.3.1",
+      amazonCorretto("linux-x86_64")   % Optional,
+      amazonCorretto("linux-aarch_64") % Optional
     ) ++ cryptoProviders ++ cli ++ logDeps ++ protobuf.value
   )
 

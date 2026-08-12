@@ -1,11 +1,3 @@
-/* IDEA notes
- * May require to delete .idea and re-import with all checkboxes
- * Worksheets may not work: https://youtrack.jetbrains.com/issue/SCL-6726
- * To work with worksheets, make sure:
-   1. You've selected the appropriate project
-   2. You've checked "Make project before run"
- */
-
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 enablePlugins(GitVersioning)
@@ -199,7 +191,7 @@ commands += Command.command("buildDebPackages") { state =>
 }
 
 lazy val buildPlatformIndependentArtifacts = taskKey[Unit]("Build fat JARs for node and TGZ for grpc-server")
-buildPlatformIndependentArtifacts := {
+buildPlatformIndependentArtifacts := Def.uncached {
   (node / assembly).value
   (`grpc-server` / Universal / packageZipTarball).value
 }

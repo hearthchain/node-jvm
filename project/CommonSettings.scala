@@ -10,7 +10,6 @@ object CommonSettings extends AutoPlugin {
 
   override def trigger: PluginTrigger = allRequirements
 
-  // These options doesn't work for ScalaJS
   override def projectSettings: Seq[Def.Setting[?]] = Seq()
 
   val assemblySettings: Seq[Def.Setting[?]] = Seq(
