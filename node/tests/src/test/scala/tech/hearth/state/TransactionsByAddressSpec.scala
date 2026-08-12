@@ -65,7 +65,8 @@ class TransactionsByAddressSpec extends FreeSpec with BlockGen with WithDomain {
       .flatMap { case (b, h) => b.transactionData.map(t => (h + 1, t)) }
       .collect {
         // The genesis block has no transactions, so it contributes nothing to an address' history
-        case (h, t: TransferTransaction) if t.sender.toAddress == forAddress || t.recipient == forAddress => (h, t.id())
+        case (h, t: TransferTransaction) if t.sender.toAddress == forAddress || t.transfers.exists(_.address == forAddress) =>
+          (h, t.id())
       }
       .reverse
 

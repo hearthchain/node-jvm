@@ -15,7 +15,7 @@ import tech.hearth.state.*
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
 import tech.hearth.transaction.lease.LeaseTransaction
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.transaction.{Asset, Authorized}
 
 import scala.collection.mutable
@@ -350,10 +350,7 @@ object StateUpdate {
         },
         tx.transaction match {
           case tt: TransferTransaction =>
-            TransactionMetadata.Metadata.Transfer(TransactionMetadata.TransferMetadata(tt.recipient.toByteString))
-
-          case mtt: MassTransferTransaction =>
-            TransactionMetadata.Metadata.MassTransfer(TransactionMetadata.MassTransferMetadata(mtt.transfers.map(_.address.toByteString)))
+            TransactionMetadata.Metadata.MassTransfer(TransactionMetadata.MassTransferMetadata(tt.transfers.map(_.address.toByteString)))
 
           case lt: LeaseTransaction =>
             TransactionMetadata.Metadata.Lease(TransactionMetadata.LeaseMetadata(lt.recipient.toByteString))

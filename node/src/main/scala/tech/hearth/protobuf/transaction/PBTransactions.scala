@@ -9,11 +9,10 @@ import tech.hearth.protobuf.transaction.Transaction.Data
 import tech.hearth.protobuf.utils.PBImplicitConversions.*
 import tech.hearth.state.Height
 import tech.hearth.transaction as vt
-import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.{GenericError, NegativeAmount}
 import tech.hearth.transaction.serialization.impl.PBTransactionSerializer
-import tech.hearth.transaction.transfer.MassTransferTransaction
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import tech.hearth.transaction.{CommitToGenerationTransaction, Proofs, TxNonNegativeAmount, TxValidationError}
 import scalapb.UnknownFieldSet.empty
 
@@ -23,27 +22,24 @@ object PBTransactions {
       sender: tech.hearth.account.PublicKey,
       chainId: Byte = 0,
       fee: Long = 0L,
-      feeAssetId: VanillaAssetId = Hearth,
       timestamp: Long = 0L,
       proofsArray: Seq[tech.hearth.common.state.ByteStr] = Nil,
       data: tech.hearth.protobuf.transaction.Transaction.Data = tech.hearth.protobuf.transaction.Transaction.Data.Empty
   ): SignedTransaction =
     new SignedTransaction(
-      Some(Transaction(chainId, sender.toByteString, Some((feeAssetId, fee): Amount), timestamp, data)),
+      Some(Transaction(chainId, sender.toByteString, fee, timestamp, data)),
       proofsArray.map(bs => ByteString.copyFrom(bs.arr))
     )
 
   def vanilla(signedTx: PBSignedTransaction): Either[ValidationError, VanillaTransaction] =
-    signedTx.wavesTransaction match {
+    signedTx.transaction match {
       case Some(parsedTx) =>
-        val (feeAsset, feeAmount) = PBAmounts.toAssetAndAmount(parsedTx.fee.getOrElse(Amount.defaultInstance))
         for {
           proofs <- Proofs.create(signedTx.proofs.map(_.toByteStr))
           tx <- createVanilla(
             parsedTx.chainId.toByte,
             parsedTx.senderPublicKey,
-            feeAmount,
-            feeAsset,
+            parsedTx.fee,
             parsedTx.timestamp,
             proofs,
             parsedTx.data
@@ -56,29 +52,30 @@ object PBTransactions {
       chainId: Byte,
       sender: ByteString,
       feeAmount: Long,
-      feeAssetId: VanillaAssetId,
       timestamp: Long,
       proofs: Proofs,
       data: PBTransaction.Data
   ): Either[ValidationError, VanillaTransaction] = {
 
     val result: Either[ValidationError, VanillaTransaction] = data match {
-      case Data.Transfer(TransferTransactionData(Some(recipient), Some(amount), attachment, `empty`)) =>
+      case Data.Transfer(TransferTransactionData(assetId, transfers, attachment, feeAssetId, `empty`)) =>
         for {
-          address <- recipient.toAddress
+          parsedTransfers <- transfers.toList.traverse { t =>
+            t.getRecipient.toAddress.flatMap { address =>
+              TxNonNegativeAmount(t.amount)(NegativeAmount(t.amount, "asset"))
+                .map(ParsedTransfer(address, _))
+            }
+          }
           tx <- vt.transfer.TransferTransaction.create(
             sender.toPublicKey,
-            address,
-            amount.vanillaAssetId,
-            amount.longAmount,
-            feeAssetId,
+            PBAmounts.toVanillaAssetId(assetId),
+            parsedTransfers,
             feeAmount,
-            attachment.toByteStr,
             timestamp,
+            attachment.toByteStr,
             proofs,
-            // An address no longer carries the network it belongs to, so the chain id has to come from the transaction
-            // itself - without it, `create` defaults to the network this node runs on and the round trip loses it
-            chainId
+            chainId,
+            PBAmounts.toVanillaAssetId(feeAssetId)
           )
         } yield tx
 
@@ -109,27 +106,6 @@ object PBTransactions {
           )
         } yield tx
 
-      case Data.MassTransfer(mt) =>
-        for {
-          parsedTransfers <- mt.transfers.traverse { t =>
-            t.getRecipient.toAddress.flatMap { addressOrAlias =>
-              TxNonNegativeAmount(t.amount)(NegativeAmount(t.amount, "asset"))
-                .map(ParsedTransfer(addressOrAlias, _))
-            }
-          }
-          tx <- vt.transfer.MassTransferTransaction.create(
-            sender.toPublicKey,
-            PBAmounts.toVanillaAssetId(mt.assetId),
-            parsedTransfers,
-            feeAmount,
-            timestamp,
-            mt.attachment.toByteStr,
-            proofs,
-            chainId,
-            feeAssetId
-          )
-        } yield tx
-
       case Data.CommitToGeneration(
             CommitToGenerationTransactionData(
               generationPeriodStart,
@@ -157,6 +133,69 @@ object PBTransactions {
           )
         } yield tx
 
+      case Data.StartBoost(StartBoostTransactionData(Some(validator), tdxQuote, `empty`)) =>
+        for {
+          validatorAddress <- validator.toAddress
+          tx <- vt.StartBoostTransaction.create(
+            sender.toPublicKey,
+            validatorAddress,
+            tdxQuote.toByteStr,
+            feeAmount,
+            timestamp,
+            proofs,
+            chainId
+          )
+        } yield tx
+
+      case Data.BindApiKey(BindApiKeyTransactionData(enclavePublicKey, encryptedApiKey, `empty`)) =>
+        vt.BindApiKeyTransaction.create(
+          sender.toPublicKey,
+          enclavePublicKey.toByteStr,
+          encryptedApiKey.toByteStr,
+          feeAmount,
+          timestamp,
+          proofs,
+          chainId
+        )
+
+      case Data.Reserve(ReserveTransactionData(Some(amount), Some(miner), feeAssetId, `empty`)) =>
+        for {
+          minerAddress <- miner.toAddress
+          tx <- vt.ReserveTransaction.create(
+            sender.toPublicKey,
+            amount.vanillaAssetId,
+            amount.longAmount,
+            minerAddress,
+            PBAmounts.toVanillaAssetId(feeAssetId),
+            feeAmount,
+            timestamp,
+            proofs,
+            chainId
+          )
+        } yield tx
+
+      case Data.Settle(SettleTransactionData(Some(senderAddress), `empty`)) =>
+        for {
+          address <- senderAddress.toAddress
+          tx      <- vt.SettleTransaction.create(sender.toPublicKey, address, feeAmount, timestamp, proofs, chainId)
+        } yield tx
+
+      case Data.Withdraw(WithdrawTransactionData(Some(fromMiner), Some(amount), feeAssetId, `empty`)) =>
+        for {
+          fromMinerAddress <- fromMiner.toAddress
+          tx <- vt.WithdrawTransaction.create(
+            sender.toPublicKey,
+            fromMinerAddress,
+            amount.vanillaAssetId,
+            amount.longAmount,
+            PBAmounts.toVanillaAssetId(feeAssetId),
+            feeAmount,
+            timestamp,
+            proofs,
+            chainId
+          )
+        } yield tx
+
       case _ =>
         Left(TxValidationError.UnsupportedTransactionType)
     }
@@ -168,8 +207,13 @@ object PBTransactions {
     tx match {
       case tx: vt.transfer.TransferTransaction =>
         import tx.*
-        val data = TransferTransactionData(Some(recipient.toPB), Some((assetId, amount.value)), attachment.toByteString)
-        PBTransactions.create(sender, chainId, fee.value, feeAssetId, timestamp, proofs, Data.Transfer(data))
+        val data = TransferTransactionData(
+          PBAmounts.toPBAssetId(assetId),
+          transfers.map(pt => TransferTransactionData.Transfer(Some(pt.address.toPB), pt.amount.value)),
+          attachment.toByteString,
+          PBAmounts.toPBAssetId(feeAssetId)
+        )
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, Data.Transfer(data))
 
       case tx: vt.assets.exchange.ExchangeTransaction =>
         import tx.*
@@ -180,25 +224,17 @@ object PBTransactions {
           sellMatcherFee.value,
           Seq(PBOrders.protobuf(order1), PBOrders.protobuf(order2))
         )
-        PBTransactions.create(tx.sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.Exchange(data))
+        PBTransactions.create(tx.sender, chainId, fee.value, timestamp, proofs, Data.Exchange(data))
 
       case tx: vt.lease.LeaseTransaction =>
         import tx.*
         val data = LeaseTransactionData(Some(recipient.toPB), amount.value)
-        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.Lease(data))
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, Data.Lease(data))
 
       case tx: vt.lease.LeaseCancelTransaction =>
         import tx.*
         val data = LeaseCancelTransactionData(leaseId.toByteString)
-        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.LeaseCancel(data))
-
-      case tx @ MassTransferTransaction(sender, assetId, transfers, fee, _, timestamp, attachment, proofs, chainId) =>
-        val data = MassTransferTransactionData(
-          PBAmounts.toPBAssetId(assetId),
-          transfers.map(pt => MassTransferTransactionData.Transfer(Some(pt.address.toPB), pt.amount.value)),
-          attachment.toByteString
-        )
-        PBTransactions.create(sender, chainId, fee.value, tx.feeAssetId, timestamp, proofs, Data.MassTransfer(data))
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, Data.LeaseCancel(data))
 
       case tx: CommitToGenerationTransaction =>
         import tx.*
@@ -211,7 +247,34 @@ object PBTransactions {
             vrfCommitmentSignature = vrfCommitmentSignature.toByteString
           )
         )
-        PBTransactions.create(sender, chainId, fee.value, Hearth, timestamp, proofs.proofs, data)
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs.proofs, data)
+
+      case tx: vt.StartBoostTransaction =>
+        import tx.*
+        val data = Data.StartBoost(StartBoostTransactionData(Some(validator.toPB), tdxQuote.toByteString))
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+
+      case tx: vt.BindApiKeyTransaction =>
+        import tx.*
+        val data = Data.BindApiKey(BindApiKeyTransactionData(enclavePublicKey.toByteString, encryptedApiKey.toByteString))
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+
+      case tx: vt.ReserveTransaction =>
+        import tx.*
+        val data = Data.Reserve(ReserveTransactionData(Some((assetId, amount.value)), Some(miner.toPB), PBAmounts.toPBAssetId(feeAssetId)))
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+
+      case tx: vt.SettleTransaction =>
+        import tx.*
+        val data = Data.Settle(SettleTransactionData(Some(senderAddress.toPB)))
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+
+      case tx: vt.WithdrawTransaction =>
+        import tx.*
+        val data = Data.Withdraw(
+          WithdrawTransactionData(Some(fromMiner.toPB), Some((assetId, amount.value)), PBAmounts.toPBAssetId(feeAssetId))
+        )
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
 
       case _ =>
         throw new IllegalArgumentException(s"Unsupported transaction: $tx")

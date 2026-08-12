@@ -366,17 +366,16 @@ package name/summary in `node/build.sbt`/`ExtensionPackaging.scala` (`waves${net
 
 Several things were deliberately left saying "waves", each for a different reason:
 
-- **The external `tech.hearth % protobuf-schemas` dependency's own fields** — `SignedTransaction.wavesTransaction`
-  (from `transaction.proto`'s *top-level* `waves_transaction` field, not to be confused with the local
-  `TransactionData` oneof case above, which is a different message in a different file),
-  `BalanceResponse.WavesBalances`/`.waves` (`accounts_api.proto`), and `StateUpdate`'s `updatedWavesAmount`
-  (`events.proto`) are defined in the sibling `protobuf-schemas` repo, out of scope here. The local hand-written
-  code that talks to them keeps matching names too, rather than renaming just one side of the wire: `grpc-server`'s
-  vanilla event mirror (`events.scala`, `events/repo/LiquidState.scala`, `events/protobuf/serde/package.scala`) and
-  `events/fixtures/HearthTxChecks.scala`'s pattern matches all still say `updatedWavesAmount`/`wavesTransaction`.
-  `PBTransactions.scala`, `PBBlocks.scala`, and `PBTransactionSerializer.scala` likewise still call
-  `.wavesTransaction`/`.getWavesTransaction`/`.withWavesTransaction` on `SignedTransaction`. A future rename of
-  `protobuf-schemas` itself needs to update all of these together.
+- **The external `tech.hearth % protobuf-schemas` dependency's own fields** — `BalanceResponse.WavesBalances`/`.waves`
+  (`accounts_api.proto`) and `StateUpdate`'s `updatedWavesAmount` (`events.proto`) are defined in the sibling
+  `protobuf-schemas` repo, out of scope here. The local hand-written code that talks to them keeps matching names
+  too, rather than renaming just one side of the wire: `grpc-server`'s vanilla event mirror (`events.scala`,
+  `events/repo/LiquidState.scala`, `events/protobuf/serde/package.scala`) and `events/fixtures/HearthTxChecks.scala`'s
+  pattern matches all still say `updatedWavesAmount`. A future rename of `protobuf-schemas` itself needs to update
+  all of these together. `SignedTransaction.wavesTransaction` *was* one of these (see "Transaction schema: Transfer
+  merge, fee restructuring, new tx types" below) — `transaction.proto`'s top-level field is now `transaction`, not
+  `waves_transaction`, and every local `.wavesTransaction`/`.getWavesTransaction`/`.withWavesTransaction` call site
+  was renamed to `.transaction`/`.getTransaction`/`.withTransaction` to match.
 - **CI publish destinations** — Docker Hub (`wavesplatform/wavesnode`, `wavesplatform/waves-private-node`,
   `wavesplatform/ride-runner`), `ghcr.io/wavesplatform/waves*`, `apt.wavesplatform.com`, and the `@waves/ride-lang`
   npm package (`.github/workflows/*.yml`, `create-aptly-repo.sh`) are real registries tied to existing
@@ -396,8 +395,10 @@ Several things were deliberately left saying "waves", each for a different reaso
 ## Transaction JSON
 
 `TransactionType` was renumbered when the removed types went: `Genesis, Transfer, Exchange, Lease, LeaseCancel,
-MassTransfer, CommitToGeneration`, ids 1 to 7. A lease cancel is type 5, not 9. Transactions no longer carry a
-`version`, and the field is absent from their JSON — an API expectation written as a JSON literal has to drop it.
+CommitToGeneration, StartBoost, Reserve, BindApiKey, Settle, Withdraw`, ids 1 to 11 (`MassTransfer` merged into
+`Transfer`, see below, rather than surviving as its own id). A lease cancel is type 5, not 9. Transactions no longer
+carry a `version`, and the field is absent from their JSON — an API expectation written as a JSON literal has to drop
+it.
 
 `SigningKey.publicKey()` returns an `Array[Byte]`, so interpolating it into an expected JSON string yields `[B@1234`.
 Wrap it: `PublicKey(signer.publicKey())`.
@@ -419,6 +420,61 @@ side of it is dropped.
 A transaction's REST JSON (`BaseTxJson.toJson`) always includes `proofs`; there is no `signature` field to fall back on
 and no `version` to gate on any more, so `/transactions/sign`/`/transactions/broadcast` test helpers that branched on
 "v1 uses signature, v2+ uses proofs" collapse to a single unconditional proofs check.
+
+## Transaction schema: Transfer merge, fee restructuring, new tx types
+
+`transaction.proto` changed in the sibling `protobuf-schemas` repo (its own working tree, not yet committed as of
+this writing): `MassTransferTransactionData` is gone, `TransferTransactionData` took over its shape (`asset_id`,
+`repeated Transfer transfers`, `attachment`, `fee_asset_id`), `Transaction.fee` changed from `Amount` (asset +
+amount) to a bare `int64`, and five new oneof cases were added: `start_boost`, `reserve`, `bind_api_key`, `settle`,
+`withdraw`. Consuming this required `mvn install` from the `protobuf-schemas` repo itself (`mvn -DskipTests install`),
+the same "publish to `~/.m2`, then make sbt actually pick it up" dance as the crypto library (see "Dependency
+cleanup" above), plus one extra wrinkle: `build.sbt`'s resolver list had
+`Resolver.sonatypeCentralSnapshots` ahead of `Resolver.mavenLocal`, so coursier preferred a real (older, already-
+published) remote SNAPSHOT over the freshly-`mvn install`'d local one — the exact same staleness trap the
+"Dependency cleanup" section warns about, just from a different cause (a real competing publish, not a resolution
+cache). Fixed by swapping the order (`Resolver.mavenLocal` first); if `protobuf-schemas` ever stops being iterated
+on locally, this order stops mattering and can be reverted.
+
+**Transfer + MassTransfer merged.** There is only one `TransferTransaction` now, and it is inherently multi-
+recipient (`sender, assetId, transfers: Seq[ParsedTransfer], fee, feeAssetId, timestamp, attachment, proofs,
+chainId`, `TransactionType.Transfer`) — the shape the old `MassTransferTransaction` already had. The old single-
+recipient `TransferTransaction` (with its own `recipient`/`amount` fields) is gone; `tx.recipient`/`tx.amount` don't
+exist any more, only `tx.transfers` (a `Seq[ParsedTransfer]`, `ParsedTransfer(address, amount)`). A single-recipient
+transfer is just `Seq(ParsedTransfer(recipient, amount))`. `TxHelpers.transfer(...)` keeps its old single-recipient
+signature for ergonomics (builds a one-element `transfers` list internally); `TxHelpers.massTransfer(...)` also
+still exists, unchanged signature, now just a thin wrapper returning the same `TransferTransaction` type.
+`TransferTxSerializer`/`TransferTxValidator`/`TransferTransactionDiff` (in `state/diffs/TransferDiff.scala`) absorbed
+the old Mass* versions outright — there is no separate Mass* serializer/validator/diff object any more.
+
+**Fee wire format changed.** `Transaction.fee` is a plain `int64` (always HRTH unless the specific transaction's own
+data message says otherwise) — there is no top-level fee asset any more. Only `TransferTransactionData`,
+`ReserveTransactionData` and `WithdrawTransactionData` carry their own `fee_asset_id: bytes` field (empty = HRTH);
+every other transaction type's fee is unconditionally HRTH at the wire level now. This lines up with what the
+domain layer (`TxWithFee.InHearth`/`InCustomAsset`, `transaction/TxWithFee.scala`) already enforced before this
+change for every type except Transfer — Lease/LeaseCancel/Exchange/CommitToGeneration were already `InHearth`, so
+nothing about their domain classes needed to change, only `PBTransactions`' wire (de)serialization of the fee.
+`PBTransactions.create`/`vanilla` no longer take/return a top-level `feeAssetId` — each `Data.*` case reads/writes
+its own `fee_asset_id` field (Transfer/Reserve/Withdraw) or has none (everything else, implicitly HRTH).
+
+**Five new transaction types — plumbing only, no semantics.** `StartBoostTransaction`, `ReserveTransaction`,
+`BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in `tech.hearth.transaction`,
+alongside `CommitToGenerationTransaction`, not in a subpackage) exist as domain case classes with working
+protobuf/JSON round-trip and `TxHelpers` constructors (`TxHelpers.startBoost`/`.reserve`/`.bindApiKey`/`.settle`/
+`.withdraw`), but **no validation or state-diff logic**. Their `TxValidator`s are all `Valid(tx) // Semantics not
+implemented yet` (same pattern `CommitToGenerationTxValidator` used to use before it grew real checks).
+`TransactionDiffer.transactionSnapshot` has no `case` for any of them, so they fall through to
+`UnsupportedTransactionType` — a broadcast one reaches the mempool/JSON layer fine but is rejected before any state
+change. `TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs them the same way `Genesis` always
+was (`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for any of them) since building one
+that way needs the same not-yet-designed semantics. Field-name-driven best guesses at what these are for (not
+verified against any spec — none exists yet): `Reserve`/`Withdraw`/`Settle` look like a miner-balance-reservation
+mechanism feeding the still-stubbed `Blockchain.blockRewardBoost` (hardcoded to `1` everywhere, see "HRTH emission
+curve"'s note on it), and `StartBoost`/`BindApiKey` (`tdx_quote`, `enclave_public_key`, `encrypted_api_key`) look
+like TDX confidential-computing remote attestation for a boosted-mining validator. Implementing real semantics needs
+someone who actually knows the design to write validation + `TransactionDiffer` cases + (if the REST sign flow
+matters) `TxBroadcastRequest` subclasses — don't guess at this from field names again without checking whether a
+spec has since landed in `hearth-specs`/`hearth-tokenomics-spec`.
 
 ## Protobuf package migration
 
@@ -464,11 +520,14 @@ finished being deleted (`consensus/nxt/api/http/NxtConsensusApiRoute.scala`, `ne
 compilation unit").
 
 The `Transaction` wire message dropped `version` entirely: `chain_id`, `sender_public_key`, `fee`, `timestamp`, then a
-`data` oneof of only the six surviving transaction kinds (transfer, exchange, lease, lease-cancel, mass-transfer,
-commit-to-generation). Constructing one directly no longer takes a version argument. `SignedTransaction` simplified to
-`{ wavesTransaction: Option[Transaction], proofs: Seq[ByteString] }`, with no `EthereumTransaction` oneof variant.
-`StateUpdate`/`TransactionMetadata` lost their data-entry, script and alias fields and oneof branches along with the
-features that produced them.
+`data` oneof, at the time of this migration holding the six surviving transaction kinds (transfer, exchange, lease,
+lease-cancel, mass-transfer, commit-to-generation) — since expanded and reshuffled, see "Transaction schema: Transfer
+merge, fee restructuring, new tx types" above for the current oneof and field shapes (`fee` in particular is no
+longer this message's original `Amount`, and `mass-transfer` no longer exists as a separate case). Constructing one
+directly no longer takes a version argument. `SignedTransaction` simplified to
+`{ transaction: Option[Transaction], proofs: Seq[ByteString] }` (its own field was renamed from `wavesTransaction` to
+`transaction` in that later change too), with no `EthereumTransaction` oneof variant. `StateUpdate`/`TransactionMetadata`
+lost their data-entry, script and alias fields and oneof branches along with the features that produced them.
 
 ## SBT 2 unused-settings lint
 
@@ -732,7 +791,8 @@ migration: delete whole files/benchmarks whose entire subject is a removed featu
 evaluator benchmarks under `lang/v1/`, `HearthEnvironmentBenchmark`, `SmartGenerator`/`MultisigTransactionGenerator`/
 `OracleTransactionGenerator` and the `Mode.MULTISIG`/`ORACLE`/`SWARM` cases that drove them), and migrate what's
 still meaningful to the current APIs (`account.KeyPair` → `tech.hearth.crypto.SigningKey`,
-`MassTransferTransaction.create`/`TxHelpers.buy`/`.sell`/`.exchange` current signatures, `Keys.hearthBalance`/
+`TransferTransaction.create`/`TxHelpers.buy`/`.sell`/`.exchange` current signatures (`MassTransferTransaction` has
+since merged into `TransferTransaction`, see "Transaction schema" above), `Keys.hearthBalance`/
 `hearthBalanceAt` in place of the removed `Keys.data`/`dataAt` data-entry storage `RocksDBSeekForPrevBenchmark`
 benchmarked, `PoSCalculator.hit`/`FairPoSCalculator.calculateDelay` in place of the removed `HearthEnvironment
 .calculateDelay` wrapper). `node-generator`'s two standalone dev utilities under `utils/generator/`
@@ -802,7 +862,7 @@ selection, and stale pre-`tech.hearth` migration assumptions):
   `sync.grpc.MassTransferTransactionGrpcSuite` ("cannot broadcast invalid mass transfer tx") — not node bugs: both
   `AsyncGrpcApi`'s `broadcastLease`/`broadcastMassTransfer` call `PBTransactions.vanilla(...).explicitGet()` on the
   client side, to compute `bodyBytes` for signing, before any gRPC call is made. That runs full domain-object
-  construction (`LeaseTransaction`/`MassTransferTransaction.create`, which invoke their `TxValidator`s and
+  construction (`LeaseTransaction`/`TransferTransaction.create`, which invoke their `TxValidator`s and
   `TxNonNegativeAmount`'s bounds check), so every one of these tests' structural rejections (self-lease, negative
   transfer amount, too many transfers, oversized attachment) now happens client-side as a plain
   `RuntimeException(validationError.toString)` (`EitherExt2.explicitGet` on a `Left`), never reaching the server as a

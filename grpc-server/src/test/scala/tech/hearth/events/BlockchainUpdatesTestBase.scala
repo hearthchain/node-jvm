@@ -13,8 +13,8 @@ import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.assets.exchange.Order.Version
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import tech.hearth.transaction.TxHelpers
 import org.scalactic.source.Position
 import org.scalatest.Assertions
@@ -69,7 +69,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
   protected def checkTransferTx(append: Append, transferTx: TransferTransaction)(implicit pos: Position): Unit = {
     val firstTxParticipantBalanceAfter  = firstTxParticipantBalanceBefore - customFee - amount
     val secondTxParticipantBalanceAfter = secondTxParticipantBalanceBefore + amount
-    checkTransfer(append.transactionIds.head, append.transactionAt(0), transferTx, secondTxParticipantAddress.toBytes())
+    checkTransfer(append.transactionIds.head, append.transactionAt(0), transferTx, Seq(secondTxParticipantAddress.toBytes()))
     checkBalances(
       filterOutMinerBalanceUpdates(append),
       Map(
@@ -152,7 +152,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
     )
   }
 
-  protected def checkForMassTransferTx(append: Append, massTransfer: MassTransferTransaction): Unit = {
+  protected def checkForMassTransferTx(append: Append, massTransfer: TransferTransaction): Unit = {
     val firstTxParticipantBalanceBeforeTx     = firstTxParticipantBalanceBefore
     val firstTxParticipantBalanceAfterTx      = firstTxParticipantBalanceBeforeTx - massTransfer.fee.value
     val firstTxParticipantAssetBalanceAfterTx = firstTokenQuantity - additionalAmount * recipients.size
@@ -161,7 +161,7 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
       (firstTxParticipantAddress, Hearth)               -> (firstTxParticipantBalanceBeforeTx, firstTxParticipantBalanceAfterTx),
       (firstTxParticipantAddress, massTransfer.assetId) -> (firstTokenQuantity, firstTxParticipantAssetBalanceAfterTx)
     ) ++ recipients.map(r => (r.address, massTransfer.assetId) -> (0L, additionalAmount)).toMap
-    checkMassTransfer(
+    checkTransfer(
       append.transactionIds.head,
       append.transactionAt(0),
       massTransfer,

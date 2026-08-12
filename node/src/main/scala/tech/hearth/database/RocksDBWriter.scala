@@ -25,7 +25,7 @@ import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
 import tech.hearth.transaction.assets.*
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.transaction.{CommitToGenerationTransaction, *}
 import tech.hearth.utils.ScorexLogging
 import io.netty.util.concurrent.DefaultThreadFactory
@@ -849,7 +849,7 @@ class RocksDBWriter(
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
             val num = TxNum(idx.toShort)
             (tx: @unchecked) match {
-              case _: TransferTransaction | _: MassTransferTransaction =>
+              case _: TransferTransaction =>
               // balances already restored
 
               case _: LeaseTransaction | _: LeaseCancelTransaction =>

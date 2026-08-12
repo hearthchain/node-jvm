@@ -55,7 +55,7 @@ class BlockchainUpdaterGeneratorFeeSameBlockTest extends PropSpec with DomainSce
       // 40% of the earlier transaction's fee is credited before this one is applied, and that is what it spends
       val affordable = createHearthTransfer(
         defaultSigner,
-        generatorPaymentOnFee.recipient,
+        generatorPaymentOnFee.transfers.head.address,
         BlockDiffer.CurrentBlockFeePart(somePayment.fee.value),
         generatorPaymentOnFee.fee.value,
         generatorPaymentOnFee.timestamp

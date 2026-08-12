@@ -16,16 +16,16 @@ class GetTransactionGrpcSuite extends GrpcBaseTransactionSuite {
       .explicitGet()
       .id()
       .toString
-    val transactionBySenderAndId = sender.getTransaction(sender = firstAddress, id = txId).getWavesTransaction
+    val transactionBySenderAndId = sender.getTransaction(sender = firstAddress, id = txId).getTransaction
     val transactionByRecipientAndId =
-      sender.getTransaction(recipient = Some(Recipient().withPublicKeyHash(secondAddress)), id = txId).getWavesTransaction
+      sender.getTransaction(recipient = Some(Recipient().withPublicKeyHash(secondAddress)), id = txId).getTransaction
     val transactionBySenderRecipientAndId =
-      sender.getTransaction(sender = firstAddress, recipient = Some(Recipient().withPublicKeyHash(secondAddress)), id = txId).getWavesTransaction
+      sender.getTransaction(sender = firstAddress, recipient = Some(Recipient().withPublicKeyHash(secondAddress)), id = txId).getTransaction
 
     transactionBySenderAndId.senderPublicKey shouldBe ByteString.copyFrom(firstAcc.publicKey())
-    transactionByRecipientAndId.getTransfer.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
+    transactionByRecipientAndId.getTransfer.transfers.head.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
     transactionBySenderRecipientAndId.senderPublicKey shouldBe ByteString.copyFrom(firstAcc.publicKey())
-    transactionBySenderRecipientAndId.getTransfer.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
+    transactionBySenderRecipientAndId.getTransfer.transfers.head.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
   }
 
   test("get multiple transactions") {
@@ -36,8 +36,8 @@ class GetTransactionGrpcSuite extends GrpcBaseTransactionSuite {
     val transactionsByIds = sender.getTransactionSeq(txsIds, sender = thirdAddress, recipient = Some(Recipient().withPublicKeyHash(secondAddress)))
     transactionsByIds.size shouldBe 10
     for (tx <- transactionsByIds) {
-      tx.getTransaction.getWavesTransaction.senderPublicKey shouldBe ByteString.copyFrom(thirdAcc.publicKey())
-      tx.getTransaction.getWavesTransaction.getTransfer.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
+      tx.getTransaction.getTransaction.senderPublicKey shouldBe ByteString.copyFrom(thirdAcc.publicKey())
+      tx.getTransaction.getTransaction.getTransfer.transfers.head.getRecipient shouldBe PBRecipients.create(secondAcc.toAddress)
     }
   }
 }

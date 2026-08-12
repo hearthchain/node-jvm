@@ -136,15 +136,13 @@ trait TransferSending extends ScorexLogging {
     import tx.*
     TransferRequest(
       tx.sender.toString,
-      recipient.toString,
       Some(assetId),
-      amount.value,
-      Some(feeAssetId),
+      transfers.map(t => TransferTransaction.Transfer(t.address.toString, t.amount.value)).toList,
       fee.value,
-      Some(attachment),
-      Some(timestamp),
-      None,
-      Some(proofs)
+      Some(feeAssetId),
+      timestamp,
+      attachment,
+      proofs
     )
   }
 

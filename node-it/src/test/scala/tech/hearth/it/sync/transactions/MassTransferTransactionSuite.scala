@@ -2,7 +2,7 @@ package tech.hearth.it.sync.transactions
 
 import com.google.protobuf.ByteString
 import tech.hearth.account.{Address, AddressScheme, PublicKey}
-import tech.hearth.api.http.requests.MassTransferRequest
+import tech.hearth.api.http.requests.TransferRequest
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
 import tech.hearth.it.NodeConfigs.GenesisAssets
@@ -11,11 +11,11 @@ import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.sync.*
 import tech.hearth.it.transactions.BaseTransactionSuite
 import tech.hearth.it.util.TxHelpers
-import tech.hearth.protobuf.transaction.{MassTransferTransactionData, PBRecipients}
+import tech.hearth.protobuf.transaction.{TransferTransactionData, PBRecipients}
 import tech.hearth.test.*
 import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.transfer.*
-import tech.hearth.transaction.transfer.MassTransferTransaction.{MaxTransferCount, Transfer}
+import tech.hearth.transaction.transfer.TransferTransaction.{MaxTransferCount, Transfer}
 import tech.hearth.transaction.transfer.TransferTransaction.MaxAttachmentSize
 import tech.hearth.transaction.Proofs
 import play.api.libs.json.*
@@ -147,10 +147,10 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
           fee: Long = calcMassTransferFee(1),
           timestamp: Long = System.currentTimeMillis,
           attachment: Array[Byte] = Array.emptyByteArray
-      ): (MassTransferRequest, Option[ByteStr]) = {
+      ): (TransferRequest, Option[ByteStr]) = {
         val txEi = for {
-          parsedTransfers <- MassTransferTransaction.parseTransfersList(transfers)
-          tx <- MassTransferTransaction
+          parsedTransfers <- TransferTransaction.parseTransfersList(transfers)
+          tx <- TransferTransaction
             .create(
               PublicKey(sender.keyPair.publicKey()),
               Hearth,
@@ -165,7 +165,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
 
         val (signature, idOpt) = txEi.fold(_ => (Proofs(List(fakeSignature)), None), tx => (tx.proofs, Some(tx.id())))
 
-        val req = MassTransferRequest(
+        val req = TransferRequest(
           sender.publicKey.toString,
           None,
           transfers,
@@ -179,7 +179,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
         (req, idOpt)
       }
 
-      def negativeTransferAmountRequest: (MassTransferRequest, Option[ByteStr]) = {
+      def negativeTransferAmountRequest: (TransferRequest, Option[ByteStr]) = {
         val recipient = secondKeyPair
 
         val transfers  = List(Transfer(recipient.toAddress.toString, -1))
@@ -187,7 +187,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
         val fee        = calcMassTransferFee(1)
         val timestamp  = System.currentTimeMillis()
         val mttdTransfers = transfers.map { t =>
-          MassTransferTransactionData.Transfer(
+          TransferTransactionData.Transfer(
             Some(PBRecipients.create(Address.fromPublicKey(PublicKey(recipient.publicKey())))),
             t.amount
           )
@@ -197,7 +197,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
           TxHelpers.massTransferBodyBytes(sender.keyPair, None, mttdTransfers, ByteString.copyFrom(attachment.arr), fee, timestamp)
 
         (
-          MassTransferRequest(
+          TransferRequest(
             sender.publicKey.toString,
             None,
             transfers,
@@ -269,7 +269,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
         val rs = sender.postJsonWithApiKey(
           "/transactions/sign",
           Json.obj(
-            "type"      -> MassTransferTransaction.typeId,
+            "type"      -> TransferTransaction.typeId,
             "version"   -> v,
             "sender"    -> signerAddress,
             "transfers" -> transfers,
@@ -309,7 +309,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
     nodes.waitForHeightAriseAndTxPresent(txId)
 
     // /transactions/info/txID should return complete list of transfers
-    val txInfo = Json.parse(sender.get(s"/transactions/info/$txId").getResponseBody).as[MassTransferRequest]
+    val txInfo = Json.parse(sender.get(s"/transactions/info/$txId").getResponseBody).as[TransferRequest]
     assert(txInfo.transfers.size == 3)
 
     // /transactions/address should return complete transfers list for the sender...
@@ -317,12 +317,12 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
       .parse(sender.get(s"/transactions/address/$firstAddress/limit/10").getResponseBody)
       .as[JsArray]
       .value
-      .map(js => extractTransactionByType(js, MassTransferTransaction.typeId).head)
+      .map(js => extractTransactionByType(js, TransferTransaction.typeId).head)
       .head
-    assert(txSender.as[MassTransferRequest].transfers.size == 3)
+    assert(txSender.as[TransferRequest].transfers.size == 3)
     assert((txSender \ "transferCount").as[Int] == 3)
     assert((txSender \ "totalAmount").as[Long] == 10.hearth)
-    val transfersAfterTrans = txSender.as[MassTransferRequest].transfers
+    val transfersAfterTrans = txSender.as[TransferRequest].transfers
     assert(transfers.equals(transfersAfterTrans))
 
     // ...and compact list for recipients
@@ -334,13 +334,13 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
       )
       .as[JsArray]
       .value
-      .map(js => extractTransactionByType(js, MassTransferTransaction.typeId).head)
+      .map(js => extractTransactionByType(js, TransferTransaction.typeId).head)
       .head
 
-    assert(txRecipient.as[MassTransferRequest].transfers.size == 1)
+    assert(txRecipient.as[TransferRequest].transfers.size == 1)
     assert((txRecipient \ "transferCount").as[Int] == 3)
     assert((txRecipient \ "totalAmount").as[Long] == 10.hearth)
-    val transferToSecond = txRecipient.as[MassTransferRequest].transfers.head
+    val transferToSecond = txRecipient.as[TransferRequest].transfers.head
     assert(transfers contains transferToSecond)
   }
 }

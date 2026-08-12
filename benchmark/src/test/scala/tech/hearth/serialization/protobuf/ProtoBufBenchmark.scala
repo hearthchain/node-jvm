@@ -7,8 +7,8 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.protobuf.transaction.PBTransactions
 import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.Proofs
-import tech.hearth.transaction.transfer.MassTransferTransaction
-import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.Transfer
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 import tech.hearth.common.utils.EitherExt2.*
@@ -27,13 +27,13 @@ class ProtoBufBenchmark {
     val vanillaTx = {
       val sender    = PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet()
       val recipient = sender.toAddress.toString
-      val transfers = MassTransferTransaction
+      val transfers = TransferTransaction
         .parseTransfersList(
           List(Transfer(recipient, 100000000L), Transfer(recipient, 200000000L))
         )
         .explicitGet()
 
-      MassTransferTransaction
+      TransferTransaction
         .create(
           sender,
           Hearth,
@@ -63,13 +63,13 @@ class ProtoBufBenchmark {
     val vanillaTx = {
       val sender    = PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet()
       val recipient = sender.toAddress.toString
-      val transfers = MassTransferTransaction
+      val transfers = TransferTransaction
         .parseTransfersList(
           List(Transfer(recipient, 100000000L), Transfer(recipient, 200000000L))
         )
         .explicitGet()
 
-      MassTransferTransaction
+      TransferTransaction
         .create(
           sender,
           Hearth,

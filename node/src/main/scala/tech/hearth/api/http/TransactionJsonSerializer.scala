@@ -11,7 +11,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.state.{Blockchain, Height, LeaseDetails, TransactionId, TxMeta}
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.MassTransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.transaction.{Asset, Transaction}
 import play.api.libs.json.*
 import play.api.libs.json.JsonConfiguration.Aux
@@ -49,8 +49,8 @@ final case class TransactionJsonSerializer(blockchain: Blockchain) {
   def txMetaJsonSerializer(address: Address, numbersAsString: Boolean): JsonSerializer[TxMetaEnriched] =
     (txMeta: TxMetaEnriched, gen: JsonGenerator, serializers: SerializerProvider) => {
       txMeta.meta match {
-        case meta @ TransactionMeta.Default(_, mtt: MassTransferTransaction, _, _) if mtt.sender.toAddress != address =>
-          /** Produces compact representation for large transactions by stripping unnecessary data. Currently implemented for MassTransfer transaction
+        case meta @ TransactionMeta.Default(_, mtt: TransferTransaction, _, _) if mtt.sender.toAddress != address =>
+          /** Produces compact representation for large transactions by stripping unnecessary data. Currently implemented for Transfer transaction
             * only.
             */
           jsObjectSerializer(numbersAsString).serialize(

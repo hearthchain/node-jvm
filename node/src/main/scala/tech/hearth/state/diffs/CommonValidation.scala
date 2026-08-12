@@ -66,9 +66,8 @@ object CommonValidation {
     }
 
     tx match {
-      case ttx: TransferTransaction => checkTransfer(ttx.sender.toAddress, ttx.assetId, ttx.amount.value, ttx.feeAssetId, ttx.fee.value)
-      case mtx: MassTransferTransaction =>
-        checkTransfer(mtx.sender.toAddress, mtx.assetId, mtx.transfers.map(_.amount.value).sum, Hearth, mtx.fee.value)
+      case ttx: TransferTransaction =>
+        checkTransfer(ttx.sender.toAddress, ttx.assetId, ttx.transfers.map(_.amount.value).sum, ttx.feeAssetId, ttx.fee.value)
       case _ => Right(tx)
     }
   }

@@ -13,8 +13,8 @@ import tech.hearth.transaction.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.{AssetPair, ExchangeTransaction, Order}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import tech.hearth.utils.SharedSchedulerMixin
 import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.server.Route
@@ -126,7 +126,15 @@ class ProtoVersionTransactionsSpec
       val recipient = TxHelpers.secondAddress
       val transferTxUnsigned =
         TransferTransaction
-          .create(PublicKey(account.publicKey), recipient, asset, 100L, Hearth, MinFee, ByteStr(attachment), now, Proofs.empty)
+          .create(
+            PublicKey(account.publicKey),
+            asset,
+            Seq(ParsedTransfer(recipient, TxNonNegativeAmount.unsafeFrom(100))),
+            MinFee,
+            now,
+            ByteStr(attachment),
+            Proofs.empty
+          )
           .explicitGet()
 
       val (proofs, transferTxJson) = Post(routePath("/sign"), transferTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {
@@ -146,14 +154,14 @@ class ProtoVersionTransactionsSpec
 
     }
 
-    "MassTransferTransaction" in {
+    "TransferTransaction (multiple recipients)" in {
       val transfers = (1 to 10).map { i =>
         ParsedTransfer(TxHelpers.signer(i).toAddress, TxNonNegativeAmount.unsafeFrom(100))
       }
       val attachment = Array.fill(TransferTransaction.MaxAttachmentSize)(1: Byte)
 
       val massTransferTxUnsigned =
-        MassTransferTransaction
+        TransferTransaction
           .create(PublicKey(account.publicKey), Hearth, transfers, MassTransferTxFee, now, ByteStr(attachment), Proofs.empty)
           .explicitGet()
 

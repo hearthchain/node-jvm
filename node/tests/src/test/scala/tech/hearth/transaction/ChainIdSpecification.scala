@@ -9,8 +9,8 @@ import tech.hearth.test.PropSpec
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.{AssetPair, ExchangeTransaction, Order}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import org.scalacheck.Gen
 import tech.hearth.crypto.SigningKey
 
@@ -44,13 +44,12 @@ class ChainIdSpecification extends PropSpec {
       validateFromOtherNetwork(
         TransferTransaction(
           PublicKey(sender.publicKey),
-          sender.toAddress,
           Hearth,
-          amount,
-          Hearth,
+          Seq(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(amount.value))),
           fee,
-          ByteStr.empty,
+          Hearth,
           ts,
+          ByteStr.empty,
           Proofs.empty,
           otherChainId
         ).signWith(sender).validatedEither.explicitGet()
@@ -99,24 +98,6 @@ class ChainIdSpecification extends PropSpec {
           ByteStr(bytes32gen.sample.get),
           fee,
           ts,
-          Proofs.empty,
-          otherChainId
-        ).signWith(sender).validatedEither.explicitGet()
-      )
-    }
-  }
-
-  property("MassTransferTransaction validation") {
-    forAll(txParams) { case (sender, amount, fee, ts) =>
-      validateFromOtherNetwork(
-        MassTransferTransaction(
-          PublicKey(sender.publicKey),
-          Hearth,
-          Seq(ParsedTransfer(sender.toAddress, TxNonNegativeAmount.unsafeFrom(amount.value))),
-          fee,
-          Hearth,
-          ts,
-          ByteStr.empty,
           Proofs.empty,
           otherChainId
         ).signWith(sender).validatedEither.explicitGet()

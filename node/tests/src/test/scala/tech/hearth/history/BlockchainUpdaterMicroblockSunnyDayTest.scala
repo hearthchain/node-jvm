@@ -26,8 +26,8 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
     // More than the fee, or the transfers below would be for a negative amount: Alice has to afford exactly one of them
     amount <- Gen.choose(fee + 2, ENOUGH_AMT / 100)
     masterToAlice: TransferTransaction = createHearthTransfer(master, alice.toAddress, amount, fee, ts).explicitGet()
-    aliceToBob                         = createHearthTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts).explicitGet()
-    aliceToBob2                        = createHearthTransfer(alice, bob.toAddress, masterToAlice.amount.value - fee - 1, fee, ts + 1).explicitGet()
+    aliceToBob  = createHearthTransfer(alice, bob.toAddress, masterToAlice.transfers.head.amount.value - fee - 1, fee, ts).explicitGet()
+    aliceToBob2 = createHearthTransfer(alice, bob.toAddress, masterToAlice.transfers.head.amount.value - fee - 1, fee, ts + 1).explicitGet()
   } yield (master, masterToAlice, aliceToBob, aliceToBob2)
 
   private def fundMaster(s: Setup): Seq[AddrWithBalance] = Seq(AddrWithBalance(s._1.toAddress, ENOUGH_AMT))
@@ -54,8 +54,8 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
       domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative hearth balance")
 
       effBalance(master.toAddress, domain) > 0 shouldBe true
-      effBalance(masterToAlice.recipient, domain) shouldBe 0L
-      effBalance(aliceToBob.recipient, domain) shouldBe 0L
+      effBalance(masterToAlice.transfers.head.address, domain) shouldBe 0L
+      effBalance(aliceToBob.transfers.head.address, domain) shouldBe 0L
     }
   }
 
@@ -72,8 +72,8 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         // effBalance is the minimum over the generating window, so an account credited in the liquid block is still
         // at zero there; what the micro block did shows up in the balances
         effBalance(master.toAddress, domain) > 0 shouldBe true
-        domain.balance(masterToAlice.recipient) shouldBe 1L
-        domain.balance(aliceToBob.recipient) shouldBe aliceToBob.amount.value
+        domain.balance(masterToAlice.transfers.head.address) shouldBe 1L
+        domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob.transfers.head.amount.value
     }
   }
 
@@ -86,8 +86,8 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative hearth balance")
 
         effBalance(master.toAddress, domain) > 0 shouldBe true
-        domain.balance(masterToAlice.recipient) shouldBe 1L
-        domain.balance(aliceToBob.recipient) shouldBe aliceToBob.amount.value
+        domain.balance(masterToAlice.transfers.head.address) shouldBe 1L
+        domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob.transfers.head.amount.value
     }
   }
 
@@ -105,7 +105,7 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         domain.appendBlockE(competing) should beRight
 
         effBalance(master.toAddress, domain) > 0 shouldBe true
-        domain.balance(aliceToBob.recipient) shouldBe aliceToBob2.amount.value
+        domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob2.transfers.head.amount.value
     }
   }
 
@@ -127,7 +127,7 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         // Same parent, later timestamp: not better than the liquid block, so it is turned away
         domain.appendBlockE(worse) should produce("is not better than existing")
 
-        domain.balance(aliceToBob.recipient) shouldBe aliceToBob.amount.value
+        domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob.transfers.head.amount.value
     }
   }
 
@@ -148,7 +148,7 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         // Same parent, earlier timestamp: better, so it replaces the liquid block and everything it carried
         domain.appendBlockE(better) should beRight
 
-        domain.balance(aliceToBob.recipient) shouldBe aliceToBob2.amount.value
+        domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob2.transfers.head.amount.value
     }
   }
 

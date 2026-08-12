@@ -16,7 +16,7 @@ import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.assets.exchange.{Order, ExchangeTransaction as ExchangeTx}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.*
-import tech.hearth.transaction.transfer.MassTransferTransaction.{ParsedTransfer, Transfer}
+import tech.hearth.transaction.transfer.TransferTransaction.{ParsedTransfer, Transfer}
 import tech.hearth.transaction.{
   Asset,
   Proofs,
@@ -374,13 +374,12 @@ object AsyncHttpApi extends Assertions {
       signedBroadcast(
         TransferTransaction(
           PublicKey(sender.publicKey()),
-          Address.fromString(recipient).explicitGet(),
           Asset.fromString(assetId),
-          TxPositiveAmount.unsafeFrom(amount),
-          Asset.fromString(feeAssetId),
+          Seq(ParsedTransfer(Address.fromString(recipient).explicitGet(), TxNonNegativeAmount.unsafeFrom(amount))),
           TxPositiveAmount.unsafeFrom(fee),
-          attachment.fold(ByteStr.empty)(s => ByteStr(s.getBytes)),
+          Asset.fromString(feeAssetId),
           System.currentTimeMillis(),
+          attachment.fold(ByteStr.empty)(s => ByteStr(s.getBytes)),
           Proofs.empty,
           AddressScheme.current.chainId
         ).signWith(sender)
@@ -438,7 +437,7 @@ object AsyncHttpApi extends Assertions {
         amountsAsStrings: Boolean = false
     ): Future[Transaction] = {
       signedBroadcast(
-        MassTransferTransaction(
+        TransferTransaction(
           PublicKey(sender.publicKey()),
           Asset.fromString(assetId),
           transfers.map(t => ParsedTransfer(Address.fromString(t.recipient).explicitGet(), TxNonNegativeAmount.unsafeFrom(t.amount))),

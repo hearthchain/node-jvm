@@ -1,10 +1,8 @@
 package tech.hearth
 
-import tech.hearth.account.{Address, PublicKey}
+import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
-import tech.hearth.common.utils.EitherExt2.*
-import tech.hearth.transaction.transfer.*
-import tech.hearth.transaction.{Asset, Proofs}
+import tech.hearth.transaction.Proofs
 import org.scalatest.enablers.Emptiness
 import org.scalatest.matchers.{HavePropertyMatchResult, HavePropertyMatcher}
 import play.api.libs.functional.syntax.*
@@ -57,34 +55,6 @@ package object http {
       JsArray(proofs.proofs.map(byteStrFormat.writes))
     }
   )
-
-  implicit val versionedTransferTransactionFormat: Reads[TransferTransaction] = (
-    (JsPath \ "version").readNullable[Byte] and
-      (JsPath \ "senderPublicKey").read[PublicKey] and
-      (JsPath \ "recipient").read[String].map(Address.fromString(_).explicitGet()) and
-      (JsPath \ "assetId").read[Asset] and
-      (JsPath \ "amount").read[Long] and
-      (JsPath \ "timestamp").read[Long] and
-      (JsPath \ "feeAssetId").read[Asset] and
-      (JsPath \ "fee").read[Long] and
-      (JsPath \ "attachment").readWithDefault(ByteStr.empty) and
-      (JsPath \ "proofs").readNullable[Proofs] and
-      (JsPath \ "signature").readNullable[ByteStr]
-  ) { (_, sender, recipient, asset, amount, timestamp, feeAsset, fee, attachment, proofs, signature) =>
-    TransferTransaction
-      .create(
-        sender,
-        recipient,
-        asset,
-        amount,
-        feeAsset,
-        fee,
-        attachment,
-        timestamp,
-        proofs.orElse(signature.map(s => Proofs(Seq(s)))).get
-      )
-      .explicitGet()
-  }
 
   implicit val emptyJsLookupResult: Emptiness[JsLookupResult] = r => r.isEmpty
 }

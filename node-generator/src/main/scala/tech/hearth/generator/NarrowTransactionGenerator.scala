@@ -12,7 +12,7 @@ import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.transfer.*
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import org.slf4j.LoggerFactory
 import pureconfig.ConfigReader
 import tech.hearth.crypto.SigningKey
@@ -20,12 +20,12 @@ import tech.hearth.crypto.SigningKey
 import java.util.concurrent.ThreadLocalRandom
 import scala.concurrent.duration.*
 import scala.reflect.ClassTag
-import scala.util.Random
 
-// Every transaction type that isn't one of Transfer/Exchange/Lease/LeaseCancel/MassTransfer (Issue, Reissue, Burn,
-// CreateAlias, Data, SponsorFee, InvokeScript, Ethereum, SetScript) no longer exists (see CLAUDE.md's Transaction
-// JSON notes) - so this generator, and the preconditions it builds, only cover the surviving five. Aliases are gone
-// too, so every recipient is a plain address.
+// Every transaction type that isn't one of Transfer/Exchange/Lease/LeaseCancel (Issue, Reissue, Burn, CreateAlias,
+// Data, SponsorFee, InvokeScript, Ethereum, SetScript) no longer exists (see CLAUDE.md's Transaction JSON notes) -
+// so this generator, and the preconditions it builds, only cover the surviving four (MassTransfer having merged
+// into Transfer, which now supports multiple recipients). Aliases are gone too, so every recipient is a plain
+// address.
 //noinspection ScalaStyle, TypeAnnotation
 class NarrowTransactionGenerator(
     settings: NarrowTransactionGenerator.Settings,
@@ -53,25 +53,28 @@ class NarrowTransactionGenerator(
         case TransactionType.Transfer =>
           (
             for {
-              sender    <- randomFrom(accounts)
-              recipient <- randomFrom(accounts).map(_.toAddress)
+              sender <- randomFrom(accounts)
+              transferCount = random.nextInt(TransferTransaction.MaxTransferCount)
+              transfers = for (_ <- 0 until transferCount) yield {
+                val recipient = randomFrom(accounts).get.toAddress
+                val amount    = 1000 / (transferCount + 1)
+                ParsedTransfer(recipient, TxNonNegativeAmount.unsafeFrom(amount))
+              }
               tx <- logOption(
                 TransferTransaction
                   .create(
                     PublicKey(sender.publicKey()),
-                    recipient,
                     Hearth,
-                    Random.nextInt(100),
-                    Hearth,
-                    500000L,
-                    createAttachment(),
+                    transfers.toList,
+                    100000L + 50000L * transferCount + 400000L,
                     timestamp,
+                    createAttachment(),
                     Proofs.empty
                   )
                   .map(_.signWith(sender))
               )
             } yield tx
-          ).logNone("Can't define sender/recipient of transaction, check your configuration")
+          ).logNone("Can't define sender of transaction, check your configuration")
 
         case TransactionType.Exchange =>
           (
@@ -144,32 +147,6 @@ class NarrowTransactionGenerator(
               )
             } yield tx
           ).logNone("There is no active lease transactions, may be you need to increase lease transaction's probability")
-
-        case TransactionType.MassTransfer =>
-          (
-            for {
-              sender <- randomFrom(accounts)
-              transferCount = random.nextInt(MassTransferTransaction.MaxTransferCount)
-              transfers = for (_ <- 0 until transferCount) yield {
-                val recipient = randomFrom(accounts).get.toAddress
-                val amount    = 1000 / (transferCount + 1)
-                ParsedTransfer(recipient, TxNonNegativeAmount.unsafeFrom(amount))
-              }
-              tx <- logOption(
-                MassTransferTransaction
-                  .create(
-                    PublicKey(sender.publicKey()),
-                    Hearth,
-                    transfers.toList,
-                    100000L + 50000L * transferCount + 400000L,
-                    timestamp,
-                    createAttachment(),
-                    Proofs.empty
-                  )
-                  .map(_.signWith(sender))
-              )
-            } yield tx
-          ).logNone("Can't define sender of transaction, check your configuration")
 
         case _ => ???
       }

@@ -20,11 +20,15 @@ object FeeValidation {
   val FeeConstants: Map[TransactionType, Long] = Map(
     TransactionType.Genesis            -> 0,
     TransactionType.Transfer           -> 1,
-    TransactionType.MassTransfer       -> 1,
     TransactionType.Lease              -> 1,
     TransactionType.LeaseCancel        -> 1,
     TransactionType.Exchange           -> 3,
-    TransactionType.CommitToGeneration -> 100 // TODO: decide
+    TransactionType.CommitToGeneration -> 100, // TODO: decide
+    TransactionType.StartBoost         -> 1,   // TODO: decide
+    TransactionType.Reserve            -> 1,   // TODO: decide
+    TransactionType.BindApiKey         -> 1,   // TODO: decide
+    TransactionType.Settle             -> 1,   // TODO: decide
+    TransactionType.Withdraw           -> 1    // TODO: decide
   )
 
   def apply(tx: Transaction): Either[ValidationError, Unit] =
@@ -35,7 +39,7 @@ object FeeValidation {
       .get(tx.tpe)
       .map { baseFee =>
         tx match {
-          case tx: MassTransferTransaction =>
+          case tx: TransferTransaction =>
             baseFee + (tx.transfers.size + 1) / 2
           case _ => baseFee
         }

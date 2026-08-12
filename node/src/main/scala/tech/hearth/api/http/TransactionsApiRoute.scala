@@ -15,7 +15,7 @@ import tech.hearth.network.TransactionPublisher
 import tech.hearth.settings.RestAPISettings
 import tech.hearth.state.{Blockchain, Height}
 import tech.hearth.transaction.*
-import tech.hearth.transaction.transfer.MassTransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.utils.Time
 import tech.hearth.mining.GeneratorKeys
 import tech.hearth.wallet.Wallet
@@ -223,7 +223,7 @@ case class TransactionsApiRoute(
   def transactionsByAddress(address: Address, limitParam: Int, maybeAfter: Option[ByteStr]): Observable[TxMetaEnriched] = {
     def txMetaEnriched(address: Address, meta: TransactionMeta): Task[TxMetaEnriched] =
       meta.transaction match {
-        case mtt: MassTransferTransaction if mtt.sender.toAddress != address =>
+        case mtt: TransferTransaction if mtt.sender.toAddress != address =>
           Task.now(TxMetaEnriched(meta))
         case _ => Task.now(TxMetaEnriched(meta))
       }

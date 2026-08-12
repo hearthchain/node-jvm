@@ -18,10 +18,10 @@ class TransactionSpecification extends PropSpec {
         val tx = createHearthTransfer(sender, recipient.toAddress, amount, fee, time).explicitGet()
 
         tx.timestamp shouldEqual time
-        tx.amount.value shouldEqual amount
+        tx.transfers.head.amount.value shouldEqual amount
         tx.fee.value shouldEqual fee
         tx.sender shouldEqual PublicKey(sender.publicKey)
-        tx.recipient shouldEqual recipient.toAddress
+        tx.transfers.head.address shouldEqual recipient.toAddress
     }
   }
 
@@ -37,9 +37,8 @@ class TransactionSpecification extends PropSpec {
 
         tx.proofs shouldEqual txAfter.proofs
         tx.sender shouldEqual txAfter.sender
-        tx.recipient shouldEqual txAfter.recipient
+        tx.transfers shouldEqual txAfter.transfers
         tx.timestamp shouldEqual txAfter.timestamp
-        tx.amount shouldEqual txAfter.amount
         tx.fee shouldEqual txAfter.fee
     }
   }

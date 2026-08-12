@@ -6,7 +6,7 @@ import tech.hearth.crypto.KeyLength
 import tech.hearth.generator.utils.Implicits.*
 import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.transfer.*
-import tech.hearth.transaction.{Proofs, Transaction}
+import tech.hearth.transaction.{Proofs, Transaction, TxNonNegativeAmount}
 import tech.hearth.crypto.SigningKey
 
 import java.util.concurrent.ThreadLocalRandom
@@ -29,7 +29,15 @@ object Gen {
       .zipWithIndex
       .map { case (((src, dst), fee), i) =>
         TransferTransaction
-          .create(PublicKey(src.publicKey()), dst, Hearth, fee, Hearth, fee, ByteStr.empty, now + i, Proofs.empty)
+          .create(
+            PublicKey(src.publicKey()),
+            Hearth,
+            Seq(TransferTransaction.ParsedTransfer(dst, TxNonNegativeAmount.unsafeFrom(fee))),
+            fee,
+            now + i,
+            ByteStr.empty,
+            Proofs.empty
+          )
           .map(_.signWith(src))
       }
       .collect { case Right(x) => x }

@@ -26,7 +26,7 @@ trait IntegrationSuiteWithThreeAddresses extends BaseSuite {
         sender
           .massTransfer(
             sender.keyPair,
-            List(firstAddress, secondAddress, thirdAddress).map(MassTransferTransaction.Transfer(_, 100.hearth)),
+            List(firstAddress, secondAddress, thirdAddress).map(TransferTransaction.Transfer(_, 100.hearth)),
             0.003.hearth
           )
           .id

@@ -4,8 +4,7 @@ import com.google.protobuf.ByteString
 import tech.hearth.account.AddressScheme
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.*
-import tech.hearth.protobuf.Amount
-import tech.hearth.protobuf.transaction.{MassTransferTransactionData, PBTransaction}
+import tech.hearth.protobuf.transaction.{TransferTransactionData, PBTransaction}
 import tech.hearth.protobuf.utils.PBUtils
 import tech.hearth.crypto.SigningKey
 
@@ -13,7 +12,7 @@ object TxHelpers {
   def massTransferBodyBytes(
       sender: SigningKey,
       assetId: Option[String],
-      transfers: Seq[MassTransferTransactionData.Transfer],
+      transfers: Seq[TransferTransactionData.Transfer],
       attachment: ByteString,
       fee: Long,
       timestamp: Long
@@ -21,13 +20,14 @@ object TxHelpers {
     val unsigned = PBTransaction(
       AddressScheme.current.chainId,
       ByteString.copyFrom(sender.publicKey()),
-      Some(Amount.of(ByteString.EMPTY, fee)),
+      fee,
       timestamp,
-      PBTransaction.Data.MassTransfer(
-        MassTransferTransactionData.of(
+      PBTransaction.Data.Transfer(
+        TransferTransactionData.of(
           if (assetId.isDefined) ByteString.copyFrom(Base16.decode(assetId.get)) else ByteString.EMPTY,
           transfers,
-          attachment
+          attachment,
+          ByteString.EMPTY
         )
       )
     )

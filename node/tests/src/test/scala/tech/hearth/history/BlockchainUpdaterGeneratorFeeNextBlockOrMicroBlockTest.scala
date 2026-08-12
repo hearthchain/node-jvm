@@ -48,7 +48,8 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
       domain.appendBlockAt(somePayment.timestamp)(somePayment)
 
       val earnedSoFar = BlockDiffer.CurrentBlockFeePart(somePayment.fee.value)
-      val affordable  = createHearthTransfer(defaultSigner, somePayment.recipient, earnedSoFar, 1, somePayment.timestamp + 2).explicitGet()
+      val affordable =
+        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, earnedSoFar, 1, somePayment.timestamp + 2).explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable) should beRight
     }
@@ -73,7 +74,7 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
 
       // The carry of the whole liquid block, micro blocks included, is credited when the next block references it
       val affordable =
-        createHearthTransfer(defaultSigner, somePayment.recipient, somePayment.fee.value, 1, somePayment.timestamp + 2).explicitGet()
+        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, somePayment.fee.value, 1, somePayment.timestamp + 2).explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable, someOtherPayment) should beRight
     }

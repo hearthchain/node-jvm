@@ -12,7 +12,7 @@ import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.transfer.*
 import tech.hearth.transaction.transfer.TransferTransaction.MaxAttachmentSize
-import tech.hearth.transaction.{Proofs, TxPositiveAmount}
+import tech.hearth.transaction.{Proofs, TxNonNegativeAmount, TxPositiveAmount}
 import org.scalatest.CancelAfterFailure
 import play.api.libs.json.Json
 
@@ -70,13 +70,12 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
     ): TransferTransaction = {
       val tx = TransferTransaction(
         sender = PublicKey(sender.keyPair.publicKey()),
-        recipient = Address.fromString(sender.address).explicitGet(),
         assetId = Hearth,
-        amount = TxPositiveAmount.unsafeFrom(1),
-        feeAssetId = Hearth,
+        transfers = Seq(TransferTransaction.ParsedTransfer(Address.fromString(sender.address).explicitGet(), TxNonNegativeAmount.unsafeFrom(1))),
         fee = TxPositiveAmount.unsafeFrom(fee),
-        attachment = ByteStr(attachment),
+        feeAssetId = Hearth,
         timestamp = timestamp,
+        attachment = ByteStr(attachment),
         proofs = Proofs.empty,
         chainId = AddressScheme.current.chainId
       )
@@ -96,7 +95,7 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
       // MaxAttachmentStringSize is sized from the same 140-byte bound as MaxAttachmentSize, so any attachment over
       // MaxAttachmentSize is also over the generic string-length limit - the attachment-specific "Invalid attachment.
       // Length ... exceeds maximum" check is unreachable via this endpoint under hex and is exercised directly in
-      // node/tests instead (MassTransferTransactionSpecification).
+      // node/tests instead (TransferTransactionSpecification).
       (invalidTx(attachment = ("1" * (MaxAttachmentSize + 1)).getBytes(StandardCharsets.UTF_8)), "Can't parse '.*' as base16 encoded byte array")
     )
 

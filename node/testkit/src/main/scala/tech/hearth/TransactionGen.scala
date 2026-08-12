@@ -161,11 +161,23 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     ByteStr(attachment)
   )
 
+  private def singleTransfer(recipient: Address, amount: Long): Seq[TransferTransaction.ParsedTransfer] =
+    Seq(TransferTransaction.ParsedTransfer(recipient, TxNonNegativeAmount.unsafeFrom(amount)))
+
   def transferGeneratorP(sender: SigningKey, recipient: Address, assetId: Asset, feeAssetId: Asset): Gen[TransferTransaction] =
     for {
       (_, _, _, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(
+        PublicKey(sender.publicKey),
+        assetId,
+        singleTransfer(recipient, amount),
+        feeAmount,
+        timestamp,
+        attachment,
+        Proofs.empty,
+        feeAssetId = feeAssetId
+      )
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -173,7 +185,16 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     for {
       (_, _, _, amount, timestamp, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(
+        PublicKey(sender.publicKey),
+        assetId,
+        singleTransfer(recipient, amount),
+        feeAmount,
+        timestamp,
+        attachment,
+        Proofs.empty,
+        feeAssetId = feeAssetId
+      )
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -182,7 +203,7 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       amount                                    <- Gen.choose(1L, maxAmount)
       (_, _, _, _, _, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, Hearth, amount, Hearth, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), Hearth, singleTransfer(recipient, amount), feeAmount, timestamp, attachment, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -190,7 +211,16 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
     for {
       (_, _, _, amount, _, _, feeAmount, attachment) <- transferParamGen
     } yield TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+      .create(
+        PublicKey(sender.publicKey),
+        assetId,
+        singleTransfer(recipient, amount),
+        feeAmount,
+        timestamp,
+        attachment,
+        Proofs.empty,
+        feeAssetId = feeAssetId
+      )
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -208,13 +238,22 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
       timestamp: Long
   ): Either[ValidationError, TransferTransaction] =
     TransferTransaction
-      .create(PublicKey(sender.publicKey), recipient, Hearth, amount, Hearth, fee, ByteStr.empty, timestamp, Proofs.empty)
+      .create(PublicKey(sender.publicKey), Hearth, singleTransfer(recipient, amount), fee, timestamp, ByteStr.empty, Proofs.empty)
       .map(_.signWith(sender))
 
   val transferV1Gen: Gen[TransferTransaction] = (for {
     (assetId, sender, recipient, amount, timestamp, feeAssetId, feeAmount, attachment) <- transferParamGen
   } yield TransferTransaction
-    .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+    .create(
+      PublicKey(sender.publicKey),
+      assetId,
+      singleTransfer(recipient, amount),
+      feeAmount,
+      timestamp,
+      attachment,
+      Proofs.empty,
+      feeAssetId = feeAssetId
+    )
     .map(_.signWith(sender))
     .explicitGet())
     .label("transferTransaction")
@@ -222,7 +261,16 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
   val transferV2Gen: Gen[TransferTransaction] = (for {
     (assetId, sender, recipient, amount, timestamp, feeAssetId, feeAmount, attachment) <- transferParamGen
   } yield TransferTransaction
-    .create(PublicKey(sender.publicKey), recipient, assetId, amount, feeAssetId, feeAmount, attachment, timestamp, Proofs.empty)
+    .create(
+      PublicKey(sender.publicKey),
+      assetId,
+      singleTransfer(recipient, amount),
+      feeAmount,
+      timestamp,
+      attachment,
+      Proofs.empty,
+      feeAssetId = feeAssetId
+    )
     .map(_.signWith(sender))
     .explicitGet(
     ))

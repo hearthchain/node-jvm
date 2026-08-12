@@ -9,7 +9,6 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.Node
 import tech.hearth.it.util.*
 import tech.hearth.it.util.GlobalTimer.instance as timer
-import tech.hearth.protobuf.Amount
 import tech.hearth.protobuf.block.PBBlocks
 import tech.hearth.transaction.assets.exchange.Order
 import tech.hearth.utils.Schedulers
@@ -56,13 +55,14 @@ object AsyncGrpcApi {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(source.publicKey()),
-        Some(Amount.of(if (feeAssetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(feeAssetId)), fee)),
+        fee,
         timestamp,
         PBTransaction.Data.Transfer(
           TransferTransactionData.of(
-            Some(recipient),
-            Some(Amount.of(if (assetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(assetId)), amount)),
-            attachment
+            if (assetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(assetId)),
+            Seq(TransferTransactionData.Transfer.of(Some(recipient), amount)),
+            attachment,
+            if (feeAssetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(feeAssetId))
           )
         )
       )
@@ -83,14 +83,13 @@ object AsyncGrpcApi {
         buyMatcherFee: Long,
         sellMatcherFee: Long,
         fee: Long,
-        timestamp: Long,
-        matcherFeeAssetId: String = "HRTH"
+        timestamp: Long
     ): Future[PBSignedTransaction] = {
 
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(matcher.publicKey()),
-        Some(Amount.of(if (matcherFeeAssetId == "HRTH") ByteString.EMPTY else ByteString.copyFrom(Base16.decode(matcherFeeAssetId)), fee)),
+        fee,
         timestamp,
         PBTransaction.Data.Exchange(
           ExchangeTransactionData.of(
@@ -164,20 +163,21 @@ object AsyncGrpcApi {
     def broadcastMassTransfer(
         sender: SigningKey,
         assetId: Option[String] = None,
-        transfers: Seq[MassTransferTransactionData.Transfer],
+        transfers: Seq[TransferTransactionData.Transfer],
         attachment: ByteString = ByteString.EMPTY,
         fee: Long
     ): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(sender.publicKey()),
-        Some(Amount.of(ByteString.EMPTY, fee)),
+        fee,
         System.currentTimeMillis(),
-        PBTransaction.Data.MassTransfer(
-          MassTransferTransactionData.of(
+        PBTransaction.Data.Transfer(
+          TransferTransactionData.of(
             if (assetId.isDefined) ByteString.copyFrom(Base16.decode(assetId.get)) else ByteString.EMPTY,
             transfers,
-            attachment
+            attachment,
+            ByteString.EMPTY
           )
         )
       )
@@ -189,7 +189,7 @@ object AsyncGrpcApi {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(source.publicKey()),
-        Some(Amount.of(ByteString.EMPTY, fee)),
+        fee,
         System.currentTimeMillis,
         PBTransaction.Data.Lease(LeaseTransactionData.of(Some(recipient), amount))
       )
@@ -201,7 +201,7 @@ object AsyncGrpcApi {
       val unsigned = PBTransaction(
         chainId,
         ByteString.copyFrom(source.publicKey()),
-        Some(Amount.of(ByteString.EMPTY, fee)),
+        fee,
         System.currentTimeMillis,
         PBTransaction.Data.LeaseCancel(LeaseCancelTransactionData.of(ByteString.copyFrom(Base16.decode(leaseId))))
       )

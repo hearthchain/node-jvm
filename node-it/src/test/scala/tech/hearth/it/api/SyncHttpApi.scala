@@ -10,7 +10,7 @@ import tech.hearth.it.Node
 import tech.hearth.it.sync.*
 import tech.hearth.state.{AssetDistribution, AssetDistributionPage, GenerationPeriod, Height}
 import tech.hearth.transaction.assets.exchange.Order
-import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
+import tech.hearth.transaction.transfer.TransferTransaction.Transfer
 import tech.hearth.transaction.{Asset, TransactionType, TxExchangeAmount, TxExchangePrice, TxHelpers}
 import io.grpc.Status.Code
 import tech.hearth.crypto.SigningKey

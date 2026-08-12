@@ -81,7 +81,7 @@ object PBBlocks {
   def clearChainId(block: PBBlock): PBBlock =
     block.update(
       _.header.chainId := 0,
-      _.transactions.foreach(_.wavesTransaction.chainId := 0)
+      _.transactions.foreach(_.transaction.chainId := 0)
     )
 
   def addChainId(block: PBBlock): PBBlock = {
@@ -89,7 +89,7 @@ object PBBlocks {
 
     block.update(
       _.header.chainId := chainId,
-      _.transactions.foreach(_.wavesTransaction.chainId := chainId)
+      _.transactions.foreach(_.transaction.chainId := chainId)
     )
   }
 }

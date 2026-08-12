@@ -14,8 +14,8 @@ import tech.hearth.transaction.TxValidationError.*
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
 import tech.hearth.transaction.lease.LeaseTransaction
 import tech.hearth.transaction.smart.script.trace.TracedResult
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import tech.hearth.transaction.{Asset, Authorized, BlockchainUpdater, CommitToGenerationTransaction, Transaction}
 
 import scala.collection.immutable.VectorMap
@@ -438,10 +438,8 @@ object BlockDiffer {
         orders.addOne(tx.buyOrder.id()).addOne(tx.sellOrder.id())
       case tx: LeaseTransaction =>
         addresses.addAll(Seq(tx.sender.toAddress, tx.recipient))
-      case tx: MassTransferTransaction =>
-        addresses.addAll(Seq(tx.sender.toAddress) ++ tx.transfers.collect { case ParsedTransfer(addr: Address, _) => addr })
       case tx: TransferTransaction =>
-        addresses.addAll(Seq(tx.sender.toAddress, tx.recipient))
+        addresses.addAll(Seq(tx.sender.toAddress) ++ tx.transfers.collect { case ParsedTransfer(addr: Address, _) => addr })
       case tx: Authorized => addresses.addOne(tx.sender.toAddress)
       case _              => ()
     }
