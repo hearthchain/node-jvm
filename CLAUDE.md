@@ -636,6 +636,25 @@ injectable trust anchor through `StartBoostTransactionDiff` itself (mirroring `I
 `trustAnchor` parameter) so a synthetic PCK chain built in-test with BouncyCastle could stand in for Intel's real
 one.
 
+### REST: signing and broadcasting
+
+`StartBoostTransaction`/`UpdateCollateralTransaction` are the two stub types from "Transaction schema" above that
+are actually signable through `/transactions/sign`/`/transactions/broadcast` now, via `StartBoostRequest`/
+`UpdateCollateralRequest` (`api/http/requests/`) wired into `TransactionFactory.parseRequest` - the rest
+(`Reserve`/`BindApiKey`/`Settle`/`Withdraw`) still fall through to `UnsupportedTransactionType`, unchanged.
+
+Both request classes hit the same real bug once tested against realistically-sized payloads (a fixture-derived TCB
+Info blob or an actual TDX quote, not a 3-byte placeholder): `ByteStr`'s default REST `Format` decodes at most 280
+base16 characters (`Base16.defaultDecodeLimit`, via `Base16.tryDecodeWithLimit`'s default `limit`), sized for a
+signature or public key, but a `tdxQuote` is ~4935 raw bytes (~9870 hex characters) and a `tcbInfo`/PEM-chain
+collateral field can run to several KB - both silently exceed it and fail with `Can't parse '...' as base16 encoded
+byte array` at request-parse time, before validation ever runs. `api/http/requests/package.scala`'s
+`largeByteStrFormat` (`LargeBlobDecodeLimit = 65536` characters) exists for exactly these fields; `StartBoostRequest`/
+`UpdateCollateralRequest` each shadow the package's ambient `given Format[ByteStr]` with it, locally, in their own
+companion object, before their `Json.format` macro call - every other request type keeps the small default
+unchanged. A future request class with its own large-blob field should reuse `largeByteStrFormat` the same way
+rather than growing the shared default limit, which stays deliberately small for the common case.
+
 ## Protobuf package migration
 
 Generated protobuf code moved from `com.wavesplatform.*` packages to `tech.hearth.*` ones. Most of it comes from the
