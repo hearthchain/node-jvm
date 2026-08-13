@@ -90,7 +90,10 @@ object Dependencies {
     logback,
     "org.scalatestplus" %% "scalacheck-1-16" % "3.2.14.0",
     "org.scalacheck"    %% "scalacheck"      % "1.19.0",
-    "org.scalamock"     %% "scalamock"       % "7.5.5"
+    "org.scalamock"     %% "scalamock"       % "7.5.5",
+    // bcprov-jdk18on (cryptoProviders, above) only parses X.509; building signed certificate/CRL fixtures for DCAP
+    // collateral tests needs the higher-level builder API.
+    "org.bouncycastle" % "bcpkix-jdk18on" % "1.85" // bcprov-jdk18on's 1.85.2 patch has no matching bcpkix release yet
   ).map(_ % Test)
 
   lazy val logDeps = Seq(
