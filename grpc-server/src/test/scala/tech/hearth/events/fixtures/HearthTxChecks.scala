@@ -39,7 +39,7 @@ object HearthTxChecks extends Matchers with OptionValues {
     actual.transaction.value.data match {
       case Data.Transfer(value) =>
         toVanillaAssetId(value.feeAssetId) shouldEqual expected.assetFee._1
-        value.assetId.toByteArray shouldBe expected.assetId.compatId.get.arr
+        toVanillaAssetId(value.assetId) shouldEqual expected.assetId
         value.transfers.foreach(actualTransfer =>
           expected.transfers.foreach(expectedTransfer => actualTransfer.amount shouldBe expectedTransfer.amount.value)
         )
