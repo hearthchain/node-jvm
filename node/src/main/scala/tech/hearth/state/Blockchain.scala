@@ -87,6 +87,8 @@ trait Blockchain {
 
   def conflictGenerators(at: GenerationPeriod): ConflictGenerators
 
+  def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave]
+
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
 

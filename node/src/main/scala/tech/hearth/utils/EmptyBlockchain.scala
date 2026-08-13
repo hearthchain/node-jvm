@@ -85,6 +85,8 @@ trait EmptyBlockchain extends Blockchain {
   override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = IndexedSeq.empty
 
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = ConflictGenerators.empty
+
+  override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = IndexedSeq.empty
 }
 
 object EmptyBlockchain extends EmptyBlockchain

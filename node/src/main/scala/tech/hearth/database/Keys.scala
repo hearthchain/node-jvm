@@ -221,6 +221,17 @@ object Keys {
       writeCommittedGenerators
     )
 
+  /** Key: Int(registeredPeriod.start) ++ Int(registrationHeight), same shape as committedGenerators - a StartBoost
+    * registers an enclave for a period exactly like CommitToGeneration commits a generator for one.
+    */
+  def registeredEnclaves(registeredPeriod: GenerationPeriod, registrationHeight: Height): Key[Option[Seq[RegisteredEnclave]]] =
+    Key.opt(
+      RegisteredEnclaves,
+      h(registeredPeriod.start) ++ h(registrationHeight),
+      readRegisteredEnclaves,
+      writeRegisteredEnclaves
+    )
+
   def conflictGenerators(committedPeriod: GenerationPeriod, conflictEndorsementHeight: Height): Key[Seq[GeneratorIndex]] =
     Key(
       ConflictGenerators,

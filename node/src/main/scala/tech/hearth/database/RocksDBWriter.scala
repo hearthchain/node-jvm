@@ -400,6 +400,7 @@ class RocksDBWriter(
       committedGenerators: Seq[(AddressId, BlsPublicKey, ByteStr)],
       committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
+      registeredEnclaves: Seq[RegisteredEnclave],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
   ): Unit = {
@@ -625,6 +626,8 @@ class RocksDBWriter(
           // TODO: Option to not store
           rw.put(Keys.commitmentTransactions(committedPeriod, h), commitmentTransactionIds)
         }
+
+        if (registeredEnclaves.nonEmpty) rw.put(Keys.registeredEnclaves(committedPeriod, h), Some(registeredEnclaves))
       }
 
       this.generationPeriodOf(h).foreach { currPeriod => // None checked in Caches
@@ -906,6 +909,7 @@ class RocksDBWriter(
             val committedPeriod = if (currentHeight == GenesisBlockHeight) currentPeriod else currentPeriod.next
             rw.delete(Keys.committedGenerators(committedPeriod, currentHeight))
             rw.delete(Keys.commitmentTransactions(committedPeriod, currentHeight))
+            rw.delete(Keys.registeredEnclaves(committedPeriod, currentHeight))
           }
 
           discardedMeta.header.flatMap(_.challengedHeader.map(_.generator.toPublicKey.toAddress)) match {
@@ -1341,6 +1345,17 @@ class RocksDBWriter(
         case (None, _, aid)                     => throw new IllegalStateException(s"Can't find address for address id $aid")
       }
       .toIndexedSeq
+  }
+
+  override def loadRegisteredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = {
+    val result = new mutable.ArrayBuffer[RegisteredEnclave]()
+    val key    = Keys.registeredEnclaves(at, at.start)
+    rdb.db.readOnly { ro =>
+      ro.iterateOver(key.keyBytes.dropRight(Ints.BYTES)) { dbEntry => // Drop height
+        result ++= key.parse(dbEntry.getValue).getOrElse(Seq.empty)
+      }
+    }
+    result.toIndexedSeq
   }
 
   override def loadConflictGenerators(at: GenerationPeriod): ConflictGenerators = {

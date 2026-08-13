@@ -189,6 +189,22 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
   protected def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
   @volatile
+  private var registeredEnclavesCache = Map.empty[GenerationPeriod, IndexedSeq[RegisteredEnclave]] // Only this and next periods
+  override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
+    this.currentGenerationPeriod.fold(Vector.empty) { curr =>
+      if (at == curr || at == curr.next) {
+        registeredEnclavesCache.getOrElse(
+          at, {
+            val r = loadRegisteredEnclaves(at)
+            registeredEnclavesCache = registeredEnclavesCache.updated(at, r)
+            r
+          }
+        )
+      } else loadRegisteredEnclaves(at)
+    }
+  protected def loadRegisteredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave]
+
+  @volatile
   private var conflictGeneratorsCache = Map.empty[GenerationPeriod, ConflictGenerators]
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators =
     this.currentGenerationPeriod.fold(ConflictGenerators.empty) { curr =>
@@ -218,6 +234,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       committedGenerators: Seq[(AddressId, BlsPublicKey, ByteStr)],
       committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
+      registeredEnclaves: Seq[RegisteredEnclave],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
   ): Unit
@@ -321,11 +338,14 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       e <- v.conflict
     } yield e.endorserIndex
 
+    val registeredEnclaves = snapshot.nextRegisteredEnclaves
+
     val committedPeriod = this.generationPeriodOf(current.height) match {
       case None =>
         require(
-          committedGenerators.isEmpty && conflictGenerators.isEmpty,
-          s"Expected empty conflict and next committed generators, got: committedGenerators=$committedGenerators, conflictGenerators=$conflictGenerators"
+          committedGenerators.isEmpty && conflictGenerators.isEmpty && registeredEnclaves.isEmpty,
+          s"Expected empty conflict/next committed generators and registered enclaves, got: " +
+            s"committedGenerators=$committedGenerators, conflictGenerators=$conflictGenerators, registeredEnclaves=$registeredEnclaves"
         )
         None
 
@@ -336,6 +356,11 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
         if (committedGenerators.nonEmpty)
           committedGeneratorsCache = committedGeneratorsCache.updatedWith(committedPeriod) { orig =>
             Some(orig.getOrElse(Vector.empty) ++ committedGeneratorsWithAddr)
+          }
+
+        if (registeredEnclaves.nonEmpty)
+          registeredEnclavesCache = registeredEnclavesCache.updatedWith(committedPeriod) { orig =>
+            Some(orig.getOrElse(Vector.empty) ++ registeredEnclaves)
           }
 
         if (conflictGenerators.nonEmpty)
@@ -389,6 +414,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       committedGenerators,
       committedPeriod,
       commitmentTransactionIds,
+      registeredEnclaves,
       conflictGenerators,
       stateHash.result()
     )
@@ -406,6 +432,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
     this.generationPeriodOf(current.height).foreach { currPeriod =>
       committedGeneratorsCache = committedGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
+      registeredEnclavesCache = registeredEnclavesCache.view.filterKeys(_ >= currPeriod).toMap
       conflictGeneratorsCache = conflictGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
     }
   }
@@ -429,6 +456,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       approvedFeaturesCache = loadApprovedFeatures()
 
       committedGeneratorsCache = Map.empty
+      registeredEnclavesCache = Map.empty
       conflictGeneratorsCache = Map.empty
 
       discardedBlocks

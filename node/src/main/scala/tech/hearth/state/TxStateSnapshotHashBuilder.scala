@@ -77,6 +77,10 @@ object TxStateSnapshotHashBuilder {
       changedKeys += gc.sender.arr ++ gc.endorserPublicKey.arr ++ gc.vrfPublicKey.arr
     }
 
+    snapshot.nextRegisteredEnclaves.foreach { re =>
+      changedKeys += re.attestationPublicKey.arr ++ re.validator.toBytes
+    }
+
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {
         case Status.Failed    => changedKeys += txInfo.id.arr ++ Array(1: Byte)

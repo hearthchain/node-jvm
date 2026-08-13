@@ -22,6 +22,7 @@ case class StateSnapshot(
     cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
     orderFills: Map[ByteStr, VolumeAndFee] = Map(),
     nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty,
+    nextRegisteredEnclaves: Seq[RegisteredEnclave] = Seq.empty,
     // DCAP collateral (see the StartBoost consensus plan): rootCaCrl/pckCrl/qeIdentity/tcbSigningIssuerChain are
     // each a single current value, tcbInfo is keyed per FMSPC (platform model) since only the FMSPCs actually
     // seen need an entry. "Last write wins" within a block, same as assetVolumes/minAssetFees above.
@@ -63,6 +64,7 @@ object StateSnapshot {
       cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
       transactions: VectorMap[ByteStr, NewTransactionInfo] = VectorMap(),
       nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty,
+      nextRegisteredEnclaves: Seq[RegisteredEnclave] = Seq.empty,
       dcapRootCaCrl: Option[ByteStr] = None,
       dcapPckCrl: Option[ByteStr] = None,
       dcapTcbInfo: Map[ByteStr, ByteStr] = Map.empty,
@@ -86,6 +88,7 @@ object StateSnapshot {
         cancelledLeases,
         of,
         nextCommittedGenerators,
+        nextRegisteredEnclaves,
         dcapRootCaCrl,
         dcapPckCrl,
         dcapTcbInfo,
@@ -183,6 +186,7 @@ object StateSnapshot {
         s1.cancelledLeases ++ s2.cancelledLeases,
         s1.orderFills ++ s2.orderFills,
         s1.nextCommittedGenerators ++ s2.nextCommittedGenerators,
+        s1.nextRegisteredEnclaves ++ s2.nextRegisteredEnclaves,
         s2.dcapRootCaCrl.orElse(s1.dcapRootCaCrl),
         s2.dcapPckCrl.orElse(s1.dcapPckCrl),
         s1.dcapTcbInfo ++ s2.dcapTcbInfo,

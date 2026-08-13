@@ -218,6 +218,16 @@ case class SnapshotBlockchain(
     if (committedHere) base ++ snapshot.nextCommittedGenerators.map(_.toCommittedGenerator) else base
   }
 
+  override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = {
+    val base = inner.registeredEnclaves(at)
+    // Mirrors committedGenerators above: an enclave registered in the genesis block boosts from the very first
+    // period, everyone else from the next one.
+    val registeredHere =
+      if (Height(this.height) == GenesisBlockHeight) this.currentGenerationPeriod.contains(at)
+      else this.currentGenerationPeriod.exists(_.next == at)
+    if (registeredHere) base ++ snapshot.nextRegisteredEnclaves else base
+  }
+
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = {
     lazy val base = inner.conflictGenerators(at)
     this.currentGenerationPeriod.fold(ConflictGenerators.empty) { currPeriod =>

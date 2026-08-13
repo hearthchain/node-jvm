@@ -775,6 +775,10 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.committedGenerators(at)
   }
 
+  override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = readLock {
+    snapshotBlockchain.registeredEnclaves(at)
+  }
+
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = readLock {
     snapshotBlockchain.conflictGenerators(at)
   }
