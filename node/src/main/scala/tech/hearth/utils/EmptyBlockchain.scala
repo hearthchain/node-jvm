@@ -55,6 +55,12 @@ trait EmptyBlockchain extends Blockchain {
 
   override def leaseDetails(leaseId: ByteStr): Option[LeaseDetails] = None
 
+  override def dcapRootCaCrl: Option[ByteStr]               = None
+  override def dcapPckCrl: Option[ByteStr]                  = None
+  override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] = None
+  override def dcapQeIdentity: Option[ByteStr]              = None
+  override def dcapTcbSigningIssuerChain: Option[ByteStr]   = None
+
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = VolumeAndFee(0, 0)
 
   /** Retrieves Hearth balance snapshot in the [from, to] range (inclusive) */

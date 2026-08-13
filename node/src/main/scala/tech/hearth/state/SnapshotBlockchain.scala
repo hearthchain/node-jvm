@@ -83,6 +83,12 @@ case class SnapshotBlockchain(
     }
   }
 
+  override def dcapRootCaCrl: Option[ByteStr]               = snapshot.dcapRootCaCrl.orElse(inner.dcapRootCaCrl)
+  override def dcapPckCrl: Option[ByteStr]                  = snapshot.dcapPckCrl.orElse(inner.dcapPckCrl)
+  override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] = snapshot.dcapTcbInfo.get(fmspc).orElse(inner.dcapTcbInfo(fmspc))
+  override def dcapQeIdentity: Option[ByteStr]              = snapshot.dcapQeIdentity.orElse(inner.dcapQeIdentity)
+  override def dcapTcbSigningIssuerChain: Option[ByteStr]   = snapshot.dcapTcbSigningIssuerChain.orElse(inner.dcapTcbSigningIssuerChain)
+
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions
       .get(id)

@@ -110,6 +110,27 @@ package object database {
       .array()
   }
 
+  // Generic length-prefixed Seq[ByteStr], for a list of opaque byte blobs of varying length (e.g. FMSPCs seen at a
+  // given height for DCAP TCB Info rollback) - the same shape readStrings/writeStrings already use for Seq[String].
+  def readByteStrSeq(data: Array[Byte]): Seq[ByteStr] = Option(data).fold(Seq.empty[ByteStr]) { _ =>
+    var i = 0
+    val s = Seq.newBuilder[ByteStr]
+
+    while (i < data.length) {
+      val len = ((data(i) << 8) | (data(i + 1) & 0xff)).toShort
+      s += ByteStr(data.slice(i + 2, i + 2 + len))
+      i += (2 + len)
+    }
+    s.result()
+  }
+
+  def writeByteStrSeq(values: Seq[ByteStr]): Array[Byte] =
+    values
+      .foldLeft(ByteBuffer.allocate(values.map(_.arr.length + 2).sum)) { case (buf, v) =>
+        buf.putShort(v.arr.length.toShort).put(v.arr)
+      }
+      .array()
+
   def readLeaseBalanceNode(data: Array[Byte]): LeaseBalanceNode = if (data != null && data.length == 20)
     LeaseBalanceNode(Longs.fromByteArray(data.take(8)), Longs.fromByteArray(data.slice(8, 16)), Height(Ints.fromByteArray(data.takeRight(4))))
   else LeaseBalanceNode.Empty

@@ -694,6 +694,14 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.leaseDetails(leaseId)
   }
 
+  override def dcapRootCaCrl: Option[ByteStr] = readLock(snapshotBlockchain.dcapRootCaCrl)
+  override def dcapPckCrl: Option[ByteStr]    = readLock(snapshotBlockchain.dcapPckCrl)
+  override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] = readLock {
+    snapshotBlockchain.dcapTcbInfo(fmspc)
+  }
+  override def dcapQeIdentity: Option[ByteStr]            = readLock(snapshotBlockchain.dcapQeIdentity)
+  override def dcapTcbSigningIssuerChain: Option[ByteStr] = readLock(snapshotBlockchain.dcapTcbSigningIssuerChain)
+
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = readLock {
     snapshotBlockchain.filledVolumeAndFee(orderId)
   }

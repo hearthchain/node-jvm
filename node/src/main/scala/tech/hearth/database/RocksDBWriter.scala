@@ -499,6 +499,32 @@ class RocksDBWriter(
         expiredKeys ++= updateHistory(rw, Keys.leaseDetailsHistory(id), threshold, Keys.leaseDetails(id))
       }
 
+      snapshot.dcapRootCaCrl.foreach { crl =>
+        rw.put(Keys.dcapRootCaCrl(Height(height)), crl)
+        expiredKeys ++= updateHistory(rw, Keys.dcapRootCaCrlHistory, threshold, Keys.dcapRootCaCrl)
+      }
+
+      snapshot.dcapPckCrl.foreach { crl =>
+        rw.put(Keys.dcapPckCrl(Height(height)), crl)
+        expiredKeys ++= updateHistory(rw, Keys.dcapPckCrlHistory, threshold, Keys.dcapPckCrl)
+      }
+
+      for ((fmspc, payload) <- snapshot.dcapTcbInfo) {
+        rw.put(Keys.dcapTcbInfo(fmspc)(Height(height)), payload)
+        expiredKeys ++= updateHistory(rw, Keys.dcapTcbInfoHistory(fmspc), threshold, Keys.dcapTcbInfo(fmspc))
+      }
+      if (snapshot.dcapTcbInfo.nonEmpty) rw.put(Keys.dcapTcbInfoFmspcsAt(Height(height)), snapshot.dcapTcbInfo.keySet.toSeq)
+
+      snapshot.dcapQeIdentity.foreach { identity =>
+        rw.put(Keys.dcapQeIdentity(Height(height)), identity)
+        expiredKeys ++= updateHistory(rw, Keys.dcapQeIdentityHistory, threshold, Keys.dcapQeIdentity)
+      }
+
+      snapshot.dcapTcbSigningIssuerChain.foreach { chain =>
+        rw.put(Keys.dcapTcbSigningIssuerChain(Height(height)), chain)
+        expiredKeys ++= updateHistory(rw, Keys.dcapTcbSigningIssuerChainHistory, threshold, Keys.dcapTcbSigningIssuerChain)
+      }
+
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
             .ofMillis(blockMeta.getHeader.timestamp - TxFilterResetTs)}")
@@ -844,6 +870,7 @@ class RocksDBWriter(
             .foreach(rollbackLeaseStatus(rw, _, currentHeight))
 
           rollbackAssetsInfo(rw, currentHeight)
+          rollbackDcapCollateral(rw, currentHeight)
 
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
@@ -958,6 +985,26 @@ class RocksDBWriter(
     (issued ++ minFeeAssets).distinct.foreach(discardAssetDescription)
   }
 
+  private def rollbackDcapCollateral(rw: RW, currentHeight: Height): Unit = {
+    def rollbackSingleton(historyKey: Key[Seq[Height]], valueKey: Height => Key[ByteStr]): Unit =
+      if (rw.get(historyKey).headOption.contains(currentHeight)) {
+        rw.delete(valueKey(currentHeight))
+        rw.filterHistory(historyKey, currentHeight)
+      }
+
+    rollbackSingleton(Keys.dcapRootCaCrlHistory, Keys.dcapRootCaCrl)
+    rollbackSingleton(Keys.dcapPckCrlHistory, Keys.dcapPckCrl)
+    rollbackSingleton(Keys.dcapQeIdentityHistory, Keys.dcapQeIdentity)
+    rollbackSingleton(Keys.dcapTcbSigningIssuerChainHistory, Keys.dcapTcbSigningIssuerChain)
+
+    val fmspcsKey = Keys.dcapTcbInfoFmspcsAt(currentHeight)
+    rw.get(fmspcsKey).foreach { fmspc =>
+      rw.delete(Keys.dcapTcbInfo(fmspc)(currentHeight))
+      rw.filterHistory(Keys.dcapTcbInfoHistory(fmspc), currentHeight)
+    }
+    rw.delete(fmspcsKey)
+  }
+
   private def rollbackOrderFill(rw: RW, orderId: ByteStr, height: Height): ByteStr = {
     val curVfKey = Keys.filledVolumeAndFee(orderId)
     val vf       = rw.get(curVfKey)
@@ -1028,6 +1075,14 @@ class RocksDBWriter(
       details <- db.get(Keys.leaseDetails(leaseId)(h))
     } yield details
   }
+
+  override def dcapRootCaCrl: Option[ByteStr] = readOnly(_.fromHistory(Keys.dcapRootCaCrlHistory, Keys.dcapRootCaCrl))
+  override def dcapPckCrl: Option[ByteStr]    = readOnly(_.fromHistory(Keys.dcapPckCrlHistory, Keys.dcapPckCrl))
+  override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] =
+    readOnly(_.fromHistory(Keys.dcapTcbInfoHistory(fmspc), Keys.dcapTcbInfo(fmspc)))
+  override def dcapQeIdentity: Option[ByteStr] = readOnly(_.fromHistory(Keys.dcapQeIdentityHistory, Keys.dcapQeIdentity))
+  override def dcapTcbSigningIssuerChain: Option[ByteStr] =
+    readOnly(_.fromHistory(Keys.dcapTcbSigningIssuerChainHistory, Keys.dcapTcbSigningIssuerChain))
 
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't
   // as many miners, so snapshots will rarely be evicted due to overflows.

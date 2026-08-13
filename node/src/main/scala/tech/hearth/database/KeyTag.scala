@@ -65,7 +65,18 @@ enum KeyTag {
     CommittedGenerators,
     ConflictGenerators,
     CommitmentTransactions,
-    GeneratorBalances
+    GeneratorBalances,
+    DcapRootCaCrlHistory,
+    DcapRootCaCrl,
+    DcapPckCrlHistory,
+    DcapPckCrl,
+    DcapTcbInfoHistory,
+    DcapTcbInfo,
+    DcapQeIdentityHistory,
+    DcapQeIdentity,
+    DcapTcbSigningIssuerChainHistory,
+    DcapTcbSigningIssuerChain,
+    DcapTcbInfoFmspcsAtHeight
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }

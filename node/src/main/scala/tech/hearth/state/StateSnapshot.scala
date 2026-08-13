@@ -21,7 +21,15 @@ case class StateSnapshot(
     newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
     cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
     orderFills: Map[ByteStr, VolumeAndFee] = Map(),
-    nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty
+    nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty,
+    // DCAP collateral (see the StartBoost consensus plan): rootCaCrl/pckCrl/qeIdentity/tcbSigningIssuerChain are
+    // each a single current value, tcbInfo is keyed per FMSPC (platform model) since only the FMSPCs actually
+    // seen need an entry. "Last write wins" within a block, same as assetVolumes/minAssetFees above.
+    dcapRootCaCrl: Option[ByteStr] = None,
+    dcapPckCrl: Option[ByteStr] = None,
+    dcapTcbInfo: Map[ByteStr, ByteStr] = Map.empty,
+    dcapQeIdentity: Option[ByteStr] = None,
+    dcapTcbSigningIssuerChain: Option[ByteStr] = None
 ) {
 
   // ignores lease balances from portfolios
@@ -53,7 +61,12 @@ object StateSnapshot {
       newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
       cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
       transactions: VectorMap[ByteStr, NewTransactionInfo] = VectorMap(),
-      nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty
+      nextCommittedGenerators: Seq[GenerationCommitment] = Seq.empty,
+      dcapRootCaCrl: Option[ByteStr] = None,
+      dcapPckCrl: Option[ByteStr] = None,
+      dcapTcbInfo: Map[ByteStr, ByteStr] = Map.empty,
+      dcapQeIdentity: Option[ByteStr] = None,
+      dcapTcbSigningIssuerChain: Option[ByteStr] = None
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -70,7 +83,12 @@ object StateSnapshot {
         newLeases,
         cancelledLeases,
         of,
-        nextCommittedGenerators
+        nextCommittedGenerators,
+        dcapRootCaCrl,
+        dcapPckCrl,
+        dcapTcbInfo,
+        dcapQeIdentity,
+        dcapTcbSigningIssuerChain
       )
     r.leftMap(GenericError(_))
   }
@@ -161,7 +179,12 @@ object StateSnapshot {
         s1.newLeases ++ s2.newLeases,
         s1.cancelledLeases ++ s2.cancelledLeases,
         s1.orderFills ++ s2.orderFills,
-        s1.nextCommittedGenerators ++ s2.nextCommittedGenerators
+        s1.nextCommittedGenerators ++ s2.nextCommittedGenerators,
+        s2.dcapRootCaCrl.orElse(s1.dcapRootCaCrl),
+        s2.dcapPckCrl.orElse(s1.dcapPckCrl),
+        s1.dcapTcbInfo ++ s2.dcapTcbInfo,
+        s2.dcapQeIdentity.orElse(s1.dcapQeIdentity),
+        s2.dcapTcbSigningIssuerChain.orElse(s1.dcapTcbSigningIssuerChain)
       )
 
   }
