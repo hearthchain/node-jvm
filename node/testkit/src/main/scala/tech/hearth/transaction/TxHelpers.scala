@@ -427,9 +427,6 @@ object TxHelpers {
       .explicitGet()
   }
 
-  // StartBoost/BindApiKey/Reserve/Withdraw/Settle/UpdateCollateral have no implemented semantics yet (see
-  // TransactionDiffer); these helpers only exercise the wire-format (protobuf/JSON) plumbing.
-
   def startBoost(
       sender: SigningKey = defaultSigner,
       validator: Address = secondAddress,
@@ -443,6 +440,9 @@ object TxHelpers {
       .create(PublicKey(sender.publicKey), validator, tdxQuote, generationPeriodStart, fee, timestamp, Proofs.empty, chainId)
       .map(_.signWith(sender))
       .explicitGet()
+
+  // BindApiKey/Reserve/Withdraw/Settle have no implemented semantics yet (see TransactionDiffer); these helpers
+  // only exercise the wire-format (protobuf/JSON) plumbing.
 
   def bindApiKey(
       sender: SigningKey = defaultSigner,
