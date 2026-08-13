@@ -1,7 +1,9 @@
 package tech.hearth.crypto.dcap
 
+import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.FreeSpec
 import org.bouncycastle.asn1.x509.{CRLNumber, Extension}
+import play.api.libs.json.Json
 import org.bouncycastle.cert.X509v2CRLBuilder
 import org.bouncycastle.cert.jcajce.{JcaX509CertificateConverter, JcaX509v3CertificateBuilder}
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -52,6 +54,30 @@ class IntelPkiTest extends FreeSpec {
 
       val result = IntelPki.verifyIssuerChain(chainPem, realFixtureAtTime, crls = Seq(resourceBytes("root_crl.der")))
       result shouldBe Right(expectedKey)
+    }
+
+    "verifyRawSignature accepts the real tcbInfo signature against the TCB Signing CA's key" in {
+      val payload      = resourceBytes("tcb_info_v3_sgx.json")
+      val raw          = JsonRawValue.extractObject(payload, "tcbInfo").explicitGet()
+      val json         = Json.parse(payload)
+      val signatureHex = (json \ "signature").as[String]
+      val signature    = tech.hearth.common.utils.Base16.decode(signatureHex)
+      val signingKey = CertificateFactory
+        .getInstance("X.509")
+        .generateCertificate(new java.io.ByteArrayInputStream(resourceBytes("signing.der")))
+        .getPublicKey
+
+      IntelPki.verifyRawSignature(raw, signature, signingKey) shouldBe Right(())
+    }
+
+    "verifyRawSignature rejects the real tcbInfo signature against an unrelated key" in {
+      val payload      = resourceBytes("tcb_info_v3_sgx.json")
+      val raw          = JsonRawValue.extractObject(payload, "tcbInfo").explicitGet()
+      val json         = Json.parse(payload)
+      val signatureHex = (json \ "signature").as[String]
+      val signature    = tech.hearth.common.utils.Base16.decode(signatureHex)
+
+      IntelPki.verifyRawSignature(raw, signature, IntelPki.rootCaPublicKey) shouldBe a[Left[?, ?]]
     }
   }
 
