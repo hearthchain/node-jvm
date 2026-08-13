@@ -427,8 +427,8 @@ object TxHelpers {
       .explicitGet()
   }
 
-  // StartBoost/BindApiKey/Reserve/Withdraw/Settle have no implemented semantics yet (see TransactionDiffer); these
-  // helpers only exercise the wire-format (protobuf/JSON) plumbing.
+  // StartBoost/BindApiKey/Reserve/Withdraw/Settle/UpdateCollateral have no implemented semantics yet (see
+  // TransactionDiffer); these helpers only exercise the wire-format (protobuf/JSON) plumbing.
 
   def startBoost(
       sender: SigningKey = defaultSigner,
@@ -496,6 +496,33 @@ object TxHelpers {
   ): SettleTransaction =
     SettleTransaction
       .create(PublicKey(sender.publicKey), senderAddress, fee, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(sender))
+      .explicitGet()
+
+  def updateCollateral(
+      sender: SigningKey = defaultSigner,
+      rootCaCrl: Option[ByteStr] = None,
+      pckCrl: Option[ByteStr] = None,
+      tcbInfo: Option[ByteStr] = None,
+      qeIdentity: Option[ByteStr] = None,
+      tcbSigningIssuerChain: Option[ByteStr] = None,
+      fee: Long = FeeConstants(TransactionType.UpdateCollateral) * FeeUnit,
+      timestamp: TxTimestamp = timestamp,
+      chainId: Byte = AddressScheme.current.chainId
+  ): UpdateCollateralTransaction =
+    UpdateCollateralTransaction
+      .create(
+        PublicKey(sender.publicKey),
+        rootCaCrl,
+        pckCrl,
+        tcbInfo,
+        qeIdentity,
+        tcbSigningIssuerChain,
+        fee,
+        timestamp,
+        Proofs.empty,
+        chainId
+      )
       .map(_.signWith(sender))
       .explicitGet()
 
