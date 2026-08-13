@@ -20,3 +20,10 @@ Validity windows (tests pin `atTime` to a fixed timestamp inside the relevant in
 - `signing.der`: 2018-05-21 to 2025-05-21
 - `tcb_info_v3_sgx.json`: 2024-08-26 to 2024-09-25 (fmspc `00A067110000`, tcbEvaluationDataNumber 16)
 - `qe_identity.json`: 2024-09-10 to 2024-10-10 (tcbEvaluationDataNumber 16)
+
+`quotev3.hex`, `quotev4.hex`, `quotev5.dat` are real DCAP quotes (hex-encoded text for v3/v4, raw binary for v5),
+one per supported quote version and body shape (v3 SGX, v4 TDX TD1.0, v5 TDX TD1.5), copied unmodified from the
+same upstream repo (`rust-crates/samples/`, MIT licensed), for `DcapQuoteTest`. `quotev4.hex` deliberately contains
+trailing bytes beyond the quote's own declared signature length, exercising the "quote embedded in a larger buffer"
+parse path. These are quote structure fixtures only, not verified end-to-end against `root.der`'s trust chain (no
+DCAP quote signature verification exists in this repo yet, only structural parsing - see `DcapQuote`).
