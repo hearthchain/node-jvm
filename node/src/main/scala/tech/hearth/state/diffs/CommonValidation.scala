@@ -53,7 +53,11 @@ object CommonValidation {
         )
         _ <- spendings.assets
           .collectFirst {
-            case (aid, delta) if delta < 0 && blockchain.balance(sender, aid) + delta < 0 =>
+            // A nonexistent asset (e.g. a typo'd feeAssetId - there is no equivalent existence check for it above,
+            // unlike assetId) trivially has balance 0, so any nonzero spend against it would otherwise always look
+            // like insufficient funds. Skip it here and let feePortfolios (TransactionDiffer) reject it with the
+            // more specific "does not exist" instead.
+            case (aid, delta) if delta < 0 && blockchain.assetDescription(aid).isDefined && blockchain.balance(sender, aid) + delta < 0 =>
               val availableBalance = blockchain.balance(sender, aid)
               "Attempt to transfer unavailable funds: Transaction application leads to negative asset " +
                 s"'$aid' balance to (at least) temporary negative state, current balance is $availableBalance, " +
