@@ -209,7 +209,7 @@ object Block {
       genesisSettings = blockchainSettings.genesisSettings
       baseTarget      = genesisSettings.initialBaseTarget
       timestamp       = genesisSettings.blockTimestamp
-      snapshot <- PredefinedSnapshot.build(blockchainSettings.genesisSnapshot, EmptyBlockchain, genesisTimestamp = Some(timestamp))
+      snapshot <- PredefinedSnapshot.build(blockchainSettings.genesisSnapshot, EmptyBlockchain, blockTimestamp = Some(timestamp))
       stateHash = TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)
       // The configured snapshot is what a misconfiguration silently changes, so check it before anything derived from it
       _ <- checkPredefined("state hash", genesisSettings.stateHash, stateHash)
