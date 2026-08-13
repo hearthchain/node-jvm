@@ -17,9 +17,8 @@ import play.api.libs.json.JsObject
   * both signed by an intermediate under Root CA, not by Root CA directly, so each needs its issuer submitted
   * alongside it to be verified eagerly here rather than deferred to whenever a quote happens to supply one.
   *
-  * Semantics (signature verification, monotonic-freshness checks, state merge) are not implemented yet: see
-  * TransactionDiffer, which has no case for this type yet and so rejects it with UnsupportedTransactionType. Only
-  * the structural "at least one field set" check and wire-format (protobuf/JSON) plumbing exist so far.
+  * See UpdateCollateralTransactionDiff/DcapCollateral for the real semantics (signature verification, monotonic
+  * freshness, state merge) - TxValidator only checks the structural "at least one field set" invariant.
   */
 final case class UpdateCollateralTransaction(
     sender: PublicKey,

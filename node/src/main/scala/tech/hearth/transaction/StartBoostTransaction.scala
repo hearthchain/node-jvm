@@ -10,8 +10,8 @@ import tech.hearth.transaction.validation.impl.StartBoostTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-/** Not yet semantically implemented: see TransactionDiffer, which has no case for this type yet and so rejects it
-  * with UnsupportedTransactionType. Only wire-format (protobuf/JSON) plumbing exists so far.
+/** See StartBoostTransactionDiff for the real semantics: verifying the embedded TDX quote end to end and
+  * registering its enclave for one generation period.
   *
   * generationPeriodStart mirrors CommitToGenerationTransaction.generationPeriodStart: a StartBoost registers the
   * enclave for one generation period and must be resubmitted for the next one (see the DCAP consensus plan).

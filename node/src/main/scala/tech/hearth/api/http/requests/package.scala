@@ -2,6 +2,7 @@ package tech.hearth.api.http
 
 import cats.Applicative
 import tech.hearth.common.state.ByteStr
+import tech.hearth.common.utils.Base16
 import tech.hearth.crypto.{DigestLength, SignatureLength}
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
@@ -83,6 +84,24 @@ package object requests {
   }
 
   implicit val byteStrFormat: Format[ByteStr] = tech.hearth.utils.byteStrFormat
+
+  // ByteStr's default Format (above) caps a base16 string at 280 characters (Base16.defaultDecodeLimit) - fine for
+  // a signature or public key, far too small for a DCAP quote (~4935 bytes raw, ~9870 hex chars) or collateral
+  // blob (TCB Info JSON can run to several KB). Request classes with such a field shadow the ambient
+  // `Format[ByteStr]` with this one (a local `given` in the request's own companion object) before calling
+  // `Json.format`, rather than changing the limit ByteStr.decodeBase16/utils.byteStrFormat use everywhere else.
+  val LargeBlobDecodeLimit: Int = 65536
+
+  val largeByteStrFormat: Format[ByteStr] = new Format[ByteStr] {
+    override def writes(o: ByteStr): JsValue = JsString(Base16.encode(o.arr))
+    override def reads(json: JsValue): JsResult[ByteStr] = json match {
+      case JsString(v) =>
+        Base16
+          .tryDecodeWithLimit(v, LargeBlobDecodeLimit)
+          .fold(e => JsError(s"Can't parse '$v' as base16 encoded byte array: ${e.getMessage}"), bytes => JsSuccess(ByteStr(bytes)))
+      case _ => JsError("Expected JsString")
+    }
+  }
 
   private[requests] def defaultTimestamp = System.currentTimeMillis()
 }
