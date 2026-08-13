@@ -17,7 +17,7 @@ import tech.hearth.transaction.assets.*
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order}
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import tech.hearth.transaction.smart.script.trace.TracedResult
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
 import play.api.libs.json.Json
 
 object TransactionDiffer {
@@ -133,7 +133,6 @@ object TransactionDiffer {
         tx match {
           case etx: ExchangeTransaction            => ExchangeTransactionDiff(blockchain)(etx).traced
           case ttx: TransferTransaction            => TransferTransactionDiff(blockchain)(ttx).traced
-          case mtx: MassTransferTransaction        => MassTransferTransactionDiff(blockchain)(mtx).traced
           case ltx: LeaseTransaction               => LeaseTransactionsDiff.lease(blockchain)(ltx).traced
           case ltx: LeaseCancelTransaction         => LeaseTransactionsDiff.leaseCancel(blockchain)(ltx).traced
           case cgtx: CommitToGenerationTransaction => CommitToGenerationTransactionDiff(blockchain)(cgtx).traced

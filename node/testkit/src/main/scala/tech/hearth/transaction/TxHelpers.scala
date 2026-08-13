@@ -16,8 +16,8 @@ import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import monix.execution.atomic.AtomicLong
 import tech.hearth.settings.MiningAccount as MiningAccountSettings
 import tech.hearth.crypto.{Crypto, Hex, SigningKey, VrfKey}
@@ -87,7 +87,17 @@ object TxHelpers {
       chainId: Byte = AddressScheme.current.chainId
   ): TransferTransaction =
     TransferTransaction
-      .create(PublicKey(from.publicKey), to, asset, amount, feeAsset, fee, attachment, timestamp, Proofs.empty, chainId)
+      .create(
+        PublicKey(from.publicKey),
+        asset,
+        Seq(ParsedTransfer(to, TxNonNegativeAmount.unsafeFrom(amount))),
+        fee,
+        timestamp,
+        attachment,
+        Proofs.empty,
+        chainId,
+        feeAsset
+      )
       .map(_.signWith(from))
       .explicitGet()
 
@@ -102,13 +112,12 @@ object TxHelpers {
   ): TransferTransaction =
     TransferTransaction(
       PublicKey(from.publicKey),
-      to,
       asset,
-      TxPositiveAmount.unsafeFrom(amount),
-      feeAsset,
+      Seq(ParsedTransfer(to, TxNonNegativeAmount.unsafeFrom(amount))),
       TxPositiveAmount.unsafeFrom(fee),
-      ByteStr.empty,
+      feeAsset,
       timestamp,
+      ByteStr.empty,
       Proofs.empty,
       chainId
     )
@@ -117,16 +126,16 @@ object TxHelpers {
       from: SigningKey = defaultSigner,
       to: Seq[(Address, Long)] = Seq(secondAddress -> 1.hearth),
       asset: Asset = Hearth,
-      fee: Long = FeeConstants(TransactionType.MassTransfer) * FeeUnit,
+      fee: Long = FeeConstants(TransactionType.Transfer) * FeeUnit,
       feeAsset: Asset = Hearth,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
-  ): MassTransferTransaction =
-    MassTransferTransaction
+  ): TransferTransaction =
+    TransferTransaction
       .create(
         PublicKey(from.publicKey),
         asset,
-        to.map { case (r, a) => MassTransferTransaction.ParsedTransfer(r, TxNonNegativeAmount.unsafeFrom(a)) },
+        to.map { case (r, a) => ParsedTransfer(r, TxNonNegativeAmount.unsafeFrom(a)) },
         fee,
         timestamp,
         ByteStr.empty,
@@ -417,6 +426,77 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
   }
+
+  // StartBoost/BindApiKey/Reserve/Withdraw/Settle have no implemented semantics yet (see TransactionDiffer); these
+  // helpers only exercise the wire-format (protobuf/JSON) plumbing.
+
+  def startBoost(
+      sender: SigningKey = defaultSigner,
+      validator: Address = secondAddress,
+      tdxQuote: ByteStr = ByteStr.empty,
+      fee: Long = FeeConstants(TransactionType.StartBoost) * FeeUnit,
+      timestamp: TxTimestamp = timestamp,
+      chainId: Byte = AddressScheme.current.chainId
+  ): StartBoostTransaction =
+    StartBoostTransaction
+      .create(PublicKey(sender.publicKey), validator, tdxQuote, fee, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(sender))
+      .explicitGet()
+
+  def bindApiKey(
+      sender: SigningKey = defaultSigner,
+      enclavePublicKey: ByteStr = ByteStr.empty,
+      encryptedApiKey: ByteStr = ByteStr.empty,
+      fee: Long = FeeConstants(TransactionType.BindApiKey) * FeeUnit,
+      timestamp: TxTimestamp = timestamp,
+      chainId: Byte = AddressScheme.current.chainId
+  ): BindApiKeyTransaction =
+    BindApiKeyTransaction
+      .create(PublicKey(sender.publicKey), enclavePublicKey, encryptedApiKey, fee, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(sender))
+      .explicitGet()
+
+  def reserve(
+      sender: SigningKey = defaultSigner,
+      asset: Asset = Hearth,
+      amount: Long = 1.hearth,
+      miner: Address = secondAddress,
+      feeAsset: Asset = Hearth,
+      fee: Long = FeeConstants(TransactionType.Reserve) * FeeUnit,
+      timestamp: TxTimestamp = timestamp,
+      chainId: Byte = AddressScheme.current.chainId
+  ): ReserveTransaction =
+    ReserveTransaction
+      .create(PublicKey(sender.publicKey), asset, amount, miner, feeAsset, fee, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(sender))
+      .explicitGet()
+
+  def withdraw(
+      sender: SigningKey = defaultSigner,
+      fromMiner: Address = secondAddress,
+      asset: Asset = Hearth,
+      amount: Long = 1.hearth,
+      feeAsset: Asset = Hearth,
+      fee: Long = FeeConstants(TransactionType.Withdraw) * FeeUnit,
+      timestamp: TxTimestamp = timestamp,
+      chainId: Byte = AddressScheme.current.chainId
+  ): WithdrawTransaction =
+    WithdrawTransaction
+      .create(PublicKey(sender.publicKey), fromMiner, asset, amount, feeAsset, fee, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(sender))
+      .explicitGet()
+
+  def settle(
+      sender: SigningKey = defaultSigner,
+      senderAddress: Address = defaultAddress,
+      fee: Long = FeeConstants(TransactionType.Settle) * FeeUnit,
+      timestamp: TxTimestamp = timestamp,
+      chainId: Byte = AddressScheme.current.chainId
+  ): SettleTransaction =
+    SettleTransaction
+      .create(PublicKey(sender.publicKey), senderAddress, fee, timestamp, Proofs.empty, chainId)
+      .map(_.signWith(sender))
+      .explicitGet()
 
   def randomId: TransactionId = TransactionId(ByteStr(Array.fill(DigestLength)(ThreadLocalRandom.current().nextInt(Byte.MaxValue).toByte)))
   def randomBlockId: BlockId  = ByteStr(Array.fill(SignatureLength)(ThreadLocalRandom.current().nextInt(Byte.MaxValue).toByte))

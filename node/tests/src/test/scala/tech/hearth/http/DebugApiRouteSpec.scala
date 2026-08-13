@@ -117,10 +117,10 @@ class DebugApiRouteSpec
       domain.appendBlock(tx4)
       domain.appendBlock()
 
-      val expectedBalance2 = initBalance - tx1.fee.value - tx1.amount.value
-      val expectedBalance3 = expectedBalance2 + tx2.amount.value
-      val expectedBalance5 = expectedBalance3 - tx3.fee.value - tx3.amount.value
-      val expectedBalance6 = expectedBalance5 + tx4.amount.value
+      val expectedBalance2 = initBalance - tx1.fee.value - tx1.transfers.head.amount.value
+      val expectedBalance3 = expectedBalance2 + tx2.transfers.head.amount.value
+      val expectedBalance5 = expectedBalance3 - tx3.fee.value - tx3.transfers.head.amount.value
+      val expectedBalance6 = expectedBalance5 + tx4.transfers.head.amount.value
 
       Get(routePath(s"/balances/history/${acc2.toAddress}")) ~> route ~> check {
         status shouldBe StatusCodes.OK

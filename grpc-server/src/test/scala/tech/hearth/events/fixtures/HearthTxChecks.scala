@@ -9,11 +9,10 @@ import tech.hearth.events.protobuf.StateUpdate.{BalanceUpdate, LeaseUpdate, Leas
 import tech.hearth.protobuf.order.Order
 import tech.hearth.protobuf.transaction.*
 import tech.hearth.protobuf.transaction.Transaction.Data
-import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.transaction.{Asset, TransactionBase}
 import org.scalactic.source.Position
 import org.scalatest.OptionValues
@@ -25,31 +24,33 @@ object HearthTxChecks extends Matchers with OptionValues {
 
   def checkBaseTx(actualId: ByteString, actual: SignedTransaction, expected: TransactionBase)(implicit pos: Position): Unit = {
     ByteStr(actualId.toByteArray) shouldEqual expected.id()
-    actual.wavesTransaction match {
+    actual.transaction match {
       case Some(value) =>
-        val assetId = if (value.getFee.assetId.isEmpty) Hearth else value.getFee.assetId
         value.timestamp shouldEqual expected.timestamp
-        assetId shouldEqual expected.assetFee._1
-        value.fee.value.amount shouldEqual expected.assetFee._2
+        value.fee shouldEqual expected.assetFee._2
       case _ =>
     }
   }
 
-  def checkTransfer(actualId: ByteString, actual: SignedTransaction, expected: TransferTransaction, publicKeyHash: Array[Byte])(implicit
+  def checkTransfer(actualId: ByteString, actual: SignedTransaction, expected: TransferTransaction, pkHashes: Seq[Array[Byte]])(implicit
       pos: Position
   ): Unit = {
     checkBaseTx(actualId, actual, expected)
-    actual.wavesTransaction.value.data match {
+    actual.transaction.value.data match {
       case Data.Transfer(value) =>
-        value.amount.get.amount shouldEqual expected.amount.value
-        value.recipient.get.publicKeyHash.toByteArray shouldBe publicKeyHash
+        toVanillaAssetId(value.feeAssetId) shouldEqual expected.assetFee._1
+        value.assetId.toByteArray shouldBe expected.assetId.compatId.get.arr
+        value.transfers.foreach(actualTransfer =>
+          expected.transfers.foreach(expectedTransfer => actualTransfer.amount shouldBe expectedTransfer.amount.value)
+        )
+        value.transfers.zip(pkHashes).foreach(item => item._1.getRecipient.publicKeyHash.toByteArray shouldBe item._2)
       case _ => fail("not a Transfer transaction")
     }
   }
 
   def checkExchange(actualId: ByteString, actual: SignedTransaction, expected: ExchangeTransaction)(implicit pos: Position): Unit = {
     checkBaseTx(actualId, actual, expected)
-    actual.wavesTransaction.value.data match {
+    actual.transaction.value.data match {
       case Data.Exchange(value) =>
         value.amount shouldEqual expected.amount.value
         value.price shouldEqual expected.price.value
@@ -65,7 +66,7 @@ object HearthTxChecks extends Matchers with OptionValues {
       pos: Position
   ): Unit = {
     checkBaseTx(actualId, actual, expected)
-    actual.wavesTransaction.value.data match {
+    actual.transaction.value.data match {
       case Data.Lease(value) =>
         value.recipient.get.publicKeyHash.toByteArray shouldBe publicKeyHash
         value.amount shouldBe expected.amount.value
@@ -77,25 +78,10 @@ object HearthTxChecks extends Matchers with OptionValues {
       pos: Position
   ): Unit = {
     checkBaseTx(actualId, actual, expected)
-    actual.wavesTransaction.value.data match {
+    actual.transaction.value.data match {
       case Data.LeaseCancel(value) =>
         value.leaseId.toByteArray shouldBe expected.leaseId.arr
       case _ => fail("not a LeaseCancel transaction")
-    }
-  }
-
-  def checkMassTransfer(actualId: ByteString, actual: SignedTransaction, expected: MassTransferTransaction, pkHashes: Seq[Array[Byte]])(implicit
-      pos: Position
-  ): Unit = {
-    checkBaseTx(actualId, actual, expected)
-    actual.wavesTransaction.value.data match {
-      case Data.MassTransfer(value) =>
-        value.assetId.toByteArray shouldBe expected.assetId.compatId.get.arr
-        value.transfers.foreach(actualTransfer =>
-          expected.transfers.foreach(expectedTransfer => actualTransfer.amount shouldBe expectedTransfer.amount.value)
-        )
-        value.transfers.zip(pkHashes).foreach(item => item._1.getRecipient.publicKeyHash.toByteArray shouldBe item._2)
-      case _ => fail("not a MassTransfer transaction")
     }
   }
 

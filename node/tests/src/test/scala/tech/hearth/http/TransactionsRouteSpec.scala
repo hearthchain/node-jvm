@@ -232,7 +232,7 @@ class TransactionsRouteSpec
 
       Get(routePath(s"/info/${transferTxn.id()}")) ~> Accept(CustomJson.jsonWithNumbersAsStrings) ~> route ~> check {
         val result = responseAs[JsObject]
-        (result \ "amount").as[String] shouldBe transferTxn.amount.value.toString
+        (result \ "totalAmount").as[String] shouldBe transferTxn.transfers.head.amount.value.toString
         (result \ "fee").as[String] shouldBe transferTxn.fee.value.toString
 
         (result \ "height").as[Int] shouldBe domain.blockchain.height
@@ -441,7 +441,7 @@ class TransactionsRouteSpec
     // exactly two chars per byte with no such compression, so a byte array over MaxAttachmentSize is always over
     // the generic string-length limit too (they're sized from the same 140-byte bound, see Base16) and is now
     // rejected by the JSON reader before ever reaching this check - this scenario is unreachable via this endpoint.
-    // The check itself is still exercised directly in MassTransferTransactionSpecification.
+    // The check itself is still exercised directly in TransferTransactionSpecification.
     "checks the length of hex attachment in bytes" ignore {}
 
     "CommitToGeneration transaction" in {

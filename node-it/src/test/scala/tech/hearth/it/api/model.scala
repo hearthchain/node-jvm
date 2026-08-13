@@ -5,7 +5,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.it.api.FinalizationVoting.ConflictEndorsement
 import tech.hearth.state.Height
 import tech.hearth.transaction.assets.exchange.AssetPair
-import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
+import tech.hearth.transaction.transfer.TransferTransaction.Transfer
 import io.grpc.{Metadata, Status as GrpcStatus}
 import play.api.libs.json.*
 

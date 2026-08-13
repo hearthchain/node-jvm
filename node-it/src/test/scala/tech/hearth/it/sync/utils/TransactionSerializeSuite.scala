@@ -10,9 +10,9 @@ import tech.hearth.test.*
 import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
-import tech.hearth.transaction.{Proofs, TxExchangeAmount, TxMatcherFee, TxOrderPrice}
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.{ParsedTransfer, Transfer}
+import tech.hearth.transaction.{Proofs, TxExchangeAmount, TxMatcherFee, TxNonNegativeAmount, TxOrderPrice}
 import org.scalatest.Informing
 import org.scalatest.prop.TableDrivenPropertyChecks
 
@@ -108,11 +108,11 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
     )
     .explicitGet()
 
-  private lazy val mass = MassTransferTransaction
+  private lazy val mass = TransferTransaction
     .create(
       publicKey,
       Hearth,
-      MassTransferTransaction
+      TransferTransaction
         .parseTransfersList(List(Transfer(firstKeyPair.toAddress.toString, 1.hearth), Transfer(secondKeyPair.toAddress.toString, 2.hearth)))
         .explicitGet(),
       2.hearth,
@@ -134,13 +134,11 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
   private lazy val transfer = TransferTransaction
     .create(
       publicKey,
-      recipient,
       Hearth,
-      100000000,
-      Hearth,
+      Seq(ParsedTransfer(recipient, TxNonNegativeAmount.unsafeFrom(100000000))),
       minFee,
-      ByteStr.empty,
       ts,
+      ByteStr.empty,
       Proofs(
         Seq(
           ByteStr

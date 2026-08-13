@@ -1,64 +1,72 @@
 package tech.hearth.state.diffs
 
-import cats.syntax.either.*
+import cats.implicits.{toBifunctorOps, toFoldableOps}
+import cats.instances.list.*
+import cats.syntax.traverse.*
+import tech.hearth.account.Address
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
-import tech.hearth.transaction.TxValidationError.GenericError
-import tech.hearth.transaction.transfer.TransferTransaction
-import tech.hearth.transaction.Asset
-import tech.hearth.crypto.Address
+import tech.hearth.transaction.TxValidationError.{GenericError, Validation}
+import tech.hearth.transaction.transfer.*
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 
 object TransferTransactionDiff {
-  def apply(blockchain: Blockchain)(tx: TransferTransaction): Either[ValidationError, StateSnapshot] =
-    TransferDiff(blockchain)(tx.sender.toAddress, tx.recipient, tx.amount.value, tx.assetId, tx.fee.value, tx.feeAssetId)
-}
 
-object TransferDiff {
-  def apply(
-      blockchain: Blockchain
-  )(
-      senderAddress: Address,
-      recipient: Address,
-      amount: Long,
-      assetId: Asset,
-      fee: Long,
-      feeAssetId: Asset
-  ): Either[ValidationError, StateSnapshot] = {
+  def apply(blockchain: Blockchain)(tx: TransferTransaction): Either[ValidationError, StateSnapshot] = {
+    def parseTransfer(xfer: ParsedTransfer): Validation[(Map[Address, Portfolio], Long)] =
+      Right(
+        (
+          tx.assetId
+            .fold(Map[Address, Portfolio](xfer.address -> Portfolio(xfer.amount.value))) { asset =>
+              Map(xfer.address -> Portfolio.build(asset, xfer.amount.value))
+            },
+          xfer.amount.value
+        )
+      )
 
-    val isSmartAsset = false
+    val portfoliosEi = tx.transfers.toList.traverse(parseTransfer)
 
-    for {
-      _ <- Either.cond(!isSmartAsset, (), GenericError("Smart assets can't participate in TransferTransactions as a fee"))
-
-      // Ride4DApps is active: overflow no longer needs an explicit check, the transaction validates itself
-      transferPf <- assetId match {
-        case Hearth =>
-          Portfolio
-            .combine(
-              Map(senderAddress -> Portfolio(-amount)),
-              Map(recipient     -> Portfolio(amount))
-            )
-            .leftMap(GenericError(_))
-        case asset @ IssuedAsset(_) =>
-          Portfolio
-            .combine(
-              Map(senderAddress -> Portfolio.build(asset -> -amount)),
-              Map(recipient     -> Portfolio.build(asset -> amount))
-            )
-            .leftMap(GenericError(_))
+    portfoliosEi.flatMap { (list: List[(Map[Address, Portfolio], Long)]) =>
+      val sender = Address.fromPublicKey(tx.sender)
+      val feePf = tx.feeAssetId match {
+        case Hearth                 => Map[Address, Portfolio](sender -> Portfolio(-tx.fee.value))
+        case asset @ IssuedAsset(_) => Map[Address, Portfolio](sender -> Portfolio.build(asset, -tx.fee.value))
       }
-      feePf <- feeAssetId match {
-        case Hearth => Right(Map(senderAddress -> Portfolio(-fee)))
-        case asset @ IssuedAsset(_) =>
-          val senderPf = Map(senderAddress -> Portfolio.build(asset -> -fee))
-          Right(senderPf)
-      }
-      portfolios <- Portfolio.combine(transferPf, feePf).leftMap(GenericError(_))
-      assetIssued    = assetId.fold(true)(blockchain.assetDescription(_).isDefined)
-      feeAssetIssued = feeAssetId.fold(true)(blockchain.assetDescription(_).isDefined)
-      _        <- Either.raiseUnless(assetIssued && feeAssetIssued)(GenericError(s"Unissued assets are not allowed"))
-      snapshot <- StateSnapshot.build(blockchain, portfolios = portfolios)
-    } yield snapshot
+      val foldInit = (feePf, 0L)
+      list
+        .foldM(foldInit) { case ((totalPortfolios, totalTransferAmount), (portfolios, transferAmount)) =>
+          Portfolio.combine(totalPortfolios, portfolios).map((_, totalTransferAmount + transferAmount))
+        }
+        .flatMap { case (recipientPortfolios, totalAmount) =>
+          Portfolio.combine(
+            recipientPortfolios,
+            tx.assetId
+              .fold(Map[Address, Portfolio](sender -> Portfolio(-totalAmount))) { asset =>
+                Map[Address, Portfolio](sender -> Portfolio.build(asset, -totalAmount))
+              }
+          )
+        }
+        .leftMap(GenericError(_))
+        .flatMap { completePortfolio =>
+          val assetIssued =
+            tx.assetId match {
+              case Hearth                 => true
+              case asset @ IssuedAsset(_) => blockchain.assetDescription(asset).isDefined
+            }
+          val feeAssetIssued =
+            tx.feeAssetId match {
+              case Hearth                 => true
+              case asset @ IssuedAsset(_) => blockchain.assetDescription(asset).isDefined
+            }
+          Either
+            .cond(
+              assetIssued && feeAssetIssued,
+              StateSnapshot.build(blockchain, portfolios = completePortfolio),
+              GenericError(s"Attempt to transfer a nonexistent asset")
+            )
+            .flatten
+        }
+    }
   }
 }

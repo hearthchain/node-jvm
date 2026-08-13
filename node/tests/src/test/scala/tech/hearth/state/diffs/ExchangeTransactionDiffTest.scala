@@ -21,7 +21,7 @@ import tech.hearth.transaction.TxHelpers.defaultAddress
 import tech.hearth.transaction.TxValidationError.AccountBalanceError
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.assets.exchange.OrderPriceMode.{AssetDecimals, FixedDecimals, Default as DefaultPriceMode}
-import tech.hearth.transaction.transfer.MassTransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.{TestValues, TestWallet}
 import org.scalatest.{EitherValues, Inside}
 import tech.hearth.crypto.SigningKey
@@ -1300,8 +1300,8 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
       */
     def parseWithMatcherFees(buyMatcherFee: Long, sellMatcherFee: Long): Either[ValidationError, Transaction] = {
       val signed = PBTransactions.protobuf(validExchange)
-      val tx     = signed.getWavesTransaction
-      val patched = signed.withWavesTransaction(
+      val tx     = signed.getTransaction
+      val patched = signed.withTransaction(
         tx.withExchange(tx.getExchange.copy(buyMatcherFee = buyMatcherFee, sellMatcherFee = sellMatcherFee))
       )
       PBTransactions.vanilla(PBSignedTransaction.parseFrom(patched.toByteArray))
@@ -1444,7 +1444,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
   def oneBuyFewSellsPreconditions(
       totalBuyMatcherFeeBoundaries: Long => Long,
       sellersTotalAmount: Long => Long
-  ): (Seq[AddrWithBalance], Seq[GenesisAssetSettings], MassTransferTransaction, Seq[ExchangeTransaction], Order) = {
+  ): (Seq[AddrWithBalance], Seq[GenesisAssetSettings], TransferTransaction, Seq[ExchangeTransaction], Order) = {
     val matcher               = TxHelpers.signer(1)
     val sellOrdersCount       = 5
     val sellers               = (1 to 5).map(idx => TxHelpers.signer(idx + 1))

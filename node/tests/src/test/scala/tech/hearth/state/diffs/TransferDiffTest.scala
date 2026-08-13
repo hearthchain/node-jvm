@@ -10,6 +10,7 @@ import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.ScriptsAndSponsorship
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxHelpers
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 
 class TransferDiffTest extends PropSpec with WithDomain {
   private val fs: FunctionalitySettings = TestFunctionalitySettings.Enabled
@@ -34,9 +35,9 @@ class TransferDiffTest extends PropSpec with WithDomain {
         val carryFee = -transfer.fee.value * 3 / 5 + 6.hearth
         assertBalanceInvariant(d.liquidSnapshot, d.rocksDBWriter, carryFee)
 
-        val recipient = transfer.recipient
+        val ParsedTransfer(recipient, amount) = transfer.transfers.head: @unchecked
         if (transfer.sender.toAddress != recipient) {
-          d.balance(recipient) shouldBe transfer.amount.value
+          d.balance(recipient) shouldBe amount.value
         }
       }
     }

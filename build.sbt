@@ -81,7 +81,7 @@ inScope(Global)(
     testOptions += Tests.Argument("-oIDOF", "-u", "target/test-reports"),
     testOptions += Tests.Setup(() => sys.props("sbt-testing") = "true"),
     network := Network.default(),
-    resolvers ++= Resolver.sonatypeCentralSnapshots +: Seq(Resolver.mavenLocal),
+    resolvers ++= Resolver.mavenLocal +: Seq(Resolver.sonatypeCentralSnapshots),
     Compile / packageDoc / publishArtifact := false,
     concurrentRestrictions                 := Seq(Tags.limit(Tags.Test, math.min(EvaluateTask.SystemProcessors, 8))),
     // Dead settings sbt 2's project-load lint now catches that sbt 1 missed (same keys, same plugin

@@ -10,7 +10,7 @@ import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.ScriptsAndSponsorship
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxHelpers
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import tech.hearth.crypto.SigningKey
 
 class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
@@ -44,7 +44,7 @@ class MassTransferTransactionDiffTest extends PropSpec with WithDomain {
       }
     }
 
-    import tech.hearth.transaction.transfer.MassTransferTransaction.MaxTransferCount as Max
+    import tech.hearth.transaction.transfer.TransferTransaction.MaxTransferCount as Max
     Seq(0, 1, 5, Max) foreach testDiff // test edge cases
   }
 

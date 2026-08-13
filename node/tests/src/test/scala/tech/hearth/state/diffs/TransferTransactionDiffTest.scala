@@ -21,8 +21,9 @@ class TransferTransactionDiffTest extends PropSpec with WithDomain {
       d.appendAndAssertSucceed(hearthTransfer)
       val rewardFee = 6.hearth - hearthTransfer.fee.value * 3 / 5
       assertBalanceInvariant(d.liquidSnapshot, d.rocksDBWriter, rewardFee)
-      d.blockchain.balance(recipient) shouldBe hearthTransfer.amount.value
-      d.blockchain.balance(sender) shouldBe ENOUGH_AMT - hearthTransfer.amount.value - hearthTransfer.fee.value
+      val transferAmount = hearthTransfer.transfers.map(_.amount.value).sum
+      d.blockchain.balance(recipient) shouldBe transferAmount
+      d.blockchain.balance(sender) shouldBe ENOUGH_AMT - transferAmount - hearthTransfer.fee.value
     }
   }
 

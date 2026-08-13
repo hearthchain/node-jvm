@@ -13,8 +13,8 @@ import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order}
 import tech.hearth.transaction.lease.LeaseTransaction
 import tech.hearth.transaction.Proofs
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
-import tech.hearth.transaction.transfer.{MassTransferTransaction, TransferTransaction}
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import org.scalacheck.Gen
 import tech.hearth.crypto.SigningKey
 
@@ -76,7 +76,15 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
 
       val transferTx =
         TransferTransaction
-          .create(PublicKey(Account.publicKey), recipient, asset, 100, Asset.Hearth, MinFee, ByteStr(attachment), Now, Proofs.empty)
+          .create(
+            PublicKey(Account.publicKey),
+            asset,
+            Seq(ParsedTransfer(recipient, TxNonNegativeAmount.unsafeFrom(100))),
+            MinFee,
+            Now,
+            ByteStr(attachment),
+            Proofs.empty
+          )
           .map(_.signWith(Account))
           .explicitGet()
 
@@ -85,13 +93,13 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
       decode(base64Str) shouldBe transferTx
     }
 
-    "MassTransferTransaction" in {
+    "TransferTransaction (multiple recipients)" in {
       val transfers =
         Gen.listOfN(10, accountOrAliasGen).map(accounts => accounts.map(ParsedTransfer(_, TxNonNegativeAmount.unsafeFrom(100)))).sample.get
       val attachment = genBoundedBytes(0, TransferTransaction.MaxAttachmentSize).sample.get
 
       val massTransferTx =
-        MassTransferTransaction
+        TransferTransaction
           .create(PublicKey(Account.publicKey), Asset.Hearth, transfers, MassTransferTxFee, Now, ByteStr(attachment), Proofs.empty)
           .map(_.signWith(Account))
           .explicitGet()

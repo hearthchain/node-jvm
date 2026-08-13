@@ -17,8 +17,8 @@ import tech.hearth.state.Height
 import tech.hearth.test.*
 import tech.hearth.transaction.*
 import tech.hearth.transaction.assets.exchange.*
-import tech.hearth.transaction.transfer.MassTransferTransaction
-import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
+import tech.hearth.transaction.transfer.TransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction.Transfer
 import org.asynchttpclient.util.HttpConstants
 import org.scalatest
 import org.scalatest.BeforeAndAfterAll
@@ -137,8 +137,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
       Json.obj(
         "type"       -> TransactionType.Transfer.id,
         "sender"     -> sender.address,
-        "recipient"  -> secondAddress,
-        "amount"     -> transferAmount,
+        "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, transferAmount))),
         "attachment" -> Base16.encode("falafel".getBytes("UTF-8"))
       )
     )
@@ -147,7 +146,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
   test("/transactions/sign should produce mass transfer transaction that is good for /transactions/broadcast") {
     signBroadcastAndCalcFee(
       Json.obj(
-        "type"       -> MassTransferTransaction.typeId,
+        "type"       -> TransferTransaction.typeId,
         "sender"     -> sender.address,
         "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, 1.hearth), Transfer(thirdAddress, 2.hearth))),
         "attachment" -> Base16.encode("masspay".getBytes("UTF-8"))
@@ -175,9 +174,8 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     val json = Json.obj(
       "type"            -> TransactionType.Transfer.id,
       "senderPublicKey" -> PublicKey(firstAddress.publicKey()).toString,
-      "recipient"       -> secondAddress,
-      "fee"             -> minFee,
-      "amount"          -> transferAmount
+      "transfers"       -> Json.toJson(Seq(Transfer(secondAddress, transferAmount))),
+      "fee"             -> minFee
     )
 
     val signedRequestResponse = sender.postJsonWithApiKey(s"/transactions/sign/${sender.address}", json)
@@ -185,9 +183,9 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     val signedRequestJson = Json.parse(signedRequestResponse.getResponseBody)
     val signedRequest     = signedRequestJson.as[TransferRequest]
     assert(PublicKey.fromBase16String(signedRequest.senderPublicKey).explicitGet() == PublicKey(firstAddress.publicKey()))
-    assert(signedRequest.recipient == secondAddress)
+    assert(signedRequest.transfers.head.recipient == secondAddress)
     assert(signedRequest.fee == minFee)
-    assert(signedRequest.amount == transferAmount)
+    assert(signedRequest.transfers.head.amount == transferAmount)
     val signature = Base16.tryDecodeWithLimit((signedRequestJson \ "proofs")(0).as[String]).get
     val tx        = signedRequest.toTx.explicitGet()
     val keyPair   = sender.keyPair

@@ -7,14 +7,14 @@ import tech.hearth.test.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.transfer.*
-import tech.hearth.transaction.transfer.MassTransferTransaction.{MaxTransferCount, ParsedTransfer, Transfer}
+import tech.hearth.transaction.transfer.TransferTransaction.{MaxTransferCount, ParsedTransfer, Transfer}
 import play.api.libs.json.Json
 import tech.hearth.crypto.{Crypto, SigningKey}
 
 import java.nio.charset.StandardCharsets
 import scala.util.Random
 
-class MassTransferTransactionSpecification extends PropSpec {
+class TransferTransactionSpecification extends PropSpec {
 
   private val massTransferTxSupportedVersions: Seq[Byte] = Seq(1, 2)
 
@@ -47,7 +47,7 @@ class MassTransferTransactionSpecification extends PropSpec {
   } yield (chainId, version, asset, recipient, fee, transfers, attachment, proofs)
 
   property("property validation") {
-    import MassTransferTransaction.create
+    import TransferTransaction.create
 
     val timestamp = 1L
 
@@ -83,7 +83,7 @@ class MassTransferTransactionSpecification extends PropSpec {
 
   property("JSON format validation") {
     val js = Json.parse("""{
-      "type": 6,
+      "type": 2,
       "id": "0e0e1d0011a3e5758fa59a77a6edfb337a03817126f635bee81e6ee04b6df668",
       "fee": 200000,
       "feeAssetId": null,
@@ -110,7 +110,7 @@ class MassTransferTransactionSpecification extends PropSpec {
       ]
     }""")
 
-    val transfers = MassTransferTransaction
+    val transfers = TransferTransaction
       .parseTransfersList(
         List(
           Transfer("thrth1a4wdg3n3hg6ppf35qe6t9d3sw97n853rv4m3j6", 100000000L),
@@ -119,7 +119,7 @@ class MassTransferTransactionSpecification extends PropSpec {
       )
       .explicitGet()
 
-    val tx = MassTransferTransaction
+    val tx = TransferTransaction
       .create(
         PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
         Hearth,

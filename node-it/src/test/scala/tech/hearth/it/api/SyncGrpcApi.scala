@@ -76,12 +76,11 @@ object SyncGrpcApi extends Assertions {
         sellMatcherFee: Long,
         fee: Long,
         timestamp: Long,
-        matcherFeeAssetId: String = "HRTH",
         waitForTx: Boolean = false
     ): PBSignedTransaction = {
       maybeWaitForTransaction(
         sync(
-          async(n).exchange(matcher, buyOrder, sellOrder, amount, price, buyMatcherFee, sellMatcherFee, fee, timestamp, matcherFeeAssetId)
+          async(n).exchange(matcher, buyOrder, sellOrder, amount, price, buyMatcherFee, sellMatcherFee, fee, timestamp)
         ),
         waitForTx
       )
@@ -177,7 +176,7 @@ object SyncGrpcApi extends Assertions {
     def broadcastMassTransfer(
         sender: SigningKey,
         assetId: Option[String] = None,
-        transfers: Seq[MassTransferTransactionData.Transfer],
+        transfers: Seq[TransferTransactionData.Transfer],
         attachment: ByteString = ByteString.EMPTY,
         fee: Long,
         waitForTx: Boolean = false
@@ -186,7 +185,7 @@ object SyncGrpcApi extends Assertions {
     }
 
     def signedBroadcast(tx: PBSignedTransaction, waitForTx: Boolean = false): PBSignedTransaction = {
-      maybeWaitForTransaction(sync(async(n).broadcast(tx.getWavesTransaction, tx.proofs)), waitForTx)
+      maybeWaitForTransaction(sync(async(n).broadcast(tx.getTransaction, tx.proofs)), waitForTx)
     }
 
     def broadcast(tx: PBTransaction, proofs: Seq[ByteString], waitForTx: Boolean = false): PBSignedTransaction = {

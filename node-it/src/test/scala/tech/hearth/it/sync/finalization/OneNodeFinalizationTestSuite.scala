@@ -28,7 +28,9 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
 
   private def minerAccountEntry(rawConfig: Config): String = {
     val account = rawConfig.getConfigList("hearth.miner.accounts").get(0)
-    s"""{ signing-key = "${account.getString("signing-key")}", vrf-key = "${account.getString("vrf-key")}", bls-key = "${account.getString("bls-key")}" }"""
+    s"""{ signing-key = "${account.getString("signing-key")}", vrf-key = "${account.getString("vrf-key")}", bls-key = "${account.getString(
+        "bls-key"
+      )}" }"""
   }
 
   // The default generation-period-length (1000000, kept large elsewhere so no other suite's run ever crosses a

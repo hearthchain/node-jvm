@@ -22,7 +22,7 @@ class BlockchainUpdaterInMemoryDiffTest extends PropSpec, WithDomain {
       d.appendKeyBlock()
       d.appendMicroBlock(payment1)
 
-      d.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value)
+      d.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment1.transfers.head.amount.value - payment1.fee.value)
       d.blockchain.height shouldBe MaxTransactionsPerBlockDiff * 2 + 1
 
       // The next key block hardens the liquid block (with payment1) and triggers compaction
@@ -31,7 +31,7 @@ class BlockchainUpdaterInMemoryDiffTest extends PropSpec, WithDomain {
 
       d.blockchain.height shouldBe MaxTransactionsPerBlockDiff * 2 + 2
       d.balance(master.toAddress) shouldBe
-        (ENOUGH_AMT - payment1.amount.value - payment1.fee.value - payment2.amount.value - payment2.fee.value)
+        (ENOUGH_AMT - payment1.transfers.head.amount.value - payment1.fee.value - payment2.transfers.head.amount.value - payment2.fee.value)
     }
   }
 
@@ -46,7 +46,7 @@ class BlockchainUpdaterInMemoryDiffTest extends PropSpec, WithDomain {
       val payment1BlockId = d.lastBlockId
 
       d.appendKeyBlock() // hardens the payment1 block, leaving an empty liquid block on top
-      d.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment1.amount.value - payment1.fee.value)
+      d.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment1.transfers.head.amount.value - payment1.fee.value)
 
       // Discard that liquid block, so compaction happens without one
       d.blockchainUpdater.removeAfter(payment1BlockId) should beRight
@@ -55,7 +55,7 @@ class BlockchainUpdaterInMemoryDiffTest extends PropSpec, WithDomain {
 
       d.blockchain.height shouldBe MaxTransactionsPerBlockDiff * 2 + 1
       d.balance(master.toAddress) shouldBe
-        (ENOUGH_AMT - payment1.amount.value - payment1.fee.value - payment2.amount.value - payment2.fee.value)
+        (ENOUGH_AMT - payment1.transfers.head.amount.value - payment1.fee.value - payment2.transfers.head.amount.value - payment2.fee.value)
     }
   }
 }

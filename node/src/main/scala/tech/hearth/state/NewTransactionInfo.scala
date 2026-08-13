@@ -41,10 +41,8 @@ object NewTransactionInfo {
           .map(_.recipientAddress)
           .toSet
       case t: LeaseTransaction => Set(t.sender.toAddress, t.recipient)
-      case t: MassTransferTransaction =>
-        Set(t.sender.toAddress) ++ t.transfers.map(_.address)
       case t: TransferTransaction =>
-        Set(t.sender.toAddress, t.recipient)
+        Set(t.sender.toAddress) ++ t.transfers.map(_.address)
       case t: CommitToGenerationTransaction => Set(t.sender.toAddress)
       case _                                => Set.empty
     }

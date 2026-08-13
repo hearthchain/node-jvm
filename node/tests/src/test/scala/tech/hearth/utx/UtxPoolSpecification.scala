@@ -23,7 +23,7 @@ import tech.hearth.test.*
 import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.TxValidationError.{GenericError, SenderIsBlacklisted}
 import tech.hearth.transaction.transfer.*
-import tech.hearth.transaction.transfer.MassTransferTransaction.ParsedTransfer
+import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import tech.hearth.transaction.{Transaction, *}
 import tech.hearth.utx.UtxPool.PackStrategy
 import org.scalacheck.Gen.*
@@ -161,7 +161,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
       test(sender, utxPool, txs)
     }
 
-  private def withMassTransferWithBlacklisted[A](allowRecipients: Boolean)(test: (SigningKey, UtxPoolImpl, Seq[MassTransferTransaction]) => A): A = {
+  private def withMassTransferWithBlacklisted[A](allowRecipients: Boolean)(test: (SigningKey, UtxPoolImpl, Seq[TransferTransaction]) => A): A = {
     withState { case (sender, senderBalance, bcu) =>
       val recipients = (1 to 10).map(idx => PublicKey(TxHelpers.signer(1 + idx).publicKey))
       val time       = TestTime()
@@ -284,7 +284,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
   private def massTransferWithRecipients(sender: SigningKey, recipients: Seq[PublicKey], maxAmount: Long) = {
     val amount    = maxAmount / (recipients.size + 1)
     val transfers = recipients.map(r => ParsedTransfer(r.toAddress, TxNonNegativeAmount.unsafeFrom(amount)))
-    val minFee    = FeeValidation.FeeConstants(TransactionType.Transfer) + FeeValidation.FeeConstants(TransactionType.MassTransfer) * transfers.size
+    val minFee    = FeeValidation.FeeConstants(TransactionType.Transfer) * (1 + transfers.size)
     TxHelpers.massTransfer(sender, transfers.map(t => (t.address, t.amount.value)), Hearth, minFee)
   }
 

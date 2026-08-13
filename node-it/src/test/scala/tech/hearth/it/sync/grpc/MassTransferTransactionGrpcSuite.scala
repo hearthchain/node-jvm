@@ -4,10 +4,9 @@ import com.google.protobuf.ByteString
 import tech.hearth.it.NodeConfigs.GenesisAssets
 import tech.hearth.it.api.SyncGrpcApi.*
 import tech.hearth.it.sync.*
-import tech.hearth.protobuf.transaction.MassTransferTransactionData.Transfer
+import tech.hearth.protobuf.transaction.TransferTransactionData.Transfer
 import tech.hearth.protobuf.transaction.Recipient
-import tech.hearth.transaction.transfer.MassTransferTransaction.MaxTransferCount
-import tech.hearth.transaction.transfer.TransferTransaction.MaxAttachmentSize
+import tech.hearth.transaction.transfer.TransferTransaction.{MaxAttachmentSize, MaxTransferCount}
 import io.grpc.Status.Code
 
 class MassTransferTransactionGrpcSuite extends GrpcBaseTransactionSuite {

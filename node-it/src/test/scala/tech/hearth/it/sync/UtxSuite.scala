@@ -8,7 +8,7 @@ import tech.hearth.it.api.TransactionInfo
 import tech.hearth.it.keyPairFromSeed
 import tech.hearth.it.{BaseFunSuite, Node}
 import tech.hearth.transaction.Asset.Hearth
-import tech.hearth.transaction.Proofs
+import tech.hearth.transaction.{Proofs, TxNonNegativeAmount}
 import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.crypto.SigningKey
 
@@ -24,13 +24,11 @@ class UtxSuite extends BaseFunSuite {
     val transferToAccount = TransferTransaction
       .create(
         PublicKey(miner.keyPair.publicKey()),
-        account.toAddress,
         Hearth,
-        AMOUNT,
-        Hearth,
+        Seq(TransferTransaction.ParsedTransfer(account.toAddress, TxNonNegativeAmount.unsafeFrom(AMOUNT))),
         ENOUGH_FEE,
-        ByteStr.empty,
         System.currentTimeMillis(),
+        ByteStr.empty,
         Proofs.empty
       )
       .map(_.signWith(miner.keyPair))
@@ -43,13 +41,11 @@ class UtxSuite extends BaseFunSuite {
     val firstTransfer = TransferTransaction
       .create(
         PublicKey(account.publicKey()),
-        miner.keyPair.toAddress,
         Hearth,
-        AMOUNT - ENOUGH_FEE,
-        Hearth,
+        Seq(TransferTransaction.ParsedTransfer(miner.keyPair.toAddress, TxNonNegativeAmount.unsafeFrom(AMOUNT - ENOUGH_FEE))),
         ENOUGH_FEE,
-        ByteStr.empty,
         System.currentTimeMillis(),
+        ByteStr.empty,
         Proofs.empty
       )
       .map(_.signWith(account))
@@ -58,20 +54,18 @@ class UtxSuite extends BaseFunSuite {
     val secondTransfer = TransferTransaction
       .create(
         PublicKey(account.publicKey()),
-        notMiner.keyPair.toAddress,
         Hearth,
-        AMOUNT - ENOUGH_FEE,
-        Hearth,
+        Seq(TransferTransaction.ParsedTransfer(notMiner.keyPair.toAddress, TxNonNegativeAmount.unsafeFrom(AMOUNT - ENOUGH_FEE))),
         ENOUGH_FEE,
-        ByteStr.empty,
         System.currentTimeMillis(),
+        ByteStr.empty,
         Proofs.empty
       )
       .map(_.signWith(account))
       .explicitGet()
 
-    val tx2Id = notMiner.signedBroadcast(secondTransfer.json()).id
-    val tx1Id = miner.signedBroadcast(firstTransfer.json()).id
+    val tx2Id = notMiner.signedBroadcast(secondTransfer.json(), waitForTx = false).id
+    val tx1Id = miner.signedBroadcast(firstTransfer.json(), waitForTx = false).id
 
     nodes.waitFor("empty utx")(_.utxSize)(_.forall(_ == 0))
 

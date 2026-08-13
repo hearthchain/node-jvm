@@ -1,0 +1,50 @@
+package tech.hearth.transaction
+
+import tech.hearth.account.*
+import tech.hearth.common.state.ByteStr
+import tech.hearth.lang.ValidationError
+import tech.hearth.transaction.serialization.impl.BindApiKeyTxSerializer
+import tech.hearth.transaction.validation.TxValidator
+import tech.hearth.transaction.validation.impl.BindApiKeyTxValidator
+import monix.eval.Coeval
+import play.api.libs.json.JsObject
+
+/** Not yet semantically implemented: see TransactionDiffer, which has no case for this type yet and so rejects it
+  * with UnsupportedTransactionType. Only wire-format (protobuf/JSON) plumbing exists so far.
+  */
+final case class BindApiKeyTransaction(
+    sender: PublicKey,
+    enclavePublicKey: ByteStr,
+    encryptedApiKey: ByteStr,
+    fee: TxPositiveAmount,
+    timestamp: TxTimestamp,
+    proofs: Proofs,
+    chainId: Byte
+) extends Transaction(TransactionType.BindApiKey),
+      ProvenTransaction,
+      TxWithFee.InHearth,
+      FastHashId {
+  override type T = BindApiKeyTransaction
+
+  override val json: Coeval[JsObject] = Coeval.evalOnce(BindApiKeyTxSerializer.toJson(this))
+
+  override def addProof(proof: ByteStr): BindApiKeyTransaction = copy(proofs = this.proofs.add(proof))
+}
+
+object BindApiKeyTransaction {
+  implicit val validator: TxValidator[BindApiKeyTransaction] = BindApiKeyTxValidator
+
+  def create(
+      sender: PublicKey,
+      enclavePublicKey: ByteStr,
+      encryptedApiKey: ByteStr,
+      fee: Long,
+      timestamp: TxTimestamp,
+      proofs: Proofs,
+      chainId: Byte = AddressScheme.current.chainId
+  ): Either[ValidationError, BindApiKeyTransaction] =
+    for {
+      fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
+      tx  <- BindApiKeyTransaction(sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, chainId).validatedEither
+    } yield tx
+}

@@ -6,7 +6,7 @@ import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.transactions.BaseTransactionSuite
 import tech.hearth.state.{AssetDistributionPage, Height}
 import tech.hearth.transaction.TxHelpers
-import tech.hearth.transaction.transfer.MassTransferTransaction
+import tech.hearth.transaction.transfer.TransferTransaction
 import org.scalatest.CancelAfterFailure
 
 import scala.concurrent.duration.*
@@ -33,7 +33,7 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
 
     node.massTransfer(
       issuer,
-      addresses.map(addr => MassTransferTransaction.Transfer(addr.toString, transferAmount)),
+      addresses.map(addr => TransferTransaction.Transfer(addr.toString, transferAmount)),
       minFee + (minFee * addresses.size),
       assetId = Some(assetId),
       waitForTx = true
@@ -90,7 +90,7 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
     node
       .massTransfer(
         issuer,
-        receivers.map(rc => MassTransferTransaction.Transfer(rc.toAddress.toString, 10)).toList,
+        receivers.map(rc => TransferTransaction.Transfer(rc.toAddress.toString, 10)).toList,
         minFee + minFee * receivers.length,
         assetId = Some(assetId),
         waitForTx = true
@@ -110,7 +110,7 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
     node
       .massTransfer(
         issuer,
-        receivers.map(rc => MassTransferTransaction.Transfer(rc.toAddress.toString, 10)).toList,
+        receivers.map(rc => TransferTransaction.Transfer(rc.toAddress.toString, 10)).toList,
         minFee + minFee * receivers.length,
         assetId = Some(assetId),
         waitForTx = true
@@ -131,7 +131,7 @@ class AssetDistributionSuite extends BaseTransactionSuite with CancelAfterFailur
   test("Unlimited list") {
     val receivers = for (i <- 0 until 2000) yield TxHelpers.signer(4000 + i)
 
-    val transfers = receivers.map { r => MassTransferTransaction.Transfer(r.toAddress.toString, 10L) }.toList
+    val transfers = receivers.map { r => TransferTransaction.Transfer(r.toAddress.toString, 10L) }.toList
 
     transfers.grouped(100).foreach { t =>
       node.massTransfer(issuer, t, minFee + t.length * minFee, assetId = Some(assetId))

@@ -1,12 +1,10 @@
 package tech.hearth.network
 
 import com.google.protobuf.{ByteString, CodedOutputStream, WireFormat}
-import tech.hearth.common.state.ByteStr
 import tech.hearth.mining.MiningConstraints
 import tech.hearth.protobuf.block.*
 import tech.hearth.protobuf.transaction.*
 import tech.hearth.test.FreeSpec
-import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.{Proofs, TxHelpers}
 
 import java.io.ByteArrayOutputStream
@@ -63,7 +61,7 @@ class BasicMessagesRepoSpec extends FreeSpec {
         PBTransaction(
           Byte.MaxValue,
           ByteString.copyFrom(bytes32gen.sample.get),
-          Some(PBAmounts.fromAssetAndAmount(IssuedAsset(ByteStr(bytes32gen.sample.get)), Long.MaxValue)),
+          Long.MaxValue,
           Long.MaxValue
         )
       ),

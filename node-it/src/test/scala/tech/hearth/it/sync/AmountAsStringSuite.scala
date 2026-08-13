@@ -9,7 +9,7 @@ import tech.hearth.it.api.{Transaction, TransactionInfo}
 import tech.hearth.state.Height
 import tech.hearth.transaction.Asset.Hearth
 import tech.hearth.transaction.assets.exchange.{Order, OrderType}
-import tech.hearth.transaction.transfer.MassTransferTransaction.Transfer
+import tech.hearth.transaction.transfer.TransferTransaction.Transfer
 import tech.hearth.transaction.{TxExchangeAmount, TxExchangePrice, TxHelpers}
 import tech.hearth.utils.ScorexLogging
 import org.asynchttpclient.Response
