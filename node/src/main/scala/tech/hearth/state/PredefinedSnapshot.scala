@@ -23,19 +23,45 @@ import scala.collection.immutable.VectorMap
   * carries no transactions at all, so its whole effect is this predefined snapshot.
   */
 object PredefinedSnapshot {
-  def build(settings: PredefinedSnapshotSettings, blockchain: Blockchain): Either[ValidationError, StateSnapshot] =
+
+  /** genesisTimestamp is only needed for the height-1 entry: `blockchain` is EmptyBlockchain there, so
+    * blockchain.lastBlockTimestamp can't supply it the way it does for every later predefined-snapshot height.
+    */
+  def build(
+      settings: PredefinedSnapshotSettings,
+      blockchain: Blockchain,
+      genesisTimestamp: Option[Long] = None
+  ): Either[ValidationError, StateSnapshot] = {
+    // Unreachable in practice: genesis always passes genesisTimestamp explicitly, and any later predefined-snapshot
+    // height by definition has a previous block. Falls back to failing DCAP collateral checks closed (everything
+    // reads as expired) rather than silently succeeding, should that invariant ever not hold.
+    val atTime = genesisTimestamp.orElse(blockchain.lastBlockTimestamp).getOrElse(0L)
     for {
       assets        <- issuedAssets(settings, blockchain)
       balances      <- this.balances(settings, assets)
       _             <- checkAssetsAreFullyDistributed(assets, balances)
       generators    <- committedGenerators(settings.generators)
       minFeeChanges <- minAssetFeeChanges(settings.minAssetFees, blockchain, assets.map(_._1).toSet)
+      // Root CA CRL is verified first and folded into an intermediate view so pckCaIssuerChain/pckCrl (which need
+      // it on chain for revocation checking, see DcapCollateral) can see it even when all three are set in this
+      // same entry - the same "resolve against the resulting view" reasoning the generator balance check below uses.
+      rootCaCrl <- settings.dcapRootCaCrl.traverse(p => DcapCollateral.verifyRootCaCrl(p, blockchain, atTime).leftMap(GenericError(_)))
+      rootCaCrlBlockchain = SnapshotBlockchain(blockchain, StateSnapshot(dcapRootCaCrl = rootCaCrl))
+      pckCaIssuerChain <- settings.dcapPckCaIssuerChain.traverse(p =>
+        DcapCollateral.verifyPckCaIssuerChain(p, rootCaCrlBlockchain, atTime).leftMap(GenericError(_))
+      )
+      pckCrl <- settings.dcapPckCrl.traverse(p =>
+        DcapCollateral.verifyPckCrl(p, settings.dcapPckCaIssuerChain, rootCaCrlBlockchain, atTime).leftMap(GenericError(_))
+      )
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = toPortfolios(balances),
         issuedAssets = assets,
         updatedMinAssetFees = minFeeChanges,
-        nextCommittedGenerators = generators
+        nextCommittedGenerators = generators,
+        dcapRootCaCrl = rootCaCrl,
+        dcapPckCrl = pckCrl,
+        dcapPckCaIssuerChain = pckCaIssuerChain
       )
       _ <- BalanceDiffValidation(blockchain)(snapshot)
       // snapshot.balances only holds entries for addresses this snapshot's own balances touched - a generator
@@ -52,6 +78,7 @@ object PredefinedSnapshot {
         }
         .toLeft(())
     } yield snapshot
+  }
 
   private def issuedAssets(
       settings: PredefinedSnapshotSettings,
