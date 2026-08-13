@@ -457,24 +457,25 @@ nothing about their domain classes needed to change, only `PBTransactions`' wire
 `PBTransactions.create`/`vanilla` no longer take/return a top-level `feeAssetId` — each `Data.*` case reads/writes
 its own `fee_asset_id` field (Transfer/Reserve/Withdraw) or has none (everything else, implicitly HRTH).
 
-**Five new transaction types — plumbing only, no semantics.** `StartBoostTransaction`, `ReserveTransaction`,
-`BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in `tech.hearth.transaction`,
-alongside `CommitToGenerationTransaction`, not in a subpackage) exist as domain case classes with working
-protobuf/JSON round-trip and `TxHelpers` constructors (`TxHelpers.startBoost`/`.reserve`/`.bindApiKey`/`.settle`/
-`.withdraw`), but **no validation or state-diff logic**. Their `TxValidator`s are all `Valid(tx) // Semantics not
-implemented yet` (same pattern `CommitToGenerationTxValidator` used to use before it grew real checks).
-`TransactionDiffer.transactionSnapshot` has no `case` for any of them, so they fall through to
+**Five new transaction types — plumbing only, no semantics, except StartBoost (see below).**
+`ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in
+`tech.hearth.transaction`, alongside `CommitToGenerationTransaction`, not in a subpackage) exist as domain case
+classes with working protobuf/JSON round-trip and `TxHelpers` constructors (`TxHelpers.reserve`/`.bindApiKey`/
+`.settle`/`.withdraw`), but **no validation or state-diff logic**. Their `TxValidator`s are all `Valid(tx) //
+Semantics not implemented yet` (same pattern `CommitToGenerationTxValidator` used to use before it grew real
+checks). `TransactionDiffer.transactionSnapshot` has no `case` for any of them, so they fall through to
 `UnsupportedTransactionType` — a broadcast one reaches the mempool/JSON layer fine but is rejected before any state
 change. `TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs them the same way `Genesis` always
 was (`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for any of them) since building one
 that way needs the same not-yet-designed semantics. Field-name-driven best guesses at what these are for (not
 verified against any spec — none exists yet): `Reserve`/`Withdraw`/`Settle` look like a miner-balance-reservation
 mechanism feeding the still-stubbed `Blockchain.blockRewardBoost` (hardcoded to `1` everywhere, see "HRTH emission
-curve"'s note on it), and `StartBoost`/`BindApiKey` (`tdx_quote`, `enclave_public_key`, `encrypted_api_key`) look
-like TDX confidential-computing remote attestation for a boosted-mining validator. Implementing real semantics needs
-someone who actually knows the design to write validation + `TransactionDiffer` cases + (if the REST sign flow
-matters) `TxBroadcastRequest` subclasses — don't guess at this from field names again without checking whether a
-spec has since landed in `hearth-specs`/`hearth-tokenomics-spec`.
+curve"'s note on it), and `BindApiKey` (`enclave_public_key`, `encrypted_api_key`) looks like a follow-on step for a
+boosted miner already registered via `StartBoost`, not yet designed. Implementing real semantics needs someone who
+actually knows the design to write validation + `TransactionDiffer` cases + (if the REST sign flow matters)
+`TxBroadcastRequest` subclasses — don't guess at this from field names again without checking whether a spec has
+since landed in `hearth-specs`/`hearth-tokenomics-spec`. `StartBoostTransaction` is no longer in this bucket — see
+"StartBoost: TDX quote verification and enclave registration" below.
 
 ## DCAP collateral registry
 
@@ -562,6 +563,78 @@ synthetic fixtures built in-test with BouncyCastle (`bcpkix-jdk18on`, test-scope
 real artifacts can't exercise every rejection path on their own. `UpdateCollateralTransactionDiffTest` covers all
 six fields end-to-end: genesis seeding, permissionless update, idempotent resubmit, rollback, and the reject paths
 above.
+
+## StartBoost: TDX quote verification and enclave registration
+
+`StartBoostTransaction` (`sender`, `validator: Address`, `tdxQuote: ByteStr`, `generationPeriodStart: Height`) is
+the second stub transaction type from "Transaction schema" above to grow real semantics: a permissionless proof
+that a TEE miner's enclave is genuine, registering it for one generation period against the DCAP collateral
+registry (see "DCAP collateral registry" above). `validator` names the already-committed consensus generator
+(`CommitToGenerationTransaction`) this TEE miner boosts; the two identities are unrelated (a generator mines
+blocks, a TEE miner runs attested AI inference, see "DCAP collateral registry" above for the terminology split)
+and StartBoost only records that pairing, it doesn't grant the validator anything by itself.
+
+`state/diffs/StartBoostTransactionDiff.scala` does the real work; `StartBoostTxValidator` only pre-filters (parses
+`tdxQuote` and rejects SGX outright, structurally, before touching chain state - a malformed or SGX quote gets
+rejected before it can occupy mempool or block space, matching the "reject SGX" policy decision made when this was
+planned). The diff:
+
+- requires `generationPeriodStart` to be exactly the *next* generation period from the current one, and `validator`
+  to already be a committed generator of that next period - a StartBoost can't register ahead of or behind the
+  generator commitment it rides on;
+- checks quote freshness and sender-binding: the TDX report's 64-byte `report_data` must equal `blockId(32) ++
+  senderPublicKey(32)`, `blockId` must name a block within the last `FreshnessWindowBlocks` (100) blocks below the
+  current height. Both values are embedded raw, not hashed - `report_data` already fits both exactly, and
+  unforgeability comes from the quote's own TDX hardware signature over `report_data`, not from hiding either
+  value; hashing them would only add cost (verifying would still mean recomputing and comparing against the small
+  set of candidate recent block ids, since a hash can't be "unhashed" to recover which block was claimed) without
+  adding security. The sender binding exists so a quote observed in the mempool can't be copied into a different
+  sender's StartBoost transaction before the original lands;
+- verifies the full quote signature chain: the quote's own embedded PCK certificate chain (leaf, PCK CA, root) is
+  checked against `IntelPki`'s pinned Intel root and the on-chain `pckCrl` (revocation) - it does *not* need the
+  on-chain `pckCaIssuerChain` too, since the chain a quote itself carries is already self-contained; that field
+  only backs verifying `pckCrl`'s own signature, at `UpdateCollateral` submission time. The PCK leaf's key then
+  verifies `qeReportSignature`; the QE report's own `user_report_data` (`SHA256(attestationPubKey ++ authData)`,
+  zero-padded to 64 bytes, per Intel's spec) is checked to prove the QE vouches for that specific attestation key;
+  that attestation key finally verifies `isvSignature` over the quote's header+body. `DcapQuote.Quote` carries
+  `isvSignedMessage`/`QuoteSignatureData.qeReportBodyMessage` as the original wire-byte slices these two signatures
+  cover, not re-serialized from the parsed fields, so a signature check can never diverge from what was actually
+  signed due to a re-encoding bug in the parser;
+- checks the quote's FMSPC (read from the PCK leaf's SGX certificate extension, OID `1.2.840.113741.1.13.1` nesting
+  `1.2.840.113741.1.13.1.4`, parsed the same ASN.1-`OCTET STRING`-wrapping-a-`SEQUENCE` way `IntelPki`'s existing
+  CRL Number extraction does) has a TCB Info entry on chain - existence only, not full TCB status evaluation (see
+  the deferred-scope note below);
+- registers the enclave: `RegisteredEnclave(attestationPublicKey, validator)`, keyed by the quote's own attestation
+  public key (a raw 64-byte P-256 point) rather than by address or by `mrEnclave` - unlike a generator's identity,
+  an enclave's identity changes on every restart (a fresh quote embeds a fresh attestation key), so the registry
+  key is exactly the value that changes with the quote, deliberately not the measurement of the underlying binary.
+
+Storage mirrors `committedGenerators`/`GenerationPeriod` exactly, including the same "only this and next period are
+cached" restriction, the same rollback-on-discard handling, and the same `Caches`/`RocksDBWriter`/`Blockchain`
+three-layer wiring - `RegisteredEnclave` is the DCAP analogue of `CommittedGenerator`.
+
+**Deliberately deferred, both flagged in `StartBoostTransactionDiff`'s own doc comment rather than silently
+skipped:** the on-chain TCB Info for a quote's FMSPC is checked for *presence* only, not for its TCB status
+(UpToDate/OutOfDate/Revoked, Intel DCAP spec S6.2.2 - a real evaluation needs matching `sgxtcbcomponents`/`pcesvn`
+against a sorted `tcbLevels` list and picking the first match, a nontrivial algorithm on its own) or re-checked for
+freshness at StartBoost time (only at the `UpdateCollateral` submission that put it on chain) - a TEE running under
+a since-downgraded TCB is not yet rejected. Neither has a settled design yet; don't guess at either without
+checking whether one has landed since.
+
+**Testing gap, also flagged rather than silently accepted:** no real, currently-valid PCK CRL fixture exists to
+vendor - Intel's DCAP PKI has no static "PCK CRL for this specific PCK CA" sample the way a Root CA CRL or TCB
+Signing CA chain does, and even upstream `dcap-rs`'s own test suite fetches this collateral live from Intel PCS at
+test time rather than vendoring it, which this repo's tests never do (see "Cross-language test vectors"/real-fixture
+convention above). `StartBoostTransactionDiffTest`'s deepest deterministically-reachable reject path is therefore
+"PCK CRL not set" - the accept path, and the PCK-chain/QE/ISV signature verification beyond it, are exercised only
+indirectly: `IntelPkiTest`'s synthetic-fixture groups cover `verifyIssuerChain`/`verifyCrl` in isolation with an
+injectable trust anchor, and `DcapQuoteTest` confirms `isvSignedMessage`/`qeReportBodyMessage` slice the exact
+expected byte ranges against real quote fixtures - but nothing currently exercises `StartBoostTransactionDiff`'s
+full signature-chain wiring end to end against a quote that actually verifies. A future pass wanting to close this
+would need either a live Intel PCS fetch (a new kind of test dependency this repo doesn't have) or threading an
+injectable trust anchor through `StartBoostTransactionDiff` itself (mirroring `IntelPki.verifyIssuerChain`'s own
+`trustAnchor` parameter) so a synthetic PCK chain built in-test with BouncyCastle could stand in for Intel's real
+one.
 
 ## Protobuf package migration
 
