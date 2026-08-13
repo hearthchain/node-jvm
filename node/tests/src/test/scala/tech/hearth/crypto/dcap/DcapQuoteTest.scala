@@ -43,6 +43,10 @@ class DcapQuoteTest extends FreeSpec {
       quote.signature.certData.certKeyType shouldBe 5
       quote.signature.certData.isPckCertChain shouldBe true
       new String(quote.signature.certData.certData.arr).startsWith("-----BEGIN CERTIFICATE-----") shouldBe true
+
+      // header(48) + SGX body(384), the exact bytes isvSignature covers
+      quote.isvSignedMessage.arr.length shouldBe 432
+      quote.signature.qeReportBodyMessage.arr.length shouldBe 384
     }
 
     "parses a v4 TDX TD1.0 quote embedded in a larger buffer" in {
@@ -64,6 +68,10 @@ class DcapQuoteTest extends FreeSpec {
       // collateral - DcapQuote unwraps it, so the exposed certData is the nested PCK cert chain (type 5).
       quote.signature.certData.certKeyType shouldBe 5
       quote.signature.certData.isPckCertChain shouldBe true
+
+      // header(48) + TD1.0 body(584)
+      quote.isvSignedMessage.arr.length shouldBe 632
+      quote.signature.qeReportBodyMessage.arr.length shouldBe 384
     }
 
     "parses a v5 TDX TD1.5 quote" in {
@@ -80,6 +88,10 @@ class DcapQuoteTest extends FreeSpec {
       body.mrServiceTd shouldBe hex("383c87d3bbb047b2d171eaca95312ede99f258088dc788f6ae2ccf8b6dd848fe8d47629e08b3f6cbd4a00dd47a5a033d")
 
       quote.signature.certData.certKeyType shouldBe 5
+
+      // header(48) + body-type/size prefix(6) + TD1.5 body(648)
+      quote.isvSignedMessage.arr.length shouldBe 702
+      quote.signature.qeReportBodyMessage.arr.length shouldBe 384
     }
   }
 

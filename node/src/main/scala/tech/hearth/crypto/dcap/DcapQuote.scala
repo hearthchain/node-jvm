@@ -85,16 +85,25 @@ object DcapQuote {
     def isPckCertChain: Boolean = certKeyType == PckCertChainKeyType
   }
 
+  /** `qeReportBodyMessage` is the exact wire bytes `qeReportSignature` covers, kept as the original slice for the
+    * same reason `Quote.isvSignedMessage` is - see there.
+    */
   case class QuoteSignatureData(
       isvSignature: ByteStr,
       attestationPubKey: ByteStr,
       qeReportBody: EnclaveReportBody,
+      qeReportBodyMessage: ByteStr,
       qeReportSignature: ByteStr,
       authData: ByteStr,
       certData: QuoteCertData
   )
 
-  case class Quote(header: QuoteHeader, body: QuoteBody, signature: QuoteSignatureData)
+  /** `isvSignedMessage` is the exact wire bytes the quote's own `signature.isvSignature` covers - the header, then
+    * (version 5+ only) the explicit body-type/body-size prefix, then the body - kept as the original slice rather
+    * than re-serialized from the parsed fields, so a signature check against it can never diverge from what the
+    * quoting enclave actually signed due to a re-encoding bug here.
+    */
+  case class Quote(header: QuoteHeader, body: QuoteBody, signature: QuoteSignatureData, isvSignedMessage: ByteStr)
 
   /** Parses one quote from the front of `bytes`. Trailing bytes beyond the quote's own declared signature length
     * are ignored, not rejected - `bytes` may be a larger buffer a quote was merely embedded in.
@@ -102,10 +111,11 @@ object DcapQuote {
   def parse(bytes: Array[Byte]): Either[String, Quote] = {
     val r = new Reader(bytes)
     for {
-      header    <- readHeader(r)
-      body      <- readBody(r, header)
+      header <- readHeader(r)
+      body   <- readBody(r, header)
+      isvSignedMessage = ByteStr(bytes.slice(0, r.position))
       signature <- readSignature(r, header.version)
-    } yield Quote(header, body, signature)
+    } yield Quote(header, body, signature, isvSignedMessage)
   }
 
   private def readHeader(r: Reader): Either[String, QuoteHeader] =
@@ -237,13 +247,15 @@ object DcapQuote {
     for {
       isvSignature      <- r.takeByteStr(64)
       attestationPubKey <- r.takeByteStr(64)
-      qeReportBody      <- readEnclaveReportBody(r)
+      qeReportStart = r.position
+      qeReportBody <- readEnclaveReportBody(r)
+      qeReportBodyMessage = ByteStr(bytes.slice(qeReportStart, r.position))
       qeReportSignature <- r.takeByteStr(64)
       authDataLen       <- r.u16()
       authData          <- r.takeByteStr(authDataLen)
       certData          <- readCertData(r)
       _                 <- Either.raiseUnless(r.remaining == 0)(s"signature data has ${r.remaining} trailing bytes")
-    } yield QuoteSignatureData(isvSignature, attestationPubKey, qeReportBody, qeReportSignature, authData, certData)
+    } yield QuoteSignatureData(isvSignature, attestationPubKey, qeReportBody, qeReportBodyMessage, qeReportSignature, authData, certData)
   }
 
   /** v4+ nests the same QE report/signature/auth-data/cert-data quadruple one level down, inside an outer cert-data
@@ -259,15 +271,18 @@ object DcapQuote {
       _ <- Either.raiseUnless(outerCertData.certKeyType == EcdsaSigAuxDataKeyType)(
         s"expected cert key type $EcdsaSigAuxDataKeyType (ECDSA sig aux data), got ${outerCertData.certKeyType}"
       )
-      inner = new Reader(outerCertData.certData.arr)
-      qeReportBody      <- readEnclaveReportBody(inner)
+      innerBytes    = outerCertData.certData.arr
+      inner         = new Reader(innerBytes)
+      qeReportStart = inner.position
+      qeReportBody <- readEnclaveReportBody(inner)
+      qeReportBodyMessage = ByteStr(innerBytes.slice(qeReportStart, inner.position))
       qeReportSignature <- inner.takeByteStr(64)
       authDataLen       <- inner.u16()
       authData          <- inner.takeByteStr(authDataLen)
       certData          <- readCertData(inner)
       _                 <- Either.raiseUnless(inner.remaining == 0)(s"quoting enclave cert data has ${inner.remaining} trailing bytes")
       _                 <- Either.raiseUnless(r.remaining == 0)(s"signature data has ${r.remaining} trailing bytes")
-    } yield QuoteSignatureData(isvSignature, attestationPubKey, qeReportBody, qeReportSignature, authData, certData)
+    } yield QuoteSignatureData(isvSignature, attestationPubKey, qeReportBody, qeReportBodyMessage, qeReportSignature, authData, certData)
   }
 
   private def readSignature(r: Reader, version: Int): Either[String, QuoteSignatureData] =
@@ -280,6 +295,8 @@ object DcapQuote {
 
   private final class Reader(bytes: Array[Byte]) {
     private var pos = 0
+
+    def position: Int = pos
 
     def remaining: Int = bytes.length - pos
 
