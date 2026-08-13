@@ -24,18 +24,20 @@ import scala.collection.immutable.VectorMap
   */
 object PredefinedSnapshot {
 
-  /** genesisTimestamp is only needed for the height-1 entry: `blockchain` is EmptyBlockchain there, so
-    * blockchain.lastBlockTimestamp can't supply it the way it does for every later predefined-snapshot height.
+  /** blockTimestamp is the timestamp of the block this entry's effects are being applied through - every real
+    * caller (Block.genesis, BlockDiffer.mkInitialSnapshot) has it and passes it explicitly. It's only truly
+    * required at the height-1 entry, where `blockchain` is still empty and so has no lastBlockTimestamp of its own
+    * to fall back on the way every later predefined-snapshot height's own previous block would supply.
     */
   def build(
       settings: PredefinedSnapshotSettings,
       blockchain: Blockchain,
-      genesisTimestamp: Option[Long] = None
+      blockTimestamp: Option[Long] = None
   ): Either[ValidationError, StateSnapshot] = {
-    // Unreachable in practice: genesis always passes genesisTimestamp explicitly, and any later predefined-snapshot
-    // height by definition has a previous block. Falls back to failing DCAP collateral checks closed (everything
-    // reads as expired) rather than silently succeeding, should that invariant ever not hold.
-    val atTime = genesisTimestamp.orElse(blockchain.lastBlockTimestamp).getOrElse(0L)
+    // Unreachable in practice: every real caller passes blockTimestamp explicitly. Falls back to failing DCAP
+    // collateral checks closed (everything reads as expired) rather than silently succeeding, should that ever
+    // not hold.
+    val atTime = blockTimestamp.orElse(blockchain.lastBlockTimestamp).getOrElse(0L)
     for {
       assets        <- issuedAssets(settings, blockchain)
       balances      <- this.balances(settings, assets)
@@ -53,6 +55,17 @@ object PredefinedSnapshot {
       pckCrl <- settings.dcapPckCrl.traverse(p =>
         DcapCollateral.verifyPckCrl(p, settings.dcapPckCaIssuerChain, rootCaCrlBlockchain, atTime).leftMap(GenericError(_))
       )
+      tcbSigningIssuerChain <- settings.dcapTcbSigningIssuerChain.traverse(p =>
+        DcapCollateral.verifyTcbSigningIssuerChain(p, rootCaCrlBlockchain, atTime).leftMap(GenericError(_))
+      )
+      tcbSigningBlockchain = SnapshotBlockchain(rootCaCrlBlockchain, StateSnapshot(dcapTcbSigningIssuerChain = tcbSigningIssuerChain))
+      tcbInfo <- settings.dcapTcbInfo.toList.traverse(p =>
+        DcapCollateral.verifyTcbInfo(p, settings.dcapTcbSigningIssuerChain, tcbSigningBlockchain, atTime).leftMap(GenericError(_))
+      )
+      _ <- checkNoDuplicates(tcbInfo.map(_._1.toString), "predefined snapshot TCB Info fmspc")
+      qeIdentity <- settings.dcapQeIdentity.traverse(p =>
+        DcapCollateral.verifyQeIdentity(p, settings.dcapTcbSigningIssuerChain, tcbSigningBlockchain, atTime).leftMap(GenericError(_))
+      )
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = toPortfolios(balances),
@@ -61,6 +74,9 @@ object PredefinedSnapshot {
         nextCommittedGenerators = generators,
         dcapRootCaCrl = rootCaCrl,
         dcapPckCrl = pckCrl,
+        dcapTcbInfo = tcbInfo.toMap,
+        dcapQeIdentity = qeIdentity,
+        dcapTcbSigningIssuerChain = tcbSigningIssuerChain,
         dcapPckCaIssuerChain = pckCaIssuerChain
       )
       _ <- BalanceDiffValidation(blockchain)(snapshot)

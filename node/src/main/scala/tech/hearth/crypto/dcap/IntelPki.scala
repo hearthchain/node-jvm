@@ -1,11 +1,13 @@
 package tech.hearth.crypto.dcap
 
+import cats.syntax.either.*
 import tech.hearth.crypto.P256Curve
 
 import java.io.ByteArrayInputStream
+import java.math.BigInteger
 import java.security.cert.{CertificateFactory, X509CRL, X509Certificate}
 import java.security.spec.X509EncodedKeySpec
-import java.security.{KeyFactory, PublicKey}
+import java.security.{KeyFactory, PublicKey, Signature}
 import java.util.{Base64, Date}
 import scala.jdk.CollectionConverters.*
 import scala.util.control.NonFatal
@@ -52,13 +54,9 @@ object IntelPki {
         .collect { case c: X509Certificate => c }
 
       for {
-        _ <- Either.cond(certs.nonEmpty, (), "empty certificate chain")
+        _ <- Either.raiseUnless(certs.nonEmpty)("empty certificate chain")
         root = certs.last
-        _ <- Either.cond(
-          root.getSubjectX500Principal == root.getIssuerX500Principal,
-          (),
-          "root certificate is not self-issued"
-        )
+        _       <- Either.raiseUnless(root.getSubjectX500Principal == root.getIssuerX500Principal)("root certificate is not self-issued")
         _       <- verifySignedBy(root, trustAnchor)
         _       <- P256Curve.validateCertChain(certs.map(_.getEncoded), crls, atTime)
         leafKey <- Right(certs.head.getPublicKey)
@@ -83,11 +81,7 @@ object IntelPki {
     try {
       val crl = certificateFactory.generateCRL(new ByteArrayInputStream(der)).asInstanceOf[X509CRL]
       crl.verify(signedBy)
-      Either.cond(
-        !crl.getNextUpdate.before(new Date(atTime)),
-        crlNumber(crl),
-        s"CRL expired at ${crl.getNextUpdate}"
-      )
+      Either.raiseWhen(crl.getNextUpdate.before(new Date(atTime)))(s"CRL expired at ${crl.getNextUpdate}").map(_ => crlNumber(crl))
     } catch {
       case NonFatal(e) => Left(s"failed to verify CRL: ${e.getMessage}")
     }
@@ -101,6 +95,29 @@ object IntelPki {
     catch {
       case NonFatal(_) => None
     }
+
+  /** Verifies a raw (r||s, 64-byte) ECDSA-P256-SHA256 signature over `message` against an already-resolved public
+    * key - the format Intel's PCS uses for tcbInfo/enclaveIdentity's own "signature" field, computed over the raw
+    * bytes of the nested object as Intel served it (see JsonRawValue), not a reserialized copy of it.
+    */
+  def verifyRawSignature(message: Array[Byte], signatureRaw64: Array[Byte], key: PublicKey): Either[String, Unit] =
+    if (signatureRaw64.length != 64) Left(s"signature must be 64 bytes, got ${signatureRaw64.length}")
+    else
+      try {
+        val sig = Signature.getInstance("SHA256withECDSA")
+        sig.initVerify(key)
+        sig.update(message)
+        Either.raiseUnless(sig.verify(rawToDerSignature(signatureRaw64)))("signature verification failed")
+      } catch {
+        case NonFatal(e) => Left(s"failed to verify signature: ${e.getMessage}")
+      }
+
+  private def rawToDerSignature(raw64: Array[Byte]): Array[Byte] = {
+    val v = new org.bouncycastle.asn1.ASN1EncodableVector()
+    v.add(new org.bouncycastle.asn1.ASN1Integer(new BigInteger(1, raw64, 0, 32)))
+    v.add(new org.bouncycastle.asn1.ASN1Integer(new BigInteger(1, raw64, 32, 32)))
+    new org.bouncycastle.asn1.DERSequence(v).getEncoded
+  }
 
   private def crlNumber(crl: X509CRL): Option[BigInt] =
     Option(crl.getExtensionValue("2.5.29.20")).map { raw =>

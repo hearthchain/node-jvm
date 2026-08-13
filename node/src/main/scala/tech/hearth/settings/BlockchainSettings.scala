@@ -197,7 +197,12 @@ case class PredefinedSnapshotSettings(
     // rather than left to arrive from the first post-genesis UpdateCollateral transaction.
     dcapRootCaCrl: Option[ByteStr] = None,
     dcapPckCrl: Option[ByteStr] = None,
-    dcapPckCaIssuerChain: Option[ByteStr] = None
+    dcapPckCaIssuerChain: Option[ByteStr] = None,
+    // Seq, not Option: a network's miners can run more than one platform model, and TCB Info is keyed per FMSPC
+    // (read out of each payload itself, not a separate field here) - see PredefinedSnapshot.
+    dcapTcbInfo: Seq[ByteStr] = Seq.empty,
+    dcapQeIdentity: Option[ByteStr] = None,
+    dcapTcbSigningIssuerChain: Option[ByteStr] = None
 )
 
 object PredefinedSnapshotSettings {
