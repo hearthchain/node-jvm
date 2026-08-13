@@ -79,6 +79,22 @@ class IntelPkiTest extends FreeSpec {
 
       IntelPki.verifyRawSignature(raw, signature, IntelPki.rootCaPublicKey) shouldBe a[Left[?, ?]]
     }
+
+    "pckLeafFmspc reads the real FMSPC out of a quote's embedded PCK cert chain" in {
+      val quoteBytes = tech.hearth.common.utils.Base16.decode(new String(resourceBytes("quotev3.hex")).trim)
+      val quote      = tech.hearth.crypto.dcap.DcapQuote.parse(quoteBytes).explicitGet()
+      quote.signature.certData.isPckCertChain shouldBe true
+
+      val fmspc = IntelPki.pckLeafFmspc(quote.signature.certData.certData.arr).explicitGet()
+      // Cross-checked independently: `openssl x509 -text` on the leaf cert's SGX extension (OID
+      // 1.2.840.113741.1.13.1), sub-field 1.2.840.113741.1.13.1.4 (FMSPC), before this test was written.
+      fmspc shouldBe tech.hearth.common.utils.Base16.decode("00606a000000")
+    }
+
+    "pckLeafFmspc rejects a chain with no SGX extension" in {
+      val chainPem = derToPem(resourceBytes("signing.der")) ++ derToPem(resourceBytes("root.der"))
+      IntelPki.pckLeafFmspc(chainPem) shouldBe a[Left[?, ?]]
+    }
   }
 
   private def genKeyPair(): KeyPair = {

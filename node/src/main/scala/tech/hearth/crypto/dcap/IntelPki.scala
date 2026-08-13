@@ -119,6 +119,43 @@ object IntelPki {
     new org.bouncycastle.asn1.DERSequence(v).getEncoded
   }
 
+  private val SgxExtensionOid = "1.2.840.113741.1.13.1"
+  private val FmspcOid        = "1.2.840.113741.1.13.1.4"
+
+  /** Reads the FMSPC (platform model id, 6 bytes) out of a PCK leaf certificate's SGX extension - the field that
+    * selects which on-chain tcbInfo entry a quote's PCK chain has to be checked against (see DcapCollateral).
+    * `chainPem` is a quote's own embedded PCK cert chain (leaf first, matching Intel PCS's own order); only the
+    * leaf carries the SGX extension, so the rest of the chain is parsed but otherwise unused here.
+    */
+  def pckLeafFmspc(chainPem: Array[Byte]): Either[String, Array[Byte]] =
+    try {
+      val leaf = certificateFactory.generateCertificates(new ByteArrayInputStream(chainPem)).asScala.headOption.collect { case c: X509Certificate =>
+        c
+      }
+      leaf.toRight("empty PCK certificate chain").flatMap(fmspcOf)
+    } catch {
+      case NonFatal(e) => Left(s"failed to parse PCK certificate chain: ${e.getMessage}")
+    }
+
+  private def fmspcOf(cert: X509Certificate): Either[String, Array[Byte]] =
+    try {
+      val sgxExtension = Option(cert.getExtensionValue(SgxExtensionOid)).toRight("PCK certificate has no SGX extension")
+      sgxExtension.flatMap { raw =>
+        // Same double DER-encoding as crlNumber below: an OCTET STRING wrapping the SGX extension's own SEQUENCE
+        // of SEQUENCE{OID, value} entries (RFC 5280-style extension list, Intel's own private OID tree).
+        val entries = org.bouncycastle.asn1.ASN1Sequence.getInstance(
+          org.bouncycastle.asn1.ASN1OctetString.getInstance(raw).getOctets
+        )
+        (0 until entries.size())
+          .map(i => org.bouncycastle.asn1.ASN1Sequence.getInstance(entries.getObjectAt(i)))
+          .find(entry => org.bouncycastle.asn1.ASN1ObjectIdentifier.getInstance(entry.getObjectAt(0)).getId == FmspcOid)
+          .map(entry => org.bouncycastle.asn1.ASN1OctetString.getInstance(entry.getObjectAt(1)).getOctets)
+          .toRight("SGX extension has no FMSPC field")
+      }
+    } catch {
+      case NonFatal(e) => Left(s"failed to read FMSPC from PCK certificate: ${e.getMessage}")
+    }
+
   private def crlNumber(crl: X509CRL): Option[BigInt] =
     Option(crl.getExtensionValue("2.5.29.20")).map { raw =>
       // The extension value is itself DER-encoded twice over: an OCTET STRING wrapping the CRLNumber's own DER
