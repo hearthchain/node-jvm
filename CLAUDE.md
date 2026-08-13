@@ -476,6 +476,93 @@ someone who actually knows the design to write validation + `TransactionDiffer` 
 matters) `TxBroadcastRequest` subclasses — don't guess at this from field names again without checking whether a
 spec has since landed in `hearth-specs`/`hearth-tokenomics-spec`.
 
+## DCAP collateral registry
+
+The first real semantics landed for one of the five stub transaction types above: `UpdateCollateralTransaction`, a
+permissionless on-chain registry for Intel DCAP (TDX/SGX) remote-attestation collateral, is the prerequisite state
+`StartBoostTransaction` will eventually verify a TEE miner's quote against. `StartBoostTransaction` itself (quote
+parsing, per-period enclave registration) is still unimplemented; only the collateral registry underneath it exists
+so far. Terminology: a *generator* is a consensus miner (committed via `CommitToGenerationTransaction`, unrelated to
+this); a *TEE miner*/*boosted miner* is a separate role that runs AI inference inside an attested enclave and proves
+that with a DCAP quote, chained through `StartBoost`. Do not conflate the two.
+
+DCAP quote verification needs a chain of Intel-signed collateral, most of it expiring and requiring periodic
+permissionless updates: a Root CA CRL, a PCK (Provisioning Certification Key) CRL plus the PCK CA's own issuer
+chain, and signed-JSON TCB Info (per platform model, keyed by FMSPC) plus QE/Enclave Identity, both chained through
+a TCB Signing CA issuer chain. `UpdateCollateralTransaction` (`transaction/UpdateCollateralTransaction.scala`)
+carries all six as independent `Option[ByteStr]` fields rather than a oneof, so one transaction can update several
+at once; `UpdateCollateralTxValidator` only requires at least one field be set. `state/diffs/
+UpdateCollateralTransactionDiff.scala` runs whichever fields are present through `state/DcapCollateral.scala` and
+merges the result into a `StateSnapshot`.
+
+### Verification
+
+`crypto/dcap/IntelPki.scala` holds the only cryptographic trust decisions in this path: a pinned `rootCaPublicKey`
+constant (matching dcap-rs's `INTEL_ROOT_CA_PEM`), `verifyIssuerChain` (reuses the existing `P256Curve` cert-chain
+validator, checked against the pinned root, mandatory revocation checking against an already-on-chain CRL),
+`verifyCrl`/`crlNumberOf` (CRL Number via the X.509 `2.5.29.20` extension), and `verifyRawSignature` (raw r||s to
+DER conversion, since Intel's JSON collateral signs with raw 64-byte ECDSA signatures while X.509/CRL use DER).
+
+TCB Info and QE/Enclave Identity are signed JSON, not X.509: `{"tcbInfo": {...}, "signature": <raw r||s, hex>}`
+(and `enclaveIdentity` for the other). The signature covers the exact raw bytes of the nested object as served, not
+a reserialized copy, so `crypto/dcap/JsonRawValue.scala` extracts that byte span with a byte-level brace-matching
+scanner (string-literal/escape aware) rather than parsing and re-emitting JSON, which would silently break the
+signature on any whitespace or key-order difference from Intel's own serialization.
+
+`DcapCollateral.scala` rejects a stale resubmission for every field: Root/PCK CRL by CRL Number, TCB Info/QE
+Identity by Intel's own `tcbEvaluationDataNumber` (incremented on every republish, including a pure TCB-recovery
+event with no other visible change). `rejectDowngrade` only compares when both a new and a stored number exist, so
+the very first submission for a field is never rejected as a "downgrade". TCB Info is stored per-FMSPC (read out of
+the payload itself, not a separate transaction field), so freshness is compared against whatever is already stored
+for that specific platform model, not any other one.
+
+### Storage and genesis
+
+The six fields use the same history-keyed RocksDB pattern as `AssetsInfo` (`KeyTag` history/value key pairs,
+`updateHistory`/`filterHistory` for rollback, new tags appended at the end of the append-only enum, since the
+ordinal is the on-disk prefix), not the period-keyed pattern `committedGenerators` uses, since collateral isn't
+tied to a generation period. `Blockchain` gained six
+accessor methods (`dcapRootCaCrl`, `dcapPckCrl`, `dcapTcbInfo(fmspc)`, `dcapQeIdentity`,
+`dcapTcbSigningIssuerChain`, `dcapPckCaIssuerChain`), implemented in every `Blockchain` (`RocksDBWriter`,
+`SnapshotBlockchain`, `BlockchainUpdaterImpl`, `EmptyBlockchain`, testkit's `ForwardingBlockchainUpdaterImpl`).
+
+Everything required to run the chain, including the Root CA CRL that every issuer-chain verification depends on
+for revocation checking, has to be seedable at genesis rather than relying on the first few blocks to bootstrap it
+in the right order (see "Predefined snapshots"): `PredefinedSnapshotSettings` gained the same six optional/repeated
+fields, and `PredefinedSnapshot.build` overlays a `SnapshotBlockchain` per field (`rootCaCrlBlockchain`,
+`tcbSigningBlockchain`) so that, within one genesis entry, a field can resolve another field also being seeded in
+that same entry (e.g. a genesis-seeded PCK CRL resolving its issuer key against a PCK CA issuer chain seeded in
+the same entry).
+
+### The genesis-timestamp bug
+
+`PredefinedSnapshot.build` needs a real wall-clock time to check collateral validity windows (`issueDate`/
+`nextUpdate`, cert `notBefore`/`notAfter`) against. It used to default that `atTime` to epoch-0 wherever a caller
+didn't have an obvious timestamp to pass, and every collateral-bearing genesis silently hit exactly that default,
+since `Block.genesis` used to call it before computing the block's own timestamp. This surfaced only when
+genesis-seeded collateral actually exercised an issuer-chain check, as `validity check failed: NotBefore: ...
+2018 ...` from decades in the future relative to epoch-0. Fixed by threading a real `blockTimestamp: Option[Long]`
+through every caller: `Block.genesis` now computes `timestamp` first and passes `Some(timestamp)`;
+`BlockDiffer.mkInitialSnapshot`, the production block-application path (`Domain.appendBlock`/
+`BlockchainUpdaterImpl.processBlock`, used for every predefined snapshot at any height, not just genesis) passes
+`Some(block.header.timestamp)`; `WithState.blockWithComputedStateHash` (testkit) passes the same for its
+genesis-height branch. All three call sites had to be found and fixed together, by grepping every
+`PredefinedSnapshot.build` call site, not just the one a specific failing test pointed at, since only one of the
+three happened to be exercised by any single failing test at a time.
+
+### Testing
+
+`node/tests/src/test/resources/dcap/` vendors real Intel-signed artifacts (Root CA cert/CRL, TCB Signing CA cert,
+a genuine TCB Info V3 JSON document, MIT-licensed from `automata-network/automata-dcap-attestation`, see `SOURCE.md`
+there) rather than only synthetic ones, matching this repo's "Cross-language test vectors" convention of preferring
+real, independently-produced fixtures over ones the test itself constructs. `IntelPkiTest`'s "against real
+Intel-signed fixtures" group exercises the actual accept path against production code's pinned `rootCaPublicKey`;
+every reject path (wrong trust anchor, non-self-issued claimed root, wrong CRL signer, garbage bytes) is covered by
+synthetic fixtures built in-test with BouncyCastle (`bcpkix-jdk18on`, test-scope only), since a handful of fixed
+real artifacts can't exercise every rejection path on their own. `UpdateCollateralTransactionDiffTest` covers all
+six fields end-to-end: genesis seeding, permissionless update, idempotent resubmit, rollback, and the reject paths
+above.
+
 ## Protobuf package migration
 
 Generated protobuf code moved from `com.wavesplatform.*` packages to `tech.hearth.*` ones. Most of it comes from the
