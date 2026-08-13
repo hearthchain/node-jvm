@@ -701,6 +701,7 @@ class BlockchainUpdaterImpl(
   }
   override def dcapQeIdentity: Option[ByteStr]            = readLock(snapshotBlockchain.dcapQeIdentity)
   override def dcapTcbSigningIssuerChain: Option[ByteStr] = readLock(snapshotBlockchain.dcapTcbSigningIssuerChain)
+  override def dcapPckCaIssuerChain: Option[ByteStr]      = readLock(snapshotBlockchain.dcapPckCaIssuerChain)
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = readLock {
     snapshotBlockchain.filledVolumeAndFee(orderId)

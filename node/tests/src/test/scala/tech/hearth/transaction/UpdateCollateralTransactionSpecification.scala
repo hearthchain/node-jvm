@@ -11,7 +11,8 @@ class UpdateCollateralTransactionSpecification extends FreeSpec {
       pckCrl: Option[ByteStr] = None,
       tcbInfo: Option[ByteStr] = None,
       qeIdentity: Option[ByteStr] = None,
-      tcbSigningIssuerChain: Option[ByteStr] = None
+      tcbSigningIssuerChain: Option[ByteStr] = None,
+      pckCaIssuerChain: Option[ByteStr] = None
   ) =
     UpdateCollateralTransaction.create(
       tech.hearth.account.PublicKey(sender),
@@ -20,6 +21,7 @@ class UpdateCollateralTransactionSpecification extends FreeSpec {
       tcbInfo,
       qeIdentity,
       tcbSigningIssuerChain,
+      pckCaIssuerChain,
       1000000,
       System.currentTimeMillis(),
       Proofs.empty
@@ -36,6 +38,10 @@ class UpdateCollateralTransactionSpecification extends FreeSpec {
 
     "accepts a transaction with only tcbSigningIssuerChain set" in {
       create(tcbSigningIssuerChain = Some(ByteStr.empty)) shouldBe Symbol("right")
+    }
+
+    "accepts a transaction with only pckCaIssuerChain set" in {
+      create(pckCaIssuerChain = Some(ByteStr.empty)) shouldBe Symbol("right")
     }
   }
 }

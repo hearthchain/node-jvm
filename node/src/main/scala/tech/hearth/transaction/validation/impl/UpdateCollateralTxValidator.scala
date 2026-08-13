@@ -9,7 +9,7 @@ object UpdateCollateralTxValidator extends TxValidator[UpdateCollateralTransacti
     import tx.*
     V.seq(tx)(
       V.cond(
-        Seq(rootCaCrl, pckCrl, tcbInfo, qeIdentity, tcbSigningIssuerChain).exists(_.isDefined),
+        Seq(rootCaCrl, pckCrl, tcbInfo, qeIdentity, tcbSigningIssuerChain, pckCaIssuerChain).exists(_.isDefined),
         GenericError("UpdateCollateral transaction must set at least one field")
       )
     )

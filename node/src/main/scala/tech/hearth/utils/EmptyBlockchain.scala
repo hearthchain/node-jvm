@@ -60,6 +60,7 @@ trait EmptyBlockchain extends Blockchain {
   override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] = None
   override def dcapQeIdentity: Option[ByteStr]              = None
   override def dcapTcbSigningIssuerChain: Option[ByteStr]   = None
+  override def dcapPckCaIssuerChain: Option[ByteStr]        = None
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = VolumeAndFee(0, 0)
 

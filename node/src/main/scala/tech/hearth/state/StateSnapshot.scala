@@ -29,7 +29,8 @@ case class StateSnapshot(
     dcapPckCrl: Option[ByteStr] = None,
     dcapTcbInfo: Map[ByteStr, ByteStr] = Map.empty,
     dcapQeIdentity: Option[ByteStr] = None,
-    dcapTcbSigningIssuerChain: Option[ByteStr] = None
+    dcapTcbSigningIssuerChain: Option[ByteStr] = None,
+    dcapPckCaIssuerChain: Option[ByteStr] = None
 ) {
 
   // ignores lease balances from portfolios
@@ -66,7 +67,8 @@ object StateSnapshot {
       dcapPckCrl: Option[ByteStr] = None,
       dcapTcbInfo: Map[ByteStr, ByteStr] = Map.empty,
       dcapQeIdentity: Option[ByteStr] = None,
-      dcapTcbSigningIssuerChain: Option[ByteStr] = None
+      dcapTcbSigningIssuerChain: Option[ByteStr] = None,
+      dcapPckCaIssuerChain: Option[ByteStr] = None
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -88,7 +90,8 @@ object StateSnapshot {
         dcapPckCrl,
         dcapTcbInfo,
         dcapQeIdentity,
-        dcapTcbSigningIssuerChain
+        dcapTcbSigningIssuerChain,
+        dcapPckCaIssuerChain
       )
     r.leftMap(GenericError(_))
   }
@@ -184,7 +187,8 @@ object StateSnapshot {
         s2.dcapPckCrl.orElse(s1.dcapPckCrl),
         s1.dcapTcbInfo ++ s2.dcapTcbInfo,
         s2.dcapQeIdentity.orElse(s1.dcapQeIdentity),
-        s2.dcapTcbSigningIssuerChain.orElse(s1.dcapTcbSigningIssuerChain)
+        s2.dcapTcbSigningIssuerChain.orElse(s1.dcapTcbSigningIssuerChain),
+        s2.dcapPckCaIssuerChain.orElse(s1.dcapPckCaIssuerChain)
       )
 
   }

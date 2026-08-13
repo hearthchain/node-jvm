@@ -267,4 +267,8 @@ object Keys {
   // without an unbounded scan - the same role assetsWithMinFee plays for assetMinFeeHistory above.
   def dcapTcbInfoFmspcsAt(height: Height): Key[Seq[ByteStr]] =
     Key(DcapTcbInfoFmspcsAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  def dcapPckCaIssuerChainHistory: Key[Seq[Height]] = historyKey(DcapPckCaIssuerChainHistory, Array.emptyByteArray)
+  def dcapPckCaIssuerChain(height: Height): Key[ByteStr] =
+    dcapCollateralValue(DcapPckCaIssuerChain, Array.emptyByteArray, height)
 }

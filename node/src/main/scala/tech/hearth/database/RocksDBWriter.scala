@@ -525,6 +525,11 @@ class RocksDBWriter(
         expiredKeys ++= updateHistory(rw, Keys.dcapTcbSigningIssuerChainHistory, threshold, Keys.dcapTcbSigningIssuerChain)
       }
 
+      snapshot.dcapPckCaIssuerChain.foreach { chain =>
+        rw.put(Keys.dcapPckCaIssuerChain(Height(height)), chain)
+        expiredKeys ++= updateHistory(rw, Keys.dcapPckCaIssuerChainHistory, threshold, Keys.dcapPckCaIssuerChain)
+      }
+
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
             .ofMillis(blockMeta.getHeader.timestamp - TxFilterResetTs)}")
@@ -996,6 +1001,7 @@ class RocksDBWriter(
     rollbackSingleton(Keys.dcapPckCrlHistory, Keys.dcapPckCrl)
     rollbackSingleton(Keys.dcapQeIdentityHistory, Keys.dcapQeIdentity)
     rollbackSingleton(Keys.dcapTcbSigningIssuerChainHistory, Keys.dcapTcbSigningIssuerChain)
+    rollbackSingleton(Keys.dcapPckCaIssuerChainHistory, Keys.dcapPckCaIssuerChain)
 
     val fmspcsKey = Keys.dcapTcbInfoFmspcsAt(currentHeight)
     rw.get(fmspcsKey).foreach { fmspc =>
@@ -1083,6 +1089,8 @@ class RocksDBWriter(
   override def dcapQeIdentity: Option[ByteStr] = readOnly(_.fromHistory(Keys.dcapQeIdentityHistory, Keys.dcapQeIdentity))
   override def dcapTcbSigningIssuerChain: Option[ByteStr] =
     readOnly(_.fromHistory(Keys.dcapTcbSigningIssuerChainHistory, Keys.dcapTcbSigningIssuerChain))
+  override def dcapPckCaIssuerChain: Option[ByteStr] =
+    readOnly(_.fromHistory(Keys.dcapPckCaIssuerChainHistory, Keys.dcapPckCaIssuerChain))
 
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't
   // as many miners, so snapshots will rarely be evicted due to overflows.

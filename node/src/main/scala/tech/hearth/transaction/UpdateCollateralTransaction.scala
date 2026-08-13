@@ -12,8 +12,10 @@ import play.api.libs.json.JsObject
 /** Permissionless DCAP collateral upsert (see the StartBoost consensus plan). Every field is independently
   * optional so one transaction can refresh several collateral slots at once; validation requires at least one to
   * be set. Each payload is the raw Intel-signed collateral as fetched from Intel PCS: DER for the two CRLs, signed
-  * JSON for tcbInfo/qeIdentity, and a PEM issuer chain (TCB Signing Cert -> Intel Root CA) needed to verify either
-  * of those two, since they're signed by the TCB Signing CA rather than Root CA directly.
+  * JSON for tcbInfo/qeIdentity, a PEM issuer chain (TCB Signing Cert -> Intel Root CA) needed to verify either of
+  * those two, and a second PEM issuer chain (PCK Platform/Processor CA -> Intel Root CA) needed to verify pckCrl -
+  * both signed by an intermediate under Root CA, not by Root CA directly, so each needs its issuer submitted
+  * alongside it to be verified eagerly here rather than deferred to whenever a quote happens to supply one.
   *
   * Semantics (signature verification, monotonic-freshness checks, state merge) are not implemented yet: see
   * TransactionDiffer, which has no case for this type yet and so rejects it with UnsupportedTransactionType. Only
@@ -26,6 +28,7 @@ final case class UpdateCollateralTransaction(
     tcbInfo: Option[ByteStr],
     qeIdentity: Option[ByteStr],
     tcbSigningIssuerChain: Option[ByteStr],
+    pckCaIssuerChain: Option[ByteStr],
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
@@ -51,6 +54,7 @@ object UpdateCollateralTransaction {
       tcbInfo: Option[ByteStr],
       qeIdentity: Option[ByteStr],
       tcbSigningIssuerChain: Option[ByteStr],
+      pckCaIssuerChain: Option[ByteStr],
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
@@ -65,6 +69,7 @@ object UpdateCollateralTransaction {
         tcbInfo,
         qeIdentity,
         tcbSigningIssuerChain,
+        pckCaIssuerChain,
         fee,
         timestamp,
         proofs,

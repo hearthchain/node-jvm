@@ -31,6 +31,7 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
     dcapTcbInfo,
     dcapQeIdentity,
     dcapTcbSigningIssuerChain,
+    dcapPckCaIssuerChain,
     filledVolumeAndFee,
     balanceAtHeight,
     balanceSnapshots,

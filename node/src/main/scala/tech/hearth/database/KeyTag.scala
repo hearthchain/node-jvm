@@ -76,7 +76,9 @@ enum KeyTag {
     DcapQeIdentity,
     DcapTcbSigningIssuerChainHistory,
     DcapTcbSigningIssuerChain,
-    DcapTcbInfoFmspcsAtHeight
+    DcapTcbInfoFmspcsAtHeight,
+    DcapPckCaIssuerChainHistory,
+    DcapPckCaIssuerChain
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }

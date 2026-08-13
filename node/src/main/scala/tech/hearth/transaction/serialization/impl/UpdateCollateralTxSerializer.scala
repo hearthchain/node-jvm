@@ -12,7 +12,8 @@ object UpdateCollateralTxSerializer {
       "pckCrl"                -> pckCrl,
       "tcbInfo"               -> tcbInfo,
       "qeIdentity"            -> qeIdentity,
-      "tcbSigningIssuerChain" -> tcbSigningIssuerChain
+      "tcbSigningIssuerChain" -> tcbSigningIssuerChain,
+      "pckCaIssuerChain"      -> pckCaIssuerChain
     )
   }
 }

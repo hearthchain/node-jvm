@@ -58,6 +58,7 @@ trait Blockchain {
   def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr]
   def dcapQeIdentity: Option[ByteStr]
   def dcapTcbSigningIssuerChain: Option[ByteStr]
+  def dcapPckCaIssuerChain: Option[ByteStr]
 
   def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee
 

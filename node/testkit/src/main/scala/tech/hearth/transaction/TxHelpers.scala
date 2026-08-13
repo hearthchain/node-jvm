@@ -506,6 +506,7 @@ object TxHelpers {
       tcbInfo: Option[ByteStr] = None,
       qeIdentity: Option[ByteStr] = None,
       tcbSigningIssuerChain: Option[ByteStr] = None,
+      pckCaIssuerChain: Option[ByteStr] = None,
       fee: Long = FeeConstants(TransactionType.UpdateCollateral) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
@@ -518,6 +519,7 @@ object TxHelpers {
         tcbInfo,
         qeIdentity,
         tcbSigningIssuerChain,
+        pckCaIssuerChain,
         fee,
         timestamp,
         Proofs.empty,

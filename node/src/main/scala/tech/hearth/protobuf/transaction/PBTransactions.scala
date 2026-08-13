@@ -198,7 +198,15 @@ object PBTransactions {
         } yield tx
 
       case Data.UpdateCollateral(
-            UpdateCollateralTransactionData(rootCaCrl, pckCrl, tcbInfo, qeIdentity, tcbSigningIssuerChain, `empty`)
+            UpdateCollateralTransactionData(
+              rootCaCrl,
+              pckCrl,
+              tcbInfo,
+              qeIdentity,
+              tcbSigningIssuerChain,
+              pckCaIssuerChain,
+              `empty`
+            )
           ) =>
         vt.UpdateCollateralTransaction.create(
           sender.toPublicKey,
@@ -207,6 +215,7 @@ object PBTransactions {
           tcbInfo.map(_.toByteStr),
           qeIdentity.map(_.toByteStr),
           tcbSigningIssuerChain.map(_.toByteStr),
+          pckCaIssuerChain.map(_.toByteStr),
           feeAmount,
           timestamp,
           proofs,
@@ -302,7 +311,8 @@ object PBTransactions {
             pckCrl.map(_.toByteString),
             tcbInfo.map(_.toByteString),
             qeIdentity.map(_.toByteString),
-            tcbSigningIssuerChain.map(_.toByteString)
+            tcbSigningIssuerChain.map(_.toByteString),
+            pckCaIssuerChain.map(_.toByteString)
           )
         )
         PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
