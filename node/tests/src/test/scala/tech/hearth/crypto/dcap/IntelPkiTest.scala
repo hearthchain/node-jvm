@@ -10,20 +10,50 @@ import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
 
 import java.io.StringWriter
 import java.math.BigInteger
-import java.security.cert.X509CRL
+import java.security.cert.{CertificateFactory, X509CRL}
 import java.security.{KeyPair, KeyPairGenerator, Security}
 import java.security.spec.ECGenParameterSpec
 import java.time.Instant
 import java.util.Date
 
 /** IntelPki carries the only cryptographic trust decisions in the DCAP collateral path (see the StartBoost
-  * consensus plan), so it's covered directly against real, BouncyCastle-built X.509 fixtures rather than through
-  * UpdateCollateralTransactionDiff/PredefinedSnapshot - those can only be tested on their reject paths, since a
-  * genuine accept path needs a certificate/CRL actually signed by Intel's real Root CA private key, which nothing
-  * here has.
+  * consensus plan). The "real fixtures" group below exercises the actual accept path against production code's
+  * pinned rootCaPublicKey, using genuine Intel-signed artifacts (src/test/resources/dcap, see SOURCE.md there) -
+  * not a synthetic throwaway root, and not requiring the trustAnchor injection point at all. The synthetic-fixture
+  * groups below that cover every reject path, which a handful of fixed real artifacts can't exercise on their own.
   */
 class IntelPkiTest extends FreeSpec {
   Security.addProvider(new BouncyCastleProvider)
+
+  // Inside both root_crl.der's (2024-03-20 to 2025-04-03) and signing.der's (2018-05-21 to 2025-05-21) validity
+  // windows - see SOURCE.md.
+  private val realFixtureAtTime = Instant.parse("2024-06-01T00:00:00Z").toEpochMilli
+
+  private def resourceBytes(name: String): Array[Byte] =
+    getClass.getResourceAsStream(s"/dcap/$name").readAllBytes()
+
+  private def derToPem(der: Array[Byte]): Array[Byte] = {
+    val cert = CertificateFactory.getInstance("X.509").generateCertificate(new java.io.ByteArrayInputStream(der))
+    pem(cert.asInstanceOf[java.security.cert.X509Certificate])
+  }
+
+  "against real Intel-signed fixtures" - {
+    "verifyCrl accepts the real Root CA CRL against the pinned rootCaPublicKey" in {
+      val result = IntelPki.verifyCrl(resourceBytes("root_crl.der"), IntelPki.rootCaPublicKey, realFixtureAtTime)
+      result shouldBe Right(Some(BigInt(1)))
+    }
+
+    "verifyIssuerChain accepts the real TCB Signing CA chain against the pinned rootCaPublicKey" in {
+      val chainPem = derToPem(resourceBytes("signing.der")) ++ derToPem(resourceBytes("root.der"))
+      val expectedKey = CertificateFactory
+        .getInstance("X.509")
+        .generateCertificate(new java.io.ByteArrayInputStream(resourceBytes("signing.der")))
+        .getPublicKey
+
+      val result = IntelPki.verifyIssuerChain(chainPem, realFixtureAtTime, crls = Seq(resourceBytes("root_crl.der")))
+      result shouldBe Right(expectedKey)
+    }
+  }
 
   private def genKeyPair(): KeyPair = {
     val gen = KeyPairGenerator.getInstance("EC", "BC")
