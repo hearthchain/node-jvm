@@ -3,6 +3,7 @@ package tech.hearth.transaction
 import tech.hearth.account.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
+import tech.hearth.state.Height
 import tech.hearth.transaction.serialization.impl.StartBoostTxSerializer
 import tech.hearth.transaction.validation.TxValidator
 import tech.hearth.transaction.validation.impl.StartBoostTxValidator
@@ -11,11 +12,15 @@ import play.api.libs.json.JsObject
 
 /** Not yet semantically implemented: see TransactionDiffer, which has no case for this type yet and so rejects it
   * with UnsupportedTransactionType. Only wire-format (protobuf/JSON) plumbing exists so far.
+  *
+  * generationPeriodStart mirrors CommitToGenerationTransaction.generationPeriodStart: a StartBoost registers the
+  * enclave for one generation period and must be resubmitted for the next one (see the DCAP consensus plan).
   */
 final case class StartBoostTransaction(
     sender: PublicKey,
     validator: Address,
     tdxQuote: ByteStr,
+    generationPeriodStart: Height,
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
@@ -38,6 +43,7 @@ object StartBoostTransaction {
       sender: PublicKey,
       validator: Address,
       tdxQuote: ByteStr,
+      generationPeriodStart: Height,
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
@@ -45,6 +51,6 @@ object StartBoostTransaction {
   ): Either[ValidationError, StartBoostTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- StartBoostTransaction(sender, validator, tdxQuote, fee, timestamp, proofs, chainId).validatedEither
+      tx  <- StartBoostTransaction(sender, validator, tdxQuote, generationPeriodStart, fee, timestamp, proofs, chainId).validatedEither
     } yield tx
 }

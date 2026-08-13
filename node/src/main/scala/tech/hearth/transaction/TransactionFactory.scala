@@ -105,14 +105,14 @@ object TransactionFactory {
       import TransactionType.*
       import cats.syntax.either.*
       val req = TransactionType.fromId(typeId) match {
-        case Transfer                                                        => jsv.as[TransferRequest].asRight
-        case Lease                                                           => jsv.as[LeaseRequest].asRight
-        case LeaseCancel                                                     => jsv.as[LeaseCancelRequest].asRight
-        case CommitToGeneration                                              => jsv.as[CommitToGenerationRequest].asRight
-        case Exchange                                                        => jsv.as[ExchangeRequest].asRight
-        case Genesis | StartBoost | Reserve | BindApiKey | Settle | Withdraw =>
-          // StartBoost/Reserve/BindApiKey/Settle/Withdraw are not yet signable through this REST flow: their
-          // semantics (validation, state diff) are not implemented yet, see TransactionDiffer.
+        case Transfer                                                                           => jsv.as[TransferRequest].asRight
+        case Lease                                                                              => jsv.as[LeaseRequest].asRight
+        case LeaseCancel                                                                        => jsv.as[LeaseCancelRequest].asRight
+        case CommitToGeneration                                                                 => jsv.as[CommitToGenerationRequest].asRight
+        case Exchange                                                                           => jsv.as[ExchangeRequest].asRight
+        case Genesis | StartBoost | Reserve | BindApiKey | Settle | Withdraw | UpdateCollateral =>
+          // StartBoost/Reserve/BindApiKey/Settle/Withdraw/UpdateCollateral are not yet signable through this REST
+          // flow: their semantics (validation, state diff) are not implemented yet, see TransactionDiffer.
           UnsupportedTransactionType.asLeft[TxBroadcastRequest[Transaction & ProvenTransaction]]
       }
 

@@ -28,7 +28,8 @@ object FeeValidation {
     TransactionType.Reserve            -> 1,   // TODO: decide
     TransactionType.BindApiKey         -> 1,   // TODO: decide
     TransactionType.Settle             -> 1,   // TODO: decide
-    TransactionType.Withdraw           -> 1    // TODO: decide
+    TransactionType.Withdraw           -> 1,   // TODO: decide
+    TransactionType.UpdateCollateral   -> 1    // TODO: decide
   )
 
   def apply(tx: Transaction): Either[ValidationError, Unit] =

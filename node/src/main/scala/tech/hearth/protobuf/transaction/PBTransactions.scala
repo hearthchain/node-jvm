@@ -133,13 +133,14 @@ object PBTransactions {
           )
         } yield tx
 
-      case Data.StartBoost(StartBoostTransactionData(Some(validator), tdxQuote, `empty`)) =>
+      case Data.StartBoost(StartBoostTransactionData(Some(validator), tdxQuote, generationPeriodStart, `empty`)) =>
         for {
           validatorAddress <- validator.toAddress
           tx <- vt.StartBoostTransaction.create(
             sender.toPublicKey,
             validatorAddress,
             tdxQuote.toByteStr,
+            Height(generationPeriodStart),
             feeAmount,
             timestamp,
             proofs,
@@ -196,6 +197,22 @@ object PBTransactions {
           )
         } yield tx
 
+      case Data.UpdateCollateral(
+            UpdateCollateralTransactionData(rootCaCrl, pckCrl, tcbInfo, qeIdentity, tcbSigningIssuerChain, `empty`)
+          ) =>
+        vt.UpdateCollateralTransaction.create(
+          sender.toPublicKey,
+          rootCaCrl.map(_.toByteStr),
+          pckCrl.map(_.toByteStr),
+          tcbInfo.map(_.toByteStr),
+          qeIdentity.map(_.toByteStr),
+          tcbSigningIssuerChain.map(_.toByteStr),
+          feeAmount,
+          timestamp,
+          proofs,
+          chainId
+        )
+
       case _ =>
         Left(TxValidationError.UnsupportedTransactionType)
     }
@@ -251,7 +268,8 @@ object PBTransactions {
 
       case tx: vt.StartBoostTransaction =>
         import tx.*
-        val data = Data.StartBoost(StartBoostTransactionData(Some(validator.toPB), tdxQuote.toByteString))
+        val data =
+          Data.StartBoost(StartBoostTransactionData(Some(validator.toPB), tdxQuote.toByteString, generationPeriodStart.toInt))
         PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
 
       case tx: vt.BindApiKeyTransaction =>
@@ -276,8 +294,21 @@ object PBTransactions {
         )
         PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
 
+      case tx: vt.UpdateCollateralTransaction =>
+        import tx.*
+        val data = Data.UpdateCollateral(
+          UpdateCollateralTransactionData(
+            rootCaCrl.map(_.toByteString),
+            pckCrl.map(_.toByteString),
+            tcbInfo.map(_.toByteString),
+            qeIdentity.map(_.toByteString),
+            tcbSigningIssuerChain.map(_.toByteString)
+          )
+        )
+        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+
       case _ =>
-        throw new IllegalArgumentException(s"Unsupported transaction: $tx")
+        throw new IllegalArgumentException(s"Unsupported transaction: ${tx.tpe}")
     }
   }
 

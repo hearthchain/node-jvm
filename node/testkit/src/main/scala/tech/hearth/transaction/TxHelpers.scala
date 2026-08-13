@@ -434,12 +434,13 @@ object TxHelpers {
       sender: SigningKey = defaultSigner,
       validator: Address = secondAddress,
       tdxQuote: ByteStr = ByteStr.empty,
+      generationPeriodStart: Height = Height(1),
       fee: Long = FeeConstants(TransactionType.StartBoost) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
   ): StartBoostTransaction =
     StartBoostTransaction
-      .create(PublicKey(sender.publicKey), validator, tdxQuote, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), validator, tdxQuote, generationPeriodStart, fee, timestamp, Proofs.empty, chainId)
       .map(_.signWith(sender))
       .explicitGet()
 
