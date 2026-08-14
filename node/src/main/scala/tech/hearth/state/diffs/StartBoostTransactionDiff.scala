@@ -74,11 +74,14 @@ object StartBoostTransactionDiff {
   }
 
   /** Chain of trust: the quote's own embedded PCK cert chain (leaf, PCK CA, root) is checked against the pinned
-    * Intel root and the on-chain pckCrl (revocation) - it doesn't need the on-chain pckCaIssuerChain too, since the
-    * chain the quote carries is already self-contained; that field only backs verifying pckCrl's own signature, at
-    * UpdateCollateral submission time (see DcapCollateral). The PCK leaf's key then verifies qeReportSignature, and
-    * qeReportBody's own user_report_data (checked by DcapQuote's own invariant, re-verified here) proves the QE
-    * vouches for this specific attestation key; that attestation key finally verifies isvSignature.
+    * Intel root - it doesn't need the on-chain pckCaIssuerChain too, since the chain the quote carries is already
+    * self-contained; that field only backs verifying pckCrl's own signature, at UpdateCollateral submission time
+    * (see DcapCollateral). It does need both on-chain CRLs for revocation, though: PKIX checks every certificate in
+    * the path (leaf and the PCK CA intermediate, since the last cert - root - is the trust anchor, excluded from
+    * the path), so pckCrl alone only covers the leaf; the intermediate's own issuer is Root CA, so its revocation
+    * status needs dcapRootCaCrl. The PCK leaf's key then verifies qeReportSignature, and qeReportBody's own
+    * user_report_data (checked by DcapQuote's own invariant, re-verified here) proves the QE vouches for this
+    * specific attestation key; that attestation key finally verifies isvSignature.
     */
   private def verifyQuoteSignatures(blockchain: Blockchain, tx: StartBoostTransaction, quote: DcapQuote.Quote): Either[String, Unit] =
     for {
@@ -86,8 +89,11 @@ object StartBoostTransactionDiff {
         s"Quote's cert data is not a PCK certificate chain (type ${quote.signature.certData.certKeyType})"
       }
       pckCrl <- blockchain.dcapPckCrl.toRight("PCK CRL must be set (via UpdateCollateral) before a StartBoost quote can be verified")
+      rootCaCrl <- blockchain.dcapRootCaCrl.toRight(
+        "Root CA CRL must be set (via UpdateCollateral) before a StartBoost quote can be verified"
+      )
       pckLeafKey <- IntelPki
-        .verifyIssuerChain(quote.signature.certData.certData.arr, tx.timestamp, crls = Seq(pckCrl.arr))
+        .verifyIssuerChain(quote.signature.certData.certData.arr, tx.timestamp, crls = Seq(pckCrl.arr, rootCaCrl.arr))
         .leftMap(e => s"Invalid PCK certificate chain: $e")
       _ <- P256Curve
         .verify(quote.signature.qeReportBodyMessage.arr, quote.signature.qeReportSignature.arr, P256Curve.publicKeyToBytes(pckLeafKey))
