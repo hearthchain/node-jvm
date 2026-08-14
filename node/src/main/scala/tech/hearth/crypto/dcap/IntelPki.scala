@@ -90,7 +90,11 @@ object IntelPki {
     try {
       val crl = certificateFactory.generateCRL(new ByteArrayInputStream(der)).asInstanceOf[X509CRL]
       crl.verify(signedBy)
-      Either.raiseWhen(crl.getNextUpdate.before(new Date(atTime)))(s"CRL expired at ${crl.getNextUpdate}").map(_ => crlNumber(crl))
+      val at = new Date(atTime)
+      for {
+        _ <- Either.raiseWhen(crl.getThisUpdate.after(at))(s"CRL not valid yet: thisUpdate ${crl.getThisUpdate} is after $at")
+        _ <- Either.raiseWhen(crl.getNextUpdate.before(at))(s"CRL expired at ${crl.getNextUpdate}")
+      } yield crlNumber(crl)
     } catch {
       case NonFatal(e) => Left(s"failed to verify CRL: ${e.getMessage}")
     }

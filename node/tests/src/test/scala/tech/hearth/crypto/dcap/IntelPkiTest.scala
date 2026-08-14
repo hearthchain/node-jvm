@@ -233,6 +233,20 @@ class IntelPkiTest extends FreeSpec {
       IntelPki.verifyCrl(crl.getEncoded, otherKp.getPublic, System.currentTimeMillis()) shouldBe a[Left[?, ?]]
     }
 
+    "rejects a CRL that is not yet valid" in {
+      val kp  = genKeyPair()
+      val crl = signedCrl(kp, "CN=Test Root", crlNumber = 1) // thisUpdate is 60 seconds before "now"
+
+      IntelPki.verifyCrl(crl.getEncoded, kp.getPublic, Instant.now().minusSeconds(120).toEpochMilli) shouldBe a[Left[?, ?]]
+    }
+
+    "rejects an expired CRL" in {
+      val kp  = genKeyPair()
+      val crl = signedCrl(kp, "CN=Test Root", crlNumber = 1) // nextUpdate is 3600 seconds after "now"
+
+      IntelPki.verifyCrl(crl.getEncoded, kp.getPublic, Instant.now().plusSeconds(7200).toEpochMilli) shouldBe a[Left[?, ?]]
+    }
+
     "rejects garbage bytes" in {
       IntelPki.verifyCrl(Array[Byte](1, 2, 3), IntelPki.rootCaPublicKey, System.currentTimeMillis()) shouldBe a[Left[?, ?]]
       IntelPki.crlNumberOf(Array[Byte](1, 2, 3)) shouldBe None
