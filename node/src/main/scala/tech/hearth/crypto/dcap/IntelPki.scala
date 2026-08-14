@@ -91,9 +91,12 @@ object IntelPki {
       val crl = certificateFactory.generateCRL(new ByteArrayInputStream(der)).asInstanceOf[X509CRL]
       crl.verify(signedBy)
       val at = new Date(atTime)
+      // nextUpdate is RFC 5280 optional, unlike thisUpdate (always present) - a CRL without it can't be proven
+      // still current, so it's rejected the same as an expired one rather than treated as never expiring.
       for {
-        _ <- Either.raiseWhen(crl.getThisUpdate.after(at))(s"CRL not valid yet: thisUpdate ${crl.getThisUpdate} is after $at")
-        _ <- Either.raiseWhen(crl.getNextUpdate.before(at))(s"CRL expired at ${crl.getNextUpdate}")
+        _          <- Either.raiseWhen(crl.getThisUpdate.after(at))(s"CRL not valid yet: thisUpdate ${crl.getThisUpdate} is after $at")
+        nextUpdate <- Option(crl.getNextUpdate).toRight("CRL has no nextUpdate field")
+        _          <- Either.raiseWhen(nextUpdate.before(at))(s"CRL expired at $nextUpdate")
       } yield crlNumber(crl)
     } catch {
       case NonFatal(e) => Left(s"failed to verify CRL: ${e.getMessage}")

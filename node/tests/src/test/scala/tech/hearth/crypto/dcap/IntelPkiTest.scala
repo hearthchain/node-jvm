@@ -162,6 +162,16 @@ class IntelPkiTest extends FreeSpec {
     new org.bouncycastle.cert.jcajce.JcaX509CRLConverter().getCRL(builder.build(signer))
   }
 
+  // nextUpdate is RFC 5280 optional (unlike thisUpdate, always present) - built without calling setNextUpdate at
+  // all, confirming verifyCrl rejects rather than treats a CRL with no expiry as never expiring.
+  private def signedCrlWithoutNextUpdate(issuerKp: KeyPair, issuerName: String, crlNumber: Long): X509CRL = {
+    val now     = Instant.now()
+    val builder = new X509v2CRLBuilder(new org.bouncycastle.asn1.x500.X500Name(issuerName), Date.from(now.minusSeconds(60)))
+    builder.addExtension(Extension.cRLNumber, false, new CRLNumber(BigInteger.valueOf(crlNumber)))
+    val signer = new JcaContentSignerBuilder("SHA256withECDSA").build(issuerKp.getPrivate)
+    new org.bouncycastle.cert.jcajce.JcaX509CRLConverter().getCRL(builder.build(signer))
+  }
+
   "verifyIssuerChain" - {
     "accepts a chain that terminates at the given trust anchor" in {
       val rootKp = genKeyPair()
@@ -245,6 +255,13 @@ class IntelPkiTest extends FreeSpec {
       val crl = signedCrl(kp, "CN=Test Root", crlNumber = 1) // nextUpdate is 3600 seconds after "now"
 
       IntelPki.verifyCrl(crl.getEncoded, kp.getPublic, Instant.now().plusSeconds(7200).toEpochMilli) shouldBe a[Left[?, ?]]
+    }
+
+    "rejects a CRL with no nextUpdate field, rather than treating it as never expiring" in {
+      val kp  = genKeyPair()
+      val crl = signedCrlWithoutNextUpdate(kp, "CN=Test Root", crlNumber = 1)
+
+      IntelPki.verifyCrl(crl.getEncoded, kp.getPublic, System.currentTimeMillis()) shouldBe a[Left[?, ?]]
     }
 
     "rejects garbage bytes" in {
