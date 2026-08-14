@@ -4,6 +4,7 @@ import tech.hearth.TestValues
 import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
+import tech.hearth.crypto.dcap.IntelPki.MaxCollateralFieldSize
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
@@ -57,6 +58,19 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
         TxHelpers.timestamp,
         Proofs.empty
       ) shouldBe a[Left[?, ?]]
+    }
+
+    "rejects a tdxQuote larger than MaxCollateralFieldSize, independent of the REST layer's own limit" in {
+      val oversized = ByteStr(new Array[Byte](MaxCollateralFieldSize + 1))
+      StartBoostTransaction.create(
+        PublicKey(sender.publicKey()),
+        validator,
+        oversized,
+        Height(1),
+        TestValues.fee,
+        TxHelpers.timestamp,
+        Proofs.empty
+      ) should produce(s"exceeds the $MaxCollateralFieldSize byte limit")
     }
   }
 

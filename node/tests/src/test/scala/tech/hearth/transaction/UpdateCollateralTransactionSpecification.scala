@@ -1,6 +1,7 @@
 package tech.hearth.transaction
 
 import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto.dcap.IntelPki.MaxCollateralFieldSize
 import tech.hearth.test.*
 
 class UpdateCollateralTransactionSpecification extends FreeSpec {
@@ -42,6 +43,16 @@ class UpdateCollateralTransactionSpecification extends FreeSpec {
 
     "accepts a transaction with only pckCaIssuerChain set" in {
       create(pckCaIssuerChain = Some(ByteStr.empty)) shouldBe Symbol("right")
+    }
+
+    "rejects a field larger than MaxCollateralFieldSize, independent of the REST layer's own limit" in {
+      create(rootCaCrl = Some(ByteStr(new Array[Byte](MaxCollateralFieldSize + 1)))) should produce(
+        s"exceeds the $MaxCollateralFieldSize byte limit"
+      )
+    }
+
+    "accepts a field exactly at MaxCollateralFieldSize" in {
+      create(rootCaCrl = Some(ByteStr(new Array[Byte](MaxCollateralFieldSize)))) shouldBe Symbol("right")
     }
   }
 }

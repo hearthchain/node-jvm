@@ -30,6 +30,15 @@ object IntelPki {
   val rootCaPublicKey: PublicKey =
     KeyFactory.getInstance("EC").generatePublic(new X509EncodedKeySpec(RootCaPublicKeyDer))
 
+  /** Upper bound on any single DCAP collateral/quote field (UpdateCollateralTransaction's six fields,
+    * StartBoostTransaction's tdxQuote), enforced by TxValidator so this applies to every submission path
+    * (REST, gRPC, P2P), not just the REST JSON layer's own decode limit (api.http.requests.LargeBlobDecodeLimit,
+    * 65536 base16 characters = 32768 bytes decoded - kept equal to that so both layers agree on the real limit).
+    * A well-formed quote/collateral document is at most a few KB; this is generous headroom, not a tight fit,
+    * chosen to keep expensive X.509/JSON parsing work bounded regardless of submission path.
+    */
+  val MaxCollateralFieldSize: Int = 32768
+
   private val certificateFactory = CertificateFactory.getInstance("X.509")
 
   /** Verifies a PEM certificate chain (leaf first, root last - matching Intel PCS's own issuer-chain header order)
