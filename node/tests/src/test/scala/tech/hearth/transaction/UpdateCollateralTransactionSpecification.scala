@@ -47,7 +47,7 @@ class UpdateCollateralTransactionSpecification extends FreeSpec {
 
     "rejects a field larger than MaxCollateralFieldSize, independent of the REST layer's own limit" in {
       create(rootCaCrl = Some(ByteStr(new Array[Byte](MaxCollateralFieldSize + 1)))) should produce(
-        s"exceeds the $MaxCollateralFieldSize byte limit"
+        s"exceeds maximum of $MaxCollateralFieldSize bytes"
       )
     }
 

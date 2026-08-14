@@ -70,7 +70,7 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
         TestValues.fee,
         TxHelpers.timestamp,
         Proofs.empty
-      ) should produce(s"exceeds the $MaxCollateralFieldSize byte limit")
+      ) should produce(s"exceeds maximum of $MaxCollateralFieldSize bytes")
     }
   }
 
