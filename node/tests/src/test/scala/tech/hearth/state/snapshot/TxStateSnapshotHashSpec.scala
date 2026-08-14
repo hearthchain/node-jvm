@@ -240,4 +240,26 @@ class TxStateSnapshotHashSpec extends PropSpec {
     hashOf(withFee) should not equal hashOf(withoutFee)
     hashOf(withFee) should not equal hashOf(withOtherFee)
   }
+
+  // Same reasoning as minAssetFee above: none of the six DCAP collateral fields have a TransactionStateSnapshot
+  // protobuf representation either, so they can't be exercised through the table above, but two nodes silently
+  // holding different collateral must still be detectable via the state hash.
+  property("DCAP collateral fields change the resulting hash") {
+    def hashOf(s: StateSnapshot): ByteStr =
+      TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
+
+    val crlA  = ByteStr(fastHash(Ints.toByteArray(0xaa11aa11)))
+    val crlB  = ByteStr(fastHash(Ints.toByteArray(0xbb22bb22)))
+    val fmspc = ByteStr(Ints.toByteArray(0xcc33cc33))
+
+    val base = hashOf(StateSnapshot())
+    base should not equal hashOf(StateSnapshot(dcapRootCaCrl = Some(crlA)))
+    hashOf(StateSnapshot(dcapRootCaCrl = Some(crlA))) should not equal hashOf(StateSnapshot(dcapRootCaCrl = Some(crlB)))
+    base should not equal hashOf(StateSnapshot(dcapPckCrl = Some(crlA)))
+    base should not equal hashOf(StateSnapshot(dcapTcbInfo = Map(fmspc -> crlA)))
+    hashOf(StateSnapshot(dcapTcbInfo = Map(fmspc -> crlA))) should not equal hashOf(StateSnapshot(dcapTcbInfo = Map(fmspc -> crlB)))
+    base should not equal hashOf(StateSnapshot(dcapQeIdentity = Some(crlA)))
+    base should not equal hashOf(StateSnapshot(dcapTcbSigningIssuerChain = Some(crlA)))
+    base should not equal hashOf(StateSnapshot(dcapPckCaIssuerChain = Some(crlA)))
+  }
 }
