@@ -82,7 +82,7 @@ object DcapCollateral {
       tcbInfo   <- field(json, "tcbInfo")
       fmspcHex  <- stringField(tcbInfo, "fmspc")
       fmspc     <- Base16.tryDecode(fmspcHex).toEither.left.map(e => s"invalid fmspc: ${e.getMessage}").map(ByteStr(_))
-      newNumber <- verifySignedJson(payload, "tcbInfo", issuerChainPayload, blockchain, atTime)
+      newNumber <- verifySignedJson(payload, "tcbInfo", issuerChainPayload, blockchain, atTime, parsedJson = Some(json))
       storedNumber = blockchain.dcapTcbInfo(fmspc).flatMap(evalNumberOf(_, "tcbInfo"))
       _ <- rejectDowngrade(Some(newNumber), storedNumber)
     } yield (fmspc, payload)
@@ -104,18 +104,21 @@ object DcapCollateral {
 
   /** Verifies the signature and validity window of a `{"<topKey>":{...},"signature":<hex>}` payload and returns the
     * nested object's own tcbEvaluationDataNumber - Intel's counter for exactly this purpose, incremented on every
-    * republish including a pure TCB-recovery event with no other visible change.
+    * republish including a pure TCB-recovery event with no other visible change. `parsedJson` lets a caller that
+    * already parsed `payload` for its own purposes (verifyTcbInfo, reading fmspc) pass that along instead of this
+    * function parsing the same bytes a second time.
     */
   private def verifySignedJson(
       payload: ByteStr,
       topKey: String,
       issuerChainPayload: Option[ByteStr],
       blockchain: Blockchain,
-      atTime: Long
+      atTime: Long,
+      parsedJson: Option[JsValue] = None
   ): Either[String, BigInt] =
     for {
       raw          <- JsonRawValue.extractObject(payload.arr, topKey)
-      json         <- parseJson(payload.arr)
+      json         <- parsedJson.map(_.asRight[String]).getOrElse(parseJson(payload.arr))
       obj          <- field(json, topKey)
       evalNumber   <- longField(obj, "tcbEvaluationDataNumber")
       _            <- checkValidityWindow(obj, atTime)
