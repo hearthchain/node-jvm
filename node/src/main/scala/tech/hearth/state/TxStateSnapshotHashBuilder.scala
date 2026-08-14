@@ -87,7 +87,7 @@ object TxStateSnapshotHashBuilder {
     // directly on the in-memory StateSnapshot this function hashes, so they need hashing here regardless.
     snapshot.dcapRootCaCrl.foreach(v => changedKeys += "dcapRootCaCrl".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapPckCrl.foreach(v => changedKeys += "dcapPckCrl".getBytes(StandardCharsets.UTF_8) ++ v.arr)
-    snapshot.dcapTcbInfo.foreach { case (fmspc, v) => changedKeys += fmspc.arr ++ v.arr }
+    snapshot.dcapTcbInfo.foreach { case (fmspc, v) => changedKeys += "dcapTcbInfo".getBytes(StandardCharsets.UTF_8) ++ fmspc.arr ++ v.arr }
     snapshot.dcapQeIdentity.foreach(v => changedKeys += "dcapQeIdentity".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapTcbSigningIssuerChain.foreach(v => changedKeys += "dcapTcbSigningIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapPckCaIssuerChain.foreach(v => changedKeys += "dcapPckCaIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
