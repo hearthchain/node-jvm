@@ -174,8 +174,15 @@ object DcapCollateral {
       .toRight("Root CA CRL must be set (in genesis or by an earlier UpdateCollateral) before an issuer chain can be verified")
       .map(crl => Seq(crl.arr))
 
+  /** Fails closed when the submission's own freshness counter can't be determined - a CRL missing its (RFC 5280
+    * optional, but always present on a real Intel CRL) CRL Number extension can't be proven at least as fresh as
+    * whatever is already stored, so it must be rejected rather than silently accepted as if it were fresher.
+    * `storedNumber` staying `None` is not the same case: that means nothing is stored yet, and the very first
+    * submission for a field is never rejected as a "downgrade".
+    */
   private def rejectDowngrade(newNumber: Option[BigInt], storedNumber: Option[BigInt]): Either[String, Unit] =
     (newNumber, storedNumber) match {
+      case (None, _)                   => Left("cannot verify freshness: submitted collateral has no freshness counter")
       case (Some(n), Some(s)) if n < s => Left(s"stale update: number $n is behind the stored $s")
       case _                           => Right(())
     }

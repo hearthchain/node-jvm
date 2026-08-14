@@ -151,6 +151,17 @@ class IntelPkiTest extends FreeSpec {
     new org.bouncycastle.cert.jcajce.JcaX509CRLConverter().getCRL(builder.build(signer))
   }
 
+  // CRL Number is RFC 5280 optional (unlike a real Intel CRL, which always carries one, per the "against real
+  // Intel-signed fixtures" group above) - DcapCollateral.rejectDowngrade must treat this the same as an
+  // unparseable one: fail closed, not silently skip the freshness check.
+  private def signedCrlWithoutNumber(issuerKp: KeyPair, issuerName: String): X509CRL = {
+    val now     = Instant.now()
+    val builder = new X509v2CRLBuilder(new org.bouncycastle.asn1.x500.X500Name(issuerName), Date.from(now.minusSeconds(60)))
+    builder.setNextUpdate(Date.from(now.plusSeconds(3600)))
+    val signer = new JcaContentSignerBuilder("SHA256withECDSA").build(issuerKp.getPrivate)
+    new org.bouncycastle.cert.jcajce.JcaX509CRLConverter().getCRL(builder.build(signer))
+  }
+
   "verifyIssuerChain" - {
     "accepts a chain that terminates at the given trust anchor" in {
       val rootKp = genKeyPair()
@@ -204,6 +215,14 @@ class IntelPkiTest extends FreeSpec {
 
       IntelPki.verifyCrl(crl.getEncoded, kp.getPublic, System.currentTimeMillis()) shouldBe Right(Some(BigInt(7)))
       IntelPki.crlNumberOf(crl.getEncoded) shouldBe Some(BigInt(7))
+    }
+
+    "accepts a validly-signed CRL with no CRL Number extension, but reports no number" in {
+      val kp  = genKeyPair()
+      val crl = signedCrlWithoutNumber(kp, "CN=Test Root")
+
+      IntelPki.verifyCrl(crl.getEncoded, kp.getPublic, System.currentTimeMillis()) shouldBe Right(None)
+      IntelPki.crlNumberOf(crl.getEncoded) shouldBe None
     }
 
     "rejects a CRL signed by a different key" in {
