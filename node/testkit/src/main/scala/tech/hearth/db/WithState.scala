@@ -523,7 +523,10 @@ object WithState {
     // BlockDiffer builds it. Using the reward snapshot here instead would compute a state hash the differ rejects.
     TracedResult(
       if (Height(blockchain.height + 1) == GenesisBlockHeight)
-        PredefinedSnapshot.build(blockchain.settings.genesisSnapshot, blockchain)
+        // blockchain is still empty here (height 0), so it has no lastBlockTimestamp to fall back on the way a
+        // later predefined-snapshot height would - the block under construction carries the genesis timestamp
+        // itself.
+        PredefinedSnapshot.build(blockchain.settings.genesisSnapshot, blockchain, blockTimestamp = Some(blockWithoutStateHash.header.timestamp))
       else
         BlockDiffer
           .createInitialBlockSnapshot(

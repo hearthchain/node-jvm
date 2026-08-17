@@ -74,7 +74,7 @@ object P256Curve extends StrictLogging {
     new DERSequence(v).getEncoded
   }
 
-  private def publicKeyToBytes(key: PublicKey): Array[Byte] = {
+  def publicKeyToBytes(key: PublicKey): Array[Byte] = {
     val point = key.asInstanceOf[ECPublicKey].getW
     asUnsignedByteArray(32, point.getAffineX) ++ asUnsignedByteArray(32, point.getAffineY)
   }

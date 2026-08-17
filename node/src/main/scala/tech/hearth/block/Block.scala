@@ -206,11 +206,11 @@ object Block {
       // ConfigReader), but nothing checks a height-1 entry is actually among them, nor do settings built directly in
       // code (tests, tools) necessarily have one; either way this defaults to an empty snapshot rather than failing
       // here, same as an empty genesis balances list did before predefined snapshots existed.
-      snapshot <- PredefinedSnapshot.build(blockchainSettings.genesisSnapshot, EmptyBlockchain)
       genesisSettings = blockchainSettings.genesisSettings
       baseTarget      = genesisSettings.initialBaseTarget
       timestamp       = genesisSettings.blockTimestamp
-      stateHash       = TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)
+      snapshot <- PredefinedSnapshot.build(blockchainSettings.genesisSnapshot, EmptyBlockchain, blockTimestamp = Some(timestamp))
+      stateHash = TxStateSnapshotHashBuilder.createGenesisStateHash(snapshot)
       // The configured snapshot is what a misconfiguration silently changes, so check it before anything derived from it
       _ <- checkPredefined("state hash", genesisSettings.stateHash, stateHash)
       // The state hash goes into the header before signing: the block is protobuf-serialized, so its body bytes cover it

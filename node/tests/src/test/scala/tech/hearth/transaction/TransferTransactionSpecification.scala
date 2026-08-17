@@ -84,7 +84,7 @@ class TransferTransactionSpecification extends PropSpec {
   property("JSON format validation") {
     val js = Json.parse("""{
       "type": 2,
-      "id": "0e0e1d0011a3e5758fa59a77a6edfb337a03817126f635bee81e6ee04b6df668",
+      "id": "c3d3baad394e99703b903701b2431684f2fdf159e4d22437349b6d05ad8ead09",
       "fee": 200000,
       "feeAssetId": null,
       "timestamp": 1518091313964,

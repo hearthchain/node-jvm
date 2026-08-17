@@ -8,8 +8,9 @@ object StartBoostTxSerializer {
   def toJson(tx: StartBoostTransaction): JsObject = {
     import tx.*
     BaseTxJson.toJson(tx) ++ Json.obj(
-      "validator" -> validator.toString,
-      "tdxQuote"  -> tdxQuote
+      "validator"             -> validator.toString,
+      "tdxQuote"              -> tdxQuote,
+      "generationPeriodStart" -> generationPeriodStart
     )
   }
 }

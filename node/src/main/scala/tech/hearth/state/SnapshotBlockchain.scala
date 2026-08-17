@@ -83,6 +83,13 @@ case class SnapshotBlockchain(
     }
   }
 
+  override def dcapRootCaCrl: Option[ByteStr]               = snapshot.dcapRootCaCrl.orElse(inner.dcapRootCaCrl)
+  override def dcapPckCrl: Option[ByteStr]                  = snapshot.dcapPckCrl.orElse(inner.dcapPckCrl)
+  override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] = snapshot.dcapTcbInfo.get(fmspc).orElse(inner.dcapTcbInfo(fmspc))
+  override def dcapQeIdentity: Option[ByteStr]              = snapshot.dcapQeIdentity.orElse(inner.dcapQeIdentity)
+  override def dcapTcbSigningIssuerChain: Option[ByteStr]   = snapshot.dcapTcbSigningIssuerChain.orElse(inner.dcapTcbSigningIssuerChain)
+  override def dcapPckCaIssuerChain: Option[ByteStr]        = snapshot.dcapPckCaIssuerChain.orElse(inner.dcapPckCaIssuerChain)
+
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions
       .get(id)
@@ -209,6 +216,16 @@ case class SnapshotBlockchain(
       if (Height(this.height) == GenesisBlockHeight) this.currentGenerationPeriod.contains(at)
       else this.currentGenerationPeriod.exists(_.next == at)
     if (committedHere) base ++ snapshot.nextCommittedGenerators.map(_.toCommittedGenerator) else base
+  }
+
+  override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = {
+    val base = inner.registeredEnclaves(at)
+    // Mirrors committedGenerators above: an enclave registered in the genesis block boosts from the very first
+    // period, everyone else from the next one.
+    val registeredHere =
+      if (Height(this.height) == GenesisBlockHeight) this.currentGenerationPeriod.contains(at)
+      else this.currentGenerationPeriod.exists(_.next == at)
+    if (registeredHere) base ++ snapshot.nextRegisteredEnclaves else base
   }
 
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = {

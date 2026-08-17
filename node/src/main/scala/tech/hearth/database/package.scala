@@ -110,6 +110,27 @@ package object database {
       .array()
   }
 
+  // Generic length-prefixed Seq[ByteStr], for a list of opaque byte blobs of varying length (e.g. FMSPCs seen at a
+  // given height for DCAP TCB Info rollback) - the same shape readStrings/writeStrings already use for Seq[String].
+  def readByteStrSeq(data: Array[Byte]): Seq[ByteStr] = Option(data).fold(Seq.empty[ByteStr]) { _ =>
+    var i = 0
+    val s = Seq.newBuilder[ByteStr]
+
+    while (i < data.length) {
+      val len = ((data(i) << 8) | (data(i + 1) & 0xff)).toShort
+      s += ByteStr(data.slice(i + 2, i + 2 + len))
+      i += (2 + len)
+    }
+    s.result()
+  }
+
+  def writeByteStrSeq(values: Seq[ByteStr]): Array[Byte] =
+    values
+      .foldLeft(ByteBuffer.allocate(values.map(_.arr.length + 2).sum)) { case (buf, v) =>
+        buf.putShort(v.arr.length.toShort).put(v.arr)
+      }
+      .array()
+
   def readLeaseBalanceNode(data: Array[Byte]): LeaseBalanceNode = if (data != null && data.length == 20)
     LeaseBalanceNode(Longs.fromByteArray(data.take(8)), Longs.fromByteArray(data.slice(8, 16)), Height(Ints.fromByteArray(data.takeRight(4))))
   else LeaseBalanceNode.Empty
@@ -338,6 +359,24 @@ package object database {
     data.view.flatMap { (addressId, blsPublicKey, vrfPublicKey) =>
       Longs.toByteArray(addressId) ++ blsPublicKey.arr ++ vrfPublicKey.arr
     }.toArray
+
+  /** Each record is the quote's attestation public key (raw P-256 point, 64 bytes) ++ the validator's address
+    * (fixed width, Address.HASH_LEN) - no addressId indirection, unlike readCommittedGenerators: an attestation key
+    * is a one-off value from a single quote, never reused across records, so there's no compaction benefit.
+    */
+  def readRegisteredEnclaves(data: Array[Byte]): Seq[RegisteredEnclave] = {
+    val keySize = 64
+    data
+      .grouped(keySize + Address.HASH_LEN)
+      .map { record =>
+        val (attestationPublicKey, addressBytes) = record.splitAt(keySize)
+        RegisteredEnclave(ByteStr(attestationPublicKey), Address.fromBytes(addressBytes).get())
+      }
+      .toSeq
+  }
+
+  def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
+    data.view.flatMap(re => re.attestationPublicKey.arr ++ re.validator.toBytes).toArray
 
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)

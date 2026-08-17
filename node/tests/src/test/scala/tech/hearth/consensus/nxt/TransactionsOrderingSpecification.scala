@@ -162,8 +162,10 @@ class TransactionsOrderingSpecification extends PropSpec {
         else None
     }
 
-    // fee (Long.MaxValue) * FeeUnit (100000) / minFee (1) vastly exceeds Long range - must saturate, not throw
-    val overflowingFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Hearth, Long.MaxValue, asset, ByteStr.empty, 1)
+    // fee (Long.MaxValue) * FeeUnit (100000) / minFee (1) vastly exceeds Long range - must saturate, not throw.
+    // amount is 0 (not e.g. 100000) because TransferTxValidator's own noOverflow check sums fee + every transfer
+    // amount and would otherwise reject construction of this transaction outright, before ordering ever sees it.
+    val overflowingFeeTx = TxHelpers.transfer(kp, TxHelpers.address(20), 0, Hearth, Long.MaxValue, asset, ByteStr.empty, 1)
     val hearthFeeTx      = TxHelpers.transfer(kp, TxHelpers.address(20), 100000, Hearth, 124L, Hearth, ByteStr.empty, 2)
     val ordering         = TransactionsOrdering.InUTXPool(Set.empty, blockchainWithAsset)
 

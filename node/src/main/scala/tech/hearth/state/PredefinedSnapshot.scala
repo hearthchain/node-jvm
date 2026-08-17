@@ -23,19 +23,61 @@ import scala.collection.immutable.VectorMap
   * carries no transactions at all, so its whole effect is this predefined snapshot.
   */
 object PredefinedSnapshot {
-  def build(settings: PredefinedSnapshotSettings, blockchain: Blockchain): Either[ValidationError, StateSnapshot] =
+
+  /** blockTimestamp is the timestamp of the block this entry's effects are being applied through - every real
+    * caller (Block.genesis, BlockDiffer.mkInitialSnapshot) has it and passes it explicitly. It's only truly
+    * required at the height-1 entry, where `blockchain` is still empty and so has no lastBlockTimestamp of its own
+    * to fall back on the way every later predefined-snapshot height's own previous block would supply.
+    */
+  def build(
+      settings: PredefinedSnapshotSettings,
+      blockchain: Blockchain,
+      blockTimestamp: Option[Long] = None
+  ): Either[ValidationError, StateSnapshot] = {
+    // Unreachable in practice: every real caller passes blockTimestamp explicitly. Falls back to failing DCAP
+    // collateral checks closed (everything reads as expired) rather than silently succeeding, should that ever
+    // not hold.
+    val atTime = blockTimestamp.orElse(blockchain.lastBlockTimestamp).getOrElse(0L)
     for {
       assets        <- issuedAssets(settings, blockchain)
       balances      <- this.balances(settings, assets)
       _             <- checkAssetsAreFullyDistributed(assets, balances)
       generators    <- committedGenerators(settings.generators)
       minFeeChanges <- minAssetFeeChanges(settings.minAssetFees, blockchain, assets.map(_._1).toSet)
+      // Root CA CRL is verified first and folded into an intermediate view so pckCaIssuerChain/pckCrl (which need
+      // it on chain for revocation checking, see DcapCollateral) can see it even when all three are set in this
+      // same entry - the same "resolve against the resulting view" reasoning the generator balance check below uses.
+      rootCaCrl <- settings.dcapRootCaCrl.traverse(p => DcapCollateral.verifyRootCaCrl(p, blockchain, atTime).leftMap(GenericError(_)))
+      rootCaCrlBlockchain = SnapshotBlockchain(blockchain, StateSnapshot(dcapRootCaCrl = rootCaCrl))
+      pckCaIssuerChain <- settings.dcapPckCaIssuerChain.traverse(p =>
+        DcapCollateral.verifyPckCaIssuerChain(p, rootCaCrlBlockchain, atTime).leftMap(GenericError(_))
+      )
+      pckCrl <- settings.dcapPckCrl.traverse(p =>
+        DcapCollateral.verifyPckCrl(p, settings.dcapPckCaIssuerChain, rootCaCrlBlockchain, atTime).leftMap(GenericError(_))
+      )
+      tcbSigningIssuerChain <- settings.dcapTcbSigningIssuerChain.traverse(p =>
+        DcapCollateral.verifyTcbSigningIssuerChain(p, rootCaCrlBlockchain, atTime).leftMap(GenericError(_))
+      )
+      tcbSigningBlockchain = SnapshotBlockchain(rootCaCrlBlockchain, StateSnapshot(dcapTcbSigningIssuerChain = tcbSigningIssuerChain))
+      tcbInfo <- settings.dcapTcbInfo.toList.traverse(p =>
+        DcapCollateral.verifyTcbInfo(p, settings.dcapTcbSigningIssuerChain, tcbSigningBlockchain, atTime).leftMap(GenericError(_))
+      )
+      _ <- checkNoDuplicates(tcbInfo.map(_._1.toString), "predefined snapshot TCB Info fmspc")
+      qeIdentity <- settings.dcapQeIdentity.traverse(p =>
+        DcapCollateral.verifyQeIdentity(p, settings.dcapTcbSigningIssuerChain, tcbSigningBlockchain, atTime).leftMap(GenericError(_))
+      )
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = toPortfolios(balances),
         issuedAssets = assets,
         updatedMinAssetFees = minFeeChanges,
-        nextCommittedGenerators = generators
+        nextCommittedGenerators = generators,
+        dcapRootCaCrl = rootCaCrl,
+        dcapPckCrl = pckCrl,
+        dcapTcbInfo = tcbInfo.toMap,
+        dcapQeIdentity = qeIdentity,
+        dcapTcbSigningIssuerChain = tcbSigningIssuerChain,
+        dcapPckCaIssuerChain = pckCaIssuerChain
       )
       _ <- BalanceDiffValidation(blockchain)(snapshot)
       // snapshot.balances only holds entries for addresses this snapshot's own balances touched - a generator
@@ -52,6 +94,7 @@ object PredefinedSnapshot {
         }
         .toLeft(())
     } yield snapshot
+  }
 
   private def issuedAssets(
       settings: PredefinedSnapshotSettings,

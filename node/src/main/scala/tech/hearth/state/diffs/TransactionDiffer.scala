@@ -136,6 +136,8 @@ object TransactionDiffer {
           case ltx: LeaseTransaction               => LeaseTransactionsDiff.lease(blockchain)(ltx).traced
           case ltx: LeaseCancelTransaction         => LeaseTransactionsDiff.leaseCancel(blockchain)(ltx).traced
           case cgtx: CommitToGenerationTransaction => CommitToGenerationTransactionDiff(blockchain)(cgtx).traced
+          case uctx: UpdateCollateralTransaction   => UpdateCollateralTransactionDiff(blockchain)(uctx).traced
+          case sbtx: StartBoostTransaction         => StartBoostTransactionDiff(blockchain)(sbtx).traced
           case _                                   => UnsupportedTransactionType.asLeft.traced
         }
       }

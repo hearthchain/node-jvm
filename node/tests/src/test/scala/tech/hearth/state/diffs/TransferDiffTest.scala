@@ -65,14 +65,12 @@ class TransferDiffTest extends PropSpec with WithDomain {
   }
 
   property("fee in a non-existent asset is rejected") {
-    // A non-existent asset can never have a real balance entry, so disallowSendingGreaterThanBalance's combined
-    // amount+fee balance check rejects it first, before feePortfolios's own "does not exist" check is ever reached.
     val unknownAsset = IssuedAsset(ByteStr.fill(32)(11))
     val recipient    = TxHelpers.signer(2)
     val transfer     = TxHelpers.transfer(master, recipient.toAddress, amount = 1L, fee = TestValues.fee, feeAsset = unknownAsset)
 
     assertDiffEi(Seq(block(Seq())), block(Seq(transfer)), fs, masterBalance) { blockDiffEi =>
-      blockDiffEi should produce("Attempt to transfer unavailable funds")
+      blockDiffEi should produce("does not exist, cannot be used to pay fees")
     }
   }
 }

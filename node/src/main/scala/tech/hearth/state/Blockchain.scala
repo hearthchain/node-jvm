@@ -51,6 +51,15 @@ trait Blockchain {
 
   def leaseDetails(leaseId: ByteStr): Option[LeaseDetails]
 
+  // DCAP collateral (see the StartBoost consensus plan): the current value of each permissionless collateral
+  // slot, resolved through the history mechanism so rollback can undo an update, same as leaseDetails above.
+  def dcapRootCaCrl: Option[ByteStr]
+  def dcapPckCrl: Option[ByteStr]
+  def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr]
+  def dcapQeIdentity: Option[ByteStr]
+  def dcapTcbSigningIssuerChain: Option[ByteStr]
+  def dcapPckCaIssuerChain: Option[ByteStr]
+
   def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee
 
   def balanceAtHeight(address: Address, height: Int, assetId: Asset = Hearth): Option[(Int, Long)]
@@ -77,6 +86,8 @@ trait Blockchain {
   def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
   def conflictGenerators(at: GenerationPeriod): ConflictGenerators
+
+  def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave]
 
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }

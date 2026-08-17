@@ -221,6 +221,17 @@ object Keys {
       writeCommittedGenerators
     )
 
+  /** Key: Int(registeredPeriod.start) ++ Int(registrationHeight), same shape as committedGenerators - a StartBoost
+    * registers an enclave for a period exactly like CommitToGeneration commits a generator for one.
+    */
+  def registeredEnclaves(registeredPeriod: GenerationPeriod, registrationHeight: Height): Key[Option[Seq[RegisteredEnclave]]] =
+    Key.opt(
+      RegisteredEnclaves,
+      h(registeredPeriod.start) ++ h(registrationHeight),
+      readRegisteredEnclaves,
+      writeRegisteredEnclaves
+    )
+
   def conflictGenerators(committedPeriod: GenerationPeriod, conflictEndorsementHeight: Height): Key[Seq[GeneratorIndex]] =
     Key(
       ConflictGenerators,
@@ -239,4 +250,36 @@ object Keys {
 
   def generatorBalances(at: Height, cfh: RDB.ApiHandle): Key[Option[Seq[(GeneratorIndex, Long)]]] =
     Key.opt(GeneratorBalances, h(at), readGeneratorBalances, writeGeneratorBalances, Some(cfh.handle))
+
+  // DCAP collateral (see the StartBoost consensus plan): each slot is a single "current" value that gets
+  // wholesale-replaced at arbitrary heights, so it needs history the same way an asset's minted volume does
+  // (assetVolumeDetailsHistory/assetVolumeDetails above), not a plain overwritable key that rollback can't undo.
+  private def dcapCollateralValue(keyTag: KeyTag, suffix: Array[Byte], height: Height): Key[ByteStr] =
+    Key(keyTag, hBytes(suffix, height), ByteStr(_), _.arr)
+
+  def dcapRootCaCrlHistory: Key[Seq[Height]]      = historyKey(DcapRootCaCrlHistory, Array.emptyByteArray)
+  def dcapRootCaCrl(height: Height): Key[ByteStr] = dcapCollateralValue(DcapRootCaCrl, Array.emptyByteArray, height)
+
+  def dcapPckCrlHistory: Key[Seq[Height]]      = historyKey(DcapPckCrlHistory, Array.emptyByteArray)
+  def dcapPckCrl(height: Height): Key[ByteStr] = dcapCollateralValue(DcapPckCrl, Array.emptyByteArray, height)
+
+  def dcapQeIdentityHistory: Key[Seq[Height]]      = historyKey(DcapQeIdentityHistory, Array.emptyByteArray)
+  def dcapQeIdentity(height: Height): Key[ByteStr] = dcapCollateralValue(DcapQeIdentity, Array.emptyByteArray, height)
+
+  def dcapTcbSigningIssuerChainHistory: Key[Seq[Height]] = historyKey(DcapTcbSigningIssuerChainHistory, Array.emptyByteArray)
+  def dcapTcbSigningIssuerChain(height: Height): Key[ByteStr] =
+    dcapCollateralValue(DcapTcbSigningIssuerChain, Array.emptyByteArray, height)
+
+  // Keyed per FMSPC (platform model): only the FMSPCs actually seen need an entry, not a global Intel-wide table.
+  def dcapTcbInfoHistory(fmspc: ByteStr): Key[Seq[Height]]      = historyKey(DcapTcbInfoHistory, fmspc.arr)
+  def dcapTcbInfo(fmspc: ByteStr)(height: Height): Key[ByteStr] = dcapCollateralValue(DcapTcbInfo, fmspc.arr, height)
+
+  // Which FMSPCs got a TCB Info update at this height, so rollback knows which per-FMSPC histories to unwind
+  // without an unbounded scan - the same role assetsWithMinFee plays for assetMinFeeHistory above.
+  def dcapTcbInfoFmspcsAt(height: Height): Key[Seq[ByteStr]] =
+    Key(DcapTcbInfoFmspcsAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  def dcapPckCaIssuerChainHistory: Key[Seq[Height]] = historyKey(DcapPckCaIssuerChainHistory, Array.emptyByteArray)
+  def dcapPckCaIssuerChain(height: Height): Key[ByteStr] =
+    dcapCollateralValue(DcapPckCaIssuerChain, Array.emptyByteArray, height)
 }

@@ -77,6 +77,21 @@ object TxStateSnapshotHashBuilder {
       changedKeys += gc.sender.arr ++ gc.endorserPublicKey.arr ++ gc.vrfPublicKey.arr
     }
 
+    snapshot.nextRegisteredEnclaves.foreach { re =>
+      changedKeys += re.attestationPublicKey.arr ++ re.validator.toBytes
+    }
+
+    // DCAP collateral (see the StartBoost consensus plan): none of these six fields have a TransactionStateSnapshot
+    // protobuf representation (light-node sync never carries them, same as minAssetFees below), but they are still
+    // real consensus state a node can diverge on - PredefinedSnapshot/UpdateCollateralTransactionDiff set them
+    // directly on the in-memory StateSnapshot this function hashes, so they need hashing here regardless.
+    snapshot.dcapRootCaCrl.foreach(v => changedKeys += "dcapRootCaCrl".getBytes(StandardCharsets.UTF_8) ++ v.arr)
+    snapshot.dcapPckCrl.foreach(v => changedKeys += "dcapPckCrl".getBytes(StandardCharsets.UTF_8) ++ v.arr)
+    snapshot.dcapTcbInfo.foreach { case (fmspc, v) => changedKeys += "dcapTcbInfo".getBytes(StandardCharsets.UTF_8) ++ fmspc.arr ++ v.arr }
+    snapshot.dcapQeIdentity.foreach(v => changedKeys += "dcapQeIdentity".getBytes(StandardCharsets.UTF_8) ++ v.arr)
+    snapshot.dcapTcbSigningIssuerChain.foreach(v => changedKeys += "dcapTcbSigningIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
+    snapshot.dcapPckCaIssuerChain.foreach(v => changedKeys += "dcapPckCaIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
+
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {
         case Status.Failed    => changedKeys += txInfo.id.arr ++ Array(1: Byte)

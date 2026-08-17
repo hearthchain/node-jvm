@@ -113,7 +113,8 @@ object BlockDiffer {
       Some(BlockRewardCalculator.fullRewardAt(Height(blockchain.height + 1), blockchain)),
       None
     )
-    val initSnapshotE = mkInitialSnapshot(blockchain, block.header.reference, maybePrevBlock, block.sender.toAddress)
+    val initSnapshotE =
+      mkInitialSnapshot(blockchain, block.header.reference, maybePrevBlock, block.sender.toAddress, Some(block.header.timestamp))
 
     for {
       _            <- TracedResult(Either.cond(!verify || block.signatureValid(), (), GenericError(s"Block $block has invalid signature")))
@@ -141,7 +142,13 @@ object BlockDiffer {
     } yield r
   }
 
-  private def mkInitialSnapshot(blockchain: Blockchain, reference: ByteStr, maybePrevBlock: Option[SignedBlockHeader], minerAddress: Address) = {
+  private def mkInitialSnapshot(
+      blockchain: Blockchain,
+      reference: ByteStr,
+      maybePrevBlock: Option[SignedBlockHeader],
+      minerAddress: Address,
+      blockTimestamp: Option[Long] = None
+  ) = {
     val heightWithNewBlock = Height(blockchain.height)
 
     val addressRewardsE: Either[String, (Portfolio, Map[Address, Portfolio])] = for {
@@ -188,8 +195,12 @@ object BlockDiffer {
       rewardPart <- rewardPartE.leftMap(GenericError(_))
       newBlockHeight = (heightWithNewBlock + 1).toInt
       combined <- blockchain.settings.predefinedSnapshots.find(_.height == newBlockHeight) match {
-        case Some(s) => PredefinedSnapshot.build(s, SnapshotBlockchain(blockchain, rewardPart)).map(rewardPart |+| _)
-        case None    => Right(rewardPart)
+        case Some(s) =>
+          // blockTimestamp is the actual timestamp of the block this predefined snapshot's effects are about to be
+          // applied through - at genesis specifically, blockchain is still empty (height 0), so it has no
+          // lastBlockTimestamp of its own to fall back on the way PredefinedSnapshot.build otherwise would.
+          PredefinedSnapshot.build(s, SnapshotBlockchain(blockchain, rewardPart), blockTimestamp).map(rewardPart |+| _)
+        case None => Right(rewardPart)
       }
     } yield combined
   }

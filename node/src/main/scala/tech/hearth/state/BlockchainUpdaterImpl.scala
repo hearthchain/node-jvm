@@ -694,6 +694,15 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.leaseDetails(leaseId)
   }
 
+  override def dcapRootCaCrl: Option[ByteStr] = readLock(snapshotBlockchain.dcapRootCaCrl)
+  override def dcapPckCrl: Option[ByteStr]    = readLock(snapshotBlockchain.dcapPckCrl)
+  override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] = readLock {
+    snapshotBlockchain.dcapTcbInfo(fmspc)
+  }
+  override def dcapQeIdentity: Option[ByteStr]            = readLock(snapshotBlockchain.dcapQeIdentity)
+  override def dcapTcbSigningIssuerChain: Option[ByteStr] = readLock(snapshotBlockchain.dcapTcbSigningIssuerChain)
+  override def dcapPckCaIssuerChain: Option[ByteStr]      = readLock(snapshotBlockchain.dcapPckCaIssuerChain)
+
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = readLock {
     snapshotBlockchain.filledVolumeAndFee(orderId)
   }
@@ -764,6 +773,10 @@ class BlockchainUpdaterImpl(
 
   override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = readLock {
     snapshotBlockchain.committedGenerators(at)
+  }
+
+  override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = readLock {
+    snapshotBlockchain.registeredEnclaves(at)
   }
 
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = readLock {

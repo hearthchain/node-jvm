@@ -349,6 +349,12 @@ object StateUpdate {
           case _             => ByteString.EMPTY
         },
         tx.transaction match {
+          // TransferTransaction absorbed the old, separate MassTransferTransaction (see the Transfer/MassTransfer
+          // merge), but the wire metadata still distinguishes them by recipient count, the same split the two
+          // pre-merge domain types used to carry structurally.
+          case tt: TransferTransaction if tt.transfers.sizeIs == 1 =>
+            TransactionMetadata.Metadata.Transfer(TransactionMetadata.TransferMetadata(tt.transfers.head.address.toByteString))
+
           case tt: TransferTransaction =>
             TransactionMetadata.Metadata.MassTransfer(TransactionMetadata.MassTransferMetadata(tt.transfers.map(_.address.toByteString)))
 
