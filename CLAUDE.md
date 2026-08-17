@@ -1456,3 +1456,73 @@ hashes a different miner balance and reports `InvalidStateHash`.
 When asserting on fee arithmetic, zero the block reward (`rewardsSettings.copy(initial = 0)`); otherwise the reward
 dominates the fees under test. Note that the miner does not receive the full reward — the DAO share is deducted — so
 expectations written as `fee + reward` are wrong whenever a DAO address is configured.
+
+## docker/private: repairing a stale genesis config
+
+`docker/private/hearth.custom.conf` had not been touched since well before the predefined-snapshots/bech32/DCAP
+migrations documented above, and turned out to be completely non-functional - the node crashed on startup before
+this pass, on the very first config field it tried to parse. Static, checked-in genesis configs like this one are
+easy to leave behind by any migration that changes what a valid config or a valid address looks like, since nothing
+exercises them in CI (unlike node-it's fixtures, which run on every PR). Confirmed and fixed by actually building
+and running the image end to end (`docker buildx build`/`docker run`, real `curl` calls against the REST API), not
+by reading the config and reasoning about it - see `docker/private/README.md`'s "Getting started" for the build
+steps this needs in a sandboxed environment (`docker/private/Dockerfile` has no `RUN` layers of its own, so the
+overlayfs-mount limitation noted at the top of this file for `node-it/docker` didn't apply the same way, but the
+buildx `docker-container` driver still needed a local registry bridge to resolve a locally-built `FROM` image,
+since that driver doesn't share the host docker daemon's image cache the way the default driver does).
+
+Every one of the following was a separate, independent failure, found one at a time by fixing the previous one and
+re-running the node:
+
+- `wallet.seed`/`rest-api.api-key-hash` were base58 strings from before `utils.byteStrFormat` moved to base16-only
+  decoding (see "Transaction JSON") - `wallet.seed` failed outright at config-parse time
+  (`Cannot convert '...' to ByteStr: not a hexadecimal digit`); `api-key-hash` parsed but silently decoded to `None`
+  (`Base16.tryDecode` swallows the failure), so `ApiRoute.withAuth` rejected every request as an invalid key
+  regardless of what was sent - a `Left`/`None` failure mode with no error message pointing at the real cause.
+  Recomputed both as base16: `wallet.seed` is any 32-byte hex string; `api-key-hash` is
+  `Base16.encode(crypto.secureHash(apiKeyUtf8Bytes))`.
+- `blockchain.custom.genesis` still had the pre-predefined-snapshots shape (`transactions`, `initial-balance`) -
+  `GenesisSettings` has neither field any more, and a CUSTOM network's `predefined-snapshots` key is mandatory at
+  parse time (see "Predefined snapshots"), which this file didn't have at all.
+- `blockchain.custom.functionality` carried a dozen settings keys (`allow-temporary-negative-until`,
+  `require-sorted-transactions-after`, `generation-balance-depth-from-50-to-1000-after-height`, and others) that no
+  longer exist on `FunctionalitySettings` - pureconfig ignores unknown keys by default, so these didn't fail parsing,
+  they were just silent dead weight kept for no reason once every field was rewritten to the current schema.
+- `functionality.pre-activated-features` pre-activated feature ids 2 through 25 - per "Node Tests"'s note on this
+  same trap in node-it fixtures, only id 1 is implemented, and activating any other one crashes the node outright
+  (`UNIMPLEMENTED FEATURE N has been ACTIVATED ON BLOCKCHAIN`). Collapsed to `{ 1 = 0 }`.
+- Nothing sets a default bech32 HRP anywhere in `Application.scala` (see "node-it fixtures"'s note on this same gap
+  for node-it's own fixtures) - confirmed this reaches the packaged docker images too, not just node-it: the node
+  crashed the moment it needed to render the wallet's own newly-generated address
+  (`IllegalStateException: default HRP not configured`). Fixed for `docker/private` specifically by adding
+  `-Dhearth.hrp=phrth` to `docker/private/Dockerfile`'s `JAVA_OPTS`; the same gap is still open, undocumented
+  anywhere before now, and unfixed for the mainnet/testnet/stagenet-targeting `docker/Dockerfile`/`entrypoint.sh`.
+- `MinerSettings` has no default for any of its fields (`enable`, `accounts`, `supportedFeatures`, ...), so a miner
+  account has to be spelled out in full - `hearth.rewards.desired` (top-level, not under `blockchain.custom.rewards`)
+  is also gone entirely (see "node-it fixtures"'s note on reward voting being permanently unimplemented) and was
+  removed rather than left as more dead weight.
+
+With all of that fixed, the account, its generator keys, and the genesis commitments it credits all had to be
+rebuilt together from scratch, since none of the old values (base58 address, pre-migration key material) carry over
+- see `docker/private/README.md`'s "Rebuilding genesis" for the `Block.genesis(...)`-based process used, the same
+one `GenesisBlockGenerator` automates for the balances/generators case it does support.
+
+A stale genesis timestamp turned out to be its own separate bug, orthogonal to all of the above: a block's target
+timestamp is `parentTimestamp + delay` (a PoS-derived offset, not the system clock), so a genesis timestamped years
+in the past makes the miner treat every subsequent block as already overdue and mine as fast as it can compute them,
+each one still stamped near the stale genesis date - meaning real transactions (timestamped at whatever time they're
+actually submitted) fail `max-transaction-time-forward-offset` against a chain tip that hasn't caught up yet, for
+however many blocks it takes to close a gap that can be years wide. Confirmed by watching the fixed config mine
+cleanly (new blocks roughly every 1-2 seconds, matching the account's share of genesis supply) once genesis was
+retimestamped close to today, after the same config produced years of at-full-speed catch-up mining in an earlier,
+not-yet-corrected attempt. See `docker/private/README.md`'s "Why genesis timestamp has to stay close to now" - this
+is exactly why predefined DCAP collateral (below) can't just be grafted onto this file's genesis: collateral
+validity is checked against genesis's own pinned timestamp (see "The genesis-timestamp bug"), and every vendored
+DCAP fixture's validity window is long past by now, the same as this file's original 2019 timestamp was.
+
+Predefined DCAP collateral at genesis (the six `dcap-*` `PredefinedSnapshotSettings` fields, requested alongside
+this fix) is documented in `docker/private/README.md` rather than actually shipped in `hearth.custom.conf` - real
+Intel-signed collateral is required (`IntelPki`'s Root CA key is pinned, not configurable, so synthetic collateral
+fails the same way at genesis as in a live `UpdateCollateralTransaction`), and its validity window would force a
+stale genesis timestamp, defeating the fix directly above. The README documents the mechanism, the config schema,
+and the constraint, for whoever fetches fresh collateral and rebuilds genesis to match it.
