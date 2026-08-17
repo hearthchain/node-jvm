@@ -128,7 +128,14 @@ hearth.extensions += com.johndoe.HearthExtension
 
 The image is useful for developing dApps and other smart contracts on the Hearth blockchain.
 
+See [`docker/private/README.md`](./private/README.md) for the full private-node guide, including how to build the
+image, seed predefined DCAP collateral at genesis, and rebuild genesis after changing balances/generators/collateral.
+
 ### Getting started
+
+Build the base image above first, then build the private-node image on top of it (see
+[`docker/private/README.md`](./private/README.md)):\
+`docker build -t hearth-private-node docker/private`
 
 To run the node,\
 `docker run -d --name hearth-private-node -p 6869:6869 hearth-private-node`
@@ -146,8 +153,8 @@ If you want to keep the blockchain state, then just stop the container instead o
 The node is configured with:
 
 - faster generation of blocks (**10 sec** interval)
-- all features pre-activated
-- custom chain id - **R**
+- feature 1 (`SmallerMinimalGeneratingBalance`) pre-activated - the only one this fork currently implements
+- custom chain id - **R**, bech32 address prefix `phrth`
 - api_key `hearth-private-node`
 
 Full node configuration is available in [`docker/private/hearth.custom.conf`](./private/hearth.custom.conf).
