@@ -44,28 +44,38 @@ object StartBoostTransactionDiff {
       _ <- Either.raiseUnless(blockchain.committedGenerators(next).exists(_.address == tx.validator)) {
         GenericError(s"${tx.validator} is not a committed generator of period $next")
       }
-      _ <- verifyFreshness(blockchain, tx, tdReportData).leftMap(GenericError(_))
+      enclaveKey <- extractEnclaveKey(tdReportData).leftMap(GenericError(_))
+      _          <- verifyFreshness(blockchain, tdReportData).leftMap(GenericError(_))
+      _ <- Either.raiseWhen(blockchain.registeredEnclaves(next).exists(_.enclavePublicKey == enclaveKey)) {
+        GenericError(s"Enclave $enclaveKey is already registered for period $next")
+      }
       _ <- verifyQuoteSignatures(blockchain, tx, quote).leftMap(GenericError(_))
       _ <- verifyTcbStatus(blockchain, quote).leftMap(GenericError(_))
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = Map(tx.sender.toAddress -> Portfolio(balance = -tx.fee.value)),
-        nextRegisteredEnclaves = Seq(RegisteredEnclave(quote.signature.attestationPubKey, tx.validator))
+        nextRegisteredEnclaves = Seq(RegisteredEnclave(enclaveKey, tx.validator, tx.sender.toAddress))
       )
     } yield snapshot
 
-  /** The TD report's 64-byte report_data must equal blockId(32) ++ senderPublicKey(32) - a recent block id proves
-    * the quote wasn't generated long ago, and binding the sender directly (no hashing needed: the report_data slot
-    * already fits both raw, and unforgeability comes from the quote's own hardware signature over it, not from
-    * hiding either value) stops a quote observed in the mempool from being replayed by a different sender.
+  /** The TD report's 64-byte report_data is blockId(32) ++ enclavePublicKey(32): report_data[32:64] carries the
+    * enclave's own ephemeral Ed25519 key, the only key generated inside the TEE and therefore the only one worth
+    * registering (both values fit the slot raw; unforgeability comes from the quote's hardware signature over
+    * them). The transaction sender is deliberately not bound into the quote: the sender becomes the enclave's
+    * operator on a first-registration-wins basis, and a hijacked registration is escaped by restarting the enclave.
     */
-  private def verifyFreshness(blockchain: Blockchain, tx: StartBoostTransaction, reportData: ByteStr): Either[String, Unit] = {
-    val (claimedBlockId, claimedSender) = reportData.arr.splitAt(32)
+  private def extractEnclaveKey(reportData: ByteStr): Either[String, ByteStr] = {
+    val key = ByteStr(reportData.arr.drop(32))
+    Either.raiseWhen(key.arr.forall(_ == 0))("Quote's report data carries an all-zero enclave key").map(_ => key)
+  }
+
+  /** A recent block id in report_data[0:32] proves the quote wasn't generated long ago: the quote itself carries no
+    * timestamp, and a block id is unpredictable before the block exists.
+    */
+  private def verifyFreshness(blockchain: Blockchain, reportData: ByteStr): Either[String, Unit] = {
+    val claimedBlockId = ByteStr(reportData.arr.take(32))
     for {
-      _ <- Either.raiseUnless(claimedSender.sameElements(tx.sender.arr)) {
-        "Quote's report data does not commit to this transaction's sender"
-      }
-      height <- blockchain.heightOf(ByteStr(claimedBlockId)).toRight("Quote's report data does not reference a known block")
+      height <- blockchain.heightOf(claimedBlockId).toRight("Quote's report data does not reference a known block")
       currentHeight = blockchain.height
       _ <- Either.raiseWhen(height <= currentHeight - FreshnessWindowBlocks || height > currentHeight) {
         s"Quote references block at height $height, outside the freshness window of the last $FreshnessWindowBlocks blocks"
