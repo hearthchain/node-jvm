@@ -31,7 +31,15 @@ case class StateSnapshot(
     dcapTcbInfo: Map[ByteStr, ByteStr] = Map.empty,
     dcapQeIdentity: Option[ByteStr] = None,
     dcapTcbSigningIssuerChain: Option[ByteStr] = None,
-    dcapPckCaIssuerChain: Option[ByteStr] = None
+    dcapPckCaIssuerChain: Option[ByteStr] = None,
+    // ReserveTransaction's new accumulated total per (sender, miner, asset) - the Diff reads the current total via
+    // Blockchain.reservedAmount and adds tx.amount, so this already carries the final value, same "last write wins
+    // within a block" convention as dcapTcbInfo above (harmless in practice: two Reserve txs to the same triple in
+    // one block each read-then-write through SnapshotBlockchain in order, so the second sees the first's result).
+    reservedAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+    // BindApiKeyTransaction's HPKE-sealed API key envelope, keyed by (enclavePublicKey, sender); upsert, same
+    // "last write wins" convention.
+    apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty
 ) {
 
   // ignores lease balances from portfolios
@@ -70,7 +78,9 @@ object StateSnapshot {
       dcapTcbInfo: Map[ByteStr, ByteStr] = Map.empty,
       dcapQeIdentity: Option[ByteStr] = None,
       dcapTcbSigningIssuerChain: Option[ByteStr] = None,
-      dcapPckCaIssuerChain: Option[ByteStr] = None
+      dcapPckCaIssuerChain: Option[ByteStr] = None,
+      reservedAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+      apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -94,7 +104,9 @@ object StateSnapshot {
         dcapTcbInfo,
         dcapQeIdentity,
         dcapTcbSigningIssuerChain,
-        dcapPckCaIssuerChain
+        dcapPckCaIssuerChain,
+        reservedAmounts,
+        apiKeyBindings
       )
     r.leftMap(GenericError(_))
   }
@@ -192,7 +204,9 @@ object StateSnapshot {
         s1.dcapTcbInfo ++ s2.dcapTcbInfo,
         s2.dcapQeIdentity.orElse(s1.dcapQeIdentity),
         s2.dcapTcbSigningIssuerChain.orElse(s1.dcapTcbSigningIssuerChain),
-        s2.dcapPckCaIssuerChain.orElse(s1.dcapPckCaIssuerChain)
+        s2.dcapPckCaIssuerChain.orElse(s1.dcapPckCaIssuerChain),
+        s1.reservedAmounts ++ s2.reservedAmounts,
+        s1.apiKeyBindings ++ s2.apiKeyBindings
       )
 
   }

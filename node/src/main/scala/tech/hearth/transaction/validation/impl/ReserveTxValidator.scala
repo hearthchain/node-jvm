@@ -6,5 +6,5 @@ import tech.hearth.transaction.validation.*
 
 object ReserveTxValidator extends TxValidator[ReserveTransaction] {
   override def validate(tx: ReserveTransaction): ValidatedV[ReserveTransaction] =
-    Valid(tx) // Semantics not implemented yet; see TransactionDiffer
+    Valid(tx) // Nothing beyond TxPositiveAmount's own bounds checks; see ReserveTransactionDiff for the real semantics
 }

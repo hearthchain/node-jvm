@@ -282,4 +282,36 @@ object Keys {
   def dcapPckCaIssuerChainHistory: Key[Seq[Height]] = historyKey(DcapPckCaIssuerChainHistory, Array.emptyByteArray)
   def dcapPckCaIssuerChain(height: Height): Key[ByteStr] =
     dcapCollateralValue(DcapPckCaIssuerChain, Array.emptyByteArray, height)
+
+  private def assetIdBytes(asset: tech.hearth.transaction.Asset): Array[Byte] = asset match {
+    case tech.hearth.transaction.Asset.Hearth => Array.emptyByteArray
+    case IssuedAsset(id)                      => id.arr
+  }
+
+  // ReserveTransaction's accumulated total, keyed by (sender, miner, asset) - not tied to a generation period, so
+  // it reuses the DCAP-collateral-style "single current value, resolved through history" mechanism (see
+  // dcapCollateralValue above) rather than committedGenerators/registeredEnclaves' period-keyed one.
+  def reservedAmountSuffix(sender: Address, miner: Address, asset: tech.hearth.transaction.Asset): ByteStr =
+    ByteStr(sender.toBytes ++ miner.toBytes ++ assetIdBytes(asset))
+
+  def reservedAmountHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(ReservedAmountHistory, suffix.arr)
+  def reservedAmount(suffix: ByteStr)(height: Height): Key[Long] =
+    Key(ReservedAmount, hBytes(suffix.arr, height), Longs.fromByteArray, Longs.toByteArray)
+
+  // Which (sender, miner, asset) suffixes changed at this height, so rollback knows which histories to unwind
+  // without an unbounded scan - the same role dcapTcbInfoFmspcsAt plays for dcapTcbInfoHistory.
+  def reservedAmountKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(ReservedAmountKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // BindApiKeyTransaction's HPKE-sealed API key envelope, keyed by (enclavePublicKey, sender) so an enclave can
+  // eventually enumerate the bindings addressed to it. Same history mechanism as reservedAmount above.
+  def apiKeyBindingSuffix(enclavePublicKey: ByteStr, sender: Address): ByteStr =
+    ByteStr(enclavePublicKey.arr ++ sender.toBytes)
+
+  def apiKeyBindingHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(ApiKeyBindingHistory, suffix.arr)
+  def apiKeyBinding(suffix: ByteStr)(height: Height): Key[ByteStr] =
+    Key(ApiKeyBinding, hBytes(suffix.arr, height), ByteStr(_), _.arr)
+
+  def apiKeyBindingKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(ApiKeyBindingKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
 }

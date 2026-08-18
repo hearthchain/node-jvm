@@ -441,8 +441,9 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
 
-  // BindApiKey/Reserve/Withdraw/Settle have no implemented semantics yet (see TransactionDiffer); these helpers
-  // only exercise the wire-format (protobuf/JSON) plumbing.
+  // Withdraw/Settle have no implemented semantics yet (see TransactionDiffer); their helpers below only exercise the
+  // wire-format (protobuf/JSON) plumbing. BindApiKey/Reserve are implemented - see BindApiKeyTransactionDiff/
+  // ReserveTransactionDiff.
 
   def bindApiKey(
       sender: SigningKey = defaultSigner,

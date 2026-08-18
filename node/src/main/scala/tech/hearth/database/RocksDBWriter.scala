@@ -531,6 +531,28 @@ class RocksDBWriter(
         expiredKeys ++= updateHistory(rw, Keys.dcapPckCaIssuerChainHistory, threshold, Keys.dcapPckCaIssuerChain)
       }
 
+      for (((sender, miner, asset), amount) <- snapshot.reservedAmounts) {
+        val suffix = Keys.reservedAmountSuffix(sender, miner, asset)
+        rw.put(Keys.reservedAmount(suffix)(Height(height)), amount)
+        expiredKeys ++= updateHistory(rw, Keys.reservedAmountHistory(suffix), threshold, Keys.reservedAmount(suffix))
+      }
+      if (snapshot.reservedAmounts.nonEmpty)
+        rw.put(
+          Keys.reservedAmountKeysAt(Height(height)),
+          snapshot.reservedAmounts.keySet.toSeq.map { case (sender, miner, asset) => Keys.reservedAmountSuffix(sender, miner, asset) }
+        )
+
+      for (((enclavePublicKey, sender), encryptedApiKey) <- snapshot.apiKeyBindings) {
+        val suffix = Keys.apiKeyBindingSuffix(enclavePublicKey, sender)
+        rw.put(Keys.apiKeyBinding(suffix)(Height(height)), encryptedApiKey)
+        expiredKeys ++= updateHistory(rw, Keys.apiKeyBindingHistory(suffix), threshold, Keys.apiKeyBinding(suffix))
+      }
+      if (snapshot.apiKeyBindings.nonEmpty)
+        rw.put(
+          Keys.apiKeyBindingKeysAt(Height(height)),
+          snapshot.apiKeyBindings.keySet.toSeq.map { case (enclavePublicKey, sender) => Keys.apiKeyBindingSuffix(enclavePublicKey, sender) }
+        )
+
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
             .ofMillis(blockMeta.getHeader.timestamp - TxFilterResetTs)}")
@@ -879,6 +901,8 @@ class RocksDBWriter(
 
           rollbackAssetsInfo(rw, currentHeight)
           rollbackDcapCollateral(rw, currentHeight)
+          rollbackReservedAmounts(rw, currentHeight)
+          rollbackApiKeyBindings(rw, currentHeight)
 
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
@@ -1015,6 +1039,24 @@ class RocksDBWriter(
     rw.delete(fmspcsKey)
   }
 
+  private def rollbackReservedAmounts(rw: RW, currentHeight: Height): Unit = {
+    val suffixesKey = Keys.reservedAmountKeysAt(currentHeight)
+    rw.get(suffixesKey).foreach { suffix =>
+      rw.delete(Keys.reservedAmount(suffix)(currentHeight))
+      rw.filterHistory(Keys.reservedAmountHistory(suffix), currentHeight)
+    }
+    rw.delete(suffixesKey)
+  }
+
+  private def rollbackApiKeyBindings(rw: RW, currentHeight: Height): Unit = {
+    val suffixesKey = Keys.apiKeyBindingKeysAt(currentHeight)
+    rw.get(suffixesKey).foreach { suffix =>
+      rw.delete(Keys.apiKeyBinding(suffix)(currentHeight))
+      rw.filterHistory(Keys.apiKeyBindingHistory(suffix), currentHeight)
+    }
+    rw.delete(suffixesKey)
+  }
+
   private def rollbackOrderFill(rw: RW, orderId: ByteStr, height: Height): ByteStr = {
     val curVfKey = Keys.filledVolumeAndFee(orderId)
     val vf       = rw.get(curVfKey)
@@ -1095,6 +1137,16 @@ class RocksDBWriter(
     readOnly(_.fromHistory(Keys.dcapTcbSigningIssuerChainHistory, Keys.dcapTcbSigningIssuerChain))
   override def dcapPckCaIssuerChain: Option[ByteStr] =
     readOnly(_.fromHistory(Keys.dcapPckCaIssuerChainHistory, Keys.dcapPckCaIssuerChain))
+
+  override def reservedAmount(sender: Address, miner: Address, asset: Asset): Long = {
+    val suffix = Keys.reservedAmountSuffix(sender, miner, asset)
+    readOnly(_.fromHistory(Keys.reservedAmountHistory(suffix), Keys.reservedAmount(suffix))).getOrElse(0L)
+  }
+
+  override def apiKeyBinding(enclavePublicKey: ByteStr, sender: Address): Option[ByteStr] = {
+    val suffix = Keys.apiKeyBindingSuffix(enclavePublicKey, sender)
+    readOnly(_.fromHistory(Keys.apiKeyBindingHistory(suffix), Keys.apiKeyBinding(suffix)))
+  }
 
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't
   // as many miners, so snapshots will rarely be evicted due to overflows.

@@ -6,5 +6,5 @@ import tech.hearth.transaction.validation.*
 
 object BindApiKeyTxValidator extends TxValidator[BindApiKeyTransaction] {
   override def validate(tx: BindApiKeyTransaction): ValidatedV[BindApiKeyTransaction] =
-    Valid(tx) // Semantics not implemented yet; see TransactionDiffer
+    Valid(tx) // Nothing structural to check here; see BindApiKeyTransactionDiff for the real semantics
 }

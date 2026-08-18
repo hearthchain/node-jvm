@@ -92,6 +92,18 @@ object TxStateSnapshotHashBuilder {
     snapshot.dcapTcbSigningIssuerChain.foreach(v => changedKeys += "dcapTcbSigningIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapPckCaIssuerChain.foreach(v => changedKeys += "dcapPckCaIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
 
+    snapshot.reservedAmounts.foreach { case ((sender, miner, asset), amount) =>
+      val assetBytes = asset match {
+        case Hearth             => Array.emptyByteArray
+        case asset: IssuedAsset => asset.id.arr
+      }
+      changedKeys += sender.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+    }
+
+    snapshot.apiKeyBindings.foreach { case ((enclavePublicKey, sender), encryptedApiKey) =>
+      changedKeys += enclavePublicKey.arr ++ sender.toBytes ++ encryptedApiKey.arr
+    }
+
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {
         case Status.Failed    => changedKeys += txInfo.id.arr ++ Array(1: Byte)

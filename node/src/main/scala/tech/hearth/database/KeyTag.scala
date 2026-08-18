@@ -79,7 +79,13 @@ enum KeyTag {
     DcapTcbInfoFmspcsAtHeight,
     DcapPckCaIssuerChainHistory,
     DcapPckCaIssuerChain,
-    RegisteredEnclaves
+    RegisteredEnclaves,
+    ReservedAmountHistory,
+    ReservedAmount,
+    ReservedAmountKeysAtHeight,
+    ApiKeyBindingHistory,
+    ApiKeyBinding,
+    ApiKeyBindingKeysAtHeight
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }
