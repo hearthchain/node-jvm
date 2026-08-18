@@ -43,8 +43,12 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
     ByteStr(mutated)
   }
 
-  private def freshReportData(d: Domain, sender: PublicKey = PublicKey(sender.publicKey())): Array[Byte] =
-    d.lastBlockId.arr ++ sender.arr
+  // Any 32 non-zero bytes work as the enclave key: the diff only extracts and registers it, never verifies it
+  // cryptographically (the quote's hardware signature is what vouches for report_data).
+  private val enclaveKey = PublicKey(TxHelpers.signer(5).publicKey())
+
+  private def freshReportData(d: Domain, key: PublicKey = enclaveKey): Array[Byte] =
+    d.lastBlockId.arr ++ key.arr
 
   "StartBoostTxValidator" - {
     "rejects an SGX quote outright" in {
@@ -100,24 +104,23 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
 
       val unknownBlockId = Array.fill(32)(1.toByte)
-      val reportData     = unknownBlockId ++ PublicKey(sender.publicKey()).arr
+      val reportData     = unknownBlockId ++ enclaveKey.arr
       d.appendBlockE(
         TxHelpers.startBoost(sender, validator, quoteWithReportData(reportData), nextPeriodStart)
       ) should produce("does not reference a known block")
     }
 
-    "rejects a quote whose report data doesn't commit to the sender" in withDomain(
+    "rejects a quote whose report data carries an all-zero enclave key" in withDomain(
       DeterministicFinality,
       AddrWithBalance.enoughBalances(sender)
     ) { d =>
       val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
       d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
 
-      val someoneElse = PublicKey(TxHelpers.signer(2).publicKey())
-      val reportData  = d.lastBlockId.arr ++ someoneElse.arr
+      val reportData = d.lastBlockId.arr ++ new Array[Byte](32)
       d.appendBlockE(
         TxHelpers.startBoost(sender, validator, quoteWithReportData(reportData), nextPeriodStart)
-      ) should produce("does not commit to this transaction's sender")
+      ) should produce("all-zero enclave key")
     }
 
     "rejects when the PCK CRL has not been set on chain yet" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>

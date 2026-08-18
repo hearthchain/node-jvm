@@ -78,7 +78,7 @@ object TxStateSnapshotHashBuilder {
     }
 
     snapshot.nextRegisteredEnclaves.foreach { re =>
-      changedKeys += re.attestationPublicKey.arr ++ re.validator.toBytes
+      changedKeys += re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes
     }
 
     // DCAP collateral (see the StartBoost consensus plan): none of these six fields have a TransactionStateSnapshot

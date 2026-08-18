@@ -360,23 +360,25 @@ package object database {
       Longs.toByteArray(addressId) ++ blsPublicKey.arr ++ vrfPublicKey.arr
     }.toArray
 
-  /** Each record is the quote's attestation public key (raw P-256 point, 64 bytes) ++ the validator's address
-    * (fixed width, Address.HASH_LEN) - no addressId indirection, unlike readCommittedGenerators: an attestation key
-    * is a one-off value from a single quote, never reused across records, so there's no compaction benefit.
+  /** Each record is the enclave's ephemeral public key (raw Ed25519, 32 bytes) ++ the validator's address ++ the
+    * operator's address (both fixed width, Address.HASH_LEN) - no addressId indirection, unlike
+    * readCommittedGenerators: an enclave key is a one-off value from a single registration, never reused across
+    * records, so there's no compaction benefit.
     */
   def readRegisteredEnclaves(data: Array[Byte]): Seq[RegisteredEnclave] = {
-    val keySize = 64
+    val keySize = 32
     data
-      .grouped(keySize + Address.HASH_LEN)
+      .grouped(keySize + 2 * Address.HASH_LEN)
       .map { record =>
-        val (attestationPublicKey, addressBytes) = record.splitAt(keySize)
-        RegisteredEnclave(ByteStr(attestationPublicKey), Address.fromBytes(addressBytes).get())
+        val (enclavePublicKey, addresses)   = record.splitAt(keySize)
+        val (validatorBytes, operatorBytes) = addresses.splitAt(Address.HASH_LEN)
+        RegisteredEnclave(ByteStr(enclavePublicKey), Address.fromBytes(validatorBytes).get(), Address.fromBytes(operatorBytes).get())
       }
       .toSeq
   }
 
   def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
-    data.view.flatMap(re => re.attestationPublicKey.arr ++ re.validator.toBytes).toArray
+    data.view.flatMap(re => re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes).toArray
 
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)
