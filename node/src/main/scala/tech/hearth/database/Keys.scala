@@ -6,7 +6,8 @@ import tech.hearth.crypto.bls.BlsPublicKey
 import tech.hearth.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
 import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset.IssuedAsset
+import tech.hearth.transaction.Asset
+import tech.hearth.transaction.Asset.{AssetIdOps, IssuedAsset}
 import tech.hearth.transaction.Transaction
 import tech.hearth.crypto.Address
 
@@ -283,16 +284,11 @@ object Keys {
   def dcapPckCaIssuerChain(height: Height): Key[ByteStr] =
     dcapCollateralValue(DcapPckCaIssuerChain, Array.emptyByteArray, height)
 
-  private def assetIdBytes(asset: tech.hearth.transaction.Asset): Array[Byte] = asset match {
-    case tech.hearth.transaction.Asset.Hearth => Array.emptyByteArray
-    case IssuedAsset(id)                      => id.arr
-  }
-
   // ReserveTransaction's accumulated total, keyed by (sender, miner, asset) - not tied to a generation period, so
   // it reuses the DCAP-collateral-style "single current value, resolved through history" mechanism (see
   // dcapCollateralValue above) rather than committedGenerators/registeredEnclaves' period-keyed one.
-  def reservedAmountSuffix(sender: Address, miner: Address, asset: tech.hearth.transaction.Asset): ByteStr =
-    ByteStr(sender.toBytes ++ miner.toBytes ++ assetIdBytes(asset))
+  def reservedAmountSuffix(sender: Address, miner: Address, asset: Asset): ByteStr =
+    ByteStr(sender.toBytes ++ miner.toBytes ++ asset.compatId.fold(Array.emptyByteArray)(_.arr))
 
   def reservedAmountHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(ReservedAmountHistory, suffix.arr)
   def reservedAmount(suffix: ByteStr)(height: Height): Key[Long] =

@@ -9,15 +9,22 @@ import tech.hearth.transaction.ReserveTransaction
 import tech.hearth.transaction.TxValidationError.GenericError
 
 /** ReserveTransaction semantics: lock `amount` of `assetId` from the sender's balance against a registered miner,
-  * accumulating into Blockchain.reservedAmount(sender, miner, assetId). Accumulate-only for now - there is no
-  * unreserve/settlement transaction yet (see the Reserve/BindApiKey consensus plan).
+  * accumulating into Blockchain.reservedAmount(sender, miner, assetId). Accumulate-only for now, by design - there
+  * is no unreserve/settlement transaction yet; SettleTransaction/WithdrawTransaction (still unimplemented stubs)
+  * look like the eventual counterpart, but that hasn't been designed.
+  *
+  * The reserved amount is debited from the sender's portfolio balance (like CommitToGeneration's deposit is *not*,
+  * see Portfolio.generationDeposit) and credited nowhere else - it is not moved to the miner or to any other
+  * address, only recorded in reservedAmounts. Until Settle/Withdraw exist, a reserved amount is unspendable and
+  * unrecoverable by design; this is not yet safe to expose on a network carrying real value.
   */
 object ReserveTransactionDiff {
   def apply(blockchain: Blockchain)(tx: ReserveTransaction): Either[ValidationError, StateSnapshot] = {
     val sender = tx.sender.toAddress
     for {
+      // tx.feeAssetId's existence is already checked upstream, by TransactionDiffer.feePortfolios (driven by
+      // TxWithFee.InCustomAsset), before this diff ever runs - only the reserved asset itself needs checking here.
       _ <- assetIssued(blockchain, tx.assetId)
-      _ <- assetIssued(blockchain, tx.feeAssetId)
       _ <- Either.raiseUnless(blockchain.isRegisteredMiner(tx.miner))(GenericError(s"${tx.miner} is not a registered miner"))
       portfolios <- Portfolio
         .combine(
