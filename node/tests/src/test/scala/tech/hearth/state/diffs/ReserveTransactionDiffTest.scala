@@ -28,7 +28,7 @@ class ReserveTransactionDiffTest extends FreeSpec with WithDomain {
     new Blockchain {
       export blockchain.{registeredEnclaves as _, *}
       override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
-        blockchain.registeredEnclaves(at) :+ RegisteredEnclave(ByteStr.fill(64)(1), registeredMiner, registeredMiner)
+        blockchain.registeredEnclaves(at) :+ RegisteredEnclave(ByteStr.fill(32)(1), registeredMiner, registeredMiner)
     }
 
   "ReserveTransactionDiff" - {

@@ -88,7 +88,7 @@ class TransactionFactorySpec extends FreeSpec {
     // ByteStr format anyway (see requests.largeByteStrFormat) - the same 280-char decode-limit bug StartBoostRequest
     // hit before its fields got the same treatment.
     "builds a BindApiKeyTransaction from a well-formed request, with an oversized encryptedApiKey" in forAll(accountGen) { sender =>
-      val enclavePublicKey = ByteStr(Array.fill(64)(9: Byte))
+      val enclavePublicKey = ByteStr(Array.fill(32)(9: Byte))
       val encryptedApiKey  = ByteStr(Array.fill(200)(7: Byte))
       val json = Json.obj(
         "type"             -> TransactionType.BindApiKey.id,
@@ -109,7 +109,7 @@ class TransactionFactorySpec extends FreeSpec {
       val json = Json.obj(
         "type"             -> TransactionType.BindApiKey.id,
         "senderPublicKey"  -> PublicKey(sender.publicKey()).toString,
-        "enclavePublicKey" -> Base16.encode(Array.fill(32)(9: Byte)),
+        "enclavePublicKey" -> Base16.encode(Array.fill(20)(9: Byte)),
         "encryptedApiKey"  -> Base16.encode(Array.fill(32)(7: Byte)),
         "fee"              -> 100000
       )

@@ -17,13 +17,13 @@ import tech.hearth.transaction.TxHelpers
 class BindApiKeyTransactionDiffTest extends FreeSpec with WithDomain {
   private val sender           = TxHelpers.defaultSigner
   private val validator        = TxHelpers.secondSigner.toAddress
-  private val enclavePublicKey = ByteStr.fill(64)(1)
+  private val enclavePublicKey = ByteStr.fill(32)(1)
 
-  private def withRegisteredEnclave(blockchain: Blockchain, attestationPublicKey: ByteStr): Blockchain =
+  private def withRegisteredEnclave(blockchain: Blockchain, enclavePublicKey: ByteStr): Blockchain =
     new Blockchain {
       export blockchain.{registeredEnclaves as _, *}
       override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
-        blockchain.registeredEnclaves(at) :+ RegisteredEnclave(attestationPublicKey, validator, validator)
+        blockchain.registeredEnclaves(at) :+ RegisteredEnclave(enclavePublicKey, validator, validator)
     }
 
   "BindApiKeyTransactionDiff" - {

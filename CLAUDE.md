@@ -571,14 +571,15 @@ planned). The diff:
 - requires `generationPeriodStart` to be exactly the *next* generation period from the current one, and `validator`
   to already be a committed generator of that next period - a StartBoost can't register ahead of or behind the
   generator commitment it rides on;
-- checks quote freshness and sender-binding: the TDX report's 64-byte `report_data` must equal `blockId(32) ++
-  senderPublicKey(32)`, `blockId` must name a block within the last `FreshnessWindowBlocks` (100) blocks below the
-  current height. Both values are embedded raw, not hashed - `report_data` already fits both exactly, and
-  unforgeability comes from the quote's own TDX hardware signature over `report_data`, not from hiding either
-  value; hashing them would only add cost (verifying would still mean recomputing and comparing against the small
-  set of candidate recent block ids, since a hash can't be "unhashed" to recover which block was claimed) without
-  adding security. The sender binding exists so a quote observed in the mempool can't be copied into a different
-  sender's StartBoost transaction before the original lands;
+- checks quote freshness and extracts the enclave key: the TDX report's 64-byte `report_data` is `blockId(32) ++
+  enclavePublicKey(32)` - `report_data[32:64]` carries the enclave's own ephemeral Ed25519 key (the only key
+  generated inside the TEE, and so the only one worth registering), and `blockId` (`report_data[0:32]`) must name a
+  block within the last `FreshnessWindowBlocks` (100) blocks below the current height. Both values are embedded raw,
+  not hashed - unforgeability comes from the quote's own TDX hardware signature over `report_data`, not from hiding
+  either value. The transaction sender is deliberately *not* bound into the quote: the sender becomes the enclave's
+  `operator` on a first-registration-wins basis (see below), so a hijacked registration is escaped by restarting the
+  enclave (which mints a fresh key) rather than contested. A quote whose enclave key already has an entry in
+  `registeredEnclaves(next)` is rejected outright, before signature verification runs;
 - verifies the full quote signature chain: the quote's own embedded PCK certificate chain (leaf, PCK CA, root) is
   checked against `IntelPki`'s pinned Intel root and the on-chain `pckCrl` (revocation) - it does *not* need the
   on-chain `pckCaIssuerChain` too, since the chain a quote itself carries is already self-contained; that field
@@ -593,15 +594,18 @@ planned). The diff:
   `1.2.840.113741.1.13.1.4`, parsed the same ASN.1-`OCTET STRING`-wrapping-a-`SEQUENCE` way `IntelPki`'s existing
   CRL Number extraction does) has a TCB Info entry on chain - existence only, not full TCB status evaluation (see
   the deferred-scope note below);
-- registers the enclave: `RegisteredEnclave(attestationPublicKey, validator, miner)`, keyed by the quote's own
-  attestation public key (a raw 64-byte P-256 point) rather than by address or by `mrEnclave` - unlike a generator's
-  identity, an enclave's identity changes on every restart (a fresh quote embeds a fresh attestation key), so the
-  registry key is exactly the value that changes with the quote, deliberately not the measurement of the underlying
-  binary. `miner` (the StartBoost sender, i.e. the TEE miner operating this enclave - added alongside `Reserve`/
-  `BindApiKey`, see below) is what lets `Blockchain.isRegisteredMiner`/`isRegisteredEnclave` answer "is this address
-  a registered miner" / "is this attestation key a registered enclave" without an extra lookup layer; it did not
-  exist when this record was first added and its addition changed the on-disk record's byte layout - see "Reserve
-  and BindApiKey" below for what that means for anyone who already has old-format data.
+- registers the enclave: `RegisteredEnclave(enclavePublicKey, validator, operator)`, keyed by the enclave's own
+  ephemeral public key (raw Ed25519, 32 bytes, from `report_data[32:64]` above) rather than by address or by
+  `mrEnclave` - unlike a generator's identity, an enclave's identity changes on every restart (a fresh boot mints a
+  fresh keypair), so the registry key is exactly the value that changes with the enclave's lifecycle, and it is the
+  only key the enclave can later sign with or receive encrypted payloads through. This is deliberately *not* the
+  quote's own DCAP attestation key (a P-256 point belonging to the platform's Quoting Enclave, shared by every TD on
+  the host - it identifies the machine, not this workload); an earlier revision of this transaction keyed the
+  registry by that attestation key instead, fixed before it shipped (see "Reserve and BindApiKey" below for the
+  on-disk consequence). `operator` (the StartBoost sender, i.e. the TEE miner operating this enclave - added
+  alongside `Reserve`/`BindApiKey`, see below) is what lets `Blockchain.isRegisteredMiner`/`isRegisteredEnclave`
+  answer "is this address a registered miner" / "is this enclave key a registered enclave" without an extra lookup
+  layer.
 
 Storage mirrors `committedGenerators`/`GenerationPeriod` exactly, including the same "only this and next period are
 cached" restriction, the same rollback-on-discard handling, and the same `Caches`/`RocksDBWriter`/`Blockchain`
@@ -656,13 +660,14 @@ way rather than growing the shared default limit, which stays deliberately small
 
 The third and fourth stub transaction types from "Transaction schema" above to grow real semantics, both reading
 the `RegisteredEnclave` registry `StartBoostTransactionDiff` writes (see above) rather than adding a new registry
-of their own. `miner` in both is the *TEE miner* role from "DCAP collateral registry"'s terminology split (the
-`StartBoostTransaction` sender), never the `validator`/consensus generator it boosts - conflating the two here
-would silently let `Reserve`/`BindApiKey` target the wrong identity.
+of their own. `miner` (`ReserveTransaction`'s own field, naming the reservation's target) and `RegisteredEnclave`'s
+`operator` field are the same identity under different names - both are the *TEE miner* role from "DCAP collateral
+registry"'s terminology split (the `StartBoostTransaction` sender), never the `validator`/consensus generator it
+boosts - conflating the two here would silently let `Reserve`/`BindApiKey` target the wrong identity.
 
 **"Registered miner"/"registered enclave" checks are period-scoped, not permanent.** `RegisteredEnclave` only
 covers the current and next generation period (StartBoost registers for the *next* one, same as
-`CommitToGenerationTransaction`), so `Blockchain.isRegisteredMiner(address)`/`isRegisteredEnclave(attestationKey)`
+`CommitToGenerationTransaction`), so `Blockchain.isRegisteredMiner(address)`/`isRegisteredEnclave(enclavePublicKey)`
 (`state/Blockchain.scala`'s `BlockchainExt`) check membership in `registeredEnclaves(current) ++
 registeredEnclaves(next)`, not an unbounded history. A miner that stops re-attesting every period stops being a
 valid `Reserve` target or `BindApiKey` registry match, by design - a deliberate choice over a permanent
@@ -685,21 +690,27 @@ a real, currently-open fund-safety gap, not an oversight: it is not yet safe to 
 carrying real value.
 
 **`BindApiKeyTransaction`** (`sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, chainId`) binds an
-HPKE-sealed API key envelope to a registered enclave's attestation public key. `state/diffs/
+HPKE-sealed API key envelope to a registered enclave's public key. `state/diffs/
 BindApiKeyTransactionDiff.scala` checks `enclavePublicKey` is registered, then upserts `encryptedApiKey` into a new
 `(enclavePublicKey, sender) -> ByteStr` store, `Blockchain.apiKeyBinding` - keyed enclave-first so a future read
 API could enumerate bindings addressed to one enclave (no such read API exists yet; this pass only implemented the
 write path). The node never decrypts `encryptedApiKey` or touches HPKE/curve semantics at all - it is opaque bytes
 to the node, capped at `IntelPki.MaxCollateralFieldSize` by `BindApiKeyTxValidator` purely as a resource-exhaustion
 bound, reused from DCAP collateral rather than a dedicated constant since a real HPKE envelope is far smaller.
-`BindApiKeyTxValidator` also requires `enclavePublicKey` be exactly 64 bytes (a registered attestation key's own
-length - a different length can never match one, so it's rejected structurally rather than paying for the
-registry lookup). Note the P-256/X25519 mismatch this implies: `RegisteredEnclave.attestationPublicKey` is a P-256
-point (Intel DCAP's signing curve), while HPKE sealing in this ecosystem (see `../hearth-chain/java`'s
-`ApiKeyEnvelope`) uses X25519 - `BindApiKeyTransaction.enclavePublicKey` is checked against the *attestation* key
-purely as a registry-membership proof, not because the node believes it's also the HPKE recipient key; how the
-actual sealing key relates to the attestation key is an off-chain client/enclave concern this transaction type
-does not need to resolve.
+`BindApiKeyTxValidator` also requires `enclavePublicKey` be exactly 32 bytes (a registered enclave key's own
+length, raw Ed25519 - a different length can never match one, so it's rejected structurally rather than paying for
+the registry lookup). Note the Ed25519/X25519 mismatch this still implies: `RegisteredEnclave.enclavePublicKey` is
+the enclave's Ed25519 identity key (see "StartBoost" above), while HPKE sealing in this ecosystem (see
+`../hearth-chain/java`'s `ApiKeyEnvelope`, `Hpke`) needs an X25519 point - `BindApiKeyTransaction.enclavePublicKey`
+is checked against the registry purely as a registry-membership proof, not because the node believes it's already
+an HPKE recipient key. Unlike the P-256 attestation key this replaced, an Ed25519 key *can* be converted to the
+matching X25519 point by a standard birational map (`SigningKey.toX25519()` in `../hearth-chain/java`, the
+libsodium `crypto_sign_ed25519_{pk,sk}_to_curve25519` construction) - the enclave side needs the seed (which only
+it holds) to derive the X25519 secret key, but the client/sealing side only ever sees the raw public key (from the
+quote or from this registry) and needs the same conversion applied to just the public half; as of this writing
+`tech.hearth.crypto` only exposes the seed-holding path (`SigningKey.toX25519()`), not a public-key-only one, which
+is a real gap for that sealing flow, not something this transaction type resolves - how the sealing key relates to
+the registered key stays an off-chain client/enclave concern either way.
 
 **Storage** follows the DCAP-collateral history-keyed pattern (`KeyTag`/`Keys` history+value key pairs,
 `updateHistory`/`filterHistory` for rollback, new tags appended at the end), not the period-keyed
@@ -714,10 +725,16 @@ one block since each Diff reads the running total through `SnapshotBlockchain` o
 in order. Both are folded into `TxStateSnapshotHashBuilder` (new consensus state needs hashing, the same class of
 omission the DCAP fields' own PR had to fix after the fact per "DCAP collateral registry" above).
 
-**`RegisteredEnclave`'s on-disk record grew from 96 to 128 bytes** (`attestationPublicKey(64) ++ validator(32)` to
-`... ++ miner(32)`) with no version bump or migration - `readRegisteredEnclaves`/`writeRegisteredEnclaves`
-(`database/package.scala`) simply changed their `.grouped(...)` width. Confirmed safe for this pass only because
-nothing has persisted the old 96-byte layout outside disposable dev/test runs (the whole project is pre-launch, see
+**`RegisteredEnclave`'s on-disk record layout changed twice, independently, with no version bump or migration
+either time.** It started as `attestationPublicKey(64) ++ validator(32)`, 96 bytes. This pass added the operator
+field, `... ++ miner(32)`, 128 bytes. Separately, a later fix (upstream PR #32, "register the enclave key, not the
+DCAP attestation key" - rebased in on top of this pass) replaced the 64-byte P-256 attestation key with the
+32-byte Ed25519 enclave key described under "StartBoost" above, and renamed the third field to `operator`; combined
+with this pass's field, the record is now `enclavePublicKey(32) ++ validator(32) ++ operator(32)`, 96 bytes -
+coincidentally the same total size as the original 2-field layout, but a different composition, so a byte-count
+check alone can't tell old data from new. `readRegisteredEnclaves`/`writeRegisteredEnclaves`
+(`database/package.scala`) simply changed their `.grouped(...)` width both times. Confirmed safe only because
+nothing has persisted any prior layout outside disposable dev/test runs (the whole project is pre-launch, see
 "HRTH emission curve"'s premine `TODO: replace before launch` notes) - a node with real old-format
 `RegisteredEnclaves` data on disk would misparse it. If a longer-lived devnet/testnet ever accumulates real
 `StartBoost` history before a change like this, it needs an explicit migration or a length-based reader fallback,
