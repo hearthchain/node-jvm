@@ -114,18 +114,10 @@ matching VRF key. Wallets hand out `SigningKey` (`Wallet.signingKey(address)`).
 
 ## Dependency cleanup: web3j and blst-java
 
-`web3j` and the direct `blst-java` dependency are gone from `node`'s build. Both were legacy from the pre-fork
-Waves codebase and had shrunk to a handful of call sites, most of them dead.
-
-`web3j` turned out to have no live callers left. `EthEncoding` (its only wrapper) served three things, and every
-one was dead code: `transaction.ERC20Address`'s JSON `Format` (nothing ever serializes or deserializes that
-type), `CustomDirectives.massValidateEthereumIds` (zero call sites), and `testkit`'s `Domain.solidStateSnapshot()`
-(computed inside `makeStateSolid()`, whose return value is discarded at its only call site,
-`liquidAndSolidAssert`). All three were deleted outright rather than reimplemented, along with the dead
-`Keys.assetStaticInfo(addr: ERC20Address)` overload. The one live `web3j` use, `P256Curve`'s `toBytesPadded` (pads
-a `BigInteger` to a fixed-length unsigned byte array, used by the P-256 certificate-chain verification path),
-moved to `org.bouncycastle.util.BigIntegers.asUnsignedByteArray`, an existing hard dependency (`bcprov-jdk18on`)
-that already does the same thing.
+`web3j` and the direct `blst-java` dependency are gone from `node`'s build - both legacy from the pre-fork Waves
+codebase, with no live callers left except one: `P256Curve.toBytesPadded` (pads a `BigInteger` to a fixed-length
+unsigned byte array, for P-256 cert-chain verification), moved to
+`org.bouncycastle.util.BigIntegers.asUnsignedByteArray` (`bcprov-jdk18on`, already a hard dependency).
 
 BLS (`crypto.bls.BlsUtils`/`BlsKeyPair`) no longer imports `supranational.blst` directly; it calls
 `tech.hearth.crypto.BlsKey` instead. `blst-java` itself is still on the classpath (`tech.hearth:crypto`'s own pom
@@ -744,155 +736,53 @@ an oversized `encryptedApiKey` to exercise `largeByteStrFormat`.
 
 ## Protobuf package migration
 
-Generated protobuf code moved from `com.wavesplatform.*` packages to `tech.hearth.*` ones. Most of it comes from the
-external `tech.hearth % protobuf-schemas` dependency, already on the new package name; but `node`'s own two local
-proto files (`node/src/main/protobuf/hearth/{api,database}.proto`, covering `BlockMeta`/`LeaseDetails`/
-`AssetDetails`/`TransactionsByIdRequest` and the rest of `database.proto`/`api.proto`) still carried a stale
-`option java_package = "com.wavesplatform...."` left over from before the migration, unlike every other `.proto`
-file (including the external ones), which already say `tech.hearth...`. That single leftover setting was the actual
-root cause of the bulk of "not found"/type-mismatch errors across `database/Keys.scala`, `RocksDBWriter.scala` and
-`database/package.scala` once the surrounding hand-written code moved to `tech.hearth.*` and started looking for
-these types there — the fix is to update `java_package` to match, not to chase each individual "not found" site.
+Generated protobuf code lives under `tech.hearth.*` now, not `com.wavesplatform.*`. If a local `.proto` file's
+`option java_package` is ever left stale (pointing at the old package), the symptom is a wave of "not found"/
+type-mismatch errors in whatever hand-written code depends on it - fix the `java_package`, don't chase each site.
 
-Hand-written Scala that assumed same-package visibility with the *not-yet-renamed* generated code (`grpc-server`'s
-`api/grpc`, `events/protobuf`, `events/api/grpc/protobuf`, and `node`'s `protobuf/transaction/transaction.scala`)
-used a `package object` re-export shim — `type X = tech.hearth.foo.X` plus `val X = tech.hearth.foo.X` for the
-companion — instead of a blanket import, so callers could keep naming these types unqualified. That shim only makes
-sense while the hand-written package and the generated package actually differ. Once the hand-written code itself
-finished moving from `com.wavesplatform.*` to `tech.hearth.*` — the same package the generated code already lived
-in — every one of these re-exports became a circular self-reference (`type X = tech.hearth.foo.X` written *inside*
-`package tech.hearth.foo`), which scalac rejects as `[E161] Naming Error: X is already defined as class/object X in
-.../target/src_managed/main/.../X.scala`. That specific error shape — a *Naming* error pointing at a generated file
-under `target/src_managed`, not a plain "not found" — is the signal that a shim has gone stale, not that a type is
-missing. Fix is to delete the redundant re-export lines; some files were 100% shim and got deleted outright
-(`events/protobuf/package.scala`, `events/api/grpc/protobuf/package.scala`), others had real converter logic
-alongside the shim and only needed the `type`/`val` alias lines stripped out (`api/grpc/package.scala`,
-`protobuf/transaction/transaction.scala`).
+A `package object` re-export shim (`type X = tech.hearth.foo.X` / `val X = ...` for the companion, used so callers
+can name a not-yet-renamed generated type unqualified) becomes a circular self-reference once the hand-written
+package and the generated package actually converge - scalac reports this as `[E161] Naming Error: X is already
+defined as class/object X in .../target/src_managed/main/...`. That specific shape (a *Naming* error pointing at
+`target/src_managed`, not a plain "not found") is the tell that a shim has gone stale and its `type`/`val` alias
+lines need deleting, not that a type is missing.
 
-Build-level references to renamed classes are easy to miss in a source-only grep, since they live as string literals
-in sbt files rather than as Scala imports, and most don't fail loudly: `mainClass`
+Package renames also live as string literals in sbt files, not just Scala imports - `mainClass`
 (`project/RunApplicationSettings.scala`), `extensionClasses` (`grpc-server/build.sbt`), `V.scalaPackage`
-(`node/build.sbt`, controls the package the generated `Version.scala` lands in), and the `-Wconf:...&origin=...`
-deprecation-suppression filters in `build.sbt` all embed a fully-qualified class name as a string. A stale
-`mainClass`/`extensionClasses` entry only breaks at runtime (`ClassNotFoundException`), and a stale `-Wconf` origin
-filter only breaks `-Werror` if and when the class it no longer matches happens to emit a fresh deprecation warning
-— neither shows up compiling the Scala sources themselves, so both need a deliberate check after any package rename.
+(`node/build.sbt`), and `-Wconf:...&origin=...` filters (`build.sbt`) all embed a fully-qualified class name as a
+string and don't fail compiling Scala sources - a stale `mainClass`/`extensionClasses` only breaks at runtime
+(`ClassNotFoundException`), a stale `-Wconf` origin only breaks `-Werror` once the class it no longer matches emits
+a fresh warning. Check both by hand after any package rename.
 
-A few files were reduced to just a `package` line with no members at some earlier point in the migration and never
-finished being deleted (`consensus/nxt/api/http/NxtConsensusApiRoute.scala`, `network/HistoryReplierL1.scala`,
-`utils/CloseableIterator.scala`, three `api/http/requests/SignedXV2Request.scala` test files). Confirmed via
-`grep -rl` that nothing in the repo referenced them, then deleted them outright. They don't cause "not found" errors
-(nothing depends on them), only `-Wunused`/`-Werror` failures ("No class, trait or object is defined in the
-compilation unit").
-
-The `Transaction` wire message dropped `version` entirely: `chain_id`, `sender_public_key`, `fee`, `timestamp`, then a
-`data` oneof, at the time of this migration holding the six surviving transaction kinds (transfer, exchange, lease,
-lease-cancel, mass-transfer, commit-to-generation) — since expanded and reshuffled, see "Transaction schema: Transfer
-merge, fee restructuring, new tx types" above for the current oneof and field shapes (`fee` in particular is no
-longer this message's original `Amount`, and `mass-transfer` no longer exists as a separate case). Constructing one
-directly no longer takes a version argument. `SignedTransaction` simplified to
-`{ transaction: Option[Transaction], proofs: Seq[ByteString] }` (its own field was renamed from `wavesTransaction` to
-`transaction` in that later change too), with no `EthereumTransaction` oneof variant. `StateUpdate`/`TransactionMetadata`
-lost their data-entry, script and alias fields and oneof branches along with the features that produced them.
+A file reduced to just a `package` line with no members doesn't error (`-Wunused`/`-Werror` catches it as "No
+class, trait or object is defined in the compilation unit" only if referenced nowhere) - `grep -rl` for zero
+references before deleting.
 
 ## SBT 2 unused-settings lint
 
-`sbt compile`/`sbt compilePR` surfaced a fresh "there are 24 keys that are not used by any other settings/tasks"
-warning right after the SBT 2 migration. Checking out the pre-migration commit and running the exact same
-`node`/`grpc-server`/`build.sbt` files under a real sbt 1.12.14 shows zero such warnings, so this looked at first
-like new dead weight from the migration — it isn't. `sbt-native-packager 1.11.7` cross-publishes separate jars for
-sbt 1 (`sbt-native-packager_2.12_1.0`) and sbt 2 (`sbt-native-packager_sbt2_3`), but its GitHub source tree shows
-`DebianPlugin.scala`/`LinuxPlugin.scala`/`JavaServerApplication.scala` living under the *shared* `src/main/scala`
-directory, identical in both builds — only two small `xsbti.FileConverter` compat shims differ, under
-`src/main/scala-2.12`/`scala-3`. The settings graph these plugins wire up — which key's value feeds which other
-key's `.value` call — is therefore byte-for-byte the same on both sbt versions; sbt 1's own lint just never caught
-these particular keys, and sbt 2's is more thorough at the same check (plausibly a side effect of its
-action-cache rearchitecture needing a much more precise live/dead distinction across the settings graph than sbt 1
-ever needed). All 24 keys were confirmed dead by reading the plugin source directly and cross-checking with
-`inspect tree`/`inspect uses` against this build, not by assumption:
+`compilePR` warns of 24 sbt keys "not used by any other settings/tasks" - not new dead weight from the SBT 2
+migration, just a stricter lint: `sbt-native-packager`'s settings graph (`Rpm`/`Debian`/`Universal`-scope bridges
+like `Linux/javaOptions`, `Debian/executableScriptName`, the Rpm daemon-user block) is byte-for-byte identical
+under sbt 1 and sbt 2 (confirmed by running the pre-migration build under real sbt 1.12.14), but sbt 1's own lint
+never caught these particular keys. Each was confirmed genuinely dead by reading the plugin source and
+cross-checking with `inspect tree`/`inspect uses` against this build, not by assumption - `Rpm/*` in particular
+stays dead even where Rpm packaging is used on any project, a real (harmless) gap in the plugin itself, since this
+repo never runs an Rpm task regardless (Debian + Universal tarballs only). None of the 24 are fixable beyond
+`excludeLintKeys` (`build.sbt`): a key is defined the moment its owning plugin is enabled, and sbt has no API to
+retract one. `gitDescribedVersion`'s `excludeLintKeys` entry needs the `git.` prefix (`git.gitDescribedVersion`,
+`SbtGit.GitKeys`), unlike the others.
 
-- `Rpm/*` (`node`): `RpmPlugin` cannot be disabled — `JavaAppPackaging` has it as a hard `requires`, not a trigger;
-  `disablePlugins(RpmPlugin)` fails project load outright with `Failed to sort ... topologically`. This repo never
-  runs an Rpm packaging task regardless (only Debian + Universal tarballs, see `packageAll`/`buildDebPackages`/
-  `buildTarballsForDocker`). Separately, `JavaServerApplication.scala`'s "Daemon User and Group" block
-  (`Rpm / daemonUser := (Linux / daemonUser).value` etc.) and `RpmPlugin`'s own `Rpm / executableScriptName`/
-  `Rpm / name` bridges are dead **even when Rpm packaging is used**, on any project: the actual mustache-replacement
-  machinery (`linuxScriptReplacements`) reads the `Linux`-scoped settings directly and never touches these
-  Rpm-scoped copies — a real (harmless) gap in the plugin itself, not something specific to this repo's config.
-- `node / Linux / javaOptions`: `JavaServerAppPackaging` unconditionally derives
-  `Linux / javaOptions := (Universal / javaOptions).value`. The JVM options this repo actually cares about
-  (`-J-Xmx2g` etc., `node/build.sbt`) are defined exactly once, at `Universal` scope, and baked into the Universal
-  launcher script that node's own `systemd.service` template invokes via `ExecStart`. The `Linux`-scoped copy exists
-  only to feed a classic SysV init script's inline JVM flags (`SystemVPlugin`), which node never uses (it uses
-  `SystemdPlugin`) — so options aren't really defined twice by this repo, just once here plus one unused
-  plugin-provided derived copy.
-- `Debian/executableScriptName`, `Universal/executableScriptName`, `Universal-src/name`, and (for `grpc-server` only)
-  `Debian/sourceDirectory`: `DebianPlugin`/`UniversalPlugin` define these as bridges from `Linux`/`Universal` scope,
-  same dead-by-design pattern as the Rpm ones above — confirmed with `inspect tree Debian/linuxScriptReplacements`,
-  which resolves through scope delegation straight to `Linux/linuxScriptReplacements` and never touches the
-  Debian-scoped copies.
-- `node / Debian / daemonUser`/`daemonUserUid`/`daemonGroup`/`daemonGroupGid`: `JavaServerApplication.scala`'s
-  "Daemon User and Group" block, Debian side — same dead bridge as the Rpm ones above. Separately, this repo's own
-  `node/src/package/debian/{postinst,postrm,prerm}` hardcode the account name from `${{app_name}}` rather than
-  reading `daemon_user`/`daemon_group` replacements at all (see "node-it fixtures" for the analogous
-  `${{app_name}}` mustache convention), since `maintainerScripts` there is fully hand-authored, not templated — so
-  even a hypothetical upstream fix wiring these settings up would still find no consumer here.
-- `node / debianControlScriptsDirectory`: unused only for `node`, not `grpc-server`. `node/build.sbt`'s
-  `Debian / maintainerScripts := maintainerScriptsFromDirectory(...)` is a plain `:=` that fully replaces
-  `DebianPlugin`'s default `Debian / maintainerScripts` — the only setting that ever reads
-  `debianControlScriptsDirectory` — with hand-authored scripts. `grpc-server`'s `ExtensionPackaging` instead does
-  `maintainerScripts := maintainerScriptsAppend((Debian / maintainerScripts).value - Postinst)(...)`, which reads
-  the *old* value first and so keeps that default (and `debianControlScriptsDirectory`) reachable — confirmed with
-  `inspect tree node/Debian/maintainerScripts` (stops at `Debian/packageSource`, no plugin default in the tree) vs.
-  `inspect tree grpc-server/Debian/maintainerScripts` (does include it).
-- `gitDescribedVersion` (every subproject): `sbt-git`'s `GitPlugin` injects this per-project unconditionally, but
-  only the root's `enablePlugins(GitVersioning)` wires `version := gitDescribedVersion.value` — this repo
-  deliberately versions every module from one root git descriptor rather than per-module, confirmed with
-  `inspect uses gitDescribedVersion` (only `ThisBuild/version` and `hearth-node/version` show up as consumers). Its
-  key reference needs the `git.` prefix (`git.gitDescribedVersion`) in `excludeLintKeys`, unlike the other keys
-  here — it lives under `SbtGit.GitKeys`, exposed via the `git` settings object already used elsewhere in
-  `build.sbt` (`git.useGitDescribe`), not as a bare top-level import.
+## SBT 2 action-cache: side-effecting tasks need `Def.uncached`
 
-None of the above are fixable from this repo's side beyond `excludeLintKeys` (`build.sbt`): the keys are defined the
-moment their owning plugin is enabled, sbt has no API to retract a key another plugin's `AutoPlugin.projectSettings`
-already added, and overriding a dead key's *value* doesn't remove it from the graph or change whether anything reads
-it. `TransactionsApiGrpcImpl` failing to compile (`needs to be abstract, since def getStateChanges ... is not
-defined`) is unrelated and pre-existing — confirmed by running the pre-migration commit's unmodified
-`grpc-server` sources under sbt 1.12.14 too; almost certainly a `tech.hearth:protobuf-schemas:0.1.0-SNAPSHOT` drift
-picked up from `~/.m2`/mavenLocal between whenever `TransactionsApiGrpcImpl` was last touched and now, not anything
-either this pass or the SBT 2 migration changed.
-
-## SBT 2 action-cache: `buildTarballsForDocker`
-
-`run-integration-tests` (`.github/workflows/check-pr.yaml`) failed `sbt --batch "node-it/docker;node-it/test"` with
-`ERROR: failed to calculate checksum of ref ...: "/target": not found` the moment `docker build` hit its
-`RUN --mount=type=bind,source=target,target=/tmp/` step. `node-it/build.sbt`'s `docker` task depends on the root
-`buildTarballsForDocker` (`build.sbt`) specifically to populate `docker/target/{hearth,hearth-grpc-server}.tgz`
-before invoking `docker build` from the `docker/` directory, and the CI log's own `[internal] load build context`
-step confirms the bug directly: it transferred only `1.15kB`, not the ~196MB the two tarballs total, so
-`docker/target/` was empty when the build context was captured, despite `buildTarballsForDocker` having reported
-success moments earlier in the same log.
-
-Root cause, reproduced locally: `buildTarballsForDocker` writes its output via `IO.copyFile` straight to
-`docker/target/*.tgz`, a path sbt's dependency/output tracking has no visibility into (it isn't a declared task
-output, just an out-of-band filesystem write). Under sbt 1 every run of a task like this just re-executes its body;
-sbt 2's `ActionCache` instead treats every task as cacheable by default and, on a cache hit, replays the cached
-result *without re-running the body* — for a `Unit`-returning task whose entire purpose is a side effect, that
-means the copy silently never happens. Confirmed by deleting `docker/target/` and running
-`sbt buildTarballsForDocker` twice in a row with no source changes: the first run recreates the tarballs, the
-second reports `[success]` in a few seconds (upstream tasks' log lines even replay) but leaves `docker/target/`
-missing entirely - the exact shape of the CI failure. `setup-java`'s `cache: 'sbt'` in the workflow persists this
-action-cache directory *across* CI runs for the same PR, which is what lets a stale hit strike on a fresh checkout
-where the actual `docker/target/` directory obviously doesn't exist yet.
-
-This is the same class of problem the SBT 2 migration already had to fix for `classpathOrdering`,
-`compilePRRaw`, `IntegrationTestsPlugin`'s `logDirectory`/`testGrouping`, and `benchmark/build.sbt`'s `Jmh / compile`
-(all wrapped in `Def.uncached` in the migration commit, see their entries elsewhere in this file for why each one
-needed it) - `buildTarballsForDocker` just wasn't caught at the time since it only got the mandatory
-`FileConverter`/`toFileRef` syntax updates to compile under sbt 2, not an audit for cacheability. Fixed the same
-way: wrapped its body in `Def.uncached`, which forces the task to actually run every time regardless of what the
-action-cache thinks it already knows. Any other task in this build that performs a filesystem write to a path
-outside its own declared outputs is a candidate for the same bug and needs the same treatment.
+sbt 2's `ActionCache` treats every task as cacheable by default and, on a cache hit, replays the cached result
+*without re-running the body*. A task whose only job is an out-of-band filesystem write sbt's output tracking can't
+see (e.g. `buildTarballsForDocker`'s `IO.copyFile` into `docker/target/*.tgz`, not a declared task output) silently
+no-ops on a cache hit - `setup-java`'s `cache: 'sbt'` persists that cache *across* CI runs, so a fresh checkout with
+an empty `docker/target/` can still hit stale and skip the copy, breaking `node-it/docker`'s later `docker build`.
+Same class of bug already fixed for `classpathOrdering`, `compilePRRaw`, `IntegrationTestsPlugin`'s
+`logDirectory`/`testGrouping`, and `benchmark/build.sbt`'s `Jmh / compile`. Fix: wrap the task body in
+`Def.uncached`. Any task in this build that writes to a path outside its own declared outputs is a candidate for
+the same bug.
 
 ## node-it fixtures
 
@@ -1030,168 +920,38 @@ per project decision, will not be: `RewardApiRoute` hardcodes `RewardVotes(0, 0)
 to attach a vote to a mined block. `RewardsTestSuite` (entirely about this) was deleted rather than ignored, and
 `BlockHeadersTestSuite`'s `desiredReward`/term-increase assertions were dropped for the same reason.
 
-A duplicate already-mined transaction resubmitted via `/transactions/broadcast` after restarting the node(s) that
-mined it used to be accepted again instead of being rejected with `AlreadyInState`/`AlreadyInTheState`
-(`NodeRestartTestSuite`, "the duplicate transaction cannot be put into the blockchain"). Root cause, confirmed with a
-repro (`DuplicateTransactionAfterRestartSpec`): `RocksDBWriter`'s constructor rebuilds its tx bloom filters
-(`prevTxFilter`/`currentTxFilter`) by seeking into the `txHandle`/default column families with plain
-`writableDB.newIterator(...)` — default `ReadOptions`, no `setTotalOrderSeek(true)`. Every column family here is
-opened with a 10-byte capped prefix extractor (`RDB.newColumnFamilyOptions`, for iterator performance), under which a
-`seek()` to a key that isn't an exact match only sees keys sharing that key's prefix bucket unless total-order-seek is
-set — exactly the caveat the surrounding comment already documented ("if specified key has less than 10 bytes:
-iterator finds the exact key for seek(key) and becomes invalid after next()"). Every *other* iterator constructed
-anywhere else in the database package (`ReadOnlyDB`, `DBResource`) already sets `setTotalOrderSeek(true)`; this one
-constructor didn't. The practical effect: on a real restart, a fresh `RocksDBWriter` rebuilds these filters as
-effectively empty, `containsTransaction` false-negatives for recently-mined transactions, and
-`disallowDuplicateIds` silently lets them back in. Fixed by wrapping both iterators in a shared
-`new ReadOptions().setTotalOrderSeek(true)`. `CommonValidationTest`/`TxBloomFilterSpec` never caught this because
-neither exercises `RocksDBWriter`'s constructor against a *pre-existing* DB (they only ever build a fresh, empty one);
-`DuplicateTransactionAfterRestartSpec` closes that gap by building a second `RocksDBWriter`/`Domain` via
-`TestStorageFactory` against the same `RDB` mid-test, simulating exactly that.
+A restarted node used to accept a duplicate already-mined transaction instead of rejecting it with
+`AlreadyInState`. Root cause: `RocksDBWriter`'s constructor rebuilds its tx bloom filters
+(`prevTxFilter`/`currentTxFilter`) with a plain `writableDB.newIterator(...)` - no `setTotalOrderSeek(true)`. Every
+column family here uses a 10-byte capped prefix extractor, under which `seek()` to a non-exact key only sees keys
+sharing its prefix bucket unless total-order-seek is set (every *other* iterator in the database package already
+sets it; this constructor didn't). Effect: on restart, the filters rebuild effectively empty,
+`containsTransaction` false-negatives, `disallowDuplicateIds` lets duplicates back in. Fixed by adding
+`new ReadOptions().setTotalOrderSeek(true)` to both iterators. Neither `CommonValidationTest` nor `TxBloomFilterSpec`
+caught this since neither exercises the constructor against a *pre-existing* DB; `DuplicateTransactionAfterRestartSpec`
+does, by building a second `RocksDBWriter`/`Domain` against the same `RDB` mid-test.
 
-`node-generator` and `benchmark` are both back to compiling clean under `compilePR` (fixed in a later pass). Both had
-rotted the same way: whole feature areas the migration removed (RIDE compiler/evaluator/estimator, smart accounts,
-`Issue`/`Reissue`/`Burn`/`CreateAlias`/`Data`/`SponsorFee`/`InvokeScript`/`Ethereum`/`SetScript`, `account.KeyPair`/
-`SeedKeyPair`, `TxVersion`) were still referenced throughout. The fix pattern was the same as everywhere else in this
-migration: delete whole files/benchmarks whose entire subject is a removed feature (nothing to salvage - the RIDE
-evaluator benchmarks under `lang/v1/`, `HearthEnvironmentBenchmark`, `SmartGenerator`/`MultisigTransactionGenerator`/
-`OracleTransactionGenerator` and the `Mode.MULTISIG`/`ORACLE`/`SWARM` cases that drove them), and migrate what's
-still meaningful to the current APIs (`account.KeyPair` → `tech.hearth.crypto.SigningKey`,
-`TransferTransaction.create`/`TxHelpers.buy`/`.sell`/`.exchange` current signatures (`MassTransferTransaction` has
-since merged into `TransferTransaction`, see "Transaction schema" above), `Keys.hearthBalance`/
-`hearthBalanceAt` in place of the removed `Keys.data`/`dataAt` data-entry storage `RocksDBSeekForPrevBenchmark`
-benchmarked, `PoSCalculator.hit`/`FairPoSCalculator.calculateDelay` in place of the removed `HearthEnvironment
-.calculateDelay` wrapper). `node-generator`'s two standalone dev utilities under `utils/generator/`
-(`BlockchainGeneratorApp`, `MinerChallengeSimulator`) needed a real fix too, not deletion: `MinerImpl`'s constructor
-dropped its explicit miner-accounts parameter (derived from `MinerSettings` via `GeneratorKeys` instead) and its
-`forgeBlock`/`nextBlockGenerationTime` methods now take a separate `SigningKey`/`VrfKey` pair instead of one unified
-key, and `BlockchainUpdaterImpl`'s constructor dropped its lease-loading-callback parameter entirely. `benchmark`'s
-`NarrowTransactionGenerator`-equivalent (the actual `NarrowTransactionGenerator` in `node-generator`) now only
-generates the six surviving transaction types; `Exchange` generation needs an explicit `tradeAssetId` (a pre-existing
-asset id on the target chain) since there is no way to mint a fresh one any more.
+`node-generator`/`benchmark` compile clean under `compilePR`. If either rots again from a future feature removal
+(the pattern that broke them this time: RIDE evaluator/estimator, smart accounts, `account.KeyPair`, `TxVersion`,
+several removed transaction types), the fix is the same: delete whole files whose entire subject is the removed
+feature, migrate what's still meaningful to current APIs (`account.KeyPair` → `SigningKey`, `MinerImpl`/
+`BlockchainUpdaterImpl` constructor signatures, `TxHelpers` current builders). `NarrowTransactionGenerator` only
+generates the six surviving transaction types; `Exchange` generation needs an explicit pre-existing `tradeAssetId`
+since there's no way to mint a fresh asset any more.
 
-### Remaining known node-it failures (as of this pass)
+### node-it: known gaps
 
-Fixed since the previous pass:
+`EndorsementFilter.simulate` correctly detects quorum reached via the miner's own balance alone, with nobody left
+to endorse (e.g. a single committed generator) - it used to only ever set `reached = true` inside the endorser
+loop, so that case stayed stuck at `false` forever despite already meeting the 2/3 threshold. Regression:
+`EndorsementFilterSpec`.
 
-- `activation.FeatureActivationTestSuite`/`PreActivatedFeaturesTestSuite` — both set `hearth.features.supported`,
-  a dead config path; the miner's actual vote list (and what `ActivationApiRoute` reports) comes from
-  `hearth.miner.supported-features` (`MinerSettings.supportedFeatures`), which neither suite ever set, so the node
-  never voted and status fell through to `Implemented` instead of `Voted`. Fixed both suites' config key; all 7 tests
-  across the two suites pass now.
-- `sync.transactions.SignAndBroadcastApiSuite`, "/transactions/sign should handle erroneous input" — not a
-  validation-order issue as first suspected: the test signed as `sender.address` (the node's own miner/generator
-  account), which is never in that node's wallet (wallet derives from a wholly separate seed, see "Keys"), so
-  `resolveSigner`'s wallet lookup failed before ever reaching the request-shape check being tested — for *every*
-  case in the test, not just one. Fixed by signing as a wallet-backed address from `createAddressServerSide()`
-  instead. The suite's chainId-mismatch broadcast case was a separate, deeper issue: `TransferRequest` has no
-  `chainId` field at all, so the request reader always builds the transaction against the server's own network
-  regardless of what the request JSON says — that check is structurally unreachable for a `Transfer` broadcast via
-  this route. Removed that assertion with a comment; it was also asserting a message
-  (`"Address belongs to another network"`) that doesn't match current error text
-  (`"Transaction from another network, expected: ..."` from `CommonValidation.disallowFromAnotherNetwork`) regardless.
-- `sync.RollbackSuite`, "Apply the same transfer transactions twice with return to UTX" — two stacked causes, not
-  the rollback logic: (1) the state snapshots being compared were taken one block apart between the two mining
-  attempts, so a block reward difference leaked into the comparison whenever the same 190 transactions happened to
-  need a different number of blocks between attempts — fixed by zeroing `rewards.initial` for the suite; (2) that fix
-  was first applied to only one of the two node configs, which produced a genuine `InvalidStateHash` divergence
-  between the two nodes (see the note on this under "node-it fixtures" above) rather than fixing anything — fixed by
-  applying the override to both.
-- `sync.MinerStateTestSuite` — two timing bugs (low-balance-miner selection, a too-tight explicit wait; see
-  "node-it fixtures" above for both patterns) got the test running cleanly up to its actual assertion, which then
-  turned out to depend on the removed depth-50 window (see "node-it fixtures" above); the test itself is now
-  `ignore`d for that reason, permanently, per project decision.
-
-Fixed in a later pass (same session), all following the two patterns already documented above (low-balance-miner
-selection, and stale pre-`tech.hearth` migration assumptions):
-
-- `sync.MerkleRootTestSuite`, `sync.SeveralAccountMiningSuite`, `sync.AddressApiSuite` (asset transfers must come from
-  `firstKeyPair`, never a node's own account — see "node-it fixtures" above),
-  `sync.AmountAsStringSuite` (fixed via the `AssetsApiRoute.jsonDetails` `issueTimestamp` fix, see "Transaction JSON")
-  — all low-balance-miner or stale-assumption fixes, no node bugs found.
-- `sync.lightnode.LightNodeMiningSuite` — two stacked bugs: (1) `fullNode.transfer(..., fullNode.balance(...).balance
-  - 1.hearth)` tried to spend the 100 HRTH committed-generator deposit along with the rest of the regular balance
-  (see "Balance snapshots" above; fixed by reading `.balanceDetails(...).available` instead); (2) once that no longer
-  crashed the transfer, the test still failed on its core assertion — its `buildNonConflicting()`-based node
-  selection always assigns node01 as the "full" node and node04 as the "light" one, but node04's genesis balance is
-  2.5x node01's (see the `balances` list in `template.conf`), so the light node actually out-mined the full node in
-  the early blocks the test asserts belong to the latter. Fixed by picking node07/node01 explicitly instead of
-  through the builder, keeping the full node's balance well ahead of the light node's.
-- `async.MicroblocksFeeTestSuite` — two stacked bugs: (1) the suite's sole miner was `Default(0)` (node01, the
-  lowest-balance account in the whole fixture), whose PoS delay averaged ~30s/block; (2) once given a high-balance
-  miner instead, the suite crashed outright the moment it reached its `pre-activated-features.2` height — NG (and
-  with it the 40%/60% fee split under test) is unconditional now, not feature-gated, so pre-activating it hits the
-  same "UNIMPLEMENTED FEATURE ... ACTIVATED ON BLOCKCHAIN" force-stop documented above. Rewrote the test to check the
-  always-on 40%/60% split across two consecutive blocks instead of a before/on/after-activation sequence, matching
-  how `BlockSizeConstraintsSuite`/`BlocksApiSuite` were collapsed earlier.
-- `sync.grpc.LeasingTransactionsGrpcSuite` ("can not make leasing to yourself") and
-  `sync.grpc.MassTransferTransactionGrpcSuite` ("cannot broadcast invalid mass transfer tx") — not node bugs: both
-  `AsyncGrpcApi`'s `broadcastLease`/`broadcastMassTransfer` call `PBTransactions.vanilla(...).explicitGet()` on the
-  client side, to compute `bodyBytes` for signing, before any gRPC call is made. That runs full domain-object
-  construction (`LeaseTransaction`/`TransferTransaction.create`, which invoke their `TxValidator`s and
-  `TxNonNegativeAmount`'s bounds check), so every one of these tests' structural rejections (self-lease, negative
-  transfer amount, too many transfers, oversized attachment) now happens client-side as a plain
-  `RuntimeException(validationError.toString)` (`EitherExt2.explicitGet` on a `Left`), never reaching the server as a
-  `GrpcStatusRuntimeException`. `assertGrpcError` only handles the latter, so `case Failure(e) => Assertions.fail(e)`
-  swallowed the real cause (confirmed by running with a temporary debug print). Fixed both tests to assert on the
-  plain exception and its `ValidationError.toString` message directly instead of using `assertGrpcError`.
-- `sync.grpc.BlockV5GrpcSuite`, `grpc.BlocksApiSuite`, `grpc.GrpcReflectionApiSuite` — not flakiness: all three
-  build their `nodeConfigs` via `NodeConfigs.newBuilder`/`Builder(...).buildNonConflicting()`, which (unlike `build()`)
-  does *not* shuffle nodes — it deterministically assigns the lowest-index `NonConflictingNodes` entry (node01, the
-  fixture's lowest-balance account) as the sole/default miner, so these were consistent low-balance-miner failures,
-  not intermittent ones; the "remain intermittently-aborting, not failure-vs-flake confirmed" framing from the
-  previous pass was wrong. Fixed all three the same way, picking a high-balance node (node07) explicitly instead of
-  going through the builder. `BlockV5GrpcSuite` additionally needed `SyncGrpcApi.blockSeqByAddress`'s
-  `Base58.decode(address)` fixed to `Address.fromString(address).explicitGet().toBytes()` — addresses are bech32m
-  now (see "Keys" above), so the raw `Base58.decode` call threw on the first non-base58 character.
-  `GrpcReflectionApiSuite` additionally needed its `FileContainingSymbol` queries updated from the pre-migration
-  `waves.events.grpc.BlockchainUpdatesApi`/`waves.node.grpc.BlocksApi` proto symbols to their current
-  `hearth.events.grpc`/`hearth.node.grpc` packages (see "Protobuf package migration" above) — reflection returned a
-  valid, successful response either way, just an `ErrorResponse` instead of a `FileDescriptorResponse` for a symbol
-  that no longer exists under the old package, so the failure surfaced as a plain assertion mismatch, not a call
-  error.
-
-Fixed in a later pass (same session), a real production bug found by tracing `TwoNodesFinalizationTestSuite` through
-both nodes' logs line by line (connectivity, endorsement gossip, and chain agreement all confirmed fine first):
-
-- `EndorsementFilter.simulate` (`state/EndorsementFilter.scala`) only ever set `reached = true` *inside* the `while`
-  loop that greedily adds endorsers one at a time. If the miner's own `endorsedBalance` (which already includes its
-  balance before the loop starts - "a miner doesn't need to endorse its own block, mining is already an
-  endorsement") already meets the 2/3 threshold by itself, or more generally if there is nobody left in `richest` to
-  add, the loop body never executes even once - so `reached` stayed `false` forever despite `endorsedBalance` already
-  equaling `totalBalance`. This is the single-committed-generator case exactly (`OneNodeFinalizationTestSuite`), and
-  would hit in production for any generator set where quorum is already satisfied by the miner alone or before the
-  last needed endorser is actually added. Fixed by computing the pre-loop `reached` value from the miner's own
-  `endorsedBalance` up front, instead of hardcoding `false`. Regression test added in
-  `EndorsementFilterSpec` ("reaches finalization on the miner's own balance alone, with nobody left to endorse").
-- `TwoNodesFinalizationTestSuite` also had its own bug once the above was fixed: the "Finalized height checks" loop's
-  runaway guard compared current height against a small fixed offset from the *pre-loop* `finalizedHeight` baseline
-  (effectively ~5), but by the time this step starts the chain is already ~20 blocks in (quorum is structurally
-  impossible during the genesis period, see above, so all of those blocks pass with `finalizedHeight` stuck at its
-  genesis value) - so the guard fired and failed the test on its very first loop iteration, before any transaction/
-  microblock ever got a chance to actually apply the now-correctly-computed quorate vote. Fixed by tracking height
-  since the step itself started instead of the stale baseline. With both fixes, `TwoNodesFinalizationTestSuite`
-  passes outright (5m15s).
-
-Still blocked, not a test-infra gap any more - a genuine unresolved question in the always-on-node-restart path:
-
-- `OneNodeFinalizationTestSuite` (single committed generator, so the `EndorsementFilter` fix above is exactly what
-  it needed) now gets past every step through "Survives restart" - finalization itself works - but still fails at
-  "Finalization voting in a block header": `node.blockHeaderAt(finalizedBlock1.height + 1).finalizationVoting` is
-  `None`. `MicroBlockMinerImpl.forgeBlocks` embeds the accumulated `FinalizationVoting` by *re-signing the current
-  liquid (not-yet-solidified) key block* on every microblock, so the data only becomes durably readable once a
-  further key block supersedes it. This suite restarts the node's container between the finalized-height check and
-  this assertion; if the block that reached quorum was still the liquid tip (not yet superseded) at the moment of
-  restart, that in-memory liquid state is exactly what NG never persists separately from a solid key block, so it
-  would be lost on restart regardless of whether finalization succeeded. Not yet confirmed as the actual cause vs.
-  some other height/timing mismatch - next step is checking whether the block that reached quorum had already been
-  superseded by a further key block *before* the restart happens, and if not, whether the test should wait for one
-  more block before restarting.
-
-Also newly found this pass, not yet fixed: `sync.transactions.SignAndBroadcastApiSuite`'s
-"/transactions/broadcast should handle erroneous input" chainId case (see above) — the chainId check itself is fine,
-but it's untestable for `Transfer` via broadcast as things stand; nothing wrong with proof-before-chainId validation
-ordering, that part was a red herring.
+Still open, a genuine unresolved question in the always-on-node-restart path, not a test-infra gap:
+`OneNodeFinalizationTestSuite` gets past "Survives restart" (finalization itself works) but fails at "Finalization
+voting in a block header" - `MicroBlockMinerImpl.forgeBlocks` embeds `FinalizationVoting` by re-signing the current
+liquid (not-yet-solidified) key block on every microblock, so it only becomes durably readable once a further key
+block supersedes it; a restart while the quorate block is still the liquid tip would lose that in-memory state
+regardless of whether finalization succeeded. Not yet confirmed as the actual cause vs. some other timing mismatch.
 
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
@@ -1544,72 +1304,26 @@ When asserting on fee arithmetic, zero the block reward (`rewardsSettings.copy(i
 dominates the fees under test. Note that the miner does not receive the full reward — the DAO share is deducted — so
 expectations written as `fee + reward` are wrong whenever a DAO address is configured.
 
-## docker/private: repairing a stale genesis config
+## docker/private: static genesis configs rot silently
 
-`docker/private/hearth.custom.conf` had not been touched since well before the predefined-snapshots/bech32/DCAP
-migrations documented above, and turned out to be completely non-functional - the node crashed on startup before
-this pass, on the very first config field it tried to parse. Static, checked-in genesis configs like this one are
-easy to leave behind by any migration that changes what a valid config or a valid address looks like, since nothing
-exercises them in CI (unlike node-it's fixtures, which run on every PR). Confirmed and fixed by actually building
-and running the image end to end (`docker buildx build`/`docker run`, real `curl` calls against the REST API), not
-by reading the config and reasoning about it - see `docker/private/README.md`'s "Getting started" for the build
-steps this needs in a sandboxed environment (`docker/private/Dockerfile` has no `RUN` layers of its own, so the
-overlayfs-mount limitation noted at the top of this file for `node-it/docker` didn't apply the same way, but the
-buildx `docker-container` driver still needed a local registry bridge to resolve a locally-built `FROM` image,
-since that driver doesn't share the host docker daemon's image cache the way the default driver does).
+`docker/private/hearth.custom.conf` and similar checked-in genesis configs aren't exercised by CI (unlike node-it's
+fixtures, which run every PR), so a migration that changes the config schema or address format leaves them broken
+with nobody noticing until someone actually builds and runs the image. Verify by doing exactly that (`docker buildx
+build`/`docker run`, real `curl` against the REST API), not by reading the config and reasoning about it. When
+rebuilding one after this kind of rot, the account, its generator keys, and the genesis commitments it credits all
+need rebuilding together from scratch (old base58 addresses and pre-migration key material don't carry over) - see
+`docker/private/README.md`'s "Rebuilding genesis" for the `Block.genesis(...)`-based process.
 
-Every one of the following was a separate, independent failure, found one at a time by fixing the previous one and
-re-running the node:
+A stale genesis timestamp is a separate, non-obvious production bug: a block's target timestamp is `parentTimestamp
++ delay` (PoS-derived, not the system clock), so a genesis timestamped years in the past makes the miner treat
+every subsequent block as already overdue and mine as fast as it can compute them, each one still stamped near the
+stale date - real transactions then fail `max-transaction-time-forward-offset` against a chain tip that hasn't
+caught up, for however many blocks it takes to close a gap that can be years wide. Retimestamp genesis close to
+now. This is also why predefined DCAP collateral (see "DCAP collateral registry") can't just be grafted onto a
+config's genesis: collateral validity is checked against genesis's own pinned timestamp, and a real Intel-signed
+fixture's validity window won't reach into whatever "now" a rebuilt genesis uses - `docker/private/README.md`
+documents the mechanism and constraint for whoever fetches fresh collateral and rebuilds genesis to match it.
 
-- `wallet.seed`/`rest-api.api-key-hash` were base58 strings from before `utils.byteStrFormat` moved to base16-only
-  decoding (see "Transaction JSON") - `wallet.seed` failed outright at config-parse time
-  (`Cannot convert '...' to ByteStr: not a hexadecimal digit`); `api-key-hash` parsed but silently decoded to `None`
-  (`Base16.tryDecode` swallows the failure), so `ApiRoute.withAuth` rejected every request as an invalid key
-  regardless of what was sent - a `Left`/`None` failure mode with no error message pointing at the real cause.
-  Recomputed both as base16: `wallet.seed` is any 32-byte hex string; `api-key-hash` is
-  `Base16.encode(crypto.secureHash(apiKeyUtf8Bytes))`.
-- `blockchain.custom.genesis` still had the pre-predefined-snapshots shape (`transactions`, `initial-balance`) -
-  `GenesisSettings` has neither field any more, and a CUSTOM network's `predefined-snapshots` key is mandatory at
-  parse time (see "Predefined snapshots"), which this file didn't have at all.
-- `blockchain.custom.functionality` carried a dozen settings keys (`allow-temporary-negative-until`,
-  `require-sorted-transactions-after`, `generation-balance-depth-from-50-to-1000-after-height`, and others) that no
-  longer exist on `FunctionalitySettings` - pureconfig ignores unknown keys by default, so these didn't fail parsing,
-  they were just silent dead weight kept for no reason once every field was rewritten to the current schema.
-- `functionality.pre-activated-features` pre-activated feature ids 2 through 25 - per "Node Tests"'s note on this
-  same trap in node-it fixtures, only id 1 is implemented, and activating any other one crashes the node outright
-  (`UNIMPLEMENTED FEATURE N has been ACTIVATED ON BLOCKCHAIN`). Collapsed to `{ 1 = 0 }`.
-- Nothing sets a default bech32 HRP anywhere in `Application.scala` (see "node-it fixtures"'s note on this same gap
-  for node-it's own fixtures) - confirmed this reaches the packaged docker images too, not just node-it: the node
-  crashed the moment it needed to render the wallet's own newly-generated address
-  (`IllegalStateException: default HRP not configured`). Fixed for `docker/private` specifically by adding
-  `-Dhearth.hrp=phrth` to `docker/private/Dockerfile`'s `JAVA_OPTS`; the same gap is still open, undocumented
-  anywhere before now, and unfixed for the mainnet/testnet/stagenet-targeting `docker/Dockerfile`/`entrypoint.sh`.
-- `MinerSettings` has no default for any of its fields (`enable`, `accounts`, `supportedFeatures`, ...), so a miner
-  account has to be spelled out in full - `hearth.rewards.desired` (top-level, not under `blockchain.custom.rewards`)
-  is also gone entirely (see "node-it fixtures"'s note on reward voting being permanently unimplemented) and was
-  removed rather than left as more dead weight.
-
-With all of that fixed, the account, its generator keys, and the genesis commitments it credits all had to be
-rebuilt together from scratch, since none of the old values (base58 address, pre-migration key material) carry over
-- see `docker/private/README.md`'s "Rebuilding genesis" for the `Block.genesis(...)`-based process used, the same
-one `GenesisBlockGenerator` automates for the balances/generators case it does support.
-
-A stale genesis timestamp turned out to be its own separate bug, orthogonal to all of the above: a block's target
-timestamp is `parentTimestamp + delay` (a PoS-derived offset, not the system clock), so a genesis timestamped years
-in the past makes the miner treat every subsequent block as already overdue and mine as fast as it can compute them,
-each one still stamped near the stale genesis date - meaning real transactions (timestamped at whatever time they're
-actually submitted) fail `max-transaction-time-forward-offset` against a chain tip that hasn't caught up yet, for
-however many blocks it takes to close a gap that can be years wide. Confirmed by watching the fixed config mine
-cleanly (new blocks roughly every 1-2 seconds, matching the account's share of genesis supply) once genesis was
-retimestamped close to today, after the same config produced years of at-full-speed catch-up mining in an earlier,
-not-yet-corrected attempt. See `docker/private/README.md`'s "Why genesis timestamp has to stay close to now" - this
-is exactly why predefined DCAP collateral (below) can't just be grafted onto this file's genesis: collateral
-validity is checked against genesis's own pinned timestamp (see "The genesis-timestamp bug"), and every vendored
-DCAP fixture's validity window is long past by now, the same as this file's original 2019 timestamp was.
-
-Predefined DCAP collateral at genesis (the six `dcap-*` `PredefinedSnapshotSettings` fields, requested alongside
-this fix) is documented in `docker/private/README.md` rather than actually shipped in `hearth.custom.conf` - real
-Intel-signed collateral is required (`IntelPki`'s Root CA key is pinned, not configurable, so synthetic collateral
-fails the same way at genesis as in a live `UpdateCollateralTransaction`), and its validity window would force a
-stale genesis timestamp, defeating the fix directly above. The README documents the mechanism, the config schema,
-and the constraint, for whoever fetches fresh collateral and rebuilds genesis to match it.
+Nothing sets a default bech32 HRP in `Application.scala` (`-Dhearth.hrp` has no fallback) - a real node crashes
+rendering its first address without it. `docker/private` works around this in its own Dockerfile; the
+mainnet/testnet/stagenet-targeting `docker/Dockerfile`/`entrypoint.sh` still doesn't, a genuine open gap.
