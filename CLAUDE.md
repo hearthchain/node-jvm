@@ -457,25 +457,22 @@ nothing about their domain classes needed to change, only `PBTransactions`' wire
 `PBTransactions.create`/`vanilla` no longer take/return a top-level `feeAssetId` — each `Data.*` case reads/writes
 its own `fee_asset_id` field (Transfer/Reserve/Withdraw) or has none (everything else, implicitly HRTH).
 
-**Five new transaction types — plumbing only, no semantics, except StartBoost (see below).**
+**Five new transaction types — plumbing only, no semantics, except StartBoost/Reserve/BindApiKey (see below).**
 `ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in
 `tech.hearth.transaction`, alongside `CommitToGenerationTransaction`, not in a subpackage) exist as domain case
 classes with working protobuf/JSON round-trip and `TxHelpers` constructors (`TxHelpers.reserve`/`.bindApiKey`/
-`.settle`/`.withdraw`), but **no validation or state-diff logic**. Their `TxValidator`s are all `Valid(tx) //
-Semantics not implemented yet` (same pattern `CommitToGenerationTxValidator` used to use before it grew real
-checks). `TransactionDiffer.transactionSnapshot` has no `case` for any of them, so they fall through to
+`.settle`/`.withdraw`). Of these, `SettleTransaction`/`WithdrawTransaction` still have **no validation or
+state-diff logic**: their `TxValidator`s are `Valid(tx) // Semantics not implemented yet` (the pattern every one of
+these five started from), `TransactionDiffer.transactionSnapshot` has no `case` for either, so they fall through to
 `UnsupportedTransactionType` — a broadcast one reaches the mempool/JSON layer fine but is rejected before any state
-change. `TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs them the same way `Genesis` always
-was (`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for any of them) since building one
-that way needs the same not-yet-designed semantics. Field-name-driven best guesses at what these are for (not
-verified against any spec — none exists yet): `Reserve`/`Withdraw`/`Settle` look like a miner-balance-reservation
-mechanism feeding the still-stubbed `Blockchain.blockRewardBoost` (hardcoded to `1` everywhere, see "HRTH emission
-curve"'s note on it), and `BindApiKey` (`enclave_public_key`, `encrypted_api_key`) looks like a follow-on step for a
-boosted miner already registered via `StartBoost`, not yet designed. Implementing real semantics needs someone who
-actually knows the design to write validation + `TransactionDiffer` cases + (if the REST sign flow matters)
-`TxBroadcastRequest` subclasses — don't guess at this from field names again without checking whether a spec has
-since landed in `hearth-specs`/`hearth-tokenomics-spec`. `StartBoostTransaction` is no longer in this bucket — see
-"StartBoost: TDX quote verification and enclave registration" below.
+change — and `TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs them the same way `Genesis`
+always was (`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for either). Field-name-driven
+best guesses at what these two are for (not verified against any spec — none exists yet): they look like the
+counterpart that would credit a `Reserve`d amount back or to the miner, but that hasn't been designed - don't guess
+at this from field names again without checking whether a spec has since landed in `hearth-specs`/
+`hearth-tokenomics-spec`. `StartBoostTransaction`, `ReserveTransaction` and `BindApiKeyTransaction` are no longer in
+this bucket - see "StartBoost: TDX quote verification and enclave registration" and "Reserve and BindApiKey:
+locking funds and binding enclave-sealed API keys" below.
 
 ## DCAP collateral registry
 
@@ -604,10 +601,15 @@ planned). The diff:
   `1.2.840.113741.1.13.1.4`, parsed the same ASN.1-`OCTET STRING`-wrapping-a-`SEQUENCE` way `IntelPki`'s existing
   CRL Number extraction does) has a TCB Info entry on chain - existence only, not full TCB status evaluation (see
   the deferred-scope note below);
-- registers the enclave: `RegisteredEnclave(attestationPublicKey, validator)`, keyed by the quote's own attestation
-  public key (a raw 64-byte P-256 point) rather than by address or by `mrEnclave` - unlike a generator's identity,
-  an enclave's identity changes on every restart (a fresh quote embeds a fresh attestation key), so the registry
-  key is exactly the value that changes with the quote, deliberately not the measurement of the underlying binary.
+- registers the enclave: `RegisteredEnclave(attestationPublicKey, validator, miner)`, keyed by the quote's own
+  attestation public key (a raw 64-byte P-256 point) rather than by address or by `mrEnclave` - unlike a generator's
+  identity, an enclave's identity changes on every restart (a fresh quote embeds a fresh attestation key), so the
+  registry key is exactly the value that changes with the quote, deliberately not the measurement of the underlying
+  binary. `miner` (the StartBoost sender, i.e. the TEE miner operating this enclave - added alongside `Reserve`/
+  `BindApiKey`, see below) is what lets `Blockchain.isRegisteredMiner`/`isRegisteredEnclave` answer "is this address
+  a registered miner" / "is this attestation key a registered enclave" without an extra lookup layer; it did not
+  exist when this record was first added and its addition changed the on-disk record's byte layout - see "Reserve
+  and BindApiKey" below for what that means for anyone who already has old-format data.
 
 Storage mirrors `committedGenerators`/`GenerationPeriod` exactly, including the same "only this and next period are
 cached" restriction, the same rollback-on-discard handling, and the same `Caches`/`RocksDBWriter`/`Blockchain`
@@ -638,22 +640,107 @@ one.
 
 ### REST: signing and broadcasting
 
-`StartBoostTransaction`/`UpdateCollateralTransaction` are the two stub types from "Transaction schema" above that
-are actually signable through `/transactions/sign`/`/transactions/broadcast` now, via `StartBoostRequest`/
-`UpdateCollateralRequest` (`api/http/requests/`) wired into `TransactionFactory.parseRequest` - the rest
-(`Reserve`/`BindApiKey`/`Settle`/`Withdraw`) still fall through to `UnsupportedTransactionType`, unchanged.
+`StartBoostTransaction`/`UpdateCollateralTransaction`/`ReserveTransaction`/`BindApiKeyTransaction` are the four
+stub types from "Transaction schema" above that are actually signable through `/transactions/sign`/
+`/transactions/broadcast` now, via `StartBoostRequest`/`UpdateCollateralRequest`/`ReserveRequest`/
+`BindApiKeyRequest` (`api/http/requests/`) wired into `TransactionFactory.parseRequest` - only `Settle`/`Withdraw`
+still fall through to `UnsupportedTransactionType`, unchanged.
 
-Both request classes hit the same real bug once tested against realistically-sized payloads (a fixture-derived TCB
-Info blob or an actual TDX quote, not a 3-byte placeholder): `ByteStr`'s default REST `Format` decodes at most 280
-base16 characters (`Base16.defaultDecodeLimit`, via `Base16.tryDecodeWithLimit`'s default `limit`), sized for a
-signature or public key, but a `tdxQuote` is ~4935 raw bytes (~9870 hex characters) and a `tcbInfo`/PEM-chain
-collateral field can run to several KB - both silently exceed it and fail with `Can't parse '...' as base16 encoded
-byte array` at request-parse time, before validation ever runs. `api/http/requests/package.scala`'s
-`largeByteStrFormat` (`LargeBlobDecodeLimit = 65536` characters) exists for exactly these fields; `StartBoostRequest`/
-`UpdateCollateralRequest` each shadow the package's ambient `given Format[ByteStr]` with it, locally, in their own
-companion object, before their `Json.format` macro call - every other request type keeps the small default
-unchanged. A future request class with its own large-blob field should reuse `largeByteStrFormat` the same way
-rather than growing the shared default limit, which stays deliberately small for the common case.
+Both `StartBoostRequest`/`UpdateCollateralRequest` hit the same real bug once tested against realistically-sized
+payloads (a fixture-derived TCB Info blob or an actual TDX quote, not a 3-byte placeholder): `ByteStr`'s default
+REST `Format` decodes at most 280 base16 characters (`Base16.defaultDecodeLimit`, via `Base16.tryDecodeWithLimit`'s
+default `limit`), sized for a signature or public key, but a `tdxQuote` is ~4935 raw bytes (~9870 hex characters)
+and a `tcbInfo`/PEM-chain collateral field can run to several KB - both silently exceed it and fail with `Can't
+parse '...' as base16 encoded byte array` at request-parse time, before validation ever runs.
+`api/http/requests/package.scala`'s `largeByteStrFormat` (`LargeBlobDecodeLimit = 65536` characters) exists for
+exactly these fields; `StartBoostRequest`/`UpdateCollateralRequest` each shadow the package's ambient
+`given Format[ByteStr]` with it, locally, in their own companion object, before their `Json.format` macro call -
+every other request type keeps the small default unchanged. `BindApiKeyRequest.encryptedApiKey` shadows it the
+same way pre-emptively, even though a real HPKE-sealed envelope is well under 280 hex chars - see "Reserve and
+BindApiKey" below. A future request class with its own large-blob field should reuse `largeByteStrFormat` the same
+way rather than growing the shared default limit, which stays deliberately small for the common case.
+
+## Reserve and BindApiKey: locking funds and binding enclave-sealed API keys
+
+The third and fourth stub transaction types from "Transaction schema" above to grow real semantics, both reading
+the `RegisteredEnclave` registry `StartBoostTransactionDiff` writes (see above) rather than adding a new registry
+of their own. `miner` in both is the *TEE miner* role from "DCAP collateral registry"'s terminology split (the
+`StartBoostTransaction` sender), never the `validator`/consensus generator it boosts - conflating the two here
+would silently let `Reserve`/`BindApiKey` target the wrong identity.
+
+**"Registered miner"/"registered enclave" checks are period-scoped, not permanent.** `RegisteredEnclave` only
+covers the current and next generation period (StartBoost registers for the *next* one, same as
+`CommitToGenerationTransaction`), so `Blockchain.isRegisteredMiner(address)`/`isRegisteredEnclave(attestationKey)`
+(`state/Blockchain.scala`'s `BlockchainExt`) check membership in `registeredEnclaves(current) ++
+registeredEnclaves(next)`, not an unbounded history. A miner that stops re-attesting every period stops being a
+valid `Reserve` target or `BindApiKey` registry match, by design - a deliberate choice over a permanent
+once-registered identity, made to stay consistent with every other period-scoped check in this codebase
+(`committedGenerators`, `isConflict`) rather than introduce a second, unbounded registry alongside the period-scoped
+one.
+
+**`ReserveTransaction`** (`sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, chainId`) locks
+`amount` of `assetId` from the sender's balance against a registered miner. `state/diffs/
+ReserveTransactionDiff.scala` checks `assetId` is `Hearth` or an already-issued `IssuedAsset` (`feeAssetId`'s
+existence is already checked upstream by `TransactionDiffer.feePortfolios`, driven by `TxWithFee.InCustomAsset`, so
+the diff doesn't re-check it) and that `miner` is registered, then debits `amount` (from `assetId`) and `fee` (from
+`feeAssetId`) from the sender's portfolio and accumulates the total into a new `(sender, miner, asset) -> Long`
+ledger, `Blockchain.reservedAmount`. Multiple `Reserve` transactions to the same triple keep adding to the same
+total - **accumulate-only, by design**: there is no unreserve/settlement transaction yet (`SettleTransaction`/
+`WithdrawTransaction`, still unimplemented stubs, look like the eventual counterpart, but that hasn't been
+designed). The debited amount is credited nowhere else - not to the miner, not to any pool - only recorded in
+`reservedAmounts`; until `Settle`/`Withdraw` exist, a reserved amount is **unspendable and unrecoverable**. This is
+a real, currently-open fund-safety gap, not an oversight: it is not yet safe to expose `Reserve` on a network
+carrying real value.
+
+**`BindApiKeyTransaction`** (`sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, chainId`) binds an
+HPKE-sealed API key envelope to a registered enclave's attestation public key. `state/diffs/
+BindApiKeyTransactionDiff.scala` checks `enclavePublicKey` is registered, then upserts `encryptedApiKey` into a new
+`(enclavePublicKey, sender) -> ByteStr` store, `Blockchain.apiKeyBinding` - keyed enclave-first so a future read
+API could enumerate bindings addressed to one enclave (no such read API exists yet; this pass only implemented the
+write path). The node never decrypts `encryptedApiKey` or touches HPKE/curve semantics at all - it is opaque bytes
+to the node, capped at `IntelPki.MaxCollateralFieldSize` by `BindApiKeyTxValidator` purely as a resource-exhaustion
+bound, reused from DCAP collateral rather than a dedicated constant since a real HPKE envelope is far smaller.
+`BindApiKeyTxValidator` also requires `enclavePublicKey` be exactly 64 bytes (a registered attestation key's own
+length - a different length can never match one, so it's rejected structurally rather than paying for the
+registry lookup). Note the P-256/X25519 mismatch this implies: `RegisteredEnclave.attestationPublicKey` is a P-256
+point (Intel DCAP's signing curve), while HPKE sealing in this ecosystem (see `../hearth-chain/java`'s
+`ApiKeyEnvelope`) uses X25519 - `BindApiKeyTransaction.enclavePublicKey` is checked against the *attestation* key
+purely as a registry-membership proof, not because the node believes it's also the HPKE recipient key; how the
+actual sealing key relates to the attestation key is an off-chain client/enclave concern this transaction type
+does not need to resolve.
+
+**Storage** follows the DCAP-collateral history-keyed pattern (`KeyTag`/`Keys` history+value key pairs,
+`updateHistory`/`filterHistory` for rollback, new tags appended at the end), not the period-keyed
+`committedGenerators`/`registeredEnclaves` one, since neither ledger is tied to a generation period: `Keys.
+reservedAmount`/`apiKeyBinding` key by a `ByteStr` suffix (`Keys.reservedAmountSuffix`/`apiKeyBindingSuffix`, since
+the composite key - two addresses and an asset, or a public key and an address - doesn't fit the single-`ByteStr`-
+suffix shape `dcapTcbInfo`'s per-FMSPC keying uses directly), with a `...KeysAtHeight` index (mirroring
+`dcapTcbInfoFmspcsAt`) recording which suffixes changed at a height, for rollback. Both new `StateSnapshot` fields
+carry the Diff-computed final value, not a delta (matching `assetVolumes`/DCAP fields, not `balances`' fuller
+safeSum-inside-`StateSnapshot.build` machinery) - correct across multiple same-key `Reserve` transactions within
+one block since each Diff reads the running total through `SnapshotBlockchain` over prior transactions' snapshots
+in order. Both are folded into `TxStateSnapshotHashBuilder` (new consensus state needs hashing, the same class of
+omission the DCAP fields' own PR had to fix after the fact per "DCAP collateral registry" above).
+
+**`RegisteredEnclave`'s on-disk record grew from 96 to 128 bytes** (`attestationPublicKey(64) ++ validator(32)` to
+`... ++ miner(32)`) with no version bump or migration - `readRegisteredEnclaves`/`writeRegisteredEnclaves`
+(`database/package.scala`) simply changed their `.grouped(...)` width. Confirmed safe for this pass only because
+nothing has persisted the old 96-byte layout outside disposable dev/test runs (the whole project is pre-launch, see
+"HRTH emission curve"'s premine `TODO: replace before launch` notes) - a node with real old-format
+`RegisteredEnclaves` data on disk would misparse it. If a longer-lived devnet/testnet ever accumulates real
+`StartBoost` history before a change like this, it needs an explicit migration or a length-based reader fallback,
+not a silent width change.
+
+**Testing constraint, same one `StartBoostTransactionDiffTest` already documents:** no test fixture in this repo
+can drive a `StartBoostTransaction` to its accept path (needs a real, currently-valid Intel-signed PCK certificate
+chain - see "Testing" under "DCAP collateral registry"), so neither `Reserve`'s nor `BindApiKey`'s "registered"
+accept path can be reached through a real `StartBoostTransaction` in a test. `ReserveTransactionDiffTest`/
+`BindApiKeyTransactionDiffTest` work around this by calling the Diff object directly against a `Blockchain` value
+that overrides `registeredEnclaves` to inject a `RegisteredEnclave` entry (Scala 3 `export blockchain.
+{registeredEnclaves as _, *}` plus one `override def`), rather than going through `d.appendBlockE` - the reject
+paths that don't need a registered miner/enclave (unknown asset, unregistered miner/enclave) go through the real
+domain normally. `TransactionFactorySpec` covers both new REST request types, including a `BindApiKeyRequest` with
+an oversized `encryptedApiKey` to exercise `largeByteStrFormat`.
 
 ## Protobuf package migration
 
