@@ -70,7 +70,7 @@ object Dependencies {
 
   val cryptoProviders = Seq(
     // Windows x86_64, Windows x86, macOS x86_64, linux x86_64
-    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.6.1",
+    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.6.2",
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java
