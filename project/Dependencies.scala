@@ -55,7 +55,7 @@ object Dependencies {
   val googleGuava     = "com.google.guava"    % "guava"             % "33.6.0-jre"
   val kamonCore       = kamonModule("core")
   val machinist       = "org.typelevel"      %% "machinist"         % "0.6.8"
-  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.1"
+  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.3"
   val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "3.0.13"
   val curve25519      = "com.wavesplatform"   % "curve25519-java"   % "0.6.6"
   val nettyHandler    = nettyModule("handler")
