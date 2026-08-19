@@ -711,6 +711,14 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.apiKeyBinding(enclavePublicKey, sender)
   }
 
+  override def settledAmount(client: Address, miner: Address, asset: Asset): Long = readLock {
+    snapshotBlockchain.settledAmount(client, miner, asset)
+  }
+
+  override def workDone(validator: Address, period: GenerationPeriod): Long = readLock {
+    snapshotBlockchain.workDone(validator, period)
+  }
+
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = readLock {
     snapshotBlockchain.filledVolumeAndFee(orderId)
   }

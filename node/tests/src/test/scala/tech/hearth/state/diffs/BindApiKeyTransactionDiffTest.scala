@@ -4,7 +4,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.state.{Blockchain, GenerationPeriod, RegisteredEnclave, SnapshotBlockchain}
+import tech.hearth.state.{Blockchain, RegisteredEnclave, SnapshotBlockchain}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.TxHelpers
@@ -20,11 +20,7 @@ class BindApiKeyTransactionDiffTest extends FreeSpec with WithDomain {
   private val enclavePublicKey = ByteStr.fill(32)(1)
 
   private def withRegisteredEnclave(blockchain: Blockchain, enclavePublicKey: ByteStr): Blockchain =
-    new Blockchain {
-      export blockchain.{registeredEnclaves as _, *}
-      override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
-        blockchain.registeredEnclaves(at) :+ RegisteredEnclave(enclavePublicKey, validator, validator)
-    }
+    blockchainWithRegisteredEnclave(blockchain, RegisteredEnclave(enclavePublicKey, validator, validator))
 
   "BindApiKeyTransactionDiff" - {
     "rejects an enclave public key that is not registered" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>

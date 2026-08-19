@@ -441,9 +441,9 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
 
-  // Withdraw/Settle have no implemented semantics yet (see TransactionDiffer); their helpers below only exercise the
-  // wire-format (protobuf/JSON) plumbing. BindApiKey/Reserve are implemented - see BindApiKeyTransactionDiff/
-  // ReserveTransactionDiff.
+  // Withdraw has no implemented semantics yet (see TransactionDiffer); its helper below only exercises the
+  // wire-format (protobuf/JSON) plumbing. BindApiKey/Reserve/Settle are implemented - see
+  // BindApiKeyTransactionDiff/ReserveTransactionDiff/SettleTransactionDiff.
 
   def bindApiKey(
       sender: SigningKey = defaultSigner,
@@ -488,17 +488,27 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
 
+  /** The enclave key defaults to a distinct signer from `sender` (its operator) - in production the two are
+    * unrelated keys (see RegisteredEnclave), and reusing `sender` here would hide a bug where the wrong key signs
+    * the settlement message.
+    */
   def settle(
       sender: SigningKey = defaultSigner,
-      senderAddress: Address = defaultAddress,
+      enclaveKey: SigningKey = signer(9),
+      settlements: Seq[SettleTransaction.Settlement] = Seq(
+        SettleTransaction.Settlement(secondAddress, Hearth, TxNonNegativeAmount.unsafeFrom(1.hearth))
+      ),
       fee: Long = FeeConstants(TransactionType.Settle) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId
-  ): SettleTransaction =
+  ): SettleTransaction = {
+    val enclavePublicKey = ByteStr(enclaveKey.publicKey())
+    val enclaveSignature = ByteStr(enclaveKey.sign(SettleTransaction.mkSettlementMessage(settlements)))
     SettleTransaction
-      .create(PublicKey(sender.publicKey), senderAddress, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), enclavePublicKey, settlements, enclaveSignature, fee, timestamp, Proofs.empty, chainId)
       .map(_.signWith(sender))
       .explicitGet()
+  }
 
   def updateCollateral(
       sender: SigningKey = defaultSigner,

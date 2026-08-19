@@ -553,6 +553,28 @@ class RocksDBWriter(
           snapshot.apiKeyBindings.keySet.toSeq.map { case (enclavePublicKey, sender) => Keys.apiKeyBindingSuffix(enclavePublicKey, sender) }
         )
 
+      for (((client, miner, asset), amount) <- snapshot.settledAmounts) {
+        val suffix = Keys.settledAmountSuffix(client, miner, asset)
+        rw.put(Keys.settledAmount(suffix)(Height(height)), amount)
+        expiredKeys ++= updateHistory(rw, Keys.settledAmountHistory(suffix), threshold, Keys.settledAmount(suffix))
+      }
+      if (snapshot.settledAmounts.nonEmpty)
+        rw.put(
+          Keys.settledAmountKeysAt(Height(height)),
+          snapshot.settledAmounts.keySet.toSeq.map { case (client, miner, asset) => Keys.settledAmountSuffix(client, miner, asset) }
+        )
+
+      for (((validator, period), work) <- snapshot.workDone) {
+        val suffix = Keys.workDoneSuffix(validator, period)
+        rw.put(Keys.workDone(suffix)(Height(height)), work)
+        expiredKeys ++= updateHistory(rw, Keys.workDoneHistory(suffix), threshold, Keys.workDone(suffix))
+      }
+      if (snapshot.workDone.nonEmpty)
+        rw.put(
+          Keys.workDoneKeysAt(Height(height)),
+          snapshot.workDone.keySet.toSeq.map { case (validator, period) => Keys.workDoneSuffix(validator, period) }
+        )
+
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
             .ofMillis(blockMeta.getHeader.timestamp - TxFilterResetTs)}")
@@ -903,6 +925,8 @@ class RocksDBWriter(
           rollbackDcapCollateral(rw, currentHeight)
           rollbackReservedAmounts(rw, currentHeight)
           rollbackApiKeyBindings(rw, currentHeight)
+          rollbackSettledAmounts(rw, currentHeight)
+          rollbackWorkDone(rw, currentHeight)
 
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
@@ -1057,6 +1081,24 @@ class RocksDBWriter(
     rw.delete(suffixesKey)
   }
 
+  private def rollbackSettledAmounts(rw: RW, currentHeight: Height): Unit = {
+    val suffixesKey = Keys.settledAmountKeysAt(currentHeight)
+    rw.get(suffixesKey).foreach { suffix =>
+      rw.delete(Keys.settledAmount(suffix)(currentHeight))
+      rw.filterHistory(Keys.settledAmountHistory(suffix), currentHeight)
+    }
+    rw.delete(suffixesKey)
+  }
+
+  private def rollbackWorkDone(rw: RW, currentHeight: Height): Unit = {
+    val suffixesKey = Keys.workDoneKeysAt(currentHeight)
+    rw.get(suffixesKey).foreach { suffix =>
+      rw.delete(Keys.workDone(suffix)(currentHeight))
+      rw.filterHistory(Keys.workDoneHistory(suffix), currentHeight)
+    }
+    rw.delete(suffixesKey)
+  }
+
   private def rollbackOrderFill(rw: RW, orderId: ByteStr, height: Height): ByteStr = {
     val curVfKey = Keys.filledVolumeAndFee(orderId)
     val vf       = rw.get(curVfKey)
@@ -1146,6 +1188,16 @@ class RocksDBWriter(
   override def apiKeyBinding(enclavePublicKey: ByteStr, sender: Address): Option[ByteStr] = {
     val suffix = Keys.apiKeyBindingSuffix(enclavePublicKey, sender)
     readOnly(_.fromHistory(Keys.apiKeyBindingHistory(suffix), Keys.apiKeyBinding(suffix)))
+  }
+
+  override def settledAmount(client: Address, miner: Address, asset: Asset): Long = {
+    val suffix = Keys.settledAmountSuffix(client, miner, asset)
+    readOnly(_.fromHistory(Keys.settledAmountHistory(suffix), Keys.settledAmount(suffix))).getOrElse(0L)
+  }
+
+  override def workDone(validator: Address, period: GenerationPeriod): Long = {
+    val suffix = Keys.workDoneSuffix(validator, period)
+    readOnly(_.fromHistory(Keys.workDoneHistory(suffix), Keys.workDone(suffix))).getOrElse(0L)
   }
 
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't

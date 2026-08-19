@@ -101,6 +101,15 @@ object TxStateSnapshotHashBuilder {
       changedKeys += enclavePublicKey.arr ++ sender.toBytes ++ encryptedApiKey.arr
     }
 
+    snapshot.settledAmounts.foreach { case ((client, miner, asset), amount) =>
+      val assetBytes = asset.compatId.fold(Array.emptyByteArray)(_.arr)
+      changedKeys += client.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+    }
+
+    snapshot.workDone.foreach { case ((validator, period), work) =>
+      changedKeys += validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
+    }
+
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {
         case Status.Failed    => changedKeys += txInfo.id.arr ++ Array(1: Byte)

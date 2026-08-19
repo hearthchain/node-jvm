@@ -175,10 +175,24 @@ object PBTransactions {
           )
         } yield tx
 
-      case Data.Settle(SettleTransactionData(Some(senderAddress), `empty`)) =>
+      case Data.Settle(SettleTransactionData(enclavePublicKey, settlements, enclaveSignature, `empty`)) =>
         for {
-          address <- senderAddress.toAddress
-          tx      <- vt.SettleTransaction.create(sender.toPublicKey, address, feeAmount, timestamp, proofs, chainId)
+          parsedSettlements <- settlements.toList.traverse { s =>
+            s.getClient.toAddress.flatMap { client =>
+              TxNonNegativeAmount(s.getCumulativeSpent.longAmount)(NegativeAmount(s.getCumulativeSpent.longAmount, "asset"))
+                .map(vt.SettleTransaction.Settlement(client, s.getCumulativeSpent.vanillaAssetId, _))
+            }
+          }
+          tx <- vt.SettleTransaction.create(
+            sender.toPublicKey,
+            enclavePublicKey.toByteStr,
+            parsedSettlements,
+            enclaveSignature.toByteStr,
+            feeAmount,
+            timestamp,
+            proofs,
+            chainId
+          )
         } yield tx
 
       case Data.Withdraw(WithdrawTransactionData(Some(fromMiner), Some(amount), feeAssetId, `empty`)) =>
@@ -293,7 +307,13 @@ object PBTransactions {
 
       case tx: vt.SettleTransaction =>
         import tx.*
-        val data = Data.Settle(SettleTransactionData(Some(senderAddress.toPB)))
+        val data = Data.Settle(
+          SettleTransactionData(
+            enclavePublicKey.toByteString,
+            settlements.map(s => SettleTransactionData.Settlement(Some(s.client.toPB), Some((s.assetId, s.cumulativeSpent.value)))),
+            enclaveSignature.toByteString
+          )
+        )
         PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
 
       case tx: vt.WithdrawTransaction =>

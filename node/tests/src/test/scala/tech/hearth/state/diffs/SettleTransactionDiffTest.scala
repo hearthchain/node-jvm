@@ -1,0 +1,290 @@
+package tech.hearth.state.diffs
+
+import tech.hearth.account.{Address, PublicKey}
+import tech.hearth.common.state.ByteStr
+import tech.hearth.common.utils.EitherExt2.*
+import tech.hearth.db.WithDomain
+import tech.hearth.db.WithState.AddrWithBalance
+import tech.hearth.state.{Blockchain, CommittedGenerator, GenerationPeriod, RegisteredEnclave, SnapshotBlockchain, StateSnapshot}
+import tech.hearth.test.*
+import tech.hearth.test.DomainPresets.*
+import tech.hearth.transaction.*
+import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
+import tech.hearth.transaction.SettleTransaction.{MaxSettlementCount, Settlement}
+
+/** Same testing constraint as ReserveTransactionDiffTest/BindApiKeyTransactionDiffTest: a registered enclave public
+  * key, in production, only comes from a verified StartBoostTransaction, which no test fixture in this repo can
+  * drive to its accept path. The accept path here is exercised by calling SettleTransactionDiff directly against a
+  * Blockchain wrapper that injects a RegisteredEnclave entry, and Blockchain.reservedAmount/settledAmount via a
+  * SnapshotBlockchain layered on top of that.
+  */
+class SettleTransactionDiffTest extends FreeSpec with WithDomain {
+  private val sender           = TxHelpers.defaultSigner
+  private val miner            = sender.toAddress
+  private val client           = TxHelpers.secondSigner.toAddress
+  private val enclaveKey       = TxHelpers.signer(9)
+  private val enclavePublicKey = ByteStr(enclaveKey.publicKey())
+
+  private def withRegisteredEnclave(blockchain: Blockchain, operator: Address = miner, validator: Address = miner): Blockchain =
+    blockchainWithRegisteredEnclave(blockchain, RegisteredEnclave(enclavePublicKey, validator, operator))
+
+  // SettleTransactionDiff requires registered.validator to be a committed generator of the *current* period (see
+  // its own comment on that check) - miner already is one (withDomain auto-commits the default signer for the
+  // genesis period), but a synthetic validator distinct from the miner needs this injected the same way
+  // withRegisteredEnclave injects the RegisteredEnclave itself.
+  private def withCommittedGenerator(blockchain: Blockchain, period: GenerationPeriod, validator: Address): Blockchain =
+    new Blockchain {
+      export blockchain.{committedGenerators as _, *}
+      override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] =
+        if (at == period) blockchain.committedGenerators(at) :+ CommittedGenerator(validator, TxHelpers.defaultBlsKey.publicKey, ByteStr.empty)
+        else blockchain.committedGenerators(at)
+    }
+
+  private def withReservation(blockchain: Blockchain, amount: Long): Blockchain = {
+    val snapshot = StateSnapshot.build(blockchain, reservedAmounts = Map((client, miner, Hearth) -> amount)).explicitGet()
+    SnapshotBlockchain(blockchain, snapshot)
+  }
+
+  private def settleTx(cumulativeSpent: Long): SettleTransaction =
+    TxHelpers.settle(
+      sender = sender,
+      enclaveKey = enclaveKey,
+      settlements = Seq(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(cumulativeSpent)))
+    )
+
+  "SettleTransactionDiff" - {
+    "rejects an enclave public key that is not registered" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      d.appendBlockE(settleTx(1L)) should produce("is not a registered enclave public key")
+    }
+
+    "rejects a sender that is not the enclave's operator" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withRegisteredEnclave(d.blockchain, operator = client)
+      SettleTransactionDiff(blockchain)(settleTx(1L)) should produce("is not the operator of enclave")
+    }
+
+    "rejects an invalid enclave signature" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain  = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      val settlements = Seq(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(50L)))
+      // Same (registered) enclavePublicKey as settleTx, but signed by a different key - the registry lookup
+      // succeeds, so this actually exercises the signature check rather than failing earlier on it.
+      val wrongSignature = ByteStr(TxHelpers.signer(10).sign(SettleTransaction.mkSettlementMessage(settlements)))
+      val forged = SettleTransaction
+        .create(PublicKey(sender.publicKey()), enclavePublicKey, settlements, wrongSignature, 100000, TxHelpers.timestamp, Proofs.empty)
+        .explicitGet()
+        .signWith(sender)
+      SettleTransactionDiff(blockchain)(forged) should produce("Invalid enclave signature")
+    }
+
+    "rejects settling for a client with no open reservation" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withRegisteredEnclave(d.blockchain)
+      SettleTransactionDiff(blockchain)(settleTx(1L)) should produce("has no open reservation")
+    }
+
+    "rejects a cumulative counter exceeding the total reserved" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      SettleTransactionDiff(blockchain)(settleTx(101L)) should produce("exceeds total reserved")
+    }
+
+    "accepts a settlement within the total reserved, crediting the miner its fee-debited balance plus the node's share" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val blockchain     = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      val balanceBefore  = blockchain.balance(miner)
+      val tx             = settleTx(60L)
+      val snapshot       = SettleTransactionDiff(blockchain)(tx).explicitGet()
+      val expectedCredit = SettleTransactionDiff.ServingNodeCredPart(60L) // 60 / 10 * 3 = 18
+
+      snapshot.settledAmounts((client, miner, Hearth)) shouldBe 60L
+      snapshot.balances((miner, Hearth)) shouldBe balanceBefore - tx.fee.value + expectedCredit
+    }
+
+    "credits the serving node its share truncated (not rounded), matching Fraction's own semantics" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val blockchain    = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      val balanceBefore = blockchain.balance(miner)
+      val tx            = settleTx(61L) // 61 / 10 * 3 = 6 * 3 = 18, not 18.3
+      val snapshot      = SettleTransactionDiff(blockchain)(tx).explicitGet()
+
+      snapshot.balances((miner, Hearth)) shouldBe balanceBefore - tx.fee.value + 18L
+    }
+
+    "credits the serving node incrementally, so splitting one settlement across two transactions credits the same total" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val blockchain1   = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      val balanceBefore = blockchain1.balance(miner)
+
+      val tx1         = settleTx(40L) // credits 40 / 10 * 3 = 12
+      val snapshot1   = SettleTransactionDiff(blockchain1)(tx1).explicitGet()
+      val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
+
+      val tx2       = settleTx(100L) // delta 60, credits 60 / 10 * 3 = 18 more
+      val snapshot2 = SettleTransactionDiff(blockchain2)(tx2).explicitGet()
+
+      val totalFees = tx1.fee.value + tx2.fee.value
+      snapshot2.balances((miner, Hearth)) shouldBe balanceBefore - totalFees + 12L + 18L
+      // Same total the node would have received from a single settlement straight to 100 (100 / 10 * 3 = 30).
+      (12L + 18L) shouldBe SettleTransactionDiff.ServingNodeCredPart(100L)
+    }
+
+    "rejects a settlement counter that decreases from what's already recorded" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val blockchain1 = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      val snapshot1   = SettleTransactionDiff(blockchain1)(settleTx(60L)).explicitGet()
+      val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
+
+      SettleTransactionDiff(blockchain2)(settleTx(59L)) should produce("would decrease")
+    }
+
+    "accepts a non-decreasing settlement counter across multiple transactions" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val blockchain1 = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      val snapshot1   = SettleTransactionDiff(blockchain1)(settleTx(60L)).explicitGet()
+      val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
+
+      val snapshot2 = SettleTransactionDiff(blockchain2)(settleTx(80L)).explicitGet()
+      snapshot2.settledAmounts((client, miner, Hearth)) shouldBe 80L
+    }
+
+    "rejects settling an asset that was never issued" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val unknownAsset = IssuedAsset(ByteStr.fill(32)(9))
+      // Injected directly (bypassing a real Reserve, which would itself reject an unissued asset) so this test
+      // exercises SettleTransactionDiff's own defence-in-depth check, not Reserve's.
+      val blockchain = withRegisteredEnclave(d.blockchain)
+      val snapshot   = StateSnapshot.build(blockchain, reservedAmounts = Map((client, miner, unknownAsset) -> 100L)).explicitGet()
+      val tx = TxHelpers.settle(
+        sender = sender,
+        enclaveKey = enclaveKey,
+        settlements = Seq(Settlement(client, unknownAsset, TxNonNegativeAmount.unsafeFrom(1L)))
+      )
+      SettleTransactionDiff(SnapshotBlockchain(blockchain, snapshot))(tx) should produce("is not issued")
+    }
+
+    "sums the serving node's credit across different clients settled in the same batch" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val otherClient = TxHelpers.signer(11).toAddress
+      val snapshot = StateSnapshot
+        .build(withRegisteredEnclave(d.blockchain), reservedAmounts = Map((client, miner, Hearth) -> 100L, (otherClient, miner, Hearth) -> 100L))
+        .explicitGet()
+      val blockchain    = SnapshotBlockchain(withRegisteredEnclave(d.blockchain), snapshot)
+      val balanceBefore = blockchain.balance(miner)
+      val settlements = Seq(
+        Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(40L)),
+        Settlement(otherClient, Hearth, TxNonNegativeAmount.unsafeFrom(60L))
+      )
+      val tx             = TxHelpers.settle(sender = sender, enclaveKey = enclaveKey, settlements = settlements)
+      val resultSnapshot = SettleTransactionDiff(blockchain)(tx).explicitGet()
+
+      resultSnapshot.settledAmounts((client, miner, Hearth)) shouldBe 40L
+      resultSnapshot.settledAmounts((otherClient, miner, Hearth)) shouldBe 60L
+      // 40 / 10 * 3 = 12, 60 / 10 * 3 = 18, summed across both clients into the miner's one Portfolio.
+      resultSnapshot.balances((miner, Hearth)) shouldBe balanceBefore - tx.fee.value + 12L + 18L
+    }
+
+    "rejects settling when the validator is not a committed generator of the current period" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val uncommittedValidator = TxHelpers.signer(13).toAddress
+      // Deliberately no withCommittedGenerator here: registeredEnclave alone (StartBoost's own check) only ever
+      // confirmed committee membership for the period the enclave registered *for*, not necessarily this one -
+      // see SettleTransactionDiff's own comment on this check.
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain, validator = uncommittedValidator), 100L)
+      SettleTransactionDiff(blockchain)(settleTx(60L)) should produce("is not a committed generator of period")
+    }
+
+    "accumulates burned work for the settling enclave's validator, not the miner" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val validator     = TxHelpers.signer(13).toAddress
+      val period        = d.blockchain.currentGenerationPeriod.get
+      val withValidator = withCommittedGenerator(withRegisteredEnclave(d.blockchain, validator = validator), period, validator)
+      val blockchain    = withReservation(withValidator, 100L)
+      val tx            = settleTx(60L) // delta 60, burned work = 60 / 10 * 6 = 36
+      val snapshot      = SettleTransactionDiff(blockchain)(tx).explicitGet()
+
+      snapshot.workDone((validator, period)) shouldBe 36L
+      snapshot.workDone.contains((miner, period)) shouldBe false
+    }
+
+    "accumulates work incrementally across transactions, keyed by validator and period" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val validator     = TxHelpers.signer(13).toAddress
+      val period        = d.blockchain.currentGenerationPeriod.get
+      val withValidator = withCommittedGenerator(withRegisteredEnclave(d.blockchain, validator = validator), period, validator)
+      val blockchain1   = withReservation(withValidator, 100L)
+
+      val snapshot1 = SettleTransactionDiff(blockchain1)(settleTx(40L)).explicitGet() // work 40 / 10 * 6 = 24
+      snapshot1.workDone((validator, period)) shouldBe 24L
+      val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
+
+      val snapshot2 = SettleTransactionDiff(blockchain2)(settleTx(100L)).explicitGet() // delta 60, work 36 more
+      snapshot2.workDone((validator, period)) shouldBe 60L
+    }
+
+    "checks the running total within the same batch, not just what's already on chain" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+
+      val accepting = Seq(
+        Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(40L)),
+        Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(60L))
+      )
+      val acceptedSnapshot = SettleTransactionDiff(blockchain)(
+        TxHelpers.settle(sender = sender, enclaveKey = enclaveKey, settlements = accepting)
+      ).explicitGet()
+      acceptedSnapshot.settledAmounts((client, miner, Hearth)) shouldBe 60L
+
+      val decreasing = Seq(
+        Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(60L)),
+        Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(40L))
+      )
+      SettleTransactionDiff(blockchain)(
+        TxHelpers.settle(sender = sender, enclaveKey = enclaveKey, settlements = decreasing)
+      ) should produce("would decrease")
+    }
+  }
+
+  "SettleTransaction.create" - {
+    "rejects more settlements than MaxSettlementCount" in {
+      val tooMany = List.fill(MaxSettlementCount + 1)(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(1L)))
+      SettleTransaction.create(
+        PublicKey(sender.publicKey()),
+        enclavePublicKey,
+        tooMany,
+        ByteStr.fill(64)(1),
+        100000,
+        TxHelpers.timestamp,
+        Proofs.empty
+      ) should produce(s"Number of settlements ${tooMany.length} is greater than $MaxSettlementCount")
+    }
+
+    "rejects a settlement whose assetId is not exactly 32 bytes" in {
+      val malformedAsset = IssuedAsset(ByteStr.fill(10)(1))
+      SettleTransaction.create(
+        PublicKey(sender.publicKey()),
+        enclavePublicKey,
+        Seq(Settlement(client, malformedAsset, TxNonNegativeAmount.unsafeFrom(1L))),
+        ByteStr.fill(64)(1),
+        100000,
+        TxHelpers.timestamp,
+        Proofs.empty
+      ) should produce("Every settlement's assetId must be")
+    }
+  }
+}

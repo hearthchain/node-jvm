@@ -39,7 +39,15 @@ case class StateSnapshot(
     reservedAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
     // BindApiKeyTransaction's HPKE-sealed API key envelope, keyed by (enclavePublicKey, sender); upsert, same
     // "last write wins" convention.
-    apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty
+    apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
+    // SettleTransaction's new cumulative-settled counter per (client, miner, asset) - like reservedAmounts above,
+    // the Diff reads the current value (via Blockchain.settledAmount) and writes the batch's final cumulative
+    // value, so this already carries the final value, not a delta.
+    settledAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+    // Work attributed to a validator within the current generation period (epoch), fed by SettleTransaction's
+    // burned share - see Keys.workDoneSuffix. Same "Diff reads current value, writes the final accumulated total"
+    // convention as reservedAmounts/settledAmounts above, not a delta.
+    workDone: Map[(Address, GenerationPeriod), Long] = Map.empty
 ) {
 
   // ignores lease balances from portfolios
@@ -80,7 +88,9 @@ object StateSnapshot {
       dcapTcbSigningIssuerChain: Option[ByteStr] = None,
       dcapPckCaIssuerChain: Option[ByteStr] = None,
       reservedAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
-      apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty
+      apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
+      settledAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+      workDone: Map[(Address, GenerationPeriod), Long] = Map.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -106,7 +116,9 @@ object StateSnapshot {
         dcapTcbSigningIssuerChain,
         dcapPckCaIssuerChain,
         reservedAmounts,
-        apiKeyBindings
+        apiKeyBindings,
+        settledAmounts,
+        workDone
       )
     r.leftMap(GenericError(_))
   }
@@ -206,7 +218,9 @@ object StateSnapshot {
         s2.dcapTcbSigningIssuerChain.orElse(s1.dcapTcbSigningIssuerChain),
         s2.dcapPckCaIssuerChain.orElse(s1.dcapPckCaIssuerChain),
         s1.reservedAmounts ++ s2.reservedAmounts,
-        s1.apiKeyBindings ++ s2.apiKeyBindings
+        s1.apiKeyBindings ++ s2.apiKeyBindings,
+        s1.settledAmounts ++ s2.settledAmounts,
+        s1.workDone ++ s2.workDone
       )
 
   }

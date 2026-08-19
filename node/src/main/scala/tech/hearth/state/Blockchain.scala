@@ -99,6 +99,15 @@ trait Blockchain {
   // eventually enumerate the bindings addressed to it. Same history mechanism as reservedAmount/DCAP collateral.
   def apiKeyBinding(enclavePublicKey: ByteStr, sender: Address): Option[ByteStr]
 
+  // SettleTransaction's cumulative-settled counter, keyed by (client, miner, asset) - same history mechanism as
+  // reservedAmount above, and always <= reservedAmount(client, miner, asset) for the same triple.
+  def settledAmount(client: Address, miner: Address, asset: Asset): Long
+
+  // Work attributed to a validator within one generation period (epoch), fed by SettleTransaction's burned share
+  // and consumed by GeneratingBalanceProvider to boost that validator's generating balance in the *next* period -
+  // see "workBoost" in CLAUDE.md. Same history mechanism as reservedAmount/settledAmount above.
+  def workDone(validator: Address, period: GenerationPeriod): Long
+
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
 
@@ -248,24 +257,29 @@ object Blockchain {
 
     def currentGenerationPeriod: Option[GenerationPeriod] = this.generationPeriodOf(Height(blockchain.height))
 
-    /** An address counts as a "registered miner" (for ReserveTransaction/BindApiKeyTransaction) as long as it has
-      * at least one enclave registered via StartBoostTransaction for the current or the next generation period -
-      * mirroring registeredEnclaves' own "only this and next period" scope, rather than a permanent registry.
+    /** The current-or-next-period scan every "registered enclave"/"registered miner" lookup below shares - only
+      * this and next period are ever in scope, mirroring registeredEnclaves' own "only this and next period" scope
+      * rather than a permanent registry.
       */
-    def isRegisteredMiner(address: Address): Boolean =
-      currentGenerationPeriod.exists { current =>
-        blockchain.registeredEnclaves(current).exists(_.operator == address) ||
-        blockchain.registeredEnclaves(current.next).exists(_.operator == address)
+    private def findRegisteredEnclave(p: RegisteredEnclave => Boolean): Option[RegisteredEnclave] =
+      currentGenerationPeriod.flatMap { current =>
+        blockchain.registeredEnclaves(current).find(p).orElse(blockchain.registeredEnclaves(current.next).find(p))
       }
 
-    /** Same current-or-next-period scoping as isRegisteredMiner, keyed by enclave public key instead of operator
-      * address - used by BindApiKeyTransaction to check its enclave_public_key against the registry.
+    /** An address counts as a "registered miner" (for ReserveTransaction/BindApiKeyTransaction) as long as it has
+      * at least one enclave registered via StartBoostTransaction for the current or the next generation period.
       */
-    def isRegisteredEnclave(enclavePublicKey: ByteStr): Boolean =
-      currentGenerationPeriod.exists { current =>
-        blockchain.registeredEnclaves(current).exists(_.enclavePublicKey == enclavePublicKey) ||
-        blockchain.registeredEnclaves(current.next).exists(_.enclavePublicKey == enclavePublicKey)
-      }
+    def isRegisteredMiner(address: Address): Boolean = findRegisteredEnclave(_.operator == address).isDefined
+
+    /** Same current-or-next-period scoping as isRegisteredMiner, keyed by enclave public key instead of operator
+      * address - looks up the full record, e.g. for SettleTransaction to check its sender against the enclave's
+      * operator.
+      */
+    def registeredEnclave(enclavePublicKey: ByteStr): Option[RegisteredEnclave] =
+      findRegisteredEnclave(_.enclavePublicKey == enclavePublicKey)
+
+    /** Used by BindApiKeyTransaction to check its enclave_public_key against the registry. */
+    def isRegisteredEnclave(enclavePublicKey: ByteStr): Boolean = registeredEnclave(enclavePublicKey).isDefined
 
     def supportsFinalizationVoting(height: Int = blockchain.height): Boolean = true
   }

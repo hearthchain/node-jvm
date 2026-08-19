@@ -6,7 +6,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.settings.GenesisAssetSettings
-import tech.hearth.state.{Blockchain, GenerationPeriod, RegisteredEnclave, SnapshotBlockchain}
+import tech.hearth.state.{Blockchain, RegisteredEnclave, SnapshotBlockchain}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
@@ -25,11 +25,7 @@ class ReserveTransactionDiffTest extends FreeSpec with WithDomain {
   private val miner  = TxHelpers.secondSigner.toAddress
 
   private def withRegisteredMiner(blockchain: Blockchain, registeredMiner: Address): Blockchain =
-    new Blockchain {
-      export blockchain.{registeredEnclaves as _, *}
-      override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
-        blockchain.registeredEnclaves(at) :+ RegisteredEnclave(ByteStr.fill(32)(1), registeredMiner, registeredMiner)
-    }
+    blockchainWithRegisteredEnclave(blockchain, RegisteredEnclave(ByteStr.fill(32)(1), registeredMiner, registeredMiner))
 
   "ReserveTransactionDiff" - {
     "rejects reserving to an unregistered miner" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>

@@ -449,22 +449,23 @@ nothing about their domain classes needed to change, only `PBTransactions`' wire
 `PBTransactions.create`/`vanilla` no longer take/return a top-level `feeAssetId` — each `Data.*` case reads/writes
 its own `fee_asset_id` field (Transfer/Reserve/Withdraw) or has none (everything else, implicitly HRTH).
 
-**Five new transaction types — plumbing only, no semantics, except StartBoost/Reserve/BindApiKey (see below).**
-`ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in
+**Five new transaction types - plumbing only, no semantics, except StartBoost/Reserve/BindApiKey/Settle (see
+below).** `ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in
 `tech.hearth.transaction`, alongside `CommitToGenerationTransaction`, not in a subpackage) exist as domain case
 classes with working protobuf/JSON round-trip and `TxHelpers` constructors (`TxHelpers.reserve`/`.bindApiKey`/
-`.settle`/`.withdraw`). Of these, `SettleTransaction`/`WithdrawTransaction` still have **no validation or
-state-diff logic**: their `TxValidator`s are `Valid(tx) // Semantics not implemented yet` (the pattern every one of
-these five started from), `TransactionDiffer.transactionSnapshot` has no `case` for either, so they fall through to
-`UnsupportedTransactionType` — a broadcast one reaches the mempool/JSON layer fine but is rejected before any state
-change — and `TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs them the same way `Genesis`
-always was (`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for either). Field-name-driven
-best guesses at what these two are for (not verified against any spec — none exists yet): they look like the
-counterpart that would credit a `Reserve`d amount back or to the miner, but that hasn't been designed - don't guess
-at this from field names again without checking whether a spec has since landed in `hearth-specs`/
-`hearth-tokenomics-spec`. `StartBoostTransaction`, `ReserveTransaction` and `BindApiKeyTransaction` are no longer in
-this bucket - see "StartBoost: TDX quote verification and enclave registration" and "Reserve and BindApiKey:
-locking funds and binding enclave-sealed API keys" below.
+`.settle`/`.withdraw`). Of these, `WithdrawTransaction` still has **no validation or state-diff logic**: its
+`TxValidator` is `Valid(tx) // Semantics not implemented yet` (the pattern every one of these five started from),
+`TransactionDiffer.transactionSnapshot` has no `case` for it, so it falls through to `UnsupportedTransactionType` -
+a broadcast one reaches the mempool/JSON layer fine but is rejected before any state change - and
+`TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs it the same way `Genesis` always was
+(`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for it). A field-name-driven best guess at
+what it's for (not verified against any spec beyond the gist "settle" analysis linked below, which only covers
+`Settle`): it looks like the counterpart that would credit a `Reserve`d amount back to the sender, but that hasn't
+been designed - don't guess at this from field names again without checking whether a spec has since landed in
+`hearth-specs`/`hearth-tokenomics-spec`. `StartBoostTransaction`, `ReserveTransaction`, `BindApiKeyTransaction` and
+`SettleTransaction` are no longer in this bucket - see "StartBoost: TDX quote verification and enclave
+registration", "Reserve and BindApiKey: locking funds and binding enclave-sealed API keys" and "Settle: retiring
+reserved funds" below.
 
 ## DCAP collateral registry
 
@@ -636,11 +637,11 @@ one.
 
 ### REST: signing and broadcasting
 
-`StartBoostTransaction`/`UpdateCollateralTransaction`/`ReserveTransaction`/`BindApiKeyTransaction` are the four
-stub types from "Transaction schema" above that are actually signable through `/transactions/sign`/
-`/transactions/broadcast` now, via `StartBoostRequest`/`UpdateCollateralRequest`/`ReserveRequest`/
-`BindApiKeyRequest` (`api/http/requests/`) wired into `TransactionFactory.parseRequest` - only `Settle`/`Withdraw`
-still fall through to `UnsupportedTransactionType`, unchanged.
+`StartBoostTransaction`/`UpdateCollateralTransaction`/`ReserveTransaction`/`BindApiKeyTransaction`/
+`SettleTransaction` are the five stub types from "Transaction schema" above that are actually signable through
+`/transactions/sign`/`/transactions/broadcast` now, via `StartBoostRequest`/`UpdateCollateralRequest`/
+`ReserveRequest`/`BindApiKeyRequest`/`SettleRequest` (`api/http/requests/`) wired into
+`TransactionFactory.parseRequest` - only `Withdraw` still falls through to `UnsupportedTransactionType`, unchanged.
 
 Both `StartBoostRequest`/`UpdateCollateralRequest` hit the same real bug once tested against realistically-sized
 payloads (a fixture-derived TCB Info blob or an actual TDX quote, not a 3-byte placeholder): `ByteStr`'s default
@@ -682,12 +683,12 @@ existence is already checked upstream by `TransactionDiffer.feePortfolios`, driv
 the diff doesn't re-check it) and that `miner` is registered, then debits `amount` (from `assetId`) and `fee` (from
 `feeAssetId`) from the sender's portfolio and accumulates the total into a new `(sender, miner, asset) -> Long`
 ledger, `Blockchain.reservedAmount`. Multiple `Reserve` transactions to the same triple keep adding to the same
-total - **accumulate-only, by design**: there is no unreserve/settlement transaction yet (`SettleTransaction`/
-`WithdrawTransaction`, still unimplemented stubs, look like the eventual counterpart, but that hasn't been
-designed). The debited amount is credited nowhere else - not to the miner, not to any pool - only recorded in
-`reservedAmounts`; until `Settle`/`Withdraw` exist, a reserved amount is **unspendable and unrecoverable**. This is
-a real, currently-open fund-safety gap, not an oversight: it is not yet safe to expose `Reserve` on a network
-carrying real value.
+total - **accumulate-only, by design**: `reservedAmount` is never decremented, it is only ever compared against
+(see "Settle: retiring reserved funds" below - `SettleTransaction` reads it as a ceiling, `WithdrawTransaction` is
+still an unimplemented stub). The debited amount is credited nowhere else - not to the miner, not to any pool -
+only recorded in `reservedAmounts`; until `Withdraw` exists, whatever a client reserves and never spends (i.e.
+never covered by a `Settle`) is **unspendable and unrecoverable**. This is a real, currently-open fund-safety gap,
+not an oversight: it is not yet safe to expose `Reserve` on a network carrying real value.
 
 **`BindApiKeyTransaction`** (`sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, chainId`) binds an
 HPKE-sealed API key envelope to a registered enclave's public key. `state/diffs/
@@ -742,14 +743,239 @@ not a silent width change.
 
 **Testing constraint, same one `StartBoostTransactionDiffTest` already documents:** no test fixture in this repo
 can drive a `StartBoostTransaction` to its accept path (needs a real, currently-valid Intel-signed PCK certificate
-chain - see "Testing" under "DCAP collateral registry"), so neither `Reserve`'s nor `BindApiKey`'s "registered"
-accept path can be reached through a real `StartBoostTransaction` in a test. `ReserveTransactionDiffTest`/
-`BindApiKeyTransactionDiffTest` work around this by calling the Diff object directly against a `Blockchain` value
-that overrides `registeredEnclaves` to inject a `RegisteredEnclave` entry (Scala 3 `export blockchain.
-{registeredEnclaves as _, *}` plus one `override def`), rather than going through `d.appendBlockE` - the reject
-paths that don't need a registered miner/enclave (unknown asset, unregistered miner/enclave) go through the real
-domain normally. `TransactionFactorySpec` covers both new REST request types, including a `BindApiKeyRequest` with
-an oversized `encryptedApiKey` to exercise `largeByteStrFormat`.
+chain - see "Testing" under "DCAP collateral registry"), so neither `Reserve`'s nor `BindApiKey`'s (nor `Settle`'s,
+below) "registered" accept path can be reached through a real `StartBoostTransaction` in a test.
+`ReserveTransactionDiffTest`/`BindApiKeyTransactionDiffTest`/`SettleTransactionDiffTest` work around this by
+calling the Diff object directly against a `Blockchain` value that overrides `registeredEnclaves` to inject a
+`RegisteredEnclave` entry (Scala 3 `export blockchain.{registeredEnclaves as _, *}` plus one `override def`),
+rather than going through `d.appendBlockE` - the reject paths that don't need a registered miner/enclave (unknown
+asset, unregistered miner/enclave) go through the real domain normally. `TransactionFactorySpec` covers all three
+new REST request types, including a `BindApiKeyRequest` with an oversized `encryptedApiKey` to exercise
+`largeByteStrFormat`.
+
+## Settle: retiring reserved funds
+
+The gist "settle" analysis (a miner-authored spec fragment, not part of `hearth-tokenomics-spec` - see
+https://gist.github.com/swell-a2a/c1c8571f465010403b3ec8c13bf47928) is the only source for this transaction's
+semantics: "At any moment of its choosing the node submits an enclave-signed batch of `(client, cumulative
+spent)`", validated against three rules ("reservation open", "counter non-decreasing", "counter within the total
+ever reserved") and, on acceptance, "Settled Cred is retired" while "value settled in epoch E feeds the
+beneficiary validator's workBoost in E+1".
+
+**`SettleTransaction`** (`sender, enclavePublicKey, settlements, enclaveSignature, fee, timestamp, proofs,
+chainId`) is submitted by a miner (`sender`, the same *TEE miner*/operator identity as `ReserveTransaction.miner`
+and `RegisteredEnclave.operator` - see "Reserve and BindApiKey" above) and carries a batch of
+`Settlement(client, assetId, cumulativeSpent)` entries, protobuf `SettleTransactionData.Settlement{client:
+Recipient, cumulative_spent: Amount}` (asset piggybacks on the existing `Amount{asset_id, amount}` message rather
+than a bare `int64`, matching `ReserveTransactionData.amount`'s shape). `enclavePublicKey`/`enclaveSignature` are
+the raw 32-byte Ed25519 key and 64-byte signature of the *enclave itself* attesting to the batch - a second,
+enclave-level signature alongside the transaction's own `proofs` (signed by `sender`'s account key), the same
+two-signer split `CommitToGeneration`'s VRF/BLS proof-of-possession fields use. The signed message
+(`SettleTransaction.mkSettlementMessage`) is each settlement's `client.toBytes`(20, `tech.hearth.crypto.Address
+.HASH_LEN`) `++` `assetId`(32, zero-padded for `Hearth`) `++` `cumulativeSpent`(8, big-endian), concatenated in
+order - fixed-width fields throughout specifically so concatenating several settlements has no parsing-boundary
+ambiguity, but only because `SettleTxValidator` separately rejects any `IssuedAsset` id whose length isn't exactly
+32 bytes. That check is load-bearing, not cosmetic: the wire format itself (`PBAmounts.toVanillaAssetId`) accepts
+an `assetId` of *any* length with no validation, so without it a malicious `sender` (the operator relaying the
+batch - exactly the party the enclave signature exists to constrain) could submit a settlements list whose
+concatenated bytes collide with a genuinely enclave-signed message for a *different* settlements list, settling
+funds the enclave never actually authorized. Caught in review before merge (security audit, Pass 2) - the
+comment on `mkSettlementMessage` explains the dependency so a future field addition doesn't silently reopen it.
+This wire shape was cross-checked against `../hearth-rs`'s independently-written stub
+(`crates/transaction/src/simple.rs`'s `SettleTransaction { enclave_public_key, settlements: Vec<(Recipient, Asset,
+i64)>, enclave_signature }`) and against `hearthchain/miner` (the actual TEE execution node repo, gateway +
+Go enclave identity service) - the latter has no settlement/spend-tracking code at all yet, only quote generation
+(`GET /v1/quote`) and TLS endorsement (`GET /v1/tls`), so this is the first concrete definition of the settlement
+wire format, not a match against existing miner-side code.
+
+`state/diffs/SettleTransactionDiff.scala` implements the gist's three rules per settlement, reading and writing
+two triple-keyed `Long` ledgers - `Blockchain.reservedAmount` (existing, read-only here) and the new
+`Blockchain.settledAmount(client, miner, asset)` (same DCAP-collateral-style history mechanism as
+`reservedAmount`, `Keys.settledAmountSuffix`/`settledAmountHistory`/`settledAmountKeysAt`, `KeyTag.SettledAmount*`
+appended at the end). `settledAmount` is a second, independent lifetime-cumulative counter - `Settle` never
+decrements `reservedAmount` itself, only ever compares against it. This is load-bearing, not an arbitrary choice:
+rule 3 is "counter within the total **ever** reserved," so the ceiling it checks against has to stay a lifetime
+total across the reservation's whole history, not shrink as settlements land. The enclave's own `cumulativeSpent`
+counter is likewise a lifetime total (that's what makes resubmitting an old batch a safe no-op rather than a
+double-spend) - decrementing `reservedAmount` by each settlement's delta would turn it into a *remaining balance*,
+and a later, legitimately-higher `cumulativeSpent` could then fail against that shrunk ceiling even though it's
+still within the true lifetime total. Keeping the two ledgers separate is also what a future `Withdraw` needs
+regardless: a client's recoverable balance is `reservedAmount - settledAmount`, which only means anything if both
+are tracked independently.
+
+- looks up `blockchain.registeredEnclave(tx.enclavePublicKey)` (a new `Blockchain.registeredEnclave` extension,
+  same current-or-next-period scoping as `isRegisteredEnclave`/`isRegisteredMiner`, but returning the full record
+  instead of a boolean so its `operator` field can be checked) and requires `tx.sender == registered.operator` -
+  "reservation open" and the other two rules are otherwise keyed by whatever `sender` claims as the miner, so this
+  stops an unrelated account from settling against someone else's reservations even though it could never forge
+  the enclave signature itself;
+- verifies `tx.enclaveSignature` against `mkSettlementMessage(tx.settlements)` using `crypto.verify` with the
+  enclave's raw public key (`PublicKey(tx.enclavePublicKey)`) - this is what "enclave-signed batch" means in
+  practice: the account-level `proofs` only prove the operator relayed the batch, not that the enclave produced it;
+- per settlement: rejects an asset that isn't `Hearth` and isn't an already-issued `IssuedAsset` (mirroring
+  `ReserveTransactionDiff.assetIssued`, defence in depth - `reservedAmount(...) > 0` already implies this in
+  practice, since `Reserve` itself checks it, but `Settle` shouldn't depend solely on that); rejects
+  `reservedAmount(client, miner, asset) <= 0` ("reservation open" - also blocks writing a `settledAmount` entry
+  for a client that never reserved anything at all, which the other two rules alone wouldn't); rejects a new
+  cumulative value lower than what's already recorded ("counter non-decreasing" - checked against a running total
+  accumulated *within the same batch* too, via a `foldLeft` over `tx.settlements`, in case a client appears more
+  than once in one transaction); rejects a new cumulative value exceeding `reservedAmount` ("counter within the
+  total ever reserved"); credits `ServingNodeCredPart` of the newly-confirmed delta (see below) to the miner,
+  accumulated across every settlement in the batch into one `Portfolio` before being combined with the fee debit.
+
+**"Settled Cred is retired" - a three-way split (`hearth-tokenomics-spec` S4), not a full burn, but only one of
+the three shares is credited.** `p = φ_b·p (burned) + φ_n·p (serving node) + φ_v·p (verifier pool)`, launch values
+`φ_b = 0.60 / φ_n = 0.30 / φ_v = 0.10`. `SettleTransactionDiff.ServingNodeCredPart` (`state.diffs.BlockDiffer
+.Fraction(3, 10)`, hardcoded the same way `BlockDiffer.CurrentBlockFeePart`/`BlockRewardCalculator`'s tier
+fractions are - a fixed protocol constant next to the logic that uses it, not a per-network `BlockchainSettings`
+field, since nothing about this fraction is meant to differ mainnet/testnet/stagenet) implements `φ_n`: for each
+settlement, the newly-confirmed delta (`newCumulative - previouslySettled` - always non-negative, since it's
+computed only after the "counter non-decreasing" check passes) is split via `ServingNodeCredPart.apply` (integer
+division first, matching every other `Fraction` in this codebase - see "Block fees"'s truncation warning) and
+credited to the miner (`tx.sender`, same identity as the settlement's `miner`/`RegisteredEnclave.operator`) in the
+settled asset. Computed incrementally per settlement rather than off the raw `cumulativeSpent` field directly, so
+splitting one client's spend across several `Settle` transactions credits the same total the node would have
+received from one transaction straight to the final value (`ServingNodeCredPart` is linear in its truncation
+behavior only when applied to the same delta either way - `SettleTransactionDiffTest`'s "credits the serving node
+incrementally" case pins this down: two transactions settling 40 then a further 60 credit `12 + 18 = 30`, the same
+as one settling 100 directly would (`100 / 10 * 3 = 30`)).
+
+`φ_v` is **not** credited to anyone: the verifier pool has no on-chain destination of any kind yet (no
+verifier-committee registry), so that 10% is, for now, folded into the effectively-burned remainder rather than
+guessed at - a future pass adding a verifier pool needs to revisit `SettleTransactionDiff` to add that credit
+alongside the other two, not replace either. `φ_b` isn't credited to a balance either, but unlike `φ_v` it isn't
+simply dropped - it feeds workBoost (see "workBoost: boosting a validator's generating balance" below).
+
+The retired (uncredited) portion needs no extra bookkeeping beyond what `Reserve` already does: it debits the
+sender's spendable balance at reservation time and credits it nowhere (see "Reserve and BindApiKey" above) -
+recording a settlement (and crediting the node's slice of it) is what makes the rest of that debit permanent,
+there is nothing left to burn or move for the untouched remainder. Asset volumes are never touched either way:
+they are fixed at issuance for every asset in this state model (`StateSnapshot.assetVolumes`'s own comment - "an
+asset's volume is fixed forever at issuance"), and this repo has no Burn/Reissue transaction type to change that
+invariant for.
+
+**Testing** follows the same constraint and workaround as `ReserveTransactionDiffTest`/`BindApiKeyTransactionDiffTest`
+(see above) - `SettleTransactionDiffTest` injects a `RegisteredEnclave`, and seeds `reservedAmount` directly through
+`StateSnapshot.build`/`SnapshotBlockchain` rather than a real `Reserve` transaction, since only the reserved
+*total* matters to the diff under test, not how it got there. The `RegisteredEnclave`-injecting `Blockchain`
+wrapper itself used to be hand-rolled separately in each of the three test files (`export blockchain.
+{registeredEnclaves as _, *}` plus one `override def`); adding a third copy for `SettleTransactionDiffTest` was
+the trigger to extract it once, as `WithDomain.blockchainWithRegisteredEnclave(blockchain, enclave)`
+(`node/testkit/.../db/WithState.scala`), with `Reserve`/`BindApiKeyTransactionDiffTest` refactored to call it too.
+`TxHelpers.settle` defaults to a distinct enclave signer (`signer(9)`) from its `sender` (`defaultSigner`) -
+reusing the same key for both would hide a bug where the wrong key ends up signing the settlement message, since
+in production the two are always unrelated keys.
+
+## workBoost: boosting a validator's generating balance
+
+The second half of what was, until this pass, a documented gap: "value settled in epoch E feeds the beneficiary
+validator's workBoost in E+1" (the gist), matching hearth-tokenomics-spec S7.1's `b_eff(i) = b_i(1 +
+workBoost_i)` amplifying "a staker's forging weight." Two project decisions fixed the previously-open design
+questions: **"let epoch be a generation period"** (so no new period concept was needed - `GenerationPeriod`,
+already used by `committedGenerators`/`registeredEnclaves`, *is* the epoch), and **work is tracked in the name of
+the validator, not the miner** (the settling enclave's `RegisteredEnclave.validator` - the consensus generator it
+boosts - not `RegisteredEnclave.operator`/the TEE miner submitting the `Settle`). Implemented as a **deliberately
+simplified placeholder** for the spec's full curve, not the curve itself - see "Why simplified, not the full
+spec formula" below for why, and for how to upgrade later without touching storage.
+
+**Tracking (`SettleTransactionDiff`):** `SettleTransactionDiff.BurnedWorkPart` (`Fraction(6, 10)`, φ_b = 0.60,
+same hardcoding rationale as `ServingNodeCredPart`) computes each settlement's burned share of its delta the same
+incremental way `ServingNodeCredPart` computes the node's share, and accumulates it into the new
+`Blockchain.workDone(validator, period)` - a third `Long` ledger with the exact `reservedAmount`/`settledAmount`
+history mechanism (`Keys.workDoneSuffix`/`workDoneHistory`/`workDoneKeysAt`, `KeyTag.WorkDone*` appended at the
+end, `StateSnapshot.workDone`), keyed by `(validator, period)` rather than a triple since there's only one
+validator per enclave. Every settlement in one `SettleTransaction` shares the same `enclavePublicKey` and
+therefore the same `registered.validator` and the same current `blockchain.currentGenerationPeriod` - so unlike
+`settledAmounts`/node-credit (keyed per settlement), the whole batch accumulates into a single `(validator,
+period)` entry. `registeredEnclave` having already resolved earlier in the same `for`-comprehension guarantees
+`currentGenerationPeriod` is defined at this point (see `Blockchain.findRegisteredEnclave`), so fetching it again
+as an explicit `Either` (rather than silently reusing a private detail of that lookup) is belt-and-braces, not a
+reachable failure mode.
+
+**`SettleTransactionDiff` also requires `registered.validator` to be a committed generator of `period` itself**
+(`blockchain.committedGenerators(period).exists(_.address == registered.validator)`), a check independent of and
+in addition to `registeredEnclave`'s own. This is load-bearing, not redundant, and its absence was a real Critical
+bug caught in review before merge (security audit, Pass 2): `findRegisteredEnclave`'s current-or-next-period
+window (see "Reserve and BindApiKey" above) means a `RegisteredEnclave` written for period `X` (StartBoost only
+ever checked `validator ∈ committedGenerators(X)`, the period it registered *for*) is also visible while
+`blockchain.currentGenerationPeriod == X.prev` - i.e. a `Settle` can land one period *before* the one StartBoost
+actually verified committee membership for. Without this check, `workDone` could be written for a `period` whose
+`committedGenerators(period)` doesn't include `validator` at all (e.g. a brand-new generator that committed for
+`X` but not `X.prev`); `GeneratingBalanceProvider` sums `totalWork` only over `committedGenerators(workPeriod)`
+(see below), so that validator's own `work` would be excluded from the sum it's later compared against, letting
+`work > totalWork` and breaking the `(1 + MaxBoost)` bound `WorkBoost` depends on. `SettleTransactionDiffTest`'s
+"rejects settling when the validator is not a committed generator of the current period" pins this down.
+
+**Consumption (`GeneratingBalanceProvider`):** rather than patch every call site that reads generating balance
+(`appender.findBlockAndGetGenerators` for eligibility/endorsement weight, `appender.minerBalance` for the PoS
+delay check, `Miner`/`BlockChallenger` for local scheduling, `CommitToGenerationTransactionDiff` for deposit
+sizing, `CommonAccountsApi` for read-only display), the boost is applied once, centrally, inside
+`GeneratingBalanceProvider.balance` itself - the single function every one of those already calls through
+`Blockchain.generatingBalance` (`BlockchainExt`). For a balance lookup at height `h`, the period being *generated
+into* is `generationPeriodOf(h + 1)` (mirroring `findBlockAndGetGenerators`'s own `parentHeight.next` ->
+`generationPeriodOf` derivation), and the work it draws on is that period's predecessor
+(`GenerationPeriod.prev`, `None` only for the very first period - `start == Height(1)` - which therefore never
+gets a boost, correctly: there's no period before genesis to have tracked anything in). `totalWork` is the sum
+of `workDone(g.address, workPeriod)` over every `g` in `committedGenerators(workPeriod)` - the full committee
+that period, not just validators who happen to have work, so a validator's boost is inherently a *share of the
+whole committee's tracked work*, not an absolute count. Summed as `BigInt`
+(`GeneratingBalanceProvider.workContext`), not a plain `Long`: individual `workDone` values are bounded
+(`safeSum`'d at write time), but a sum over an unbounded number of committed generators isn't itself guaranteed
+to fit a `Long` - flagged in review (security audit, Pass 2) since the original plain-`Long` `.sum` could silently
+wrap on a large enough committee.
+
+**`balance`'s per-account cost, and why `findBlockAndGetGenerators` doesn't call it directly.** Computing
+`totalWork` is an `O(committee)` scan (`committedGenerators` plus one `workDone` read per member). `balance` is
+public and computes it fresh per call, which is fine for every single-account caller above - but
+`findBlockAndGetGenerators` calls it once *per committed generator* to build one block's eligibility list, which
+would make that `O(committee²)` (flagged in review, code quality Pass 1, as a real per-block RocksDB-read
+multiplier, not a one-off cost). `GeneratingBalanceProvider.workContext(blockchain, atHeight)` computes the
+`(workPeriod, totalWork)` pair once; `balanceWithContext` takes it as a parameter instead of recomputing it.
+`findBlockAndGetGenerators` calls `workContext` once and threads it through its per-generator loop via
+`balanceWithContext`; every other caller keeps using plain `balance`, which computes the same context internally
+for its own single account.
+
+**`WorkBoost`** (`consensus/WorkBoost.scala`) is the pure curve: `boosted = balance + balance * MaxBoost * work /
+totalWork` (`MaxBoost = 2`, the conservative end of the spec's own "2-3" governance range - see the file's own
+comment on the "Bounded amplification (Lemma)" tradeoff), `0` whenever `totalWork <= 0` or this validator's own
+`work <= 0`. The `(1 + MaxBoost)` bound (`work/totalWork <= 1`) holds *only* because `SettleTransactionDiff`
+guarantees `work` is genuinely one of `totalWork`'s own addends (see the committee-membership check above) - it's
+not an invariant `WorkBoost` can enforce on its own, only rely on. As defence in depth against exactly that
+assumption ever being violated again (rather than trusting the write-side check silently forever), the final
+`BigInt -> Long` conversion is guarded by an explicit `require(boosted.isValidLong, ...)` instead of `.toLong`'s
+default silent-truncation behavior - `BigInt.toLong` wraps into an arbitrary, possibly negative, `Long` on
+overflow with no error, which would otherwise turn a broken invariant into a corrupted generating balance instead
+of a loud failure (flagged in review, security audit Pass 2, alongside the committee-membership check itself).
+**BigInt intermediate arithmetic throughout, not Double**: this feeds directly into which blocks are valid, so it
+has to be exact and platform-independent, the same "no floating point in consensus" rule `EmissionCurve` follows
+(see "Why fixed-point BigInt, not `Math.pow`" under "HRTH emission curve").
+
+**Why simplified, not the full spec formula.** hearth-tokenomics-spec S7.1's real curve is EMA-smoothed
+(`w_i(E) = (1-α)w_i(E-1) + α·r_i(E)`), normalized against the **median** of every active validator's work that
+period (not a sum-based share), then passed through a saturating function (`B_max · g/(g+κ)`). None of `α`/`κ`
+has a value anywhere in the spec (unlike `B_max`'s explicit "2-3"), and a per-period median across every
+committed generator is meaningfully more machinery than a sum. Given the project is pre-launch (see the emission
+curve/retirement-split sections' own "TODO: replace before launch" precedent - nothing on a live chain depends on
+today's choice), the simplified version ships the actual mechanic (tracked work -> more forging weight, bounded
+the same way) without inventing values for constants the spec doesn't provide. **Upgrading later needs no storage
+migration**: `Blockchain.workDone` already stores the raw per-period signal (`r_i(E)`'s role) the EMA would be
+built from, so swapping `WorkBoost`'s body for the full curve - and eventually adding the EMA smoothing and
+median normalization around it - only touches `GeneratingBalanceProvider`/`WorkBoost`, not
+`SettleTransactionDiff` or any persisted schema. The one wrinkle: EMA needs a "previous period's smoothed value"
+to carry forward, which isn't stored yet (`workDone` is the raw, un-smoothed signal) - bootstrapping it from
+already-stored historical raw values, retroactively or lazily, is a small follow-up, not a blocker.
+
+**Testing:** `WorkBoostTest` covers the pure curve directly (zero-total, zero-own-work, proportional share,
+truncation, the `(1 + MaxBoost)` bound). `GeneratingBalanceProviderTest` exercises the full wiring
+(period resolution, committee enumeration, `workDone` lookup, boost application) against a *real* domain's
+`effectiveBalance`/`generationPeriodOf` wrapped with a `Blockchain` that injects `committedGenerators`/`workDone`
+for one specific period - the same "inject the minimal necessary state directly" technique used throughout this
+feature, chosen over driving a real period boundary crossing (which needs an actual `CommitToGenerationTransaction`
+committing a generator for a *later* period - see "node-it fixtures"'s own extensive notes on how fiddly that is
+- well beyond what this is testing). `generationPeriodLength = 1` makes the genesis period exactly `[1, 1]`, so
+its predecessor is already well-defined and a height-1 lookup already draws on it, with no need to advance the
+chain past genesis at all. `SettleTransactionDiffTest` covers the tracking side (attributed to the validator, not
+the miner; accumulates within a batch and across transactions, mirroring the node-credit tests' structure).
 
 ## Protobuf package migration
 

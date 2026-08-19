@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 import tech.hearth.account.Address
 import tech.hearth.block.{Block, BlockEndorsement, BlockSnapshot, FinalizationVoting}
 import tech.hearth.common.state.ByteStr
-import tech.hearth.consensus.PoSSelector
+import tech.hearth.consensus.{GeneratingBalanceProvider, PoSSelector}
 import tech.hearth.lang.ValidationError
 import tech.hearth.metrics.*
 import tech.hearth.network.BlockSnapshotResponse
@@ -63,8 +63,11 @@ package object appender {
 
       conflictGenerators  = currentPeriod.fold(ConflictGenerators.empty)(blockchain.conflictGenerators).upTo(blockHeight)
       committedGenerators = currentPeriod.fold(Nil)(blockchain.committedGenerators)
+      // Computed once for the whole committee rather than left for each generatingBalance call to recompute -
+      // see GeneratingBalanceProvider.workContext's own doc comment for why that matters.
+      workContext = GeneratingBalanceProvider.workContext(blockchain, parentHeight.toInt)
       validGenerators = committedGenerators.view
-        .map(cg => cg -> blockchain.generatingBalance(cg.address, Some(parentBlockId)))
+        .map(cg => cg -> GeneratingBalanceProvider.balanceWithContext(blockchain, cg.address, Some(parentBlockId), workContext))
         .zipWithIndex
         .collect {
           case ((cg, balance), idx)

@@ -34,6 +34,8 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
     dcapPckCaIssuerChain,
     reservedAmount,
     apiKeyBinding,
+    settledAmount,
+    workDone,
     filledVolumeAndFee,
     balanceAtHeight,
     balanceSnapshots,

@@ -85,7 +85,13 @@ enum KeyTag {
     ReservedAmountKeysAtHeight,
     ApiKeyBindingHistory,
     ApiKeyBinding,
-    ApiKeyBindingKeysAtHeight
+    ApiKeyBindingKeysAtHeight,
+    SettledAmountHistory,
+    SettledAmount,
+    SettledAmountKeysAtHeight,
+    WorkDoneHistory,
+    WorkDone,
+    WorkDoneKeysAtHeight
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }

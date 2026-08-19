@@ -116,5 +116,39 @@ class TransactionFactorySpec extends FreeSpec {
 
       TransactionFactory.parseRequest(json) shouldBe a[Left[?, ?]]
     }
+
+    "builds a SettleTransaction from a well-formed request" in forAll(accountGen, accountGen) { (sender, clientKey) =>
+      val client           = clientKey.toAddress
+      val enclavePublicKey = ByteStr(Array.fill(32)(9: Byte))
+      val enclaveSignature = ByteStr(Array.fill(64)(7: Byte))
+      val json = Json.obj(
+        "type"             -> TransactionType.Settle.id,
+        "senderPublicKey"  -> PublicKey(sender.publicKey()).toString,
+        "enclavePublicKey" -> Base16.encode(enclavePublicKey.arr),
+        "settlements"      -> Json.arr(Json.obj("client" -> client.toString, "cumulativeSpent" -> 100000000)),
+        "enclaveSignature" -> Base16.encode(enclaveSignature.arr),
+        "fee"              -> 100000
+      )
+
+      val tx = TransactionFactory.parseRequest(json).explicitGet()
+      tx shouldBe a[SettleTransaction]
+      val settle = tx.asInstanceOf[SettleTransaction]
+      settle.enclavePublicKey shouldBe enclavePublicKey
+      settle.enclaveSignature shouldBe enclaveSignature
+      settle.settlements shouldBe Seq(SettleTransaction.Settlement(client, Asset.Hearth, TxNonNegativeAmount.unsafeFrom(100000000)))
+    }
+
+    "rejects a Settle request with an empty settlements list" in forAll(accountGen) { sender =>
+      val json = Json.obj(
+        "type"             -> TransactionType.Settle.id,
+        "senderPublicKey"  -> PublicKey(sender.publicKey()).toString,
+        "enclavePublicKey" -> Base16.encode(Array.fill(32)(9: Byte)),
+        "settlements"      -> Json.arr(),
+        "enclaveSignature" -> Base16.encode(Array.fill(64)(7: Byte)),
+        "fee"              -> 100000
+      )
+
+      TransactionFactory.parseRequest(json) shouldBe a[Left[?, ?]]
+    }
   }
 }
