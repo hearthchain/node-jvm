@@ -25,11 +25,9 @@ class TransactionFactorySpec extends FreeSpec {
     "builds a StartBoostTransaction from a well-formed request" in forAll(accountGen, accountGen) { (sender, validatorKey) =>
       val validator = validatorKey.toAddress
       val json = Json.obj(
-        "type"            -> TransactionType.StartBoost.id,
-        "senderPublicKey" -> PublicKey(sender.publicKey()).toString,
-        "validator"       -> validator.toString,
-        // ByteStr.toString switches to a "base64:"-prefixed form at 1024+ bytes (a real quote is ~4935), which
-        // the request-side decoder (utils.byteArrayFromString) doesn't accept - encode explicitly as base16.
+        "type"                  -> TransactionType.StartBoost.id,
+        "senderPublicKey"       -> PublicKey(sender.publicKey()).toString,
+        "validator"             -> validator.toString,
         "tdxQuote"              -> Base16.encode(tdxQuote.arr),
         "generationPeriodStart" -> 100,
         "fee"                   -> 100000000
@@ -41,6 +39,16 @@ class TransactionFactorySpec extends FreeSpec {
       startBoost.validator shouldBe validator
       startBoost.tdxQuote shouldBe tdxQuote
       startBoost.generationPeriodStart shouldBe Height(100)
+    }
+
+    "round-trips a signed transaction's own JSON, large ByteStr fields included" in forAll(accountGen, accountGen) { (sender, validatorKey) =>
+      // /transactions/sign hands its JSON straight back to /transactions/broadcast, so every ByteStr field must be
+      // written in the base16 the reader accepts - including past the 1024-byte mark where ByteStr.toString is base64.
+      val startBoost = TxHelpers.startBoost(sender, validatorKey.toAddress, tdxQuote, Height(100))
+      TransactionFactory.parseRequest(startBoost.json()).explicitGet() shouldBe startBoost
+
+      val collateral = TxHelpers.updateCollateral(sender, tcbInfo = Some(tcbInfo))
+      TransactionFactory.parseRequest(collateral.json()).explicitGet() shouldBe collateral
     }
 
     "builds an UpdateCollateralTransaction from a well-formed request" in forAll(accountGen) { sender =>

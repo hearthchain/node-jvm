@@ -1056,7 +1056,7 @@ object OrderbookHistory {
 
       case _ => JsError("Can't read ByteStr")
     },
-    Writes(x => JsString(x.toString))
+    Writes(tech.hearth.utils.byteStrFormat.writes)
   )
 
   implicit val assetPairFormat: Format[AssetPair] = Json.format[AssetPair]

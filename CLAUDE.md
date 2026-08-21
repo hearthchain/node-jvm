@@ -634,7 +634,9 @@ full signature-chain wiring end to end against a quote that actually verifies. A
 would need either a live Intel PCS fetch (a new kind of test dependency this repo doesn't have) or threading an
 injectable trust anchor through `StartBoostTransactionDiff` itself (mirroring `IntelPki.verifyIssuerChain`'s own
 `trustAnchor` parameter) so a synthetic PCK chain built in-test with BouncyCastle could stand in for Intel's real
-one.
+one. The accept path has since been exercised end to end, outside the unit tests, against a real Intel-signed quote
+and live PCS collateral on the docker/private image - see "Live StartBoost on docker/private" below; the unit-test gap
+itself is unchanged.
 
 ### REST: signing and broadcasting
 
@@ -1507,18 +1509,16 @@ rebuilt together from scratch, since none of the old values (base58 address, pre
 - see `docker/private/README.md`'s "Rebuilding genesis" for the `Block.genesis(...)`-based process used, the same
 one `GenesisBlockGenerator` automates for the balances/generators case it does support.
 
-A stale genesis timestamp turned out to be its own separate bug, orthogonal to all of the above: a block's target
-timestamp is `parentTimestamp + delay` (a PoS-derived offset, not the system clock), so a genesis timestamped years
-in the past makes the miner treat every subsequent block as already overdue and mine as fast as it can compute them,
-each one still stamped near the stale genesis date - meaning real transactions (timestamped at whatever time they're
-actually submitted) fail `max-transaction-time-forward-offset` against a chain tip that hasn't caught up yet, for
-however many blocks it takes to close a gap that can be years wide. Confirmed by watching the fixed config mine
-cleanly (new blocks roughly every 1-2 seconds, matching the account's share of genesis supply) once genesis was
-retimestamped close to today, after the same config produced years of at-full-speed catch-up mining in an earlier,
-not-yet-corrected attempt. See `docker/private/README.md`'s "Why genesis timestamp has to stay close to now" - this
-is exactly why predefined DCAP collateral (below) can't just be grafted onto this file's genesis: collateral
-validity is checked against genesis's own pinned timestamp (see "The genesis-timestamp bug"), and every vendored
-DCAP fixture's validity window is long past by now, the same as this file's original 2019 timestamp was.
+A stale genesis timestamp is cheaper than the README used to claim, but not free: `Miner.forgeBlock` stamps a
+block `max(parentTimestamp + delay, now - 1 minute)`, so the first block after a stale genesis lands a minute
+behind wall clock and the miner then produces blocks as fast as it can compute them (~1.6 s each, ~35 blocks)
+until block time catches up, after which it runs at the configured pace; transactions timestamped "now" are
+accepted throughout (the 90 min forward offset covers that minute). Measured 2026-08-21 against a genesis 4.3 days
+old: height 20 at 30 s, 42 at 2 min. The cost is in the K=100 StartBoost freshness window (below): the burst spends
+a third of it before anyone can react, so keep genesis reasonably fresh rather than letting it drift for weeks.
+Collateral validity is the real constraint on a genesis that ships DCAP fields (see "The genesis-timestamp bug"):
+every vendored DCAP fixture's validity window is long past by now, the same as this file's original 2019 timestamp
+was.
 
 Predefined DCAP collateral at genesis (the six `dcap-*` `PredefinedSnapshotSettings` fields, requested alongside
 this fix) is documented in `docker/private/README.md` rather than actually shipped in `hearth.custom.conf` - real
@@ -1526,3 +1526,39 @@ Intel-signed collateral is required (`IntelPki`'s Root CA key is pinned, not con
 fails the same way at genesis as in a live `UpdateCollateralTransaction`), and its validity window would force a
 stale genesis timestamp, defeating the fix directly above. The README documents the mechanism, the config schema,
 and the constraint, for whoever fetches fresh collateral and rebuilds genesis to match it.
+
+## Live StartBoost on docker/private
+
+First end-to-end run of the StartBoost accept path (2026-08-21, `docker/private` image built from `1f05c6637` plus
+this branch): a real Intel-signed TDX v4 quote whose `report_data` is the private image's genesis block id
+(`98dad961...`) ++ a known enclave key, verified against live Intel PCS collateral for its FMSPC. `UpdateCollateral`
+in blocks 32/33, `CommitToGeneration` in 33, `StartBoost` accepted in block 34 (height 33, inside the K=100
+window), `RegisteredEnclave(enclaveKey, validator = sender, operator = sender)` readable for period
+[1000001, 2000000]. `docker/private/startboost-live.py` is the runbook (stdlib Python, REST only, see the README
+there). What it took, beyond what the code already documented:
+
+- Collateral goes in two transactions: `DcapCollateral` resolves the Root CA CRL for revocation checking from chain
+  state (`blockchain.dcapRootCaCrl`), never from the transaction being applied, so `rootCaCrl` has to be mined first
+  and everything else (`pckCaIssuerChain` + `pckCrl`, `tcbSigningIssuerChain` + `tcbInfo` + `qeIdentity`) can follow
+  in one. The PCK CRL must come from the CA that issued the quote's PCK leaf (Platform CA for this quote; Intel PCS
+  publishes a Processor CA one too). Formats: CRLs DER, issuer chains PEM, TCB Info / QE Identity the raw signed
+  JSON as served; all hex-encoded in the request. Intel PCS material is dated the day it is fetched and validity is
+  checked at the transaction timestamp, so a quote captured against an old genesis still verifies, but the
+  collateral has to be fresh.
+- `/transactions/sign` -> `/transactions/broadcast` was broken for any transaction with a ByteStr field of 1024+
+  bytes (a quote is ~5 KB, most collateral blobs are too): `utils.byteStrFormat.writes` emitted `ByteStr.toString`,
+  which switches to a `base64:` form at that size, while the reads side is base16-only, so the node's own signed JSON
+  was unreadable by the node. Fixed by writing base16 unconditionally (`requests.largeByteStrFormat` already did;
+  the transaction serializers use the ambient format), regression in `TransactionFactorySpec` ("round-trips a signed
+  transaction's own JSON"). `TransactionFactorySpec` had been sidestepping this by encoding base16 by hand.
+- Nothing exposed the enclave registry: `GET /blockchain/finality` now carries `currentRegisteredEnclaves` /
+  `nextRegisteredEnclaves` (`FinalityApiRoute`, covered by `FinalityApiRouteSpec`), the same per-period shape as
+  `currentGenerators` / `nextGenerators`.
+- The private node generates its wallet's first account (nonce 0, the funded generator) itself at startup, so
+  `GET /addresses` lists it already and `POST /addresses` returns nonce 1 - the README used to say the opposite.
+  `CommitToGeneration` via `/transactions/sign` needs only `{"type": 6, "sender": <addr>}`; the node fills the period
+  start and generator keys from `hearth.miner.accounts`.
+- Under sbt 2's default thin client the server JVM outlives a `sbt --batch` run; re-running a suite that loads the
+  Amazon Corretto crypto provider after a recompile then aborts with `IllegalAccessError: ... ConstantTime is in
+  unnamed module of loader sbt.internal.ManagedClassLoader$ZombieClassLoader` (the provider is registered once per
+  JVM, from the old layer). `sbt --client shutdown` and rerun; not a code problem.

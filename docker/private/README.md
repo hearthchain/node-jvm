@@ -1,3 +1,7 @@
+---
+purpose: Build, run and exercise the docker/private Hearth node (private chain id R, genesis and DCAP notes, live StartBoost check)
+---
+
 # Hearth private node
 
 The image is useful for developing dApps and other smart contracts on the Hearth blockchain.
@@ -26,7 +30,7 @@ The node is configured with:
 - feature 1 (`SmallerMinimalGeneratingBalance`) pre-activated - the only transaction/consensus feature this fork currently implements gating for; nothing else is
 - custom chain id - **R**, bech32 address prefix `phrth`
 - api_key `hearth-private-node`
-- a single pre-funded, pre-committed generator account (`phrth1gxv7se8ueq623ukgwxmesapatdmhay84f0sfk0`, nonce 0 of `wallet.seed`) - the node mines with it immediately, and its own wallet controls it as soon as it's registered via `POST /addresses` (a fresh wallet's first generated address is always nonce 0)
+- a single pre-funded, pre-committed generator account (`phrth1gxv7se8ueq623ukgwxmesapatdmhay84f0sfk0`, nonce 0 of `wallet.seed`) - the node mines with it immediately and its own wallet controls it from startup: the node generates the wallet's first account itself, so `GET /addresses` already lists it and `POST /addresses` yields nonce 1 onwards, never this one
 
 Full node configuration is available in [`hearth.custom.conf`](./hearth.custom.conf).
 
@@ -65,6 +69,19 @@ Adding or changing any `predefined-snapshots` field changes the state genesis co
 
 `GenesisBlockGenerator` (`node/src/main/scala/tech/hearth/GenesisBlockGenerator.scala`, run via `sbt "node/runMain tech.hearth.GenesisBlockGenerator <input.conf> <output.conf>"`) builds balances/generators from a list of seed phrases and computes the matching pinned `genesis`/`predefined-snapshots` block for you - see its `genesis-generator { }` input format in the file itself. It does not yet accept the `dcap-*` fields, so a genesis that needs predefined DCAP collateral currently has to be assembled by hand: build a `BlockchainSettings` with the desired `predefined-snapshots` entry (DCAP fields included) directly and call `Block.genesis(blockchainSettings)` to get the real `signature`/`state-hash`/`block-id` to pin, the same way `GenesisBlockGenerator.mkGenesisSettings` does internally. `hearth.custom.conf`'s own account (address, generator keys, genesis commitments) was produced this way, from a throwaway `sbt "node/Test/console"` session - regenerate it the same way after changing anything under `predefined-snapshots`, or the running node fails closed at startup with a "Genesis state hash mismatch"/"Genesis block id mismatch" error (see CLAUDE.md, "Genesis commitments").
 
-### Why genesis timestamp has to stay close to now
+### Why genesis timestamp should stay close to now
 
-A block's target timestamp is computed as `lastBlock.timestamp + delay` (a PoS-derived delay, independent of wall-clock time) - not from the system clock directly. If genesis's own `timestamp` is old, every block after it inherits that staleness and the miner never waits (its target is already overdue), so the chain mines as fast as it can compute blocks rather than at the configured 10-second interval, and every one of those blocks is still timestamped in the past - meaning a real transaction (timestamped at whatever time it's actually submitted) fails the max-transaction-time-forward-offset check against a chain tip still stuck near the old genesis date, until enough blocks have been mined to physically close the gap. `hearth.custom.conf`'s genesis timestamp needs rebuilding (see above) with each new image build for exactly this reason - don't reuse an old genesis timestamp across a long-dormant rebuild.
+A block is stamped `max(lastBlock.timestamp + delay, now - 1 minute)` (`Miner.scala`), so a stale genesis does not make the chain replay the whole gap: the first mined block lands about a minute behind wall clock and the miner then produces blocks as fast as it can (roughly 1.6 s each, ~35 blocks) until block time catches up with wall clock, after which it settles at the configured pace. Observed on 2026-08-21 against a genesis 4.3 days old: height 20 after 30 s, height 42 after 2 min. Transactions timestamped "now" are accepted throughout (the 90 min forward offset covers that minute), so a stale genesis costs nothing for ordinary use, but the burst eats a third of StartBoost's 100-block quote-freshness window (see below), so rebuild genesis (see above) rather than let it drift for long.
+
+## Live StartBoost check
+
+[`startboost-live.py`](./startboost-live.py) drives the whole TEE-miner registration path against a freshly started container over REST, stdlib only: Root CA CRL, then the rest of the DCAP collateral (`UpdateCollateral`, two transactions because every issuer chain is revocation-checked against the Root CA CRL already on chain), `CommitToGeneration` for the next period, `StartBoost` with a real quote, then a read of the enclave registry through `GET /blockchain/finality` (`currentRegisteredEnclaves`/`nextRegisteredEnclaves`).
+
+It needs a fixture directory with `quote.hex` (an Intel-signed TDX quote whose `report_data[0:32]` is this image's genesis block id `98dad961...` and `report_data[32:64]` the enclave key to register) and `collateral/` with the matching Intel PCS material (`rootca.crl.der`, `pck-ca-issuer-chain.pem`, `pckcrl-platform.pem`/`pckcrl-processor.pem` for the CA that issued the quote's PCK leaf, `tcb-signing-issuer-chain.pem`, `tcbinfo.json` for the quote's FMSPC, `qeidentity.json`), all currently valid: validity is checked against the transaction timestamp, so yesterday's genesis is fine but last month's collateral is not. The script mirrors three node-side definitions by hand (`StartBoostTransactionDiff.FreshnessWindowBlocks`, the TD report layout in `DcapQuote` for the report_data offset, and `TransactionType` ids); a change to any of them needs a matching edit here. Start from a fresh volume and run it within the first few minutes: the quote is fresh only while height < 101, and the catch-up burst above spends ~35 of those blocks in the first minute.
+
+```
+docker rm -f hearth-private-node; docker run -d --name hearth-private-node -p 6869:6869 hearth-private-node
+docker/private/startboost-live.py <fixture-dir>
+```
+
+Runs on 2026-08-21 (node `1f05c6637` plus this branch): first attempt, started at height 31, had collateral in blocks 32 and 33, commit in 33, StartBoost accepted in block 34; reruns on fresh containers had them confirmed in blocks 3, 5, 6 and 7 (broadcast at heights 2, 4, 5, 7). Both registered enclave key `4421c67f...` for period [1000001, 2000000] with operator = validator = the sender.
