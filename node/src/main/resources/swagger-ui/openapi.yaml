@@ -3514,8 +3514,9 @@ components:
         - $ref: '#/components/schemas/Hash'
     Address:
       type: string
-      pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
-      example: 3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k
+      description: bech32m, HRP per network (-Dhearth.hrp)
+      pattern: '^[a-z]+1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38}$'
+      example: phrth1gxv7se8ueq623ukgwxmesapatdmhay84f0sfk0
     Alias:
       type: string
       pattern: '^alias\:.:[\-\.0-9@_a-z]{4,30}$'

@@ -583,14 +583,7 @@ planned). The diff:
 - requires `generationPeriodStart` to be exactly the *next* generation period from the current one, and `validator`
   to already be a committed generator of that next period - a StartBoost can't register ahead of or behind the
   generator commitment it rides on;
-- checks quote freshness and sender-binding: the TDX report's 64-byte `report_data` must equal `blockId(32) ++
-  senderPublicKey(32)`, `blockId` must name a block within the last `FreshnessWindowBlocks` (100) blocks below the
-  current height. Both values are embedded raw, not hashed - `report_data` already fits both exactly, and
-  unforgeability comes from the quote's own TDX hardware signature over `report_data`, not from hiding either
-  value; hashing them would only add cost (verifying would still mean recomputing and comparing against the small
-  set of candidate recent block ids, since a hash can't be "unhashed" to recover which block was claimed) without
-  adding security. The sender binding exists so a quote observed in the mempool can't be copied into a different
-  sender's StartBoost transaction before the original lands;
+- checks quote freshness and the enclave-key binding: the TDX report's 64-byte `report_data` must equal `blockId(32) ++ enclavePublicKey(32)`; `blockId` must name a block within the last `FreshnessWindowBlocks` (100) blocks below the current height, and `report_data[32:64]` is the enclave's own ephemeral Ed25519 key, the one later flows encrypt to and verify against (all-zero is rejected). Both values are embedded raw, not hashed: `report_data` fits both exactly and unforgeability comes from the quote's TDX hardware signature over it. There is no sender binding (see #32): a third party observing a quote in the mempool can front-run the registration and become the recorded operator, which buys nothing signable (only the enclave holds the key) and costs a fee; the miner escapes by restarting the enclave (fresh key) and re-registering, and first-registration-wins per key and period makes that escape deterministic;
 - verifies the full quote signature chain: the quote's own embedded PCK certificate chain (leaf, PCK CA, root) is
   checked against `IntelPki`'s pinned Intel root and the on-chain `pckCrl` (revocation) - it does *not* need the
   on-chain `pckCaIssuerChain` too, since the chain a quote itself carries is already self-contained; that field
