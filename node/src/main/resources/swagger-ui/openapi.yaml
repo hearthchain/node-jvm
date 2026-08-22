@@ -4578,7 +4578,7 @@ components:
                 $ref: '#/components/schemas/GeneratorDataLSF'
     RegisteredEnclaveData:
       type: object
-      description: A TEE miner's enclave registered for the period via StartBoost
+      description: A TEE miner's enclave registered for the period via StartBoost, as of height (not finalizedHeight)
       required:
         - enclavePublicKey
         - validator

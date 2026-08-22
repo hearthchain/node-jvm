@@ -59,9 +59,7 @@ package object utils {
   }
 
   // Always base16, never ByteStr.toString's "base64:" form at 1024+ bytes: the reads side is base16-only, so a large
-  // field (a DCAP quote, a collateral blob) written as base64 could not be read back by /transactions/broadcast. The
-  // reads side here still stops at Base16.defaultDecodeLimit; request classes with large fields shadow it with
-  // requests.largeByteStrFormat.
+  // field (a DCAP quote, a collateral blob) written as base64 could not be read back by /transactions/broadcast.
   implicit val byteStrFormat: Format[ByteStr] = new Format[ByteStr] {
     override def writes(o: ByteStr): JsValue = JsString(Base16.encode(o.arr))
     override def reads(json: JsValue): JsResult[ByteStr] = json match {

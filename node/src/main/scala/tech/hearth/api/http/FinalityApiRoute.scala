@@ -35,8 +35,7 @@ case class FinalityApiRoute(blockchain: Blockchain, blocksApi: CommonBlocksApi, 
             )
           )
       ),
-      // TEE miners registered via StartBoost ride on the generator commitments above, so they are read per period
-      // the same way: registrations always target the next period.
+      // A StartBoost registration always targets the next period; the current list is what last period registered.
       "currentRegisteredEnclaves" -> currentPeriod.fold(Seq.empty[RegisteredEnclave])(blockchain.registeredEnclaves),
       "nextRegisteredEnclaves"    -> currentPeriod.fold(Seq.empty[RegisteredEnclave])(p => blockchain.registeredEnclaves(p.next))
     )
