@@ -33,6 +33,7 @@ object TxStateSnapshotHashBuilder {
 
   def createHashFromSnapshot(snapshot: StateSnapshot, txStatusOpt: Option[TxStatusInfo]): Result = {
     val changedKeys = mutable.SortedSet.empty[Array[Byte]]
+    def tag(name: String): Array[Byte] = name.getBytes(StandardCharsets.UTF_8)
 
     snapshot.balances.foreach { case ((address, asset), balance) =>
       asset match {
@@ -92,22 +93,25 @@ object TxStateSnapshotHashBuilder {
     snapshot.dcapTcbSigningIssuerChain.foreach(v => changedKeys += "dcapTcbSigningIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapPckCaIssuerChain.foreach(v => changedKeys += "dcapPckCaIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
 
+    // Domain tags keep these preimages distinct: reserved and settled are otherwise byte-identical, and an
+    // api-key binding with a 20-byte envelope would match a registered-enclave entry. The variable envelope is
+    // length-prefixed so it cannot borrow bytes from the trailing sender. Same UTF-8-tag scheme as the DCAP fields.
     snapshot.reservedAmounts.foreach { case ((sender, miner, asset), amount) =>
       val assetBytes = asset.compatId.fold(Array.emptyByteArray)(_.arr)
-      changedKeys += sender.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+      changedKeys += tag("reservedAmount") ++ sender.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
     }
 
     snapshot.apiKeyBindings.foreach { case ((enclavePublicKey, sender), encryptedApiKey) =>
-      changedKeys += enclavePublicKey.arr ++ sender.toBytes ++ encryptedApiKey.arr
+      changedKeys += tag("apiKeyBinding") ++ enclavePublicKey.arr ++ sender.toBytes ++ Longs.toByteArray(encryptedApiKey.arr.length.toLong) ++ encryptedApiKey.arr
     }
 
     snapshot.settledAmounts.foreach { case ((client, miner, asset), amount) =>
       val assetBytes = asset.compatId.fold(Array.emptyByteArray)(_.arr)
-      changedKeys += client.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+      changedKeys += tag("settledAmount") ++ client.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
     }
 
     snapshot.workDone.foreach { case ((validator, period), work) =>
-      changedKeys += validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
+      changedKeys += tag("workDone") ++ validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
     }
 
     txStatusOpt.foreach(txInfo =>
