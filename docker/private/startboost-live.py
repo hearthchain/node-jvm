@@ -3,6 +3,12 @@
 
 Usage: startboost-live.py <fixture-dir>
 
+Alongside the node, the execution-node stack must be up: the LiteLLM gateway with its dev spend ledger
+(GATEWAY_URL, default http://localhost:4000) and the identity service with settlement wired
+(MINER_URL, default http://localhost:8471), started with HEARTH_ENCLAVE_SEED set to the demo seed and
+-embers-per-usd matching EMBERS_PER_USD below. GATEWAY_MASTER_KEY (no default) must hold the gateway master key:
+it authenticates both LiteLLM admin calls and the miner settlement endpoint.
+
 <fixture-dir> holds quote.hex (a TDX v4 quote whose report_data[0:32] is this image's genesis block id and
 report_data[32:64] the enclave key to register) and collateral/ with rootca.crl.der, pck-ca-issuer-chain.pem,
 pckcrl-platform.pem or pckcrl-processor.pem (PCK_CRL=platform|processor picks which, default platform: it must be the
@@ -121,8 +127,17 @@ TX_TRANSFER, TX_COMMIT_TO_GENERATION, TX_START_BOOST = 2, 6, 7  # TransactionTyp
 TX_RESERVE, TX_BIND_API_KEY, TX_SETTLE, TX_UPDATE_COLLATERAL = 8, 9, 10, 12
 FEE = 100_000  # sign fills this default for Reserve/BindApiKey/Settle/StartBoost/UpdateCollateral (CommitToGeneration is 100 units; Transfer needs explicit fee)
 TRANSFER_FEE = 200_000  # Transfer needs explicit fee (min: base + 1 unit per 2 transfers) and timestamp
-# Multiples of 10 so the 30%/60% Fraction splits (delta/10*3) stay exact in balance asserts.
-RESERVE, S1, S2 = 1_000_000, 600_000, 800_000
+RESERVE = 1_000_000
+# The client's API key inside DEMO_ENVELOPE: the runbook plays the client, so holding the plaintext is its right.
+DEMO_API_KEY = "sk-hearth-demo-4f3b45b412ebaad3"
+# One hearth/mock-demo call meters 10 prompt + 20 completion tokens at 1e-6/2e-6 USD: 5e-5 USD exactly.
+USD_PER_CALL = 5e-5
+CALLS_PER_ROUND = 4
+EMBERS_PER_USD = int(os.environ.get("EMBERS_PER_USD", "1000000000"))
+# 4 calls x 5e-5 USD x 1e9 embers/USD = 200_000 embers per round; a multiple of 10 keeps the 30% split exact.
+ROUND_EMBERS = round(CALLS_PER_ROUND * USD_PER_CALL * EMBERS_PER_USD)
+MINER_URL = os.environ.get("MINER_URL", "http://localhost:8471")
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:4000")
 
 # Fail fast before touching the node: the hand-rolled crypto must reproduce committed vectors.
 if ed25519_sign(DEMO_SEED, DEMO_MESSAGE).hex() != DEMO_SIGNATURE:
@@ -133,6 +148,7 @@ if bech32m_decode(FUNDED).hex() != "4199e864fcc834a8f2c871b798743d5b777e90f5":
 if len(sys.argv) != 2:
     sys.exit(__doc__)
 FIX = sys.argv[1]
+MASTER_KEY = os.environ.get("GATEWAY_MASTER_KEY") or sys.exit("GATEWAY_MASTER_KEY must hold the gateway master key")
 PCK_CRL = os.environ.get("PCK_CRL", "platform")
 if PCK_CRL not in ("platform", "processor"):
     sys.exit("PCK_CRL must be platform or processor")
@@ -163,6 +179,22 @@ def get(path):
     if s != 200:
         sys.exit(f"GET {path} -> {s}: {body}")
     return body
+
+
+def http_json(method, url, body=None, bearer=None):
+    r = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method)
+    r.add_header("Content-Type", "application/json")
+    if bearer:
+        r.add_header("Authorization", "Bearer " + bearer)
+    try:
+        with urllib.request.urlopen(r, timeout=60) as resp:
+            return resp.status, json.loads(resp.read() or b"null")
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        try:
+            return e.code, json.loads(raw)
+        except ValueError:
+            return e.code, raw.decode(errors="replace")
 
 
 def height():
@@ -325,27 +357,111 @@ if balance(client) != 1_500_000 - RESERVE - 2 * FEE:
     sys.exit(f"client balance after BindApiKey: {balance(client)}")
 
 
-def settle_tx(cumulative):
-    # The enclave-signed message: client(20) ++ assetId(32, zeros for Hearth) ++ cumulativeSpent(8 BE) per settlement.
-    msg = bech32m_decode(client) + bytes(32) + cumulative.to_bytes(8, "big")
+def settlement_message(operator, period_start, cumulative):
+    # The M1 preimage, only for adversarial batches below; honest batches come signed from the miner.
+    return (
+        b"hearth-settle-v1"
+        + b"R"
+        + bytes.fromhex(enclave_key)
+        + bech32m_decode(operator)
+        + period_start.to_bytes(4, "big")
+        + (1).to_bytes(2, "big")
+        + bech32m_decode(client)
+        + bytes(32)
+        + cumulative.to_bytes(8, "big")
+    )
+
+
+def settle_tx_forged(period_start, cumulative):
     return {
         "type": TX_SETTLE,
         "sender": miner_op,
         "enclavePublicKey": enclave_key,
         "settlements": [{"client": client, "cumulativeSpent": cumulative}],
-        "enclaveSignature": ed25519_sign(DEMO_SEED, msg).hex(),
+        "enclaveSignature": ed25519_sign(DEMO_SEED, settlement_message(miner_op, period_start, cumulative)).hex(),
     }
 
 
-expected = balance(miner_op)
-for cum, prev in ((S1, 0), (S2, S1)):
-    wait_confirmed(f"settle:{cum}", sign_and_broadcast(f"settle:{cum}", settle_tx(cum)))
-    expected += (cum - prev) // 10 * 3 - FEE  # operator keeps the 30% node share, minus the fee
-    if balance(miner_op) != expected:
-        sys.exit(f"operator balance after settle {cum}: {balance(miner_op)}, expected {expected}")
+def miner_settlement():
+    s, batch = http_json("GET", f"{MINER_URL}/v1/settlement?clients={client}", bearer=MASTER_KEY)
+    if s != 200:
+        sys.exit(f"miner settlement failed {s}: {batch}")
+    if batch["enclave_public_key"] != enclave_key or batch["operator"] != miner_op:
+        sys.exit(f"miner settled for an unexpected enclave/operator: {batch}")
+    return batch
 
-# A replayed (or withheld-then-resent) old batch must fail the non-decreasing counter, and a counter can never
-# outgrow what the client reserved.
-expect_rejected("settle:replay", settle_tx(S1), "would decrease")
-expect_rejected("settle:over-reserve", settle_tx(RESERVE + 10), "exceeds total reserved")
-log("full cycle done: reserve", RESERVE, "settled", S2, "operator credited", S2 // 10 * 3)
+
+def wait_metered(cumulative):
+    # The gateway writes its spend ledger asynchronously; poll the miner until the metered total lands.
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        batch = miner_settlement()
+        got = [(e["client"], e["cumulative_spent"]) for e in batch["settlements"]]
+        if got == [(client, cumulative)]:
+            return batch
+        time.sleep(3)
+    sys.exit(f"miner never metered {cumulative} embers; last batch: {batch}")
+
+
+def settle_from(batch):
+    return {
+        "type": TX_SETTLE,
+        "sender": miner_op,
+        "enclavePublicKey": batch["enclave_public_key"],
+        "settlements": [{"client": e["client"], "cumulativeSpent": e["cumulative_spent"]} for e in batch["settlements"]],
+        "enclaveSignature": batch["signature"],
+    }
+
+
+# The stack must be reachable before any spend is generated.
+for name, url, bearer in (("gateway", f"{GATEWAY_URL}/health/liveliness", None), ("miner", f"{MINER_URL}/v1/settlement?clients={client}", MASTER_KEY)):
+    st, body = http_json("GET", url, bearer=bearer)
+    if st != 200:
+        sys.exit(f"{name} not ready at {url}: {st} {body}")
+log("gateway and miner are up; first settlement call provisioned the client key from the on-chain envelope")
+
+# The on-chain reads the miner itself relies on, checked from the outside too.
+if get(f"/blockchain/finality/binding/{enclave_key}/{client}")["envelope"] != DEMO_ENVELOPE:
+    sys.exit("on-chain envelope does not round-trip")
+period_start = get("/blockchain/finality")["currentGenerationPeriod"]["start"]
+
+expected = balance(miner_op)
+cumulative = 0
+for round_no in (1, 2):
+    for _ in range(CALLS_PER_ROUND):
+        st, resp = http_json(
+            "POST",
+            f"{GATEWAY_URL}/v1/chat/completions",
+            {"model": "hearth/mock-demo", "messages": [{"role": "user", "content": "metering ping"}]},
+            bearer=DEMO_API_KEY,
+        )
+        if st != 200:
+            sys.exit(f"client chat call failed {st}: {resp}")
+        if resp["usage"]["total_tokens"] != 30:
+            sys.exit(f"unexpected token usage: {resp['usage']}")
+    cumulative += ROUND_EMBERS
+    batch = wait_metered(cumulative)
+    if batch["period_start"] != period_start:
+        sys.exit(f"miner signed for period {batch['period_start']}, chain is at {period_start}")
+    wait_confirmed(f"settle:{cumulative}", sign_and_broadcast(f"settle:{cumulative}", settle_from(batch)))
+    expected += ROUND_EMBERS // 10 * 3 - FEE  # operator keeps the 30% node share of the newly settled delta
+    if balance(miner_op) != expected:
+        sys.exit(f"operator balance after settle {cumulative}: {balance(miner_op)}, expected {expected}")
+    counters = get(f"/blockchain/finality/settlement/{client}/{miner_op}")
+    if counters != {"reserved": RESERVE, "settled": cumulative}:
+        sys.exit(f"on-chain counters after settle {cumulative}: {counters}")
+
+# Replaying the same signed batch is a no-op settlement: the cumulative counter does not move, only the fee is paid.
+wait_confirmed("settle:replay", sign_and_broadcast("settle:replay", settle_from(batch)))
+expected -= FEE
+if balance(miner_op) != expected:
+    sys.exit(f"operator balance after replay: {balance(miner_op)}, expected {expected}")
+
+# Adversarial batches, signed here with the (openly committed) demo key: the chain must reject a rewound counter
+# and one above the reservation; a batch signed for another operator must fail the signature rebuild.
+expect_rejected("settle:decrease", settle_tx_forged(period_start, cumulative - 1), "would decrease")
+expect_rejected("settle:over-reserve", settle_tx_forged(period_start, RESERVE + 10), "exceeds total reserved")
+wrong_operator = settle_tx_forged(period_start, cumulative)
+wrong_operator["enclaveSignature"] = ed25519_sign(DEMO_SEED, settlement_message(client, period_start, cumulative)).hex()
+expect_rejected("settle:wrong-operator", wrong_operator, "Invalid enclave signature")
+log("full cycle done: reserve", RESERVE, "metered", cumulative, "operator credited", cumulative // 10 * 3)
