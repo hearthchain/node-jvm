@@ -158,13 +158,13 @@ def log(*a):
     print(time.strftime("%H:%M:%S"), *a, flush=True)
 
 
-def req(method, path, body=None, auth=False):
-    r = urllib.request.Request(BASE + path, data=json.dumps(body).encode() if body is not None else None, method=method)
+def http_json(method, url, body=None, headers=(), timeout=60):
+    r = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method)
     r.add_header("Content-Type", "application/json")
-    if auth:
-        r.add_header("X-API-Key", API_KEY)
+    for name, value in headers:
+        r.add_header(name, value)
     try:
-        with urllib.request.urlopen(r, timeout=30) as resp:
+        with urllib.request.urlopen(r, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read() or b"null")
     except urllib.error.HTTPError as e:
         raw = e.read()
@@ -172,6 +172,14 @@ def req(method, path, body=None, auth=False):
             return e.code, json.loads(raw)
         except ValueError:
             return e.code, raw.decode(errors="replace")
+
+
+def req(method, path, body=None, auth=False):
+    return http_json(method, BASE + path, body, (("X-API-Key", API_KEY),) if auth else (), timeout=30)
+
+
+def bearer(token):
+    return (("Authorization", "Bearer " + token),)
 
 
 def get(path):
@@ -179,22 +187,6 @@ def get(path):
     if s != 200:
         sys.exit(f"GET {path} -> {s}: {body}")
     return body
-
-
-def http_json(method, url, body=None, bearer=None):
-    r = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method)
-    r.add_header("Content-Type", "application/json")
-    if bearer:
-        r.add_header("Authorization", "Bearer " + bearer)
-    try:
-        with urllib.request.urlopen(r, timeout=60) as resp:
-            return resp.status, json.loads(resp.read() or b"null")
-    except urllib.error.HTTPError as e:
-        raw = e.read()
-        try:
-            return e.code, json.loads(raw)
-        except ValueError:
-            return e.code, raw.decode(errors="replace")
 
 
 def height():
@@ -383,7 +375,7 @@ def settle_tx_forged(period_start, cumulative):
 
 
 def miner_settlement():
-    s, batch = http_json("GET", f"{MINER_URL}/v1/settlement?clients={client}", bearer=MASTER_KEY)
+    s, batch = http_json("GET", f"{MINER_URL}/v1/settlement?clients={client}", headers=bearer(MASTER_KEY))
     if s != 200:
         sys.exit(f"miner settlement failed {s}: {batch}")
     if batch["enclave_public_key"] != enclave_key or batch["operator"] != miner_op:
@@ -414,14 +406,17 @@ def settle_from(batch):
 
 
 # The stack must be reachable before any spend is generated.
-for name, url, bearer in (("gateway", f"{GATEWAY_URL}/health/liveliness", None), ("miner", f"{MINER_URL}/v1/settlement?clients={client}", MASTER_KEY)):
-    st, body = http_json("GET", url, bearer=bearer)
+for name, url, hdrs in (
+    ("gateway", f"{GATEWAY_URL}/health/liveliness", ()),
+    ("miner", f"{MINER_URL}/v1/settlement?clients={client}", bearer(MASTER_KEY)),
+):
+    st, body = http_json("GET", url, headers=hdrs)
     if st != 200:
         sys.exit(f"{name} not ready at {url}: {st} {body}")
 log("gateway and miner are up; first settlement call provisioned the client key from the on-chain envelope")
 
 # The on-chain reads the miner itself relies on, checked from the outside too.
-if get(f"/blockchain/finality/binding/{enclave_key}/{client}")["envelope"] != DEMO_ENVELOPE:
+if get(f"/blockchain/binding/{enclave_key}/{client}")["envelope"] != DEMO_ENVELOPE:
     sys.exit("on-chain envelope does not round-trip")
 period_start = get("/blockchain/finality")["currentGenerationPeriod"]["start"]
 
@@ -433,7 +428,7 @@ for round_no in (1, 2):
             "POST",
             f"{GATEWAY_URL}/v1/chat/completions",
             {"model": "hearth/mock-demo", "messages": [{"role": "user", "content": "metering ping"}]},
-            bearer=DEMO_API_KEY,
+            headers=bearer(DEMO_API_KEY),
         )
         if st != 200:
             sys.exit(f"client chat call failed {st}: {resp}")
@@ -447,7 +442,7 @@ for round_no in (1, 2):
     expected += ROUND_EMBERS // 10 * 3 - FEE  # operator keeps the 30% node share of the newly settled delta
     if balance(miner_op) != expected:
         sys.exit(f"operator balance after settle {cumulative}: {balance(miner_op)}, expected {expected}")
-    counters = get(f"/blockchain/finality/settlement/{client}/{miner_op}")
+    counters = get(f"/blockchain/settlement/{client}/{miner_op}")
     if counters != {"reserved": RESERVE, "settled": cumulative}:
         sys.exit(f"on-chain counters after settle {cumulative}: {counters}")
 
@@ -456,6 +451,10 @@ wait_confirmed("settle:replay", sign_and_broadcast("settle:replay", settle_from(
 expected -= FEE
 if balance(miner_op) != expected:
     sys.exit(f"operator balance after replay: {balance(miner_op)}, expected {expected}")
+# The counter must not have moved: a replay is a no-op settlement, which is the whole point of the assert.
+counters = get(f"/blockchain/settlement/{client}/{miner_op}")
+if counters != {"reserved": RESERVE, "settled": cumulative}:
+    sys.exit(f"on-chain counters moved on replay: {counters}")
 
 # Adversarial batches, signed here with the (openly committed) demo key: the chain must reject a rewound counter
 # and one above the reservation; a batch signed for another operator must fail the signature rebuild.

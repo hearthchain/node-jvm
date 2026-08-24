@@ -400,6 +400,12 @@ object ApiError {
     override val message: String  = "Not finalized"
   }
 
+  case object ApiKeyBindingDoesNotExist extends ApiError {
+    override val id: Int          = 407
+    override val code: StatusCode = StatusCodes.NotFound
+    override val message: String  = "no api key binding for this enclave key and client"
+  }
+
   object ScriptErrorJson {
     def apply(errId: Int, tx: Transaction, message: String): JsObject =
       Json.obj(

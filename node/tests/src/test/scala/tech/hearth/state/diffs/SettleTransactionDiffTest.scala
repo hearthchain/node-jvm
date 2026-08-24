@@ -77,6 +77,37 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       SettleTransactionDiff(blockchain)(forged) should produce("Invalid enclave signature")
     }
 
+    // The diff rebuilds the signed message from the transaction's chainId, the sender (operator) and the chain's
+    // current period, never from the batch, so a batch the enclave signed for a different context does not verify.
+    // Each case signs a valid batch with the correct enclave key but a wrong prefix field.
+    def settleSignedFor(chainId: Byte, operator: Address, periodStart: Int): SettleTransaction = {
+      val settlements = Seq(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(50L)))
+      val message     = SettleTransaction.mkSettlementMessage(chainId, enclavePublicKey, operator, periodStart, settlements)
+      val signature   = ByteStr(enclaveKey.sign(message))
+      SettleTransaction
+        .create(PublicKey(sender.publicKey()), enclavePublicKey, settlements, signature, 100000, TxHelpers.timestamp, Proofs.empty)
+        .explicitGet()
+        .signWith(sender)
+    }
+
+    "rejects a batch the enclave signed for another operator" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      SettleTransactionDiff(blockchain)(settleSignedFor(AddressScheme.current.chainId, client, 1)) should
+        produce("Invalid enclave signature")
+    }
+
+    "rejects a batch the enclave signed for another period" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      SettleTransactionDiff(blockchain)(settleSignedFor(AddressScheme.current.chainId, miner, 2)) should
+        produce("Invalid enclave signature")
+    }
+
+    "rejects a batch the enclave signed for another chain" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      SettleTransactionDiff(blockchain)(settleSignedFor((AddressScheme.current.chainId + 1).toByte, miner, 1)) should
+        produce("Invalid enclave signature")
+    }
+
     "rejects settling for a client with no open reservation" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
       val blockchain = withRegisteredEnclave(d.blockchain)
       SettleTransactionDiff(blockchain)(settleTx(1L)) should produce("has no open reservation")
