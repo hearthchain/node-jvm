@@ -374,25 +374,20 @@ def settle_tx_forged(period_start, cumulative):
     }
 
 
-def miner_settlement():
-    s, batch = http_json("GET", f"{MINER_URL}/v1/settlement?clients={client}", headers=bearer(MASTER_KEY))
-    if s != 200:
-        sys.exit(f"miner settlement failed {s}: {batch}")
-    if batch["enclave_public_key"] != enclave_key or batch["operator"] != miner_op:
-        sys.exit(f"miner settled for an unexpected enclave/operator: {batch}")
-    return batch
-
-
 def wait_metered(cumulative):
     # The gateway writes its spend ledger asynchronously; poll the miner until the metered total lands.
     deadline = time.time() + 120
+    batch = None
     while time.time() < deadline:
-        batch = miner_settlement()
-        got = [(e["client"], e["cumulative_spent"]) for e in batch["settlements"]]
-        if got == [(client, cumulative)]:
-            return batch
+        s, batch = http_json("GET", f"{MINER_URL}/v1/settlement?clients={client}", headers=bearer(MASTER_KEY))
+        if s == 200:
+            got = [(e["client"], e["cumulative_spent"]) for e in batch["settlements"]]
+            if got == [(client, cumulative)]:
+                if batch["enclave_public_key"] != enclave_key or batch["operator"] != miner_op:
+                    sys.exit(f"miner settled for an unexpected enclave/operator: {batch}")
+                return batch
         time.sleep(3)
-    sys.exit(f"miner never metered {cumulative} embers; last batch: {batch}")
+    sys.exit(f"miner never metered {cumulative} embers; last response: {batch}")
 
 
 def settle_from(batch):
@@ -405,19 +400,35 @@ def settle_from(batch):
     }
 
 
-# The stack must be reachable before any spend is generated.
-for name, url, hdrs in (
-    ("gateway", f"{GATEWAY_URL}/health/liveliness", ()),
-    ("miner", f"{MINER_URL}/v1/settlement?clients={client}", bearer(MASTER_KEY)),
-):
-    st, body = http_json("GET", url, headers=hdrs)
-    if st != 200:
-        sys.exit(f"{name} not ready at {url}: {st} {body}")
-log("gateway and miner are up; first settlement call provisioned the client key from the on-chain envelope")
-
-# The on-chain reads the miner itself relies on, checked from the outside too.
-if get(f"/blockchain/binding/{enclave_key}/{client}")["envelope"] != DEMO_ENVELOPE:
-    sys.exit("on-chain envelope does not round-trip")
+# The gateway must be reachable, and the BindApiKey envelope must be visible in the node's read view (the persisted
+# state lags the latest block by one, so a binding just confirmed can be a beat behind) before any spend is worth
+# generating. The miner reads the same envelope internally.
+st, body = http_json("GET", f"{GATEWAY_URL}/health/liveliness")
+if st != 200:
+    sys.exit(f"gateway not ready: {st} {body}")
+deadline = time.time() + 60
+while time.time() < deadline:
+    s, b = req("GET", f"/blockchain/binding/{enclave_key}/{client}")
+    if s == 200 and b.get("envelope") == DEMO_ENVELOPE:
+        break
+    time.sleep(2)
+else:
+    sys.exit("on-chain envelope never became visible")
+# First settlement pull: the miner opens the envelope and provisions the client key on the gateway. Spend is still
+# zero, so no settlement is emitted (the counter would not move), but the client can now authenticate its chat calls.
+# The miner reads the binding from the node's persisted view, which can trail a just-confirmed block, so poll to 200.
+deadline = time.time() + 60
+body = None
+while time.time() < deadline:
+    s, body = http_json("GET", f"{MINER_URL}/v1/settlement?clients={client}", headers=bearer(MASTER_KEY))
+    if s == 200:
+        break
+    time.sleep(2)
+else:
+    sys.exit(f"miner provisioning pull never succeeded; last response: {body}")
+if body["settlements"]:
+    sys.exit(f"miner emitted a settlement before any spend: {body}")
+log("gateway up, envelope visible; miner opened it and provisioned the client key (zero spend, no settlement yet)")
 period_start = get("/blockchain/finality")["currentGenerationPeriod"]["start"]
 
 expected = balance(miner_op)
