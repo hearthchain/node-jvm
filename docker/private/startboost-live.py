@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive the full StartBoost path against a freshly started private node on localhost:6869 over REST (stdlib only).
+"""Drive the full TEE-miner cycle against a freshly started private node on localhost:6869 over REST (stdlib only).
 
 Usage: startboost-live.py <fixture-dir>
 
@@ -78,6 +78,8 @@ def ed25519_pubkey(seed):
 
 
 def ed25519_sign(seed, msg):
+    if seed != DEMO_SEED:  # variable-time reference code, public seed only: never let it touch a real key
+        sys.exit("ed25519_sign is demo-only")
     a, prefix = _scalars(seed)
     pub = _enc(_mul(a, _B))
     r = int.from_bytes(hashlib.sha512(prefix + msg).digest(), "little") % _L
@@ -109,12 +111,6 @@ def bech32m_decode(addr):
     return bytes(out)
 
 
-# Fail fast before touching the node: the hand-rolled crypto must reproduce the committed vectors.
-if ed25519_sign(DEMO_SEED, DEMO_MESSAGE).hex() != DEMO_SIGNATURE:
-    sys.exit("self-check failed: ed25519_sign does not reproduce the committed demo signature")
-if len(bech32m_decode("phrth1gxv7se8ueq623ukgwxmesapatdmhay84f0sfk0")) != 20:
-    sys.exit("self-check failed: bech32m_decode must yield a 20-byte address hash")
-
 BASE = "http://localhost:6869"
 API_KEY = "hearth-private-node"  # hearth.custom.conf api-key-hash
 FUNDED = "phrth1gxv7se8ueq623ukgwxmesapatdmhay84f0sfk0"  # the pre-committed generator, nonce 0 of wallet.seed
@@ -123,10 +119,16 @@ FRESHNESS_WINDOW = 100  # StartBoostTransactionDiff.FreshnessWindowBlocks
 REPORT_DATA_OFFSET = 48 + 520  # quote header + TD10 report body up to report_data (DcapQuote)
 TX_TRANSFER, TX_COMMIT_TO_GENERATION, TX_START_BOOST = 2, 6, 7  # TransactionType ids
 TX_RESERVE, TX_BIND_API_KEY, TX_SETTLE, TX_UPDATE_COLLATERAL = 8, 9, 10, 12
-FEE = 100_000  # FeeConstants default that /transactions/sign fills for every type here except Transfer
+FEE = 100_000  # sign fills this default for Reserve/BindApiKey/Settle/StartBoost/UpdateCollateral (CommitToGeneration is 100 units; Transfer needs explicit fee)
 TRANSFER_FEE = 200_000  # Transfer needs explicit fee (min: base + 1 unit per 2 transfers) and timestamp
 # Multiples of 10 so the 30%/60% Fraction splits (delta/10*3) stay exact in balance asserts.
 RESERVE, S1, S2 = 1_000_000, 600_000, 800_000
+
+# Fail fast before touching the node: the hand-rolled crypto must reproduce committed vectors.
+if ed25519_sign(DEMO_SEED, DEMO_MESSAGE).hex() != DEMO_SIGNATURE:
+    sys.exit("self-check failed: ed25519_sign does not reproduce the committed demo signature")
+if bech32m_decode(FUNDED).hex() != "4199e864fcc834a8f2c871b798743d5b777e90f5":
+    sys.exit("self-check failed: bech32m_decode does not reproduce the funded address hash")
 
 if len(sys.argv) != 2:
     sys.exit(__doc__)
@@ -191,7 +193,11 @@ def sign_and_broadcast(label, tx):
 def wait_confirmed(label, txid):
     deadline = time.time() + 180
     while time.time() < deadline:
-        s, info = req("GET", f"/transactions/info/{txid}")
+        try:
+            s, info = req("GET", f"/transactions/info/{txid}")
+        except urllib.error.URLError:  # transient during a block; keep polling to the deadline
+            time.sleep(2)
+            continue
         if s == 200 and "height" in info:
             log(f"[{label}] confirmed in block {info['height']}")
             return info
