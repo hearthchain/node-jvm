@@ -9,8 +9,8 @@ import tech.hearth.transaction.validation.impl.BindApiKeyTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-/** Not yet semantically implemented: see TransactionDiffer, which has no case for this type yet and so rejects it
-  * with UnsupportedTransactionType. Only wire-format (protobuf/JSON) plumbing exists so far.
+/** See BindApiKeyTransactionDiff for the real semantics: binds an HPKE-sealed API key envelope (encryptedApiKey,
+  * opaque to the node) to a registered enclave's attestation public key.
   */
 final case class BindApiKeyTransaction(
     sender: PublicKey,

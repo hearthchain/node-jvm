@@ -115,18 +115,10 @@ matching VRF key. Wallets hand out `SigningKey` (`Wallet.signingKey(address)`).
 
 ## Dependency cleanup: web3j and blst-java
 
-`web3j` and the direct `blst-java` dependency are gone from `node`'s build. Both were legacy from the pre-fork
-Waves codebase and had shrunk to a handful of call sites, most of them dead.
-
-`web3j` turned out to have no live callers left. `EthEncoding` (its only wrapper) served three things, and every
-one was dead code: `transaction.ERC20Address`'s JSON `Format` (nothing ever serializes or deserializes that
-type), `CustomDirectives.massValidateEthereumIds` (zero call sites), and `testkit`'s `Domain.solidStateSnapshot()`
-(computed inside `makeStateSolid()`, whose return value is discarded at its only call site,
-`liquidAndSolidAssert`). All three were deleted outright rather than reimplemented, along with the dead
-`Keys.assetStaticInfo(addr: ERC20Address)` overload. The one live `web3j` use, `P256Curve`'s `toBytesPadded` (pads
-a `BigInteger` to a fixed-length unsigned byte array, used by the P-256 certificate-chain verification path),
-moved to `org.bouncycastle.util.BigIntegers.asUnsignedByteArray`, an existing hard dependency (`bcprov-jdk18on`)
-that already does the same thing.
+`web3j` and the direct `blst-java` dependency are gone from `node`'s build - both legacy from the pre-fork Waves
+codebase, with no live callers left except one: `P256Curve.toBytesPadded` (pads a `BigInteger` to a fixed-length
+unsigned byte array, for P-256 cert-chain verification), moved to
+`org.bouncycastle.util.BigIntegers.asUnsignedByteArray` (`bcprov-jdk18on`, already a hard dependency).
 
 BLS (`crypto.bls.BlsUtils`/`BlsKeyPair`) no longer imports `supranational.blst` directly; it calls
 `tech.hearth.crypto.BlsKey` instead. `blst-java` itself is still on the classpath (`tech.hearth:crypto`'s own pom
@@ -458,25 +450,23 @@ nothing about their domain classes needed to change, only `PBTransactions`' wire
 `PBTransactions.create`/`vanilla` no longer take/return a top-level `feeAssetId` — each `Data.*` case reads/writes
 its own `fee_asset_id` field (Transfer/Reserve/Withdraw) or has none (everything else, implicitly HRTH).
 
-**Five new transaction types — plumbing only, no semantics, except StartBoost (see below).**
-`ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in
+**Five new transaction types - plumbing only, no semantics, except StartBoost/Reserve/BindApiKey/Settle (see
+below).** `ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in
 `tech.hearth.transaction`, alongside `CommitToGenerationTransaction`, not in a subpackage) exist as domain case
 classes with working protobuf/JSON round-trip and `TxHelpers` constructors (`TxHelpers.reserve`/`.bindApiKey`/
-`.settle`/`.withdraw`), but **no validation or state-diff logic**. Their `TxValidator`s are all `Valid(tx) //
-Semantics not implemented yet` (same pattern `CommitToGenerationTxValidator` used to use before it grew real
-checks). `TransactionDiffer.transactionSnapshot` has no `case` for any of them, so they fall through to
-`UnsupportedTransactionType` — a broadcast one reaches the mempool/JSON layer fine but is rejected before any state
-change. `TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs them the same way `Genesis` always
-was (`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for any of them) since building one
-that way needs the same not-yet-designed semantics. Field-name-driven best guesses at what these are for (not
-verified against any spec — none exists yet): `Reserve`/`Withdraw`/`Settle` look like a miner-balance-reservation
-mechanism feeding the still-stubbed `Blockchain.blockRewardBoost` (hardcoded to `1` everywhere, see "HRTH emission
-curve"'s note on it), and `BindApiKey` (`enclave_public_key`, `encrypted_api_key`) looks like a follow-on step for a
-boosted miner already registered via `StartBoost`, not yet designed. Implementing real semantics needs someone who
-actually knows the design to write validation + `TransactionDiffer` cases + (if the REST sign flow matters)
-`TxBroadcastRequest` subclasses — don't guess at this from field names again without checking whether a spec has
-since landed in `hearth-specs`/`hearth-tokenomics-spec`. `StartBoostTransaction` is no longer in this bucket — see
-"StartBoost: TDX quote verification and enclave registration" below.
+`.settle`/`.withdraw`). Of these, `WithdrawTransaction` still has **no validation or state-diff logic**: its
+`TxValidator` is `Valid(tx) // Semantics not implemented yet` (the pattern every one of these five started from),
+`TransactionDiffer.transactionSnapshot` has no `case` for it, so it falls through to `UnsupportedTransactionType` -
+a broadcast one reaches the mempool/JSON layer fine but is rejected before any state change - and
+`TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs it the same way `Genesis` always was
+(`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for it). A field-name-driven best guess at
+what it's for (not verified against any spec beyond the gist "settle" analysis linked below, which only covers
+`Settle`): it looks like the counterpart that would credit a `Reserve`d amount back to the sender, but that hasn't
+been designed - don't guess at this from field names again without checking whether a spec has since landed in
+`hearth-specs`/`hearth-tokenomics-spec`. `StartBoostTransaction`, `ReserveTransaction`, `BindApiKeyTransaction` and
+`SettleTransaction` are no longer in this bucket - see "StartBoost: TDX quote verification and enclave
+registration", "Reserve and BindApiKey: locking funds and binding enclave-sealed API keys" and "Settle: retiring
+reserved funds" below.
 
 ## DCAP collateral registry
 
@@ -583,7 +573,15 @@ planned). The diff:
 - requires `generationPeriodStart` to be exactly the *next* generation period from the current one, and `validator`
   to already be a committed generator of that next period - a StartBoost can't register ahead of or behind the
   generator commitment it rides on;
-- checks quote freshness and the enclave-key binding: the TDX report's 64-byte `report_data` must equal `blockId(32) ++ enclavePublicKey(32)`; `blockId` must name a block within the last `FreshnessWindowBlocks` (100) blocks below the current height, and `report_data[32:64]` is the enclave's own ephemeral Ed25519 key, the one later flows encrypt to and verify against (all-zero is rejected). Both values are embedded raw, not hashed: `report_data` fits both exactly and unforgeability comes from the quote's TDX hardware signature over it. There is no sender binding (see #32): a third party observing a quote in the mempool can front-run the registration and become the recorded operator, which buys nothing signable (only the enclave holds the key) and costs a fee; the miner escapes by restarting the enclave (fresh key) and re-registering, and first-registration-wins per key and period makes that escape deterministic;
+- checks quote freshness and extracts the enclave key: the TDX report's 64-byte `report_data` is `blockId(32) ++
+  enclavePublicKey(32)` - `report_data[32:64]` carries the enclave's own ephemeral Ed25519 key (the only key
+  generated inside the TEE, and so the only one worth registering), and `blockId` (`report_data[0:32]`) must name a
+  block within the last `FreshnessWindowBlocks` (100) blocks below the current height. Both values are embedded raw,
+  not hashed - unforgeability comes from the quote's own TDX hardware signature over `report_data`, not from hiding
+  either value. The transaction sender is deliberately *not* bound into the quote (see #32): the sender becomes the enclave's
+  `operator` on a first-registration-wins basis (see below), so a hijacked registration is escaped by restarting the
+  enclave (which mints a fresh key) rather than contested. An all-zero enclave key, or one already carrying an entry in
+  `registeredEnclaves(next)`, is rejected outright, before signature verification runs;
 - verifies the full quote signature chain: the quote's own embedded PCK certificate chain (leaf, PCK CA, root) is
   checked against `IntelPki`'s pinned Intel root and the on-chain `pckCrl` (revocation) - it does *not* need the
   on-chain `pckCaIssuerChain` too, since the chain a quote itself carries is already self-contained; that field
@@ -598,10 +596,18 @@ planned). The diff:
   `1.2.840.113741.1.13.1.4`, parsed the same ASN.1-`OCTET STRING`-wrapping-a-`SEQUENCE` way `IntelPki`'s existing
   CRL Number extraction does) has a TCB Info entry on chain - existence only, not full TCB status evaluation (see
   the deferred-scope note below);
-- registers the enclave: `RegisteredEnclave(attestationPublicKey, validator)`, keyed by the quote's own attestation
-  public key (a raw 64-byte P-256 point) rather than by address or by `mrEnclave` - unlike a generator's identity,
-  an enclave's identity changes on every restart (a fresh quote embeds a fresh attestation key), so the registry
-  key is exactly the value that changes with the quote, deliberately not the measurement of the underlying binary.
+- registers the enclave: `RegisteredEnclave(enclavePublicKey, validator, operator)`, keyed by the enclave's own
+  ephemeral public key (raw Ed25519, 32 bytes, from `report_data[32:64]` above) rather than by address or by
+  `mrEnclave` - unlike a generator's identity, an enclave's identity changes on every restart (a fresh boot mints a
+  fresh keypair), so the registry key is exactly the value that changes with the enclave's lifecycle, and it is the
+  only key the enclave can later sign with or receive encrypted payloads through. This is deliberately *not* the
+  quote's own DCAP attestation key (a P-256 point belonging to the platform's Quoting Enclave, shared by every TD on
+  the host - it identifies the machine, not this workload); an earlier revision of this transaction keyed the
+  registry by that attestation key instead, fixed before it shipped (see "Reserve and BindApiKey" below for the
+  on-disk consequence). `operator` (the StartBoost sender, i.e. the TEE miner operating this enclave - added
+  alongside `Reserve`/`BindApiKey`, see below) is what lets `Blockchain.isRegisteredMiner`/`isRegisteredEnclave`
+  answer "is this address a registered miner" / "is this enclave key a registered enclave" without an extra lookup
+  layer.
 
 Storage mirrors `committedGenerators`/`GenerationPeriod` exactly, including the same "only this and next period are
 cached" restriction, the same rollback-on-discard handling, and the same `Caches`/`RocksDBWriter`/`Blockchain`
@@ -619,174 +625,395 @@ checking whether one has landed since.
 
 ### REST: signing and broadcasting
 
-`StartBoostTransaction`/`UpdateCollateralTransaction` are the two stub types from "Transaction schema" above that
-are actually signable through `/transactions/sign`/`/transactions/broadcast` now, via `StartBoostRequest`/
-`UpdateCollateralRequest` (`api/http/requests/`) wired into `TransactionFactory.parseRequest` - the rest
-(`Reserve`/`BindApiKey`/`Settle`/`Withdraw`) still fall through to `UnsupportedTransactionType`, unchanged.
+`StartBoostTransaction`/`UpdateCollateralTransaction`/`ReserveTransaction`/`BindApiKeyTransaction`/
+`SettleTransaction` are the five stub types from "Transaction schema" above that are actually signable through
+`/transactions/sign`/`/transactions/broadcast` now, via `StartBoostRequest`/`UpdateCollateralRequest`/
+`ReserveRequest`/`BindApiKeyRequest`/`SettleRequest` (`api/http/requests/`) wired into
+`TransactionFactory.parseRequest` - only `Withdraw` still falls through to `UnsupportedTransactionType`, unchanged.
 
-Both request classes hit the same real bug once tested against realistically-sized payloads (a fixture-derived TCB
-Info blob or an actual TDX quote, not a 3-byte placeholder): `ByteStr`'s default REST `Format` decodes at most 280
-base16 characters (`Base16.defaultDecodeLimit`, via `Base16.tryDecodeWithLimit`'s default `limit`), sized for a
-signature or public key, but a `tdxQuote` is ~4935 raw bytes (~9870 hex characters) and a `tcbInfo`/PEM-chain
-collateral field can run to several KB - both silently exceed it and fail with `Can't parse '...' as base16 encoded
-byte array` at request-parse time, before validation ever runs. `api/http/requests/package.scala`'s
-`largeByteStrFormat` (`LargeBlobDecodeLimit = 65536` characters) exists for exactly these fields; `StartBoostRequest`/
-`UpdateCollateralRequest` each shadow the package's ambient `given Format[ByteStr]` with it, locally, in their own
-companion object, before their `Json.format` macro call - every other request type keeps the small default
-unchanged. A future request class with its own large-blob field should reuse `largeByteStrFormat` the same way
-rather than growing the shared default limit, which stays deliberately small for the common case.
+Both `StartBoostRequest`/`UpdateCollateralRequest` hit the same real bug once tested against realistically-sized
+payloads (a fixture-derived TCB Info blob or an actual TDX quote, not a 3-byte placeholder): `ByteStr`'s default
+REST `Format` decodes at most 280 base16 characters (`Base16.defaultDecodeLimit`, via `Base16.tryDecodeWithLimit`'s
+default `limit`), sized for a signature or public key, but a `tdxQuote` is ~4935 raw bytes (~9870 hex characters)
+and a `tcbInfo`/PEM-chain collateral field can run to several KB - both silently exceed it and fail with `Can't
+parse '...' as base16 encoded byte array` at request-parse time, before validation ever runs.
+`api/http/requests/package.scala`'s `largeByteStrFormat` (`LargeBlobDecodeLimit = 65536` characters) exists for
+exactly these fields; `StartBoostRequest`/`UpdateCollateralRequest` each shadow the package's ambient
+`given Format[ByteStr]` with it, locally, in their own companion object, before their `Json.format` macro call -
+every other request type keeps the small default unchanged. `BindApiKeyRequest.encryptedApiKey` shadows it the
+same way pre-emptively, even though a real HPKE-sealed envelope is well under 280 hex chars - see "Reserve and
+BindApiKey" below. A future request class with its own large-blob field should reuse `largeByteStrFormat` the same
+way rather than growing the shared default limit, which stays deliberately small for the common case.
+
+## Reserve and BindApiKey: locking funds and binding enclave-sealed API keys
+
+The third and fourth stub transaction types from "Transaction schema" above to grow real semantics, both reading
+the `RegisteredEnclave` registry `StartBoostTransactionDiff` writes (see above) rather than adding a new registry
+of their own. `miner` (`ReserveTransaction`'s own field, naming the reservation's target) and `RegisteredEnclave`'s
+`operator` field are the same identity under different names - both are the *TEE miner* role from "DCAP collateral
+registry"'s terminology split (the `StartBoostTransaction` sender), never the `validator`/consensus generator it
+boosts - conflating the two here would silently let `Reserve`/`BindApiKey` target the wrong identity.
+
+**"Registered miner"/"registered enclave" checks are period-scoped, not permanent.** `RegisteredEnclave` only
+covers the current and next generation period (StartBoost registers for the *next* one, same as
+`CommitToGenerationTransaction`), so `Blockchain.isRegisteredMiner(address)`/`isRegisteredEnclave(enclavePublicKey)`
+(`state/Blockchain.scala`'s `BlockchainExt`) check membership in `registeredEnclaves(current) ++
+registeredEnclaves(next)`, not an unbounded history. A miner that stops re-attesting every period stops being a
+valid `Reserve` target or `BindApiKey` registry match, by design - a deliberate choice over a permanent
+once-registered identity, made to stay consistent with every other period-scoped check in this codebase
+(`committedGenerators`, `isConflict`) rather than introduce a second, unbounded registry alongside the period-scoped
+one.
+
+**`ReserveTransaction`** (`sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, chainId`) locks
+`amount` of `assetId` from the sender's balance against a registered miner. `state/diffs/
+ReserveTransactionDiff.scala` checks `assetId` is `Hearth` or an already-issued `IssuedAsset` (`feeAssetId`'s
+existence is already checked upstream by `TransactionDiffer.feePortfolios`, driven by `TxWithFee.InCustomAsset`, so
+the diff doesn't re-check it) and that `miner` is registered, then debits `amount` (from `assetId`) and `fee` (from
+`feeAssetId`) from the sender's portfolio and accumulates the total into a new `(sender, miner, asset) -> Long`
+ledger, `Blockchain.reservedAmount`. Multiple `Reserve` transactions to the same triple keep adding to the same
+total - **accumulate-only, by design**: `reservedAmount` is never decremented, it is only ever compared against
+(see "Settle: retiring reserved funds" below - `SettleTransaction` reads it as a ceiling, `WithdrawTransaction` is
+still an unimplemented stub). The debited amount is credited nowhere else - not to the miner, not to any pool -
+only recorded in `reservedAmounts`; until `Withdraw` exists, whatever a client reserves and never spends (i.e.
+never covered by a `Settle`) is **unspendable and unrecoverable**. This is a real, currently-open fund-safety gap,
+not an oversight: it is not yet safe to expose `Reserve` on a network carrying real value.
+
+**`BindApiKeyTransaction`** (`sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, chainId`) binds an
+HPKE-sealed API key envelope to a registered enclave's public key. `state/diffs/
+BindApiKeyTransactionDiff.scala` checks `enclavePublicKey` is registered, then upserts `encryptedApiKey` into a new
+`(enclavePublicKey, sender) -> ByteStr` store, `Blockchain.apiKeyBinding` - keyed enclave-first so a future read
+API could enumerate bindings addressed to one enclave (no such read API exists yet; this pass only implemented the
+write path). The node never decrypts `encryptedApiKey` or touches HPKE/curve semantics at all - it is opaque bytes
+to the node, capped at `IntelPki.MaxCollateralFieldSize` by `BindApiKeyTxValidator` purely as a resource-exhaustion
+bound, reused from DCAP collateral rather than a dedicated constant since a real HPKE envelope is far smaller.
+`BindApiKeyTxValidator` also requires `enclavePublicKey` be exactly 32 bytes (a registered enclave key's own
+length, raw Ed25519 - a different length can never match one, so it's rejected structurally rather than paying for
+the registry lookup). Note the Ed25519/X25519 mismatch this still implies: `RegisteredEnclave.enclavePublicKey` is
+the enclave's Ed25519 identity key (see "StartBoost" above), while HPKE sealing in this ecosystem (see
+`../hearth-chain/java`'s `ApiKeyEnvelope`, `Hpke`) needs an X25519 point - `BindApiKeyTransaction.enclavePublicKey`
+is checked against the registry purely as a registry-membership proof, not because the node believes it's already
+an HPKE recipient key. Unlike the P-256 attestation key this replaced, an Ed25519 key *can* be converted to the
+matching X25519 point by a standard birational map (`SigningKey.toX25519()` in `../hearth-chain/java`, the
+libsodium `crypto_sign_ed25519_{pk,sk}_to_curve25519` construction) - the enclave side needs the seed (which only
+it holds) to derive the X25519 secret key, but the client/sealing side only ever sees the raw public key (from the
+quote or from this registry) and needs the same conversion applied to just the public half; as of this writing
+`tech.hearth.crypto` only exposes the seed-holding path (`SigningKey.toX25519()`), not a public-key-only one, which
+is a real gap for that sealing flow, not something this transaction type resolves - how the sealing key relates to
+the registered key stays an off-chain client/enclave concern either way.
+
+**Storage** follows the DCAP-collateral history-keyed pattern (`KeyTag`/`Keys` history+value key pairs,
+`updateHistory`/`filterHistory` for rollback, new tags appended at the end), not the period-keyed
+`committedGenerators`/`registeredEnclaves` one, since neither ledger is tied to a generation period: `Keys.
+reservedAmount`/`apiKeyBinding` key by a `ByteStr` suffix (`Keys.reservedAmountSuffix`/`apiKeyBindingSuffix`, since
+the composite key - two addresses and an asset, or a public key and an address - doesn't fit the single-`ByteStr`-
+suffix shape `dcapTcbInfo`'s per-FMSPC keying uses directly), with a `...KeysAtHeight` index (mirroring
+`dcapTcbInfoFmspcsAt`) recording which suffixes changed at a height, for rollback. Both new `StateSnapshot` fields
+carry the Diff-computed final value, not a delta (matching `assetVolumes`/DCAP fields, not `balances`' fuller
+safeSum-inside-`StateSnapshot.build` machinery) - correct across multiple same-key `Reserve` transactions within
+one block since each Diff reads the running total through `SnapshotBlockchain` over prior transactions' snapshots
+in order. Both are folded into `TxStateSnapshotHashBuilder` (new consensus state needs hashing, the same class of
+omission the DCAP fields' own PR had to fix after the fact per "DCAP collateral registry" above).
+
+**`RegisteredEnclave`'s on-disk record layout changed twice, independently, with no version bump or migration
+either time.** It started as `attestationPublicKey(64) ++ validator(32)`, 96 bytes. This pass added the operator
+field, `... ++ miner(32)`, 128 bytes. Separately, a later fix (upstream PR #32, "register the enclave key, not the
+DCAP attestation key" - rebased in on top of this pass) replaced the 64-byte P-256 attestation key with the
+32-byte Ed25519 enclave key described under "StartBoost" above, and renamed the third field to `operator`; combined
+with this pass's field, the record is now `enclavePublicKey(32) ++ validator(32) ++ operator(32)`, 96 bytes -
+coincidentally the same total size as the original 2-field layout, but a different composition, so a byte-count
+check alone can't tell old data from new. `readRegisteredEnclaves`/`writeRegisteredEnclaves`
+(`database/package.scala`) simply changed their `.grouped(...)` width both times. Confirmed safe only because
+nothing has persisted any prior layout outside disposable dev/test runs (the whole project is pre-launch, see
+"HRTH emission curve"'s premine `TODO: replace before launch` notes) - a node with real old-format
+`RegisteredEnclaves` data on disk would misparse it. If a longer-lived devnet/testnet ever accumulates real
+`StartBoost` history before a change like this, it needs an explicit migration or a length-based reader fallback,
+not a silent width change.
+
+**Testing constraint, same one `StartBoostTransactionDiffTest` already documents:** no test fixture in this repo
+can drive a `StartBoostTransaction` to its accept path (needs a real, currently-valid Intel-signed PCK certificate
+chain - see "Testing" under "DCAP collateral registry"), so neither `Reserve`'s nor `BindApiKey`'s (nor `Settle`'s,
+below) "registered" accept path can be reached through a real `StartBoostTransaction` in a test.
+`ReserveTransactionDiffTest`/`BindApiKeyTransactionDiffTest`/`SettleTransactionDiffTest` work around this by
+calling the Diff object directly against a `Blockchain` value that overrides `registeredEnclaves` to inject a
+`RegisteredEnclave` entry (Scala 3 `export blockchain.{registeredEnclaves as _, *}` plus one `override def`),
+rather than going through `d.appendBlockE` - the reject paths that don't need a registered miner/enclave (unknown
+asset, unregistered miner/enclave) go through the real domain normally. `TransactionFactorySpec` covers all three
+new REST request types, including a `BindApiKeyRequest` with an oversized `encryptedApiKey` to exercise
+`largeByteStrFormat`.
+
+## Settle: retiring reserved funds
+
+The gist "settle" analysis (a miner-authored spec fragment, not part of `hearth-tokenomics-spec` - see
+https://gist.github.com/swell-a2a/c1c8571f465010403b3ec8c13bf47928) is the only source for this transaction's
+semantics: "At any moment of its choosing the node submits an enclave-signed batch of `(client, cumulative
+spent)`", validated against three rules ("reservation open", "counter non-decreasing", "counter within the total
+ever reserved") and, on acceptance, "Settled Cred is retired" while "value settled in epoch E feeds the
+beneficiary validator's workBoost in E+1".
+
+**`SettleTransaction`** (`sender, enclavePublicKey, settlements, enclaveSignature, fee, timestamp, proofs,
+chainId`) is submitted by a miner (`sender`, the same *TEE miner*/operator identity as `ReserveTransaction.miner`
+and `RegisteredEnclave.operator` - see "Reserve and BindApiKey" above) and carries a batch of
+`Settlement(client, assetId, cumulativeSpent)` entries, protobuf `SettleTransactionData.Settlement{client:
+Recipient, cumulative_spent: Amount}` (asset piggybacks on the existing `Amount{asset_id, amount}` message rather
+than a bare `int64`, matching `ReserveTransactionData.amount`'s shape). `enclavePublicKey`/`enclaveSignature` are
+the raw 32-byte Ed25519 key and 64-byte signature of the *enclave itself* attesting to the batch - a second,
+enclave-level signature alongside the transaction's own `proofs` (signed by `sender`'s account key), the same
+two-signer split `CommitToGeneration`'s VRF/BLS proof-of-possession fields use. The signed message
+(`SettleTransaction.mkSettlementMessage`) is each settlement's `client.toBytes`(20, `tech.hearth.crypto.Address
+.HASH_LEN`) `++` `assetId`(32, zero-padded for `Hearth`) `++` `cumulativeSpent`(8, big-endian), concatenated in
+order - fixed-width fields throughout specifically so concatenating several settlements has no parsing-boundary
+ambiguity, but only because `SettleTxValidator` separately rejects any `IssuedAsset` id whose length isn't exactly
+32 bytes. That check is load-bearing, not cosmetic: the wire format itself (`PBAmounts.toVanillaAssetId`) accepts
+an `assetId` of *any* length with no validation, so without it a malicious `sender` (the operator relaying the
+batch - exactly the party the enclave signature exists to constrain) could submit a settlements list whose
+concatenated bytes collide with a genuinely enclave-signed message for a *different* settlements list, settling
+funds the enclave never actually authorized. Caught in review before merge (security audit, Pass 2) - the
+comment on `mkSettlementMessage` explains the dependency so a future field addition doesn't silently reopen it.
+This wire shape was cross-checked against `../hearth-rs`'s independently-written stub
+(`crates/transaction/src/simple.rs`'s `SettleTransaction { enclave_public_key, settlements: Vec<(Recipient, Asset,
+i64)>, enclave_signature }`) and against `hearthchain/miner` (the actual TEE execution node repo, gateway +
+Go enclave identity service) - the latter has no settlement/spend-tracking code at all yet, only quote generation
+(`GET /v1/quote`) and TLS endorsement (`GET /v1/tls`), so this is the first concrete definition of the settlement
+wire format, not a match against existing miner-side code.
+
+`state/diffs/SettleTransactionDiff.scala` implements the gist's three rules per settlement, reading and writing
+two triple-keyed `Long` ledgers - `Blockchain.reservedAmount` (existing, read-only here) and the new
+`Blockchain.settledAmount(client, miner, asset)` (same DCAP-collateral-style history mechanism as
+`reservedAmount`, `Keys.settledAmountSuffix`/`settledAmountHistory`/`settledAmountKeysAt`, `KeyTag.SettledAmount*`
+appended at the end). `settledAmount` is a second, independent lifetime-cumulative counter - `Settle` never
+decrements `reservedAmount` itself, only ever compares against it. This is load-bearing, not an arbitrary choice:
+rule 3 is "counter within the total **ever** reserved," so the ceiling it checks against has to stay a lifetime
+total across the reservation's whole history, not shrink as settlements land. The enclave's own `cumulativeSpent`
+counter is likewise a lifetime total (that's what makes resubmitting an old batch a safe no-op rather than a
+double-spend) - decrementing `reservedAmount` by each settlement's delta would turn it into a *remaining balance*,
+and a later, legitimately-higher `cumulativeSpent` could then fail against that shrunk ceiling even though it's
+still within the true lifetime total. Keeping the two ledgers separate is also what a future `Withdraw` needs
+regardless: a client's recoverable balance is `reservedAmount - settledAmount`, which only means anything if both
+are tracked independently.
+
+- looks up `blockchain.registeredEnclave(tx.enclavePublicKey)` (a new `Blockchain.registeredEnclave` extension,
+  same current-or-next-period scoping as `isRegisteredEnclave`/`isRegisteredMiner`, but returning the full record
+  instead of a boolean so its `operator` field can be checked) and requires `tx.sender == registered.operator` -
+  "reservation open" and the other two rules are otherwise keyed by whatever `sender` claims as the miner, so this
+  stops an unrelated account from settling against someone else's reservations even though it could never forge
+  the enclave signature itself;
+- verifies `tx.enclaveSignature` against `mkSettlementMessage(tx.settlements)` using `crypto.verify` with the
+  enclave's raw public key (`PublicKey(tx.enclavePublicKey)`) - this is what "enclave-signed batch" means in
+  practice: the account-level `proofs` only prove the operator relayed the batch, not that the enclave produced it;
+- per settlement: rejects an asset that isn't `Hearth` and isn't an already-issued `IssuedAsset` (mirroring
+  `ReserveTransactionDiff.assetIssued`, defence in depth - `reservedAmount(...) > 0` already implies this in
+  practice, since `Reserve` itself checks it, but `Settle` shouldn't depend solely on that); rejects
+  `reservedAmount(client, miner, asset) <= 0` ("reservation open" - also blocks writing a `settledAmount` entry
+  for a client that never reserved anything at all, which the other two rules alone wouldn't); rejects a new
+  cumulative value lower than what's already recorded ("counter non-decreasing" - checked against a running total
+  accumulated *within the same batch* too, via a `foldLeft` over `tx.settlements`, in case a client appears more
+  than once in one transaction); rejects a new cumulative value exceeding `reservedAmount` ("counter within the
+  total ever reserved"); credits `ServingNodeCredPart` of the newly-confirmed delta (see below) to the miner,
+  accumulated across every settlement in the batch into one `Portfolio` before being combined with the fee debit.
+
+**"Settled Cred is retired" - a three-way split (`hearth-tokenomics-spec` S4), not a full burn, but only one of
+the three shares is credited.** `p = φ_b·p (burned) + φ_n·p (serving node) + φ_v·p (verifier pool)`, launch values
+`φ_b = 0.60 / φ_n = 0.30 / φ_v = 0.10`. `SettleTransactionDiff.ServingNodeCredPart` (`state.diffs.BlockDiffer
+.Fraction(3, 10)`, hardcoded the same way `BlockDiffer.CurrentBlockFeePart`/`BlockRewardCalculator`'s tier
+fractions are - a fixed protocol constant next to the logic that uses it, not a per-network `BlockchainSettings`
+field, since nothing about this fraction is meant to differ mainnet/testnet/stagenet) implements `φ_n`: for each
+settlement, the newly-confirmed delta (`newCumulative - previouslySettled` - always non-negative, since it's
+computed only after the "counter non-decreasing" check passes) is split via `ServingNodeCredPart.apply` (integer
+division first, matching every other `Fraction` in this codebase - see "Block fees"'s truncation warning) and
+credited to the miner (`tx.sender`, same identity as the settlement's `miner`/`RegisteredEnclave.operator`) in the
+settled asset. Computed incrementally per settlement rather than off the raw `cumulativeSpent` field directly, so
+splitting one client's spend across several `Settle` transactions credits the same total the node would have
+received from one transaction straight to the final value (`ServingNodeCredPart` is linear in its truncation
+behavior only when applied to the same delta either way - `SettleTransactionDiffTest`'s "credits the serving node
+incrementally" case pins this down: two transactions settling 40 then a further 60 credit `12 + 18 = 30`, the same
+as one settling 100 directly would (`100 / 10 * 3 = 30`)).
+
+`φ_v` is **not** credited to anyone: the verifier pool has no on-chain destination of any kind yet (no
+verifier-committee registry), so that 10% is, for now, folded into the effectively-burned remainder rather than
+guessed at - a future pass adding a verifier pool needs to revisit `SettleTransactionDiff` to add that credit
+alongside the other two, not replace either. `φ_b` isn't credited to a balance either, but unlike `φ_v` it isn't
+simply dropped - it feeds workBoost (see "workBoost: boosting a validator's generating balance" below).
+
+The retired (uncredited) portion needs no extra bookkeeping beyond what `Reserve` already does: it debits the
+sender's spendable balance at reservation time and credits it nowhere (see "Reserve and BindApiKey" above) -
+recording a settlement (and crediting the node's slice of it) is what makes the rest of that debit permanent,
+there is nothing left to burn or move for the untouched remainder. Asset volumes are never touched either way:
+they are fixed at issuance for every asset in this state model (`StateSnapshot.assetVolumes`'s own comment - "an
+asset's volume is fixed forever at issuance"), and this repo has no Burn/Reissue transaction type to change that
+invariant for.
+
+**Testing** follows the same constraint and workaround as `ReserveTransactionDiffTest`/`BindApiKeyTransactionDiffTest`
+(see above) - `SettleTransactionDiffTest` injects a `RegisteredEnclave`, and seeds `reservedAmount` directly through
+`StateSnapshot.build`/`SnapshotBlockchain` rather than a real `Reserve` transaction, since only the reserved
+*total* matters to the diff under test, not how it got there. The `RegisteredEnclave`-injecting `Blockchain`
+wrapper itself used to be hand-rolled separately in each of the three test files (`export blockchain.
+{registeredEnclaves as _, *}` plus one `override def`); adding a third copy for `SettleTransactionDiffTest` was
+the trigger to extract it once, as `WithDomain.blockchainWithRegisteredEnclave(blockchain, enclave)`
+(`node/testkit/.../db/WithState.scala`), with `Reserve`/`BindApiKeyTransactionDiffTest` refactored to call it too.
+`TxHelpers.settle` defaults to a distinct enclave signer (`signer(9)`) from its `sender` (`defaultSigner`) -
+reusing the same key for both would hide a bug where the wrong key ends up signing the settlement message, since
+in production the two are always unrelated keys.
+
+## workBoost: boosting a validator's generating balance
+
+The second half of what was, until this pass, a documented gap: "value settled in epoch E feeds the beneficiary
+validator's workBoost in E+1" (the gist), matching hearth-tokenomics-spec S7.1's `b_eff(i) = b_i(1 +
+workBoost_i)` amplifying "a staker's forging weight." Two project decisions fixed the previously-open design
+questions: **"let epoch be a generation period"** (so no new period concept was needed - `GenerationPeriod`,
+already used by `committedGenerators`/`registeredEnclaves`, *is* the epoch), and **work is tracked in the name of
+the validator, not the miner** (the settling enclave's `RegisteredEnclave.validator` - the consensus generator it
+boosts - not `RegisteredEnclave.operator`/the TEE miner submitting the `Settle`). Implemented as a **deliberately
+simplified placeholder** for the spec's full curve, not the curve itself - see "Why simplified, not the full
+spec formula" below for why, and for how to upgrade later without touching storage.
+
+**Tracking (`SettleTransactionDiff`):** `SettleTransactionDiff.BurnedWorkPart` (`Fraction(6, 10)`, φ_b = 0.60,
+same hardcoding rationale as `ServingNodeCredPart`) computes each settlement's burned share of its delta the same
+incremental way `ServingNodeCredPart` computes the node's share, and accumulates it into the new
+`Blockchain.workDone(validator, period)` - a third `Long` ledger with the exact `reservedAmount`/`settledAmount`
+history mechanism (`Keys.workDoneSuffix`/`workDoneHistory`/`workDoneKeysAt`, `KeyTag.WorkDone*` appended at the
+end, `StateSnapshot.workDone`), keyed by `(validator, period)` rather than a triple since there's only one
+validator per enclave. Every settlement in one `SettleTransaction` shares the same `enclavePublicKey` and
+therefore the same `registered.validator` and the same current `blockchain.currentGenerationPeriod` - so unlike
+`settledAmounts`/node-credit (keyed per settlement), the whole batch accumulates into a single `(validator,
+period)` entry. `registeredEnclave` having already resolved earlier in the same `for`-comprehension guarantees
+`currentGenerationPeriod` is defined at this point (see `Blockchain.findRegisteredEnclave`), so fetching it again
+as an explicit `Either` (rather than silently reusing a private detail of that lookup) is belt-and-braces, not a
+reachable failure mode.
+
+**`SettleTransactionDiff` also requires `registered.validator` to be a committed generator of `period` itself**
+(`blockchain.committedGenerators(period).exists(_.address == registered.validator)`), a check independent of and
+in addition to `registeredEnclave`'s own. This is load-bearing, not redundant, and its absence was a real Critical
+bug caught in review before merge (security audit, Pass 2): `findRegisteredEnclave`'s current-or-next-period
+window (see "Reserve and BindApiKey" above) means a `RegisteredEnclave` written for period `X` (StartBoost only
+ever checked `validator ∈ committedGenerators(X)`, the period it registered *for*) is also visible while
+`blockchain.currentGenerationPeriod == X.prev` - i.e. a `Settle` can land one period *before* the one StartBoost
+actually verified committee membership for. Without this check, `workDone` could be written for a `period` whose
+`committedGenerators(period)` doesn't include `validator` at all (e.g. a brand-new generator that committed for
+`X` but not `X.prev`); `GeneratingBalanceProvider` sums `totalWork` only over `committedGenerators(workPeriod)`
+(see below), so that validator's own `work` would be excluded from the sum it's later compared against, letting
+`work > totalWork` and breaking the `(1 + MaxBoost)` bound `WorkBoost` depends on. `SettleTransactionDiffTest`'s
+"rejects settling when the validator is not a committed generator of the current period" pins this down.
+
+**Consumption (`GeneratingBalanceProvider`):** rather than patch every call site that reads generating balance
+(`appender.findBlockAndGetGenerators` for eligibility/endorsement weight, `appender.minerBalance` for the PoS
+delay check, `Miner`/`BlockChallenger` for local scheduling, `CommitToGenerationTransactionDiff` for deposit
+sizing, `CommonAccountsApi` for read-only display), the boost is applied once, centrally, inside
+`GeneratingBalanceProvider.balance` itself - the single function every one of those already calls through
+`Blockchain.generatingBalance` (`BlockchainExt`). For a balance lookup at height `h`, the period being *generated
+into* is `generationPeriodOf(h + 1)` (mirroring `findBlockAndGetGenerators`'s own `parentHeight.next` ->
+`generationPeriodOf` derivation), and the work it draws on is that period's predecessor
+(`GenerationPeriod.prev`, `None` only for the very first period - `start == Height(1)` - which therefore never
+gets a boost, correctly: there's no period before genesis to have tracked anything in). `totalWork` is the sum
+of `workDone(g.address, workPeriod)` over every `g` in `committedGenerators(workPeriod)` - the full committee
+that period, not just validators who happen to have work, so a validator's boost is inherently a *share of the
+whole committee's tracked work*, not an absolute count. Summed as `BigInt`
+(`GeneratingBalanceProvider.workContext`), not a plain `Long`: individual `workDone` values are bounded
+(`safeSum`'d at write time), but a sum over an unbounded number of committed generators isn't itself guaranteed
+to fit a `Long` - flagged in review (security audit, Pass 2) since the original plain-`Long` `.sum` could silently
+wrap on a large enough committee.
+
+**`balance`'s per-account cost, and why `findBlockAndGetGenerators` doesn't call it directly.** Computing
+`totalWork` is an `O(committee)` scan (`committedGenerators` plus one `workDone` read per member). `balance` is
+public and computes it fresh per call, which is fine for every single-account caller above - but
+`findBlockAndGetGenerators` calls it once *per committed generator* to build one block's eligibility list, which
+would make that `O(committee²)` (flagged in review, code quality Pass 1, as a real per-block RocksDB-read
+multiplier, not a one-off cost). `GeneratingBalanceProvider.workContext(blockchain, atHeight)` computes the
+`(workPeriod, totalWork)` pair once; `balanceWithContext` takes it as a parameter instead of recomputing it.
+`findBlockAndGetGenerators` calls `workContext` once and threads it through its per-generator loop via
+`balanceWithContext`; every other caller keeps using plain `balance`, which computes the same context internally
+for its own single account.
+
+**`WorkBoost`** (`consensus/WorkBoost.scala`) is the pure curve: `boosted = balance + balance * MaxBoost * work /
+totalWork` (`MaxBoost = 2`, the conservative end of the spec's own "2-3" governance range - see the file's own
+comment on the "Bounded amplification (Lemma)" tradeoff), `0` whenever `totalWork <= 0` or this validator's own
+`work <= 0`. The `(1 + MaxBoost)` bound (`work/totalWork <= 1`) holds *only* because `SettleTransactionDiff`
+guarantees `work` is genuinely one of `totalWork`'s own addends (see the committee-membership check above) - it's
+not an invariant `WorkBoost` can enforce on its own, only rely on. As defence in depth against exactly that
+assumption ever being violated again (rather than trusting the write-side check silently forever), the final
+`BigInt -> Long` conversion is guarded by an explicit `require(boosted.isValidLong, ...)` instead of `.toLong`'s
+default silent-truncation behavior - `BigInt.toLong` wraps into an arbitrary, possibly negative, `Long` on
+overflow with no error, which would otherwise turn a broken invariant into a corrupted generating balance instead
+of a loud failure (flagged in review, security audit Pass 2, alongside the committee-membership check itself).
+**BigInt intermediate arithmetic throughout, not Double**: this feeds directly into which blocks are valid, so it
+has to be exact and platform-independent, the same "no floating point in consensus" rule `EmissionCurve` follows
+(see "Why fixed-point BigInt, not `Math.pow`" under "HRTH emission curve").
+
+**Why simplified, not the full spec formula.** hearth-tokenomics-spec S7.1's real curve is EMA-smoothed
+(`w_i(E) = (1-α)w_i(E-1) + α·r_i(E)`), normalized against the **median** of every active validator's work that
+period (not a sum-based share), then passed through a saturating function (`B_max · g/(g+κ)`). None of `α`/`κ`
+has a value anywhere in the spec (unlike `B_max`'s explicit "2-3"), and a per-period median across every
+committed generator is meaningfully more machinery than a sum. Given the project is pre-launch (see the emission
+curve/retirement-split sections' own "TODO: replace before launch" precedent - nothing on a live chain depends on
+today's choice), the simplified version ships the actual mechanic (tracked work -> more forging weight, bounded
+the same way) without inventing values for constants the spec doesn't provide. **Upgrading later needs no storage
+migration**: `Blockchain.workDone` already stores the raw per-period signal (`r_i(E)`'s role) the EMA would be
+built from, so swapping `WorkBoost`'s body for the full curve - and eventually adding the EMA smoothing and
+median normalization around it - only touches `GeneratingBalanceProvider`/`WorkBoost`, not
+`SettleTransactionDiff` or any persisted schema. The one wrinkle: EMA needs a "previous period's smoothed value"
+to carry forward, which isn't stored yet (`workDone` is the raw, un-smoothed signal) - bootstrapping it from
+already-stored historical raw values, retroactively or lazily, is a small follow-up, not a blocker.
+
+**Testing:** `WorkBoostTest` covers the pure curve directly (zero-total, zero-own-work, proportional share,
+truncation, the `(1 + MaxBoost)` bound). `GeneratingBalanceProviderTest` exercises the full wiring
+(period resolution, committee enumeration, `workDone` lookup, boost application) against a *real* domain's
+`effectiveBalance`/`generationPeriodOf` wrapped with a `Blockchain` that injects `committedGenerators`/`workDone`
+for one specific period - the same "inject the minimal necessary state directly" technique used throughout this
+feature, chosen over driving a real period boundary crossing (which needs an actual `CommitToGenerationTransaction`
+committing a generator for a *later* period - see "node-it fixtures"'s own extensive notes on how fiddly that is
+- well beyond what this is testing). `generationPeriodLength = 1` makes the genesis period exactly `[1, 1]`, so
+its predecessor is already well-defined and a height-1 lookup already draws on it, with no need to advance the
+chain past genesis at all. `SettleTransactionDiffTest` covers the tracking side (attributed to the validator, not
+the miner; accumulates within a batch and across transactions, mirroring the node-credit tests' structure).
 
 ## Protobuf package migration
 
-Generated protobuf code moved from `com.wavesplatform.*` packages to `tech.hearth.*` ones. Most of it comes from the
-external `tech.hearth % protobuf-schemas` dependency, already on the new package name; but `node`'s own two local
-proto files (`node/src/main/protobuf/hearth/{api,database}.proto`, covering `BlockMeta`/`LeaseDetails`/
-`AssetDetails`/`TransactionsByIdRequest` and the rest of `database.proto`/`api.proto`) still carried a stale
-`option java_package = "com.wavesplatform...."` left over from before the migration, unlike every other `.proto`
-file (including the external ones), which already say `tech.hearth...`. That single leftover setting was the actual
-root cause of the bulk of "not found"/type-mismatch errors across `database/Keys.scala`, `RocksDBWriter.scala` and
-`database/package.scala` once the surrounding hand-written code moved to `tech.hearth.*` and started looking for
-these types there — the fix is to update `java_package` to match, not to chase each individual "not found" site.
+Generated protobuf code lives under `tech.hearth.*` now, not `com.wavesplatform.*`. If a local `.proto` file's
+`option java_package` is ever left stale (pointing at the old package), the symptom is a wave of "not found"/
+type-mismatch errors in whatever hand-written code depends on it - fix the `java_package`, don't chase each site.
 
-Hand-written Scala that assumed same-package visibility with the *not-yet-renamed* generated code (`grpc-server`'s
-`api/grpc`, `events/protobuf`, `events/api/grpc/protobuf`, and `node`'s `protobuf/transaction/transaction.scala`)
-used a `package object` re-export shim — `type X = tech.hearth.foo.X` plus `val X = tech.hearth.foo.X` for the
-companion — instead of a blanket import, so callers could keep naming these types unqualified. That shim only makes
-sense while the hand-written package and the generated package actually differ. Once the hand-written code itself
-finished moving from `com.wavesplatform.*` to `tech.hearth.*` — the same package the generated code already lived
-in — every one of these re-exports became a circular self-reference (`type X = tech.hearth.foo.X` written *inside*
-`package tech.hearth.foo`), which scalac rejects as `[E161] Naming Error: X is already defined as class/object X in
-.../target/src_managed/main/.../X.scala`. That specific error shape — a *Naming* error pointing at a generated file
-under `target/src_managed`, not a plain "not found" — is the signal that a shim has gone stale, not that a type is
-missing. Fix is to delete the redundant re-export lines; some files were 100% shim and got deleted outright
-(`events/protobuf/package.scala`, `events/api/grpc/protobuf/package.scala`), others had real converter logic
-alongside the shim and only needed the `type`/`val` alias lines stripped out (`api/grpc/package.scala`,
-`protobuf/transaction/transaction.scala`).
+A `package object` re-export shim (`type X = tech.hearth.foo.X` / `val X = ...` for the companion, used so callers
+can name a not-yet-renamed generated type unqualified) becomes a circular self-reference once the hand-written
+package and the generated package actually converge - scalac reports this as `[E161] Naming Error: X is already
+defined as class/object X in .../target/src_managed/main/...`. That specific shape (a *Naming* error pointing at
+`target/src_managed`, not a plain "not found") is the tell that a shim has gone stale and its `type`/`val` alias
+lines need deleting, not that a type is missing.
 
-Build-level references to renamed classes are easy to miss in a source-only grep, since they live as string literals
-in sbt files rather than as Scala imports, and most don't fail loudly: `mainClass`
+Package renames also live as string literals in sbt files, not just Scala imports - `mainClass`
 (`project/RunApplicationSettings.scala`), `extensionClasses` (`grpc-server/build.sbt`), `V.scalaPackage`
-(`node/build.sbt`, controls the package the generated `Version.scala` lands in), and the `-Wconf:...&origin=...`
-deprecation-suppression filters in `build.sbt` all embed a fully-qualified class name as a string. A stale
-`mainClass`/`extensionClasses` entry only breaks at runtime (`ClassNotFoundException`), and a stale `-Wconf` origin
-filter only breaks `-Werror` if and when the class it no longer matches happens to emit a fresh deprecation warning
-— neither shows up compiling the Scala sources themselves, so both need a deliberate check after any package rename.
+(`node/build.sbt`), and `-Wconf:...&origin=...` filters (`build.sbt`) all embed a fully-qualified class name as a
+string and don't fail compiling Scala sources - a stale `mainClass`/`extensionClasses` only breaks at runtime
+(`ClassNotFoundException`), a stale `-Wconf` origin only breaks `-Werror` once the class it no longer matches emits
+a fresh warning. Check both by hand after any package rename.
 
-A few files were reduced to just a `package` line with no members at some earlier point in the migration and never
-finished being deleted (`consensus/nxt/api/http/NxtConsensusApiRoute.scala`, `network/HistoryReplierL1.scala`,
-`utils/CloseableIterator.scala`, three `api/http/requests/SignedXV2Request.scala` test files). Confirmed via
-`grep -rl` that nothing in the repo referenced them, then deleted them outright. They don't cause "not found" errors
-(nothing depends on them), only `-Wunused`/`-Werror` failures ("No class, trait or object is defined in the
-compilation unit").
-
-The `Transaction` wire message dropped `version` entirely: `chain_id`, `sender_public_key`, `fee`, `timestamp`, then a
-`data` oneof, at the time of this migration holding the six surviving transaction kinds (transfer, exchange, lease,
-lease-cancel, mass-transfer, commit-to-generation) — since expanded and reshuffled, see "Transaction schema: Transfer
-merge, fee restructuring, new tx types" above for the current oneof and field shapes (`fee` in particular is no
-longer this message's original `Amount`, and `mass-transfer` no longer exists as a separate case). Constructing one
-directly no longer takes a version argument. `SignedTransaction` simplified to
-`{ transaction: Option[Transaction], proofs: Seq[ByteString] }` (its own field was renamed from `wavesTransaction` to
-`transaction` in that later change too), with no `EthereumTransaction` oneof variant. `StateUpdate`/`TransactionMetadata`
-lost their data-entry, script and alias fields and oneof branches along with the features that produced them.
+A file reduced to just a `package` line with no members doesn't error (`-Wunused`/`-Werror` catches it as "No
+class, trait or object is defined in the compilation unit" only if referenced nowhere) - `grep -rl` for zero
+references before deleting.
 
 ## SBT 2 unused-settings lint
 
-`sbt compile`/`sbt compilePR` surfaced a fresh "there are 24 keys that are not used by any other settings/tasks"
-warning right after the SBT 2 migration. Checking out the pre-migration commit and running the exact same
-`node`/`grpc-server`/`build.sbt` files under a real sbt 1.12.14 shows zero such warnings, so this looked at first
-like new dead weight from the migration — it isn't. `sbt-native-packager 1.11.7` cross-publishes separate jars for
-sbt 1 (`sbt-native-packager_2.12_1.0`) and sbt 2 (`sbt-native-packager_sbt2_3`), but its GitHub source tree shows
-`DebianPlugin.scala`/`LinuxPlugin.scala`/`JavaServerApplication.scala` living under the *shared* `src/main/scala`
-directory, identical in both builds — only two small `xsbti.FileConverter` compat shims differ, under
-`src/main/scala-2.12`/`scala-3`. The settings graph these plugins wire up — which key's value feeds which other
-key's `.value` call — is therefore byte-for-byte the same on both sbt versions; sbt 1's own lint just never caught
-these particular keys, and sbt 2's is more thorough at the same check (plausibly a side effect of its
-action-cache rearchitecture needing a much more precise live/dead distinction across the settings graph than sbt 1
-ever needed). All 24 keys were confirmed dead by reading the plugin source directly and cross-checking with
-`inspect tree`/`inspect uses` against this build, not by assumption:
+`compilePR` warns of 24 sbt keys "not used by any other settings/tasks" - not new dead weight from the SBT 2
+migration, just a stricter lint: `sbt-native-packager`'s settings graph (`Rpm`/`Debian`/`Universal`-scope bridges
+like `Linux/javaOptions`, `Debian/executableScriptName`, the Rpm daemon-user block) is byte-for-byte identical
+under sbt 1 and sbt 2 (confirmed by running the pre-migration build under real sbt 1.12.14), but sbt 1's own lint
+never caught these particular keys. Each was confirmed genuinely dead by reading the plugin source and
+cross-checking with `inspect tree`/`inspect uses` against this build, not by assumption - `Rpm/*` in particular
+stays dead even where Rpm packaging is used on any project, a real (harmless) gap in the plugin itself, since this
+repo never runs an Rpm task regardless (Debian + Universal tarballs only). None of the 24 are fixable beyond
+`excludeLintKeys` (`build.sbt`): a key is defined the moment its owning plugin is enabled, and sbt has no API to
+retract one. `gitDescribedVersion`'s `excludeLintKeys` entry needs the `git.` prefix (`git.gitDescribedVersion`,
+`SbtGit.GitKeys`), unlike the others.
 
-- `Rpm/*` (`node`): `RpmPlugin` cannot be disabled — `JavaAppPackaging` has it as a hard `requires`, not a trigger;
-  `disablePlugins(RpmPlugin)` fails project load outright with `Failed to sort ... topologically`. This repo never
-  runs an Rpm packaging task regardless (only Debian + Universal tarballs, see `packageAll`/`buildDebPackages`/
-  `buildTarballsForDocker`). Separately, `JavaServerApplication.scala`'s "Daemon User and Group" block
-  (`Rpm / daemonUser := (Linux / daemonUser).value` etc.) and `RpmPlugin`'s own `Rpm / executableScriptName`/
-  `Rpm / name` bridges are dead **even when Rpm packaging is used**, on any project: the actual mustache-replacement
-  machinery (`linuxScriptReplacements`) reads the `Linux`-scoped settings directly and never touches these
-  Rpm-scoped copies — a real (harmless) gap in the plugin itself, not something specific to this repo's config.
-- `node / Linux / javaOptions`: `JavaServerAppPackaging` unconditionally derives
-  `Linux / javaOptions := (Universal / javaOptions).value`. The JVM options this repo actually cares about
-  (`-J-Xmx2g` etc., `node/build.sbt`) are defined exactly once, at `Universal` scope, and baked into the Universal
-  launcher script that node's own `systemd.service` template invokes via `ExecStart`. The `Linux`-scoped copy exists
-  only to feed a classic SysV init script's inline JVM flags (`SystemVPlugin`), which node never uses (it uses
-  `SystemdPlugin`) — so options aren't really defined twice by this repo, just once here plus one unused
-  plugin-provided derived copy.
-- `Debian/executableScriptName`, `Universal/executableScriptName`, `Universal-src/name`, and (for `grpc-server` only)
-  `Debian/sourceDirectory`: `DebianPlugin`/`UniversalPlugin` define these as bridges from `Linux`/`Universal` scope,
-  same dead-by-design pattern as the Rpm ones above — confirmed with `inspect tree Debian/linuxScriptReplacements`,
-  which resolves through scope delegation straight to `Linux/linuxScriptReplacements` and never touches the
-  Debian-scoped copies.
-- `node / Debian / daemonUser`/`daemonUserUid`/`daemonGroup`/`daemonGroupGid`: `JavaServerApplication.scala`'s
-  "Daemon User and Group" block, Debian side — same dead bridge as the Rpm ones above. Separately, this repo's own
-  `node/src/package/debian/{postinst,postrm,prerm}` hardcode the account name from `${{app_name}}` rather than
-  reading `daemon_user`/`daemon_group` replacements at all (see "node-it fixtures" for the analogous
-  `${{app_name}}` mustache convention), since `maintainerScripts` there is fully hand-authored, not templated — so
-  even a hypothetical upstream fix wiring these settings up would still find no consumer here.
-- `node / debianControlScriptsDirectory`: unused only for `node`, not `grpc-server`. `node/build.sbt`'s
-  `Debian / maintainerScripts := maintainerScriptsFromDirectory(...)` is a plain `:=` that fully replaces
-  `DebianPlugin`'s default `Debian / maintainerScripts` — the only setting that ever reads
-  `debianControlScriptsDirectory` — with hand-authored scripts. `grpc-server`'s `ExtensionPackaging` instead does
-  `maintainerScripts := maintainerScriptsAppend((Debian / maintainerScripts).value - Postinst)(...)`, which reads
-  the *old* value first and so keeps that default (and `debianControlScriptsDirectory`) reachable — confirmed with
-  `inspect tree node/Debian/maintainerScripts` (stops at `Debian/packageSource`, no plugin default in the tree) vs.
-  `inspect tree grpc-server/Debian/maintainerScripts` (does include it).
-- `gitDescribedVersion` (every subproject): `sbt-git`'s `GitPlugin` injects this per-project unconditionally, but
-  only the root's `enablePlugins(GitVersioning)` wires `version := gitDescribedVersion.value` — this repo
-  deliberately versions every module from one root git descriptor rather than per-module, confirmed with
-  `inspect uses gitDescribedVersion` (only `ThisBuild/version` and `hearth-node/version` show up as consumers). Its
-  key reference needs the `git.` prefix (`git.gitDescribedVersion`) in `excludeLintKeys`, unlike the other keys
-  here — it lives under `SbtGit.GitKeys`, exposed via the `git` settings object already used elsewhere in
-  `build.sbt` (`git.useGitDescribe`), not as a bare top-level import.
+## SBT 2 action-cache: side-effecting tasks need `Def.uncached`
 
-None of the above are fixable from this repo's side beyond `excludeLintKeys` (`build.sbt`): the keys are defined the
-moment their owning plugin is enabled, sbt has no API to retract a key another plugin's `AutoPlugin.projectSettings`
-already added, and overriding a dead key's *value* doesn't remove it from the graph or change whether anything reads
-it. `TransactionsApiGrpcImpl` failing to compile (`needs to be abstract, since def getStateChanges ... is not
-defined`) is unrelated and pre-existing — confirmed by running the pre-migration commit's unmodified
-`grpc-server` sources under sbt 1.12.14 too; almost certainly a `tech.hearth:protobuf-schemas:0.1.0-SNAPSHOT` drift
-picked up from `~/.m2`/mavenLocal between whenever `TransactionsApiGrpcImpl` was last touched and now, not anything
-either this pass or the SBT 2 migration changed.
-
-## SBT 2 action-cache: `buildTarballsForDocker`
-
-`run-integration-tests` (`.github/workflows/check-pr.yaml`) failed `sbt --batch "node-it/docker;node-it/test"` with
-`ERROR: failed to calculate checksum of ref ...: "/target": not found` the moment `docker build` hit its
-`RUN --mount=type=bind,source=target,target=/tmp/` step. `node-it/build.sbt`'s `docker` task depends on the root
-`buildTarballsForDocker` (`build.sbt`) specifically to populate `docker/target/{hearth,hearth-grpc-server}.tgz`
-before invoking `docker build` from the `docker/` directory, and the CI log's own `[internal] load build context`
-step confirms the bug directly: it transferred only `1.15kB`, not the ~196MB the two tarballs total, so
-`docker/target/` was empty when the build context was captured, despite `buildTarballsForDocker` having reported
-success moments earlier in the same log.
-
-Root cause, reproduced locally: `buildTarballsForDocker` writes its output via `IO.copyFile` straight to
-`docker/target/*.tgz`, a path sbt's dependency/output tracking has no visibility into (it isn't a declared task
-output, just an out-of-band filesystem write). Under sbt 1 every run of a task like this just re-executes its body;
-sbt 2's `ActionCache` instead treats every task as cacheable by default and, on a cache hit, replays the cached
-result *without re-running the body* — for a `Unit`-returning task whose entire purpose is a side effect, that
-means the copy silently never happens. Confirmed by deleting `docker/target/` and running
-`sbt buildTarballsForDocker` twice in a row with no source changes: the first run recreates the tarballs, the
-second reports `[success]` in a few seconds (upstream tasks' log lines even replay) but leaves `docker/target/`
-missing entirely - the exact shape of the CI failure. `setup-java`'s `cache: 'sbt'` in the workflow persists this
-action-cache directory *across* CI runs for the same PR, which is what lets a stale hit strike on a fresh checkout
-where the actual `docker/target/` directory obviously doesn't exist yet.
-
-This is the same class of problem the SBT 2 migration already had to fix for `classpathOrdering`,
-`compilePRRaw`, `IntegrationTestsPlugin`'s `logDirectory`/`testGrouping`, and `benchmark/build.sbt`'s `Jmh / compile`
-(all wrapped in `Def.uncached` in the migration commit, see their entries elsewhere in this file for why each one
-needed it) - `buildTarballsForDocker` just wasn't caught at the time since it only got the mandatory
-`FileConverter`/`toFileRef` syntax updates to compile under sbt 2, not an audit for cacheability. Fixed the same
-way: wrapped its body in `Def.uncached`, which forces the task to actually run every time regardless of what the
-action-cache thinks it already knows. Any other task in this build that performs a filesystem write to a path
-outside its own declared outputs is a candidate for the same bug and needs the same treatment.
+sbt 2's `ActionCache` treats every task as cacheable by default and, on a cache hit, replays the cached result
+*without re-running the body*. A task whose only job is an out-of-band filesystem write sbt's output tracking can't
+see (e.g. `buildTarballsForDocker`'s `IO.copyFile` into `docker/target/*.tgz`, not a declared task output) silently
+no-ops on a cache hit - `setup-java`'s `cache: 'sbt'` persists that cache *across* CI runs, so a fresh checkout with
+an empty `docker/target/` can still hit stale and skip the copy, breaking `node-it/docker`'s later `docker build`.
+Same class of bug already fixed for `classpathOrdering`, `compilePRRaw`, `IntegrationTestsPlugin`'s
+`logDirectory`/`testGrouping`, and `benchmark/build.sbt`'s `Jmh / compile`. Fix: wrap the task body in
+`Def.uncached`. Any task in this build that writes to a path outside its own declared outputs is a candidate for
+the same bug.
 
 ## node-it fixtures
 
@@ -924,168 +1151,38 @@ per project decision, will not be: `RewardApiRoute` hardcodes `RewardVotes(0, 0)
 to attach a vote to a mined block. `RewardsTestSuite` (entirely about this) was deleted rather than ignored, and
 `BlockHeadersTestSuite`'s `desiredReward`/term-increase assertions were dropped for the same reason.
 
-A duplicate already-mined transaction resubmitted via `/transactions/broadcast` after restarting the node(s) that
-mined it used to be accepted again instead of being rejected with `AlreadyInState`/`AlreadyInTheState`
-(`NodeRestartTestSuite`, "the duplicate transaction cannot be put into the blockchain"). Root cause, confirmed with a
-repro (`DuplicateTransactionAfterRestartSpec`): `RocksDBWriter`'s constructor rebuilds its tx bloom filters
-(`prevTxFilter`/`currentTxFilter`) by seeking into the `txHandle`/default column families with plain
-`writableDB.newIterator(...)` — default `ReadOptions`, no `setTotalOrderSeek(true)`. Every column family here is
-opened with a 10-byte capped prefix extractor (`RDB.newColumnFamilyOptions`, for iterator performance), under which a
-`seek()` to a key that isn't an exact match only sees keys sharing that key's prefix bucket unless total-order-seek is
-set — exactly the caveat the surrounding comment already documented ("if specified key has less than 10 bytes:
-iterator finds the exact key for seek(key) and becomes invalid after next()"). Every *other* iterator constructed
-anywhere else in the database package (`ReadOnlyDB`, `DBResource`) already sets `setTotalOrderSeek(true)`; this one
-constructor didn't. The practical effect: on a real restart, a fresh `RocksDBWriter` rebuilds these filters as
-effectively empty, `containsTransaction` false-negatives for recently-mined transactions, and
-`disallowDuplicateIds` silently lets them back in. Fixed by wrapping both iterators in a shared
-`new ReadOptions().setTotalOrderSeek(true)`. `CommonValidationTest`/`TxBloomFilterSpec` never caught this because
-neither exercises `RocksDBWriter`'s constructor against a *pre-existing* DB (they only ever build a fresh, empty one);
-`DuplicateTransactionAfterRestartSpec` closes that gap by building a second `RocksDBWriter`/`Domain` via
-`TestStorageFactory` against the same `RDB` mid-test, simulating exactly that.
+A restarted node used to accept a duplicate already-mined transaction instead of rejecting it with
+`AlreadyInState`. Root cause: `RocksDBWriter`'s constructor rebuilds its tx bloom filters
+(`prevTxFilter`/`currentTxFilter`) with a plain `writableDB.newIterator(...)` - no `setTotalOrderSeek(true)`. Every
+column family here uses a 10-byte capped prefix extractor, under which `seek()` to a non-exact key only sees keys
+sharing its prefix bucket unless total-order-seek is set (every *other* iterator in the database package already
+sets it; this constructor didn't). Effect: on restart, the filters rebuild effectively empty,
+`containsTransaction` false-negatives, `disallowDuplicateIds` lets duplicates back in. Fixed by adding
+`new ReadOptions().setTotalOrderSeek(true)` to both iterators. Neither `CommonValidationTest` nor `TxBloomFilterSpec`
+caught this since neither exercises the constructor against a *pre-existing* DB; `DuplicateTransactionAfterRestartSpec`
+does, by building a second `RocksDBWriter`/`Domain` against the same `RDB` mid-test.
 
-`node-generator` and `benchmark` are both back to compiling clean under `compilePR` (fixed in a later pass). Both had
-rotted the same way: whole feature areas the migration removed (RIDE compiler/evaluator/estimator, smart accounts,
-`Issue`/`Reissue`/`Burn`/`CreateAlias`/`Data`/`SponsorFee`/`InvokeScript`/`Ethereum`/`SetScript`, `account.KeyPair`/
-`SeedKeyPair`, `TxVersion`) were still referenced throughout. The fix pattern was the same as everywhere else in this
-migration: delete whole files/benchmarks whose entire subject is a removed feature (nothing to salvage - the RIDE
-evaluator benchmarks under `lang/v1/`, `HearthEnvironmentBenchmark`, `SmartGenerator`/`MultisigTransactionGenerator`/
-`OracleTransactionGenerator` and the `Mode.MULTISIG`/`ORACLE`/`SWARM` cases that drove them), and migrate what's
-still meaningful to the current APIs (`account.KeyPair` → `tech.hearth.crypto.SigningKey`,
-`TransferTransaction.create`/`TxHelpers.buy`/`.sell`/`.exchange` current signatures (`MassTransferTransaction` has
-since merged into `TransferTransaction`, see "Transaction schema" above), `Keys.hearthBalance`/
-`hearthBalanceAt` in place of the removed `Keys.data`/`dataAt` data-entry storage `RocksDBSeekForPrevBenchmark`
-benchmarked, `PoSCalculator.hit`/`FairPoSCalculator.calculateDelay` in place of the removed `HearthEnvironment
-.calculateDelay` wrapper). `node-generator`'s two standalone dev utilities under `utils/generator/`
-(`BlockchainGeneratorApp`, `MinerChallengeSimulator`) needed a real fix too, not deletion: `MinerImpl`'s constructor
-dropped its explicit miner-accounts parameter (derived from `MinerSettings` via `GeneratorKeys` instead) and its
-`forgeBlock`/`nextBlockGenerationTime` methods now take a separate `SigningKey`/`VrfKey` pair instead of one unified
-key, and `BlockchainUpdaterImpl`'s constructor dropped its lease-loading-callback parameter entirely. `benchmark`'s
-`NarrowTransactionGenerator`-equivalent (the actual `NarrowTransactionGenerator` in `node-generator`) now only
-generates the six surviving transaction types; `Exchange` generation needs an explicit `tradeAssetId` (a pre-existing
-asset id on the target chain) since there is no way to mint a fresh one any more.
+`node-generator`/`benchmark` compile clean under `compilePR`. If either rots again from a future feature removal
+(the pattern that broke them this time: RIDE evaluator/estimator, smart accounts, `account.KeyPair`, `TxVersion`,
+several removed transaction types), the fix is the same: delete whole files whose entire subject is the removed
+feature, migrate what's still meaningful to current APIs (`account.KeyPair` → `SigningKey`, `MinerImpl`/
+`BlockchainUpdaterImpl` constructor signatures, `TxHelpers` current builders). `NarrowTransactionGenerator` only
+generates the six surviving transaction types; `Exchange` generation needs an explicit pre-existing `tradeAssetId`
+since there's no way to mint a fresh asset any more.
 
-### Remaining known node-it failures (as of this pass)
+### node-it: known gaps
 
-Fixed since the previous pass:
+`EndorsementFilter.simulate` correctly detects quorum reached via the miner's own balance alone, with nobody left
+to endorse (e.g. a single committed generator) - it used to only ever set `reached = true` inside the endorser
+loop, so that case stayed stuck at `false` forever despite already meeting the 2/3 threshold. Regression:
+`EndorsementFilterSpec`.
 
-- `activation.FeatureActivationTestSuite`/`PreActivatedFeaturesTestSuite` — both set `hearth.features.supported`,
-  a dead config path; the miner's actual vote list (and what `ActivationApiRoute` reports) comes from
-  `hearth.miner.supported-features` (`MinerSettings.supportedFeatures`), which neither suite ever set, so the node
-  never voted and status fell through to `Implemented` instead of `Voted`. Fixed both suites' config key; all 7 tests
-  across the two suites pass now.
-- `sync.transactions.SignAndBroadcastApiSuite`, "/transactions/sign should handle erroneous input" — not a
-  validation-order issue as first suspected: the test signed as `sender.address` (the node's own miner/generator
-  account), which is never in that node's wallet (wallet derives from a wholly separate seed, see "Keys"), so
-  `resolveSigner`'s wallet lookup failed before ever reaching the request-shape check being tested — for *every*
-  case in the test, not just one. Fixed by signing as a wallet-backed address from `createAddressServerSide()`
-  instead. The suite's chainId-mismatch broadcast case was a separate, deeper issue: `TransferRequest` has no
-  `chainId` field at all, so the request reader always builds the transaction against the server's own network
-  regardless of what the request JSON says — that check is structurally unreachable for a `Transfer` broadcast via
-  this route. Removed that assertion with a comment; it was also asserting a message
-  (`"Address belongs to another network"`) that doesn't match current error text
-  (`"Transaction from another network, expected: ..."` from `CommonValidation.disallowFromAnotherNetwork`) regardless.
-- `sync.RollbackSuite`, "Apply the same transfer transactions twice with return to UTX" — two stacked causes, not
-  the rollback logic: (1) the state snapshots being compared were taken one block apart between the two mining
-  attempts, so a block reward difference leaked into the comparison whenever the same 190 transactions happened to
-  need a different number of blocks between attempts — fixed by zeroing `rewards.initial` for the suite; (2) that fix
-  was first applied to only one of the two node configs, which produced a genuine `InvalidStateHash` divergence
-  between the two nodes (see the note on this under "node-it fixtures" above) rather than fixing anything — fixed by
-  applying the override to both.
-- `sync.MinerStateTestSuite` — two timing bugs (low-balance-miner selection, a too-tight explicit wait; see
-  "node-it fixtures" above for both patterns) got the test running cleanly up to its actual assertion, which then
-  turned out to depend on the removed depth-50 window (see "node-it fixtures" above); the test itself is now
-  `ignore`d for that reason, permanently, per project decision.
-
-Fixed in a later pass (same session), all following the two patterns already documented above (low-balance-miner
-selection, and stale pre-`tech.hearth` migration assumptions):
-
-- `sync.MerkleRootTestSuite`, `sync.SeveralAccountMiningSuite`, `sync.AddressApiSuite` (asset transfers must come from
-  `firstKeyPair`, never a node's own account — see "node-it fixtures" above),
-  `sync.AmountAsStringSuite` (fixed via the `AssetsApiRoute.jsonDetails` `issueTimestamp` fix, see "Transaction JSON")
-  — all low-balance-miner or stale-assumption fixes, no node bugs found.
-- `sync.lightnode.LightNodeMiningSuite` — two stacked bugs: (1) `fullNode.transfer(..., fullNode.balance(...).balance
-  - 1.hearth)` tried to spend the 100 HRTH committed-generator deposit along with the rest of the regular balance
-  (see "Balance snapshots" above; fixed by reading `.balanceDetails(...).available` instead); (2) once that no longer
-  crashed the transfer, the test still failed on its core assertion — its `buildNonConflicting()`-based node
-  selection always assigns node01 as the "full" node and node04 as the "light" one, but node04's genesis balance is
-  2.5x node01's (see the `balances` list in `template.conf`), so the light node actually out-mined the full node in
-  the early blocks the test asserts belong to the latter. Fixed by picking node07/node01 explicitly instead of
-  through the builder, keeping the full node's balance well ahead of the light node's.
-- `async.MicroblocksFeeTestSuite` — two stacked bugs: (1) the suite's sole miner was `Default(0)` (node01, the
-  lowest-balance account in the whole fixture), whose PoS delay averaged ~30s/block; (2) once given a high-balance
-  miner instead, the suite crashed outright the moment it reached its `pre-activated-features.2` height — NG (and
-  with it the 40%/60% fee split under test) is unconditional now, not feature-gated, so pre-activating it hits the
-  same "UNIMPLEMENTED FEATURE ... ACTIVATED ON BLOCKCHAIN" force-stop documented above. Rewrote the test to check the
-  always-on 40%/60% split across two consecutive blocks instead of a before/on/after-activation sequence, matching
-  how `BlockSizeConstraintsSuite`/`BlocksApiSuite` were collapsed earlier.
-- `sync.grpc.LeasingTransactionsGrpcSuite` ("can not make leasing to yourself") and
-  `sync.grpc.MassTransferTransactionGrpcSuite` ("cannot broadcast invalid mass transfer tx") — not node bugs: both
-  `AsyncGrpcApi`'s `broadcastLease`/`broadcastMassTransfer` call `PBTransactions.vanilla(...).explicitGet()` on the
-  client side, to compute `bodyBytes` for signing, before any gRPC call is made. That runs full domain-object
-  construction (`LeaseTransaction`/`TransferTransaction.create`, which invoke their `TxValidator`s and
-  `TxNonNegativeAmount`'s bounds check), so every one of these tests' structural rejections (self-lease, negative
-  transfer amount, too many transfers, oversized attachment) now happens client-side as a plain
-  `RuntimeException(validationError.toString)` (`EitherExt2.explicitGet` on a `Left`), never reaching the server as a
-  `GrpcStatusRuntimeException`. `assertGrpcError` only handles the latter, so `case Failure(e) => Assertions.fail(e)`
-  swallowed the real cause (confirmed by running with a temporary debug print). Fixed both tests to assert on the
-  plain exception and its `ValidationError.toString` message directly instead of using `assertGrpcError`.
-- `sync.grpc.BlockV5GrpcSuite`, `grpc.BlocksApiSuite`, `grpc.GrpcReflectionApiSuite` — not flakiness: all three
-  build their `nodeConfigs` via `NodeConfigs.newBuilder`/`Builder(...).buildNonConflicting()`, which (unlike `build()`)
-  does *not* shuffle nodes — it deterministically assigns the lowest-index `NonConflictingNodes` entry (node01, the
-  fixture's lowest-balance account) as the sole/default miner, so these were consistent low-balance-miner failures,
-  not intermittent ones; the "remain intermittently-aborting, not failure-vs-flake confirmed" framing from the
-  previous pass was wrong. Fixed all three the same way, picking a high-balance node (node07) explicitly instead of
-  going through the builder. `BlockV5GrpcSuite` additionally needed `SyncGrpcApi.blockSeqByAddress`'s
-  `Base58.decode(address)` fixed to `Address.fromString(address).explicitGet().toBytes()` — addresses are bech32m
-  now (see "Keys" above), so the raw `Base58.decode` call threw on the first non-base58 character.
-  `GrpcReflectionApiSuite` additionally needed its `FileContainingSymbol` queries updated from the pre-migration
-  `waves.events.grpc.BlockchainUpdatesApi`/`waves.node.grpc.BlocksApi` proto symbols to their current
-  `hearth.events.grpc`/`hearth.node.grpc` packages (see "Protobuf package migration" above) — reflection returned a
-  valid, successful response either way, just an `ErrorResponse` instead of a `FileDescriptorResponse` for a symbol
-  that no longer exists under the old package, so the failure surfaced as a plain assertion mismatch, not a call
-  error.
-
-Fixed in a later pass (same session), a real production bug found by tracing `TwoNodesFinalizationTestSuite` through
-both nodes' logs line by line (connectivity, endorsement gossip, and chain agreement all confirmed fine first):
-
-- `EndorsementFilter.simulate` (`state/EndorsementFilter.scala`) only ever set `reached = true` *inside* the `while`
-  loop that greedily adds endorsers one at a time. If the miner's own `endorsedBalance` (which already includes its
-  balance before the loop starts - "a miner doesn't need to endorse its own block, mining is already an
-  endorsement") already meets the 2/3 threshold by itself, or more generally if there is nobody left in `richest` to
-  add, the loop body never executes even once - so `reached` stayed `false` forever despite `endorsedBalance` already
-  equaling `totalBalance`. This is the single-committed-generator case exactly (`OneNodeFinalizationTestSuite`), and
-  would hit in production for any generator set where quorum is already satisfied by the miner alone or before the
-  last needed endorser is actually added. Fixed by computing the pre-loop `reached` value from the miner's own
-  `endorsedBalance` up front, instead of hardcoding `false`. Regression test added in
-  `EndorsementFilterSpec` ("reaches finalization on the miner's own balance alone, with nobody left to endorse").
-- `TwoNodesFinalizationTestSuite` also had its own bug once the above was fixed: the "Finalized height checks" loop's
-  runaway guard compared current height against a small fixed offset from the *pre-loop* `finalizedHeight` baseline
-  (effectively ~5), but by the time this step starts the chain is already ~20 blocks in (quorum is structurally
-  impossible during the genesis period, see above, so all of those blocks pass with `finalizedHeight` stuck at its
-  genesis value) - so the guard fired and failed the test on its very first loop iteration, before any transaction/
-  microblock ever got a chance to actually apply the now-correctly-computed quorate vote. Fixed by tracking height
-  since the step itself started instead of the stale baseline. With both fixes, `TwoNodesFinalizationTestSuite`
-  passes outright (5m15s).
-
-Still blocked, not a test-infra gap any more - a genuine unresolved question in the always-on-node-restart path:
-
-- `OneNodeFinalizationTestSuite` (single committed generator, so the `EndorsementFilter` fix above is exactly what
-  it needed) now gets past every step through "Survives restart" - finalization itself works - but still fails at
-  "Finalization voting in a block header": `node.blockHeaderAt(finalizedBlock1.height + 1).finalizationVoting` is
-  `None`. `MicroBlockMinerImpl.forgeBlocks` embeds the accumulated `FinalizationVoting` by *re-signing the current
-  liquid (not-yet-solidified) key block* on every microblock, so the data only becomes durably readable once a
-  further key block supersedes it. This suite restarts the node's container between the finalized-height check and
-  this assertion; if the block that reached quorum was still the liquid tip (not yet superseded) at the moment of
-  restart, that in-memory liquid state is exactly what NG never persists separately from a solid key block, so it
-  would be lost on restart regardless of whether finalization succeeded. Not yet confirmed as the actual cause vs.
-  some other height/timing mismatch - next step is checking whether the block that reached quorum had already been
-  superseded by a further key block *before* the restart happens, and if not, whether the test should wait for one
-  more block before restarting.
-
-Also newly found this pass, not yet fixed: `sync.transactions.SignAndBroadcastApiSuite`'s
-"/transactions/broadcast should handle erroneous input" chainId case (see above) — the chainId check itself is fine,
-but it's untestable for `Transfer` via broadcast as things stand; nothing wrong with proof-before-chainId validation
-ordering, that part was a red herring.
+Still open, a genuine unresolved question in the always-on-node-restart path, not a test-infra gap:
+`OneNodeFinalizationTestSuite` gets past "Survives restart" (finalization itself works) but fails at "Finalization
+voting in a block header" - `MicroBlockMinerImpl.forgeBlocks` embeds `FinalizationVoting` by re-signing the current
+liquid (not-yet-solidified) key block on every microblock, so it only becomes durably readable once a further key
+block supersedes it; a restart while the quorate block is still the liquid tip would lose that in-memory state
+regardless of whether finalization succeeded. Not yet confirmed as the actual cause vs. some other timing mismatch.
 
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
@@ -1438,64 +1535,21 @@ When asserting on fee arithmetic, zero the block reward (`rewardsSettings.copy(i
 dominates the fees under test. Note that the miner does not receive the full reward — the DAO share is deducted — so
 expectations written as `fee + reward` are wrong whenever a DAO address is configured.
 
-## docker/private: repairing a stale genesis config
+## docker/private: static genesis configs rot silently
 
-`docker/private/hearth.custom.conf` had not been touched since well before the predefined-snapshots/bech32/DCAP
-migrations documented above, and turned out to be completely non-functional - the node crashed on startup before
-this pass, on the very first config field it tried to parse. Static, checked-in genesis configs like this one are
-easy to leave behind by any migration that changes what a valid config or a valid address looks like, since nothing
-exercises them in CI (unlike node-it's fixtures, which run on every PR). Confirmed and fixed by actually building
-and running the image end to end (`docker buildx build`/`docker run`, real `curl` calls against the REST API), not
-by reading the config and reasoning about it - see `docker/private/README.md`'s "Getting started" for the build
-steps this needs in a sandboxed environment (`docker/private/Dockerfile` has no `RUN` layers of its own, so the
-overlayfs-mount limitation noted at the top of this file for `node-it/docker` didn't apply the same way, but the
-buildx `docker-container` driver still needed a local registry bridge to resolve a locally-built `FROM` image,
-since that driver doesn't share the host docker daemon's image cache the way the default driver does).
+`docker/private/hearth.custom.conf` and similar checked-in genesis configs aren't exercised by CI (unlike node-it's
+fixtures, which run every PR), so a migration that changes the config schema or address format leaves them broken
+with nobody noticing until someone actually builds and runs the image. Verify by doing exactly that (`docker buildx
+build`/`docker run`, real `curl` against the REST API), not by reading the config and reasoning about it. When
+rebuilding one after this kind of rot, the account, its generator keys, and the genesis commitments it credits all
+need rebuilding together from scratch (old base58 addresses and pre-migration key material don't carry over) - see
+`docker/private/README.md`'s "Rebuilding genesis" for the `Block.genesis(...)`-based process.
 
-Every one of the following was a separate, independent failure, found one at a time by fixing the previous one and
-re-running the node:
+A stale genesis timestamp is not a catch-up bug: `Miner.forgeBlock` stamps a block `max(parentTimestamp + delay, now - 1 minute)`, so the chain bursts roughly 35 blocks in its first minute and then runs at the configured pace, with transactions timestamped "now" accepted throughout (measurements in `docker/private/README.md`, "Why genesis timestamp should stay close to now"); the cost is a third of the K=100 StartBoost freshness window, so keep genesis reasonably fresh. This is also why predefined DCAP collateral (see "DCAP collateral registry") can't just be grafted onto a config's genesis: collateral validity is checked against genesis's own pinned timestamp, and a real Intel-signed fixture's validity window won't reach into whatever "now" a rebuilt genesis uses - `docker/private/README.md` documents the mechanism and constraint for whoever fetches fresh collateral and rebuilds genesis to match it.
 
-- `wallet.seed`/`rest-api.api-key-hash` were base58 strings from before `utils.byteStrFormat` moved to base16-only
-  decoding (see "Transaction JSON") - `wallet.seed` failed outright at config-parse time
-  (`Cannot convert '...' to ByteStr: not a hexadecimal digit`); `api-key-hash` parsed but silently decoded to `None`
-  (`Base16.tryDecode` swallows the failure), so `ApiRoute.withAuth` rejected every request as an invalid key
-  regardless of what was sent - a `Left`/`None` failure mode with no error message pointing at the real cause.
-  Recomputed both as base16: `wallet.seed` is any 32-byte hex string; `api-key-hash` is
-  `Base16.encode(crypto.secureHash(apiKeyUtf8Bytes))`.
-- `blockchain.custom.genesis` still had the pre-predefined-snapshots shape (`transactions`, `initial-balance`) -
-  `GenesisSettings` has neither field any more, and a CUSTOM network's `predefined-snapshots` key is mandatory at
-  parse time (see "Predefined snapshots"), which this file didn't have at all.
-- `blockchain.custom.functionality` carried a dozen settings keys (`allow-temporary-negative-until`,
-  `require-sorted-transactions-after`, `generation-balance-depth-from-50-to-1000-after-height`, and others) that no
-  longer exist on `FunctionalitySettings` - pureconfig ignores unknown keys by default, so these didn't fail parsing,
-  they were just silent dead weight kept for no reason once every field was rewritten to the current schema.
-- `functionality.pre-activated-features` pre-activated feature ids 2 through 25 - per "Node Tests"'s note on this
-  same trap in node-it fixtures, only id 1 is implemented, and activating any other one crashes the node outright
-  (`UNIMPLEMENTED FEATURE N has been ACTIVATED ON BLOCKCHAIN`). Collapsed to `{ 1 = 0 }`.
-- Nothing sets a default bech32 HRP anywhere in `Application.scala` (see "node-it fixtures"'s note on this same gap
-  for node-it's own fixtures) - confirmed this reaches the packaged docker images too, not just node-it: the node
-  crashed the moment it needed to render the wallet's own newly-generated address
-  (`IllegalStateException: default HRP not configured`). Fixed for `docker/private` specifically by adding
-  `-Dhearth.hrp=phrth` to `docker/private/Dockerfile`'s `JAVA_OPTS`; the same gap is still open, undocumented
-  anywhere before now, and unfixed for the mainnet/testnet/stagenet-targeting `docker/Dockerfile`/`entrypoint.sh`.
-- `MinerSettings` has no default for any of its fields (`enable`, `accounts`, `supportedFeatures`, ...), so a miner
-  account has to be spelled out in full - `hearth.rewards.desired` (top-level, not under `blockchain.custom.rewards`)
-  is also gone entirely (see "node-it fixtures"'s note on reward voting being permanently unimplemented) and was
-  removed rather than left as more dead weight.
-
-With all of that fixed, the account, its generator keys, and the genesis commitments it credits all had to be
-rebuilt together from scratch, since none of the old values (base58 address, pre-migration key material) carry over
-- see `docker/private/README.md`'s "Rebuilding genesis" for the `Block.genesis(...)`-based process used, the same
-one `GenesisBlockGenerator` automates for the balances/generators case it does support.
-
-A stale genesis timestamp is not a catch-up bug: `Miner.forgeBlock` stamps a block `max(parentTimestamp + delay, now - 1 minute)`, so the chain bursts roughly 35 blocks in its first minute and then runs at the configured pace, with transactions timestamped "now" accepted throughout (measurements in `docker/private/README.md`, "Why genesis timestamp should stay close to now"). The cost is a third of the K=100 StartBoost freshness window, so keep genesis reasonably fresh. Collateral validity is the real constraint on a genesis that ships DCAP fields (see "The genesis-timestamp bug"): every vendored DCAP fixture's validity window is long past by now, the same as this file's original 2019 timestamp was.
-
-Predefined DCAP collateral at genesis (the six `dcap-*` `PredefinedSnapshotSettings` fields, requested alongside
-this fix) is documented in `docker/private/README.md` rather than actually shipped in `hearth.custom.conf` - real
-Intel-signed collateral is required (`IntelPki`'s Root CA key is pinned, not configurable, so synthetic collateral
-fails the same way at genesis as in a live `UpdateCollateralTransaction`), and its validity window would force a
-stale genesis timestamp, defeating the fix directly above. The README documents the mechanism, the config schema,
-and the constraint, for whoever fetches fresh collateral and rebuilds genesis to match it.
+Nothing sets a default bech32 HRP in `Application.scala` (`-Dhearth.hrp` has no fallback) - a real node crashes
+rendering its first address without it. `docker/private` works around this in its own Dockerfile; the
+mainnet/testnet/stagenet-targeting `docker/Dockerfile`/`entrypoint.sh` still doesn't, a genuine open gap.
 
 ## Live StartBoost on docker/private
 

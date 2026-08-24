@@ -398,6 +398,19 @@ trait WithDomain extends WithState {
   def domainSettingsWithFS(fs: FunctionalitySettings): HearthSettings =
     DomainPresets.domainSettingsWithFS(fs)
 
+  /** No test fixture in this repo can drive a StartBoostTransaction to its accept path (see
+    * StartBoostTransactionDiffTest's own doc comment), so a RegisteredEnclave entry - needed by every Diff test that
+    * checks a "registered miner"/"registered enclave" precondition (Reserve/BindApiKey/Settle) - has to be injected
+    * directly rather than produced by a real transaction. Shared here instead of each test hand-rolling its own
+    * `export blockchain.{registeredEnclaves as _, *}` wrapper.
+    */
+  def blockchainWithRegisteredEnclave(blockchain: Blockchain, enclave: RegisteredEnclave): Blockchain =
+    new Blockchain {
+      export blockchain.{registeredEnclaves as _, *}
+      override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
+        blockchain.registeredEnclaves(at) :+ enclave
+    }
+
   def withDomain[A](
       settings: HearthSettings = DomainPresets.SettingsFromDefaultConfig,
       balances: Seq[AddrWithBalance] = Seq.empty,

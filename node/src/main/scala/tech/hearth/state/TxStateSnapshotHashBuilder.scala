@@ -10,7 +10,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.state.TxMeta.Status
 import tech.hearth.state.diffs.BlockDiffer.CurrentBlockFeePart
 import tech.hearth.state.diffs.TransactionDiffer
-import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
+import tech.hearth.transaction.Asset.{AssetIdOps, IssuedAsset, Hearth}
 import tech.hearth.transaction.smart.script.trace.TracedResult
 import tech.hearth.transaction.Transaction
 import org.bouncycastle.crypto.digests.Blake2bDigest
@@ -91,6 +91,24 @@ object TxStateSnapshotHashBuilder {
     snapshot.dcapQeIdentity.foreach(v => changedKeys += "dcapQeIdentity".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapTcbSigningIssuerChain.foreach(v => changedKeys += "dcapTcbSigningIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapPckCaIssuerChain.foreach(v => changedKeys += "dcapPckCaIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
+
+    snapshot.reservedAmounts.foreach { case ((sender, miner, asset), amount) =>
+      val assetBytes = asset.compatId.fold(Array.emptyByteArray)(_.arr)
+      changedKeys += sender.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+    }
+
+    snapshot.apiKeyBindings.foreach { case ((enclavePublicKey, sender), encryptedApiKey) =>
+      changedKeys += enclavePublicKey.arr ++ sender.toBytes ++ encryptedApiKey.arr
+    }
+
+    snapshot.settledAmounts.foreach { case ((client, miner, asset), amount) =>
+      val assetBytes = asset.compatId.fold(Array.emptyByteArray)(_.arr)
+      changedKeys += client.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+    }
+
+    snapshot.workDone.foreach { case ((validator, period), work) =>
+      changedKeys += validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
+    }
 
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {

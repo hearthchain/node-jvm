@@ -105,16 +105,19 @@ object TransactionFactory {
       import TransactionType.*
       import cats.syntax.either.*
       val req = TransactionType.fromId(typeId) match {
-        case Transfer                                           => jsv.as[TransferRequest].asRight
-        case Lease                                              => jsv.as[LeaseRequest].asRight
-        case LeaseCancel                                        => jsv.as[LeaseCancelRequest].asRight
-        case CommitToGeneration                                 => jsv.as[CommitToGenerationRequest].asRight
-        case Exchange                                           => jsv.as[ExchangeRequest].asRight
-        case StartBoost                                         => jsv.as[StartBoostRequest].asRight
-        case UpdateCollateral                                   => jsv.as[UpdateCollateralRequest].asRight
-        case Genesis | Reserve | BindApiKey | Settle | Withdraw =>
-          // Reserve/BindApiKey/Settle/Withdraw are not yet signable through this REST flow: their semantics
-          // (validation, state diff) are not implemented yet, see TransactionDiffer.
+        case Transfer           => jsv.as[TransferRequest].asRight
+        case Lease              => jsv.as[LeaseRequest].asRight
+        case LeaseCancel        => jsv.as[LeaseCancelRequest].asRight
+        case CommitToGeneration => jsv.as[CommitToGenerationRequest].asRight
+        case Exchange           => jsv.as[ExchangeRequest].asRight
+        case StartBoost         => jsv.as[StartBoostRequest].asRight
+        case UpdateCollateral   => jsv.as[UpdateCollateralRequest].asRight
+        case Reserve            => jsv.as[ReserveRequest].asRight
+        case BindApiKey         => jsv.as[BindApiKeyRequest].asRight
+        case Settle             => jsv.as[SettleRequest].asRight
+        case Genesis | Withdraw =>
+          // Withdraw is not yet signable through this REST flow: its semantics (validation, state diff) are not
+          // implemented yet, see TransactionDiffer.
           UnsupportedTransactionType.asLeft[TxBroadcastRequest[Transaction & ProvenTransaction]]
       }
 

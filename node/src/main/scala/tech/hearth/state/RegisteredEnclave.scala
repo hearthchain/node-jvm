@@ -11,8 +11,10 @@ import tech.hearth.common.state.ByteStr
   * quote's DCAP attestation key belongs to the platform's Quoting Enclave and is shared by every TD on the host,
   * so it identifies the machine, not this workload). `validator` is the already-committed consensus generator this
   * TEE miner boosts, carried alongside the enclave key rather than derived from it - the two are unrelated
-  * identities. `operator` is the address that sent the registering transaction; registration is first-wins per
-  * enclave key and period, so a hijacked registration is escaped by restarting the enclave (fresh key) rather than
-  * contested.
+  * identities. `operator` is the address that sent the registering transaction, i.e. the TEE miner operating this
+  * enclave; registration is first-wins per enclave key and period, so a hijacked registration is escaped by
+  * restarting the enclave (fresh key) rather than contested. ReserveTransaction/BindApiKeyTransaction check this
+  * field against `Blockchain.registeredEnclaves` (current or next period) to decide whether an address is a
+  * "registered miner".
   */
 case class RegisteredEnclave(enclavePublicKey: ByteStr, validator: Address, operator: Address)

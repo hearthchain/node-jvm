@@ -6,7 +6,8 @@ import tech.hearth.crypto.bls.BlsPublicKey
 import tech.hearth.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
 import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset.IssuedAsset
+import tech.hearth.transaction.Asset
+import tech.hearth.transaction.Asset.{AssetIdOps, IssuedAsset}
 import tech.hearth.transaction.Transaction
 import tech.hearth.crypto.Address
 
@@ -282,4 +283,68 @@ object Keys {
   def dcapPckCaIssuerChainHistory: Key[Seq[Height]] = historyKey(DcapPckCaIssuerChainHistory, Array.emptyByteArray)
   def dcapPckCaIssuerChain(height: Height): Key[ByteStr] =
     dcapCollateralValue(DcapPckCaIssuerChain, Array.emptyByteArray, height)
+
+  // Shared by reservedAmountSuffix/settledAmountSuffix below - both key a Long ledger by a pair of addresses plus
+  // an asset (sender/miner/asset, or client/miner/asset).
+  private def addressPairAssetSuffix(a: Address, b: Address, asset: Asset): ByteStr =
+    ByteStr(a.toBytes ++ b.toBytes ++ asset.compatId.fold(Array.emptyByteArray)(_.arr))
+
+  // ReserveTransaction's accumulated total, keyed by (sender, miner, asset) - not tied to a generation period, so
+  // it reuses the DCAP-collateral-style "single current value, resolved through history" mechanism (see
+  // dcapCollateralValue above) rather than committedGenerators/registeredEnclaves' period-keyed one.
+  def reservedAmountSuffix(sender: Address, miner: Address, asset: Asset): ByteStr =
+    addressPairAssetSuffix(sender, miner, asset)
+
+  def reservedAmountHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(ReservedAmountHistory, suffix.arr)
+  def reservedAmount(suffix: ByteStr)(height: Height): Key[Long] =
+    Key(ReservedAmount, hBytes(suffix.arr, height), Longs.fromByteArray, Longs.toByteArray)
+
+  // Which (sender, miner, asset) suffixes changed at this height, so rollback knows which histories to unwind
+  // without an unbounded scan - the same role dcapTcbInfoFmspcsAt plays for dcapTcbInfoHistory.
+  def reservedAmountKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(ReservedAmountKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // BindApiKeyTransaction's HPKE-sealed API key envelope, keyed by (enclavePublicKey, sender) so an enclave can
+  // eventually enumerate the bindings addressed to it. Same history mechanism as reservedAmount above.
+  def apiKeyBindingSuffix(enclavePublicKey: ByteStr, sender: Address): ByteStr =
+    ByteStr(enclavePublicKey.arr ++ sender.toBytes)
+
+  def apiKeyBindingHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(ApiKeyBindingHistory, suffix.arr)
+  def apiKeyBinding(suffix: ByteStr)(height: Height): Key[ByteStr] =
+    Key(ApiKeyBinding, hBytes(suffix.arr, height), ByteStr(_), _.arr)
+
+  def apiKeyBindingKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(ApiKeyBindingKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // SettleTransaction's cumulative-settled counter, keyed by (client, miner, asset) - same triple ReserveTransaction
+  // accumulates into, same history mechanism as reservedAmount above.
+  def settledAmountSuffix(client: Address, miner: Address, asset: Asset): ByteStr =
+    addressPairAssetSuffix(client, miner, asset)
+
+  def settledAmountHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(SettledAmountHistory, suffix.arr)
+  def settledAmount(suffix: ByteStr)(height: Height): Key[Long] =
+    Key(SettledAmount, hBytes(suffix.arr, height), Longs.fromByteArray, Longs.toByteArray)
+
+  // Which (client, miner, asset) suffixes changed at this height, so rollback knows which histories to unwind
+  // without an unbounded scan - the same role reservedAmountKeysAt plays for reservedAmountHistory.
+  def settledAmountKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(SettledAmountKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // Work attributed to a validator within one generation period (epoch), fed by SettleTransaction's burned share
+  // and consumed by GeneratingBalanceProvider to boost that validator's generating balance in the *next* period
+  // (see the "workBoost" section in CLAUDE.md). period.start is a stable identity for a period's whole lifetime
+  // (see GenerationPeriod), so it's usable as a suffix component the same way registeredEnclaves' key uses it -
+  // but this is a single cumulative Long, so it reuses the reservedAmount/settledAmount history mechanism, not
+  // registeredEnclaves' append-only-event-log one.
+  def workDoneSuffix(validator: Address, period: GenerationPeriod): ByteStr =
+    ByteStr(validator.toBytes ++ h(period.start))
+
+  def workDoneHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(WorkDoneHistory, suffix.arr)
+  def workDone(suffix: ByteStr)(height: Height): Key[Long] =
+    Key(WorkDone, hBytes(suffix.arr, height), Longs.fromByteArray, Longs.toByteArray)
+
+  // Which (validator, period) suffixes changed at this height, so rollback knows which histories to unwind
+  // without an unbounded scan - the same role reservedAmountKeysAt plays for reservedAmountHistory.
+  def workDoneKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(WorkDoneKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
 }
