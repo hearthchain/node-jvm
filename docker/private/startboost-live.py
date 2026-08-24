@@ -270,9 +270,11 @@ if not any(g["address"] == addr for g in fin["nextGenerators"]):
 # fees land on them, so every balance assert below is exact.
 client, miner_op = new_account(), new_account()
 for who, amount in ((client, 1_500_000), (miner_op, 500_000)):
+    # Unlike the other types, TransferRequest demands explicit fee and timestamp; sign still resolves the key
+    # from "sender" and injects senderPublicKey itself.
     tx = {
         "type": TX_TRANSFER,
-        "senderPublicKey": get(f"/addresses/publicKey/{addr}")["publicKey"],
+        "sender": addr,
         "transfers": [{"recipient": who, "amount": amount}],
         "fee": TRANSFER_FEE,
         "timestamp": int(time.time() * 1000),
