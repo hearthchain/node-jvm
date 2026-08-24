@@ -167,10 +167,12 @@ def height():
     return get("/blocks/height")["height"]
 
 
-def hexfile(name):
+def hexfile(name, der=False):
+    # Field formats differ on purpose: CRL fields are DER while issuer chains stay PEM, so only a CRL served as
+    # PEM by Intel PCS gets decoded (first block; a CRL file has exactly one).
     with open(os.path.join(FIX, "collateral", name), "rb") as f:
         raw = f.read()
-    if raw.lstrip().startswith(b"-----BEGIN"):  # Intel PCS serves PCK CRLs as PEM; the field is DER
+    if der and raw.lstrip().startswith(b"-----BEGIN"):
         raw = base64.b64decode(b"".join(raw.split(b"-----")[2].split()))
     return raw.hex()
 
@@ -251,7 +253,7 @@ collateral = {
     "type": TX_UPDATE_COLLATERAL,
     "sender": addr,
     "pckCaIssuerChain": hexfile("pck-ca-issuer-chain.pem"),
-    "pckCrl": hexfile(f"pckcrl-{PCK_CRL}.pem"),
+    "pckCrl": hexfile(f"pckcrl-{PCK_CRL}.pem", der=True),
     "tcbSigningIssuerChain": hexfile("tcb-signing-issuer-chain.pem"),
     "tcbInfo": hexfile("tcbinfo.json"),
     "qeIdentity": hexfile("qeidentity.json"),
