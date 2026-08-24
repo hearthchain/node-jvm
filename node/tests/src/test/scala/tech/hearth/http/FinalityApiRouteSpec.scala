@@ -4,76 +4,44 @@ import tech.hearth.api.http.FinalityApiRoute
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.db.WithDomain
-import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.BlockchainSettings
-import tech.hearth.state.{GenerationPeriod, RegisteredEnclave}
+import tech.hearth.state.{SnapshotBlockchain, StateSnapshot}
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.TxHelpers
-import tech.hearth.utils.EmptyBlockchain
-import org.apache.pekko.http.scaladsl.model.StatusCodes.OK
-import play.api.libs.json.{JsArray, JsObject, Json}
+import tech.hearth.transaction.{Asset, TxHelpers}
+import org.apache.pekko.http.scaladsl.model.StatusCodes.{NotFound, OK}
+import play.api.libs.json.*
 
+/** Covers the point reads the settlement flow needs: the api-key envelope for (enclaveKey, client) and the
+  * reserved/settled counters for (client, miner). The bindings are injected via SnapshotBlockchain because no test
+  * fixture can drive StartBoost to its accept path (see BindApiKeyTransactionDiffTest's doc comment).
+  */
 class FinalityApiRouteSpec extends RouteSpec("/blockchain/finality") with WithDomain {
-  private val sender = TxHelpers.defaultSigner
+  private val enclaveKey = ByteStr.fill(32)(1)
+  private val client     = TxHelpers.defaultSigner.toAddress
+  private val miner      = TxHelpers.secondSigner.toAddress
+  private val envelope   = ByteStr.fill(79)(2)
 
-  "RegisteredEnclave JSON" - {
-    "carries the key as base16 and the two addresses as bech32, in their own slots" in {
-      import FinalityApiRoute.given
-      val validator = TxHelpers.signer(1).toAddress
-      val operator  = TxHelpers.signer(2).toAddress
-      val enclave   = RegisteredEnclave(ByteStr.fill(32)(1), validator, operator)
-      Json.toJson(enclave) shouldBe Json.obj(
-        "enclavePublicKey" -> Base16.encode(enclave.enclavePublicKey.arr),
-        "validator"        -> validator.toBech32,
-        "operator"         -> operator.toBech32
-      )
+  "binding and settlement point reads" in withDomain(DeterministicFinality) { d =>
+    val snapshot = StateSnapshot(
+      apiKeyBindings = Map((enclaveKey, client) -> envelope),
+      reservedAmounts = Map((client, miner, Asset.Hearth) -> 800000L),
+      settledAmounts = Map((client, miner, Asset.Hearth) -> 240000L)
+    )
+    val route = seal(FinalityApiRoute(SnapshotBlockchain(d.blockchain, snapshot), d.blocksApi, d.generatorsApi).route)
+
+    Get(s"/blockchain/finality/binding/${Base16.encode(enclaveKey.arr)}/${client.toBech32}") ~> route ~> check {
+      status shouldBe OK
+      (responseAs[JsObject] \ "envelope").as[String] shouldBe Base16.encode(envelope.arr)
     }
-  }
-
-  "GET /blockchain/finality" - {
-    "reports the next period's committed generators and registered enclaves" in withDomain(
-      DeterministicFinality,
-      AddrWithBalance.enoughBalances(sender)
-    ) { d =>
-      val route = seal(FinalityApiRoute(d.blockchain, d.blocksApi, d.generatorsApi).route)
-      val next  = d.blockchain.currentGenerationPeriod.value.next
-      d.appendBlock(TxHelpers.commitToGeneration(next.start, sender))
-
-      Get(routePath("")) ~> route ~> check {
-        status shouldBe OK
-        val json = responseAs[JsObject]
-        (json \ "height").as[Int] shouldBe d.blockchain.height
-        (json \ "nextGenerationPeriod" \ "start").as[Int] shouldBe next.start.toInt
-        (json \ "nextGenerators").as[JsArray].value.map(g => (g \ "address").as[String]) should contain(sender.toAddress.toString)
-        // Registering through a transaction needs a verifiable quote (StartBoostTransactionDiffTest); the route
-        // mapping is covered below against a stub, here only the keys are pinned.
-        (json \ "currentRegisteredEnclaves").as[JsArray].value shouldBe empty
-        (json \ "nextRegisteredEnclaves").as[JsArray].value shouldBe empty
-      }
+    Get(s"/blockchain/finality/binding/${Base16.encode(enclaveKey.arr)}/${miner.toBech32}") ~> route ~> check {
+      status shouldBe NotFound
     }
-
-    "reads the current period's registry and the next period's registry from their own periods" in withDomain(
-      DeterministicFinality
-    ) { d =>
-      val period  = d.blockchain.currentGenerationPeriod.value
-      val current = RegisteredEnclave(ByteStr.fill(32)(1), TxHelpers.signer(1).toAddress, TxHelpers.signer(2).toAddress)
-      val next    = RegisteredEnclave(ByteStr.fill(32)(2), TxHelpers.signer(3).toAddress, TxHelpers.signer(4).toAddress)
-      val stub = new EmptyBlockchain {
-        override lazy val settings: BlockchainSettings = d.blockchain.settings
-        override def height: Int                       = d.blockchain.height
-        override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
-          if (at == period) IndexedSeq(current) else if (at == period.next) IndexedSeq(next) else IndexedSeq.empty
-      }
-      val route = seal(FinalityApiRoute(stub, d.blocksApi, d.generatorsApi).route)
-
-      Get(routePath("")) ~> route ~> check {
-        status shouldBe OK
-        val json = responseAs[JsObject]
-        (json \ "currentRegisteredEnclaves").as[JsArray].value.map(e => (e \ "enclavePublicKey").as[String]) shouldBe
-          Seq(Base16.encode(current.enclavePublicKey.arr))
-        (json \ "nextRegisteredEnclaves").as[JsArray].value.map(e => (e \ "enclavePublicKey").as[String]) shouldBe
-          Seq(Base16.encode(next.enclavePublicKey.arr))
-      }
+    Get(s"/blockchain/finality/settlement/${client.toBech32}/${miner.toBech32}") ~> route ~> check {
+      status shouldBe OK
+      responseAs[JsObject] shouldBe Json.obj("reserved" -> 800000, "settled" -> 240000)
+    }
+    Get(s"/blockchain/finality/settlement/${miner.toBech32}/${client.toBech32}") ~> route ~> check {
+      status shouldBe OK
+      responseAs[JsObject] shouldBe Json.obj("reserved" -> 0, "settled" -> 0)
     }
   }
 }

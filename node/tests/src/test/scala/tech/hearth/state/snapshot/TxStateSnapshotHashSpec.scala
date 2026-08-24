@@ -268,16 +268,16 @@ class TxStateSnapshotHashSpec extends PropSpec {
     def hashOf(s: StateSnapshot): ByteStr =
       TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
 
-    val client   = signer101.toAddress
-    val miner     = signer102.toAddress
-    val enclave   = ByteStr(client.toBytes)  // 20-byte envelope: matches a registered-enclave entry's shape without a tag
-    val period    = GenerationPeriod(Height(1), 1000)
-    val base      = hashOf(StateSnapshot())
-    val reserved  = hashOf(StateSnapshot(reservedAmounts = Map((client, miner, Asset.Hearth) -> 5L)))
-    val settled   = hashOf(StateSnapshot(settledAmounts = Map((client, miner, Asset.Hearth) -> 5L)))
-    val bound     = hashOf(StateSnapshot(apiKeyBindings = Map((enclave, miner) -> ByteStr(miner.toBytes))))
+    val client     = signer101.toAddress
+    val miner      = signer102.toAddress
+    val enclave    = ByteStr(client.toBytes) // 20-byte envelope: matches a registered-enclave entry's shape without a tag
+    val period     = GenerationPeriod(Height(1), 1000)
+    val base       = hashOf(StateSnapshot())
+    val reserved   = hashOf(StateSnapshot(reservedAmounts = Map((client, miner, Asset.Hearth) -> 5L)))
+    val settled    = hashOf(StateSnapshot(settledAmounts = Map((client, miner, Asset.Hearth) -> 5L)))
+    val bound      = hashOf(StateSnapshot(apiKeyBindings = Map((enclave, miner) -> ByteStr(miner.toBytes))))
     val enclaveReg = hashOf(StateSnapshot(nextRegisteredEnclaves = Seq(RegisteredEnclave(enclave, miner, client))))
-    val work      = hashOf(StateSnapshot(workDone = Map((miner, period) -> 5L)))
+    val work       = hashOf(StateSnapshot(workDone = Map((miner, period) -> 5L)))
 
     // Same key/value in reserved vs settled must not hash alike (they shared a preimage before domain tags).
     reserved should not equal settled

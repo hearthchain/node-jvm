@@ -32,7 +32,7 @@ object TxStateSnapshotHashBuilder {
   case class TxStatusInfo(id: ByteStr, status: TxMeta.Status)
 
   def createHashFromSnapshot(snapshot: StateSnapshot, txStatusOpt: Option[TxStatusInfo]): Result = {
-    val changedKeys = mutable.SortedSet.empty[Array[Byte]]
+    val changedKeys                    = mutable.SortedSet.empty[Array[Byte]]
     def tag(name: String): Array[Byte] = name.getBytes(StandardCharsets.UTF_8)
 
     snapshot.balances.foreach { case ((address, asset), balance) =>
@@ -102,7 +102,9 @@ object TxStateSnapshotHashBuilder {
     }
 
     snapshot.apiKeyBindings.foreach { case ((enclavePublicKey, sender), encryptedApiKey) =>
-      changedKeys += tag("apiKeyBinding") ++ enclavePublicKey.arr ++ sender.toBytes ++ Longs.toByteArray(encryptedApiKey.arr.length.toLong) ++ encryptedApiKey.arr
+      changedKeys += tag("apiKeyBinding") ++ enclavePublicKey.arr ++ sender.toBytes ++ Longs.toByteArray(
+        encryptedApiKey.arr.length.toLong
+      ) ++ encryptedApiKey.arr
     }
 
     snapshot.settledAmounts.foreach { case ((client, miner, asset), amount) =>
