@@ -62,13 +62,16 @@ object SettleTransactionDiff {
       _ <- Either.raiseUnless(registered.operator == sender) {
         GenericError(s"$sender is not the operator of enclave ${tx.enclavePublicKey}")
       }
-      _ <- Either.raiseUnless {
-        crypto.verify(tx.enclaveSignature, SettleTransaction.mkSettlementMessage(tx.settlements), PublicKey(tx.enclavePublicKey))
-      }(GenericError("Invalid enclave signature over settlements"))
       // registeredEnclave above only ever resolves when Blockchain.currentGenerationPeriod is defined (see
       // Blockchain.findRegisteredEnclave), so this can't actually fail here - kept as an explicit Either for
       // clarity rather than a partial .get, not because this branch is reachable.
       period <- blockchain.currentGenerationPeriod.toRight(GenericError("DeterministicFinality is not yet activated"))
+      // The signature is rebuilt from the transaction and `period`, not from the batch, so a batch signed for a
+      // different network, operator or period does not verify here.
+      message = SettleTransaction.mkSettlementMessage(tx.chainId, tx.enclavePublicKey, sender, period.start.toInt, tx.settlements)
+      _ <- Either.raiseUnless(crypto.verify(tx.enclaveSignature, message, PublicKey(tx.enclavePublicKey))) {
+        GenericError("Invalid enclave signature over settlements")
+      }
       // registeredEnclave only confirms registered.validator was a committed generator of the period the enclave
       // registered *for* (StartBoostTransactionDiff's own check) - not necessarily of `period` here, since
       // findRegisteredEnclave's current-or-next-period window lets a Settle land one period earlier than that
