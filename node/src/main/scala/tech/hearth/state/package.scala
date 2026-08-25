@@ -6,8 +6,10 @@ import com.google.common.primitives.Ints
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.bls.BlsPublicKey
+import tech.hearth.lang.ValidationError
 import tech.hearth.state.GeneratorIndex
 import tech.hearth.transaction.{Asset, BlockchainUpdater, RefinedTypeOps}
+import tech.hearth.transaction.TxValidationError.GenericError
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.numeric.Positive
 import play.api.libs.json.*
@@ -19,6 +21,15 @@ import scala.util.Try
 package object state {
   def safeSum(x: Long, y: Long, source: String): Either[String, Long] =
     Try(Math.addExact(x, y)).toEither.leftMap(_ => s"$source sum overflow")
+
+  /** The native asset always exists; an issued asset must be described in state. Shared by the Reserve and Settle
+    * diffs, which both lock/move an asset the sender names.
+    */
+  def assetIssued(blockchain: Blockchain, asset: Asset): Either[ValidationError, Unit] = asset match {
+    case Asset.Hearth => ().asRight
+    case issued @ Asset.IssuedAsset(_) =>
+      Either.cond(blockchain.assetDescription(issued).isDefined, (), GenericError(s"Asset $issued is not issued"))
+  }
 
   implicit val safeSummarizer: Summarizer[[X] =>> Either[String, X]] = safeSum(_, _, _)
   implicit val unsafeSummarizer: Summarizer[Id]                      = (x, y, _) => x + y

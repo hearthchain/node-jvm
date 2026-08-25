@@ -3,8 +3,6 @@ package tech.hearth.state.diffs
 import cats.syntax.either.*
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset
-import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
 import tech.hearth.transaction.ReserveTransaction
 import tech.hearth.transaction.TxValidationError.GenericError
 
@@ -43,10 +41,5 @@ object ReserveTransactionDiff {
         reservedAmounts = Map((sender, tx.miner, tx.assetId) -> newReservedAmount)
       )
     } yield snapshot
-  }
-
-  private def assetIssued(blockchain: Blockchain, asset: Asset): Either[ValidationError, Unit] = asset match {
-    case Hearth                 => ().asRight
-    case asset @ IssuedAsset(_) => Either.cond(blockchain.assetDescription(asset).isDefined, (), GenericError(s"Asset $asset is not issued"))
   }
 }

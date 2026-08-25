@@ -531,49 +531,30 @@ class RocksDBWriter(
         expiredKeys ++= updateHistory(rw, Keys.dcapPckCaIssuerChainHistory, threshold, Keys.dcapPckCaIssuerChain)
       }
 
-      for (((sender, miner, asset), amount) <- snapshot.reservedAmounts) {
-        val suffix = Keys.reservedAmountSuffix(sender, miner, asset)
-        rw.put(Keys.reservedAmount(suffix)(Height(height)), amount)
-        expiredKeys ++= updateHistory(rw, Keys.reservedAmountHistory(suffix), threshold, Keys.reservedAmount(suffix))
-      }
-      if (snapshot.reservedAmounts.nonEmpty)
-        rw.put(
-          Keys.reservedAmountKeysAt(Height(height)),
-          snapshot.reservedAmounts.keySet.toSeq.map { case (sender, miner, asset) => Keys.reservedAmountSuffix(sender, miner, asset) }
-        )
-
-      for (((enclavePublicKey, sender), encryptedApiKey) <- snapshot.apiKeyBindings) {
-        val suffix = Keys.apiKeyBindingSuffix(enclavePublicKey, sender)
-        rw.put(Keys.apiKeyBinding(suffix)(Height(height)), encryptedApiKey)
-        expiredKeys ++= updateHistory(rw, Keys.apiKeyBindingHistory(suffix), threshold, Keys.apiKeyBinding(suffix))
-      }
-      if (snapshot.apiKeyBindings.nonEmpty)
-        rw.put(
-          Keys.apiKeyBindingKeysAt(Height(height)),
-          snapshot.apiKeyBindings.keySet.toSeq.map { case (enclavePublicKey, sender) => Keys.apiKeyBindingSuffix(enclavePublicKey, sender) }
-        )
-
-      for (((client, miner, asset), amount) <- snapshot.settledAmounts) {
-        val suffix = Keys.settledAmountSuffix(client, miner, asset)
-        rw.put(Keys.settledAmount(suffix)(Height(height)), amount)
-        expiredKeys ++= updateHistory(rw, Keys.settledAmountHistory(suffix), threshold, Keys.settledAmount(suffix))
-      }
-      if (snapshot.settledAmounts.nonEmpty)
-        rw.put(
-          Keys.settledAmountKeysAt(Height(height)),
-          snapshot.settledAmounts.keySet.toSeq.map { case (client, miner, asset) => Keys.settledAmountSuffix(client, miner, asset) }
-        )
-
-      for (((validator, period), work) <- snapshot.workDone) {
-        val suffix = Keys.workDoneSuffix(validator, period)
-        rw.put(Keys.workDone(suffix)(Height(height)), work)
-        expiredKeys ++= updateHistory(rw, Keys.workDoneHistory(suffix), threshold, Keys.workDone(suffix))
-      }
-      if (snapshot.workDone.nonEmpty)
-        rw.put(
-          Keys.workDoneKeysAt(Height(height)),
-          snapshot.workDone.keySet.toSeq.map { case (validator, period) => Keys.workDoneSuffix(validator, period) }
-        )
+      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.reservedAmounts)(
+        { case (sender, miner, asset) => Keys.reservedAmountSuffix(sender, miner, asset) },
+        Keys.reservedAmount,
+        Keys.reservedAmountHistory,
+        Keys.reservedAmountKeysAt
+      )
+      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.apiKeyBindings)(
+        { case (enclavePublicKey, sender) => Keys.apiKeyBindingSuffix(enclavePublicKey, sender) },
+        Keys.apiKeyBinding,
+        Keys.apiKeyBindingHistory,
+        Keys.apiKeyBindingKeysAt
+      )
+      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.settledAmounts)(
+        { case (client, miner, asset) => Keys.settledAmountSuffix(client, miner, asset) },
+        Keys.settledAmount,
+        Keys.settledAmountHistory,
+        Keys.settledAmountKeysAt
+      )
+      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.workDone)(
+        { case (validator, period) => Keys.workDoneSuffix(validator, period) },
+        Keys.workDone,
+        Keys.workDoneHistory,
+        Keys.workDoneKeysAt
+      )
 
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
@@ -923,10 +904,10 @@ class RocksDBWriter(
 
           rollbackAssetsInfo(rw, currentHeight)
           rollbackDcapCollateral(rw, currentHeight)
-          rollbackReservedAmounts(rw, currentHeight)
-          rollbackApiKeyBindings(rw, currentHeight)
-          rollbackSettledAmounts(rw, currentHeight)
-          rollbackWorkDone(rw, currentHeight)
+          rollbackKeyed(rw, currentHeight, Keys.reservedAmountKeysAt, Keys.reservedAmount, Keys.reservedAmountHistory)
+          rollbackKeyed(rw, currentHeight, Keys.apiKeyBindingKeysAt, Keys.apiKeyBinding, Keys.apiKeyBindingHistory)
+          rollbackKeyed(rw, currentHeight, Keys.settledAmountKeysAt, Keys.settledAmount, Keys.settledAmountHistory)
+          rollbackKeyed(rw, currentHeight, Keys.workDoneKeysAt, Keys.workDone, Keys.workDoneHistory)
 
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
@@ -1063,38 +1044,40 @@ class RocksDBWriter(
     rw.delete(fmspcsKey)
   }
 
-  private def rollbackReservedAmounts(rw: RW, currentHeight: Height): Unit = {
-    val suffixesKey = Keys.reservedAmountKeysAt(currentHeight)
-    rw.get(suffixesKey).foreach { suffix =>
-      rw.delete(Keys.reservedAmount(suffix)(currentHeight))
-      rw.filterHistory(Keys.reservedAmountHistory(suffix), currentHeight)
+  /** Writes one height-keyed ledger family (reserved/apiKeyBinding/settled/workDone): put each entry's value at this
+    * height, extend its history (returning the expired keys), then record the per-height suffix index. All four
+    * families share this shape.
+    */
+  private def writeKeyed[K, V](rw: RW, height: Int, threshold: Height, entries: Map[K, V])(
+      suffixOf: K => ByteStr,
+      value: ByteStr => Height => Key[V],
+      history: ByteStr => Key[Seq[Height]],
+      keysAt: Height => Key[Seq[ByteStr]]
+  ): Seq[Array[Byte]] = {
+    val expired = Seq.newBuilder[Array[Byte]]
+    for ((k, v) <- entries) {
+      val suffix = suffixOf(k)
+      rw.put(value(suffix)(Height(height)), v)
+      expired ++= updateHistory(rw, history(suffix), threshold, value(suffix))
     }
-    rw.delete(suffixesKey)
+    if (entries.nonEmpty) rw.put(keysAt(Height(height)), entries.keySet.toSeq.map(suffixOf))
+    expired.result()
   }
 
-  private def rollbackApiKeyBindings(rw: RW, currentHeight: Height): Unit = {
-    val suffixesKey = Keys.apiKeyBindingKeysAt(currentHeight)
+  /** Rolls back one height-keyed ledger family: delete each suffix's value at this height, trim its history, then
+    * drop the per-height suffix index. Mirror of writeKeyed.
+    */
+  private def rollbackKeyed(
+      rw: RW,
+      currentHeight: Height,
+      keysAt: Height => Key[Seq[ByteStr]],
+      value: ByteStr => Height => Key[?],
+      history: ByteStr => Key[Seq[Height]]
+  ): Unit = {
+    val suffixesKey = keysAt(currentHeight)
     rw.get(suffixesKey).foreach { suffix =>
-      rw.delete(Keys.apiKeyBinding(suffix)(currentHeight))
-      rw.filterHistory(Keys.apiKeyBindingHistory(suffix), currentHeight)
-    }
-    rw.delete(suffixesKey)
-  }
-
-  private def rollbackSettledAmounts(rw: RW, currentHeight: Height): Unit = {
-    val suffixesKey = Keys.settledAmountKeysAt(currentHeight)
-    rw.get(suffixesKey).foreach { suffix =>
-      rw.delete(Keys.settledAmount(suffix)(currentHeight))
-      rw.filterHistory(Keys.settledAmountHistory(suffix), currentHeight)
-    }
-    rw.delete(suffixesKey)
-  }
-
-  private def rollbackWorkDone(rw: RW, currentHeight: Height): Unit = {
-    val suffixesKey = Keys.workDoneKeysAt(currentHeight)
-    rw.get(suffixesKey).foreach { suffix =>
-      rw.delete(Keys.workDone(suffix)(currentHeight))
-      rw.filterHistory(Keys.workDoneHistory(suffix), currentHeight)
+      rw.delete(value(suffix)(currentHeight))
+      rw.filterHistory(history(suffix), currentHeight)
     }
     rw.delete(suffixesKey)
   }

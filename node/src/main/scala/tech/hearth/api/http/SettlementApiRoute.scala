@@ -1,8 +1,8 @@
 package tech.hearth.api.http
 
-import tech.hearth.common.utils.Base16
 import tech.hearth.state.Blockchain
 import tech.hearth.transaction.Asset
+import tech.hearth.utils.byteStrFormat
 import org.apache.pekko.http.scaladsl.server.Route
 import play.api.libs.json.*
 
@@ -16,7 +16,7 @@ case class SettlementApiRoute(blockchain: Blockchain) extends ApiRoute {
       complete(
         blockchain
           .apiKeyBinding(enclaveKey.byteStr, client)
-          .map(envelope => Json.obj("envelope" -> Base16.encode(envelope.arr)))
+          .map(envelope => Json.obj("envelope" -> byteStrFormat.writes(envelope)))
           .toRight(ApiError.ApiKeyBindingDoesNotExist)
       )
     } ~ (get & path("settlement" / AddrSegment / AddrSegment)) { (client, miner) =>
