@@ -12,7 +12,9 @@ Build the base node image first (see [`../README.md`](../README.md), "Building D
 `docker build -t hearth-private-node docker/private` (from the repository root)
 
 Run:\
-`docker run -d --name hearth-private-node -p 6869:6869 hearth-private-node`
+`docker run -d --name hearth-private-node -p 6869:6869 -p 6881:6881 hearth-private-node`
+
+6869 is the REST API, 6881 the BlockchainUpdates gRPC stream (see below); drop the second `-p` if nothing subscribes to the stream.
 
 Node API documentation: http://localhost:6869/
 
@@ -37,6 +39,12 @@ Full node configuration: [`hearth.custom.conf`](./hearth.custom.conf).
 ### Why the node needs `-Dhearth.hrp`
 
 Nothing in the node picks a default bech32 address prefix (HRP) - it crashes the first time it renders or parses any address unless one is set. [`Dockerfile`](./Dockerfile) sets `-Dhearth.hrp=phrth` via `JAVA_OPTS`; a config-only setup needs the same system property however it launches the node.
+
+### The BlockchainUpdates extension and its own state
+
+`hearth.extensions` enables `tech.hearth.events.BlockchainUpdates`, which streams block/microblock appends and rollbacks (balances, leases, assets, reserves, settlements) over gRPC on port **6881**.
+
+The extension keeps its own RocksDB at `/var/lib/hearth/blockchain-updates`, inside the node's data directory but entirely separate from the node's own state. It refuses to start when the two disagree: a lower extension height than the node's, or a last-update id that does not match the block at the node's height, aborts startup with an `IllegalStateException`. So wipe the two together - dropping the chain while keeping `blockchain-updates/` (or the reverse) leaves a node that will not come up.
 
 ## Predefined DCAP collateral at genesis
 
