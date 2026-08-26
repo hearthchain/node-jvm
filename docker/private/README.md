@@ -38,6 +38,12 @@ Full node configuration: [`hearth.custom.conf`](./hearth.custom.conf).
 
 Nothing in the node picks a default bech32 address prefix (HRP) - it crashes the first time it renders or parses any address unless one is set. [`Dockerfile`](./Dockerfile) sets `-Dhearth.hrp=phrth` via `JAVA_OPTS`; a config-only setup needs the same system property however it launches the node.
 
+### The BlockchainUpdates extension and its own state
+
+`hearth.extensions` enables `tech.hearth.events.BlockchainUpdates`, which streams block/microblock appends and rollbacks (balances, leases, assets, reserves, settlements) over gRPC on port **6881**.
+
+The extension keeps its own RocksDB at `/var/lib/hearth/blockchain-updates`, inside the node's data directory but entirely separate from the node's own state. It refuses to start when the two disagree: a lower extension height than the node's, or a last-update id that does not match the block at the node's height, aborts startup with an `IllegalStateException`. So wipe the two together - dropping the chain while keeping `blockchain-updates/` (or the reverse) leaves a node that will not come up.
+
 ## Predefined DCAP collateral at genesis
 
 A `StartBoostTransaction` (TEE miner boosting; root [`CLAUDE.md`](../../CLAUDE.md), "DCAP collateral registry" and "StartBoost" sections) can verify a quote only once Intel DCAP collateral (Root CA CRL, PCK CRL plus its issuer chain, per-platform TCB Info, QE Identity plus its issuer chain) is on chain. A permissionless `UpdateCollateralTransaction` can add it later, or genesis can seed some or all of it, like balances and committed generators, via six `dcap-*` fields in a `predefined-snapshots` entry:
