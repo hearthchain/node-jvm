@@ -5,7 +5,7 @@ import scalapb.compiler.Version.scalapbVersion
 object Dependencies {
   private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.17.Final"
 
-  val gProtoVersion = "4.35.1"
+  val gProtoVersion = "4.36.0"
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
   val overrides = Def.setting(
     Seq(
