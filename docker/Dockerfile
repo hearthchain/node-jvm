@@ -45,7 +45,7 @@ RUN --mount=type=bind,source=target,target=/tmp/ \
     # Set permissions
     chown -R hearth:hearth $HEARTH_DATA $HEARTH_LOG $HEARTH_INSTALL_PATH && chmod 755 $HEARTH_DATA $HEARTH_LOG;
 
-EXPOSE 6869 6868 6863 6862 6870
+EXPOSE 6869 6868 6863 6862 6870 6881
 VOLUME $HEARTH_DATA
 VOLUME $HEARTH_LOG
 VOLUME $HEARTH_INSTALL_PATH/lib/plugins
