@@ -481,7 +481,8 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
           routeTimeout
         ),
         RewardApiRoute(blockchainUpdater),
-        FinalityApiRoute(blockchainUpdater, extensionContext.blocksApi, extensionContext.generatorsApi)
+        FinalityApiRoute(blockchainUpdater, extensionContext.blocksApi, extensionContext.generatorsApi),
+        SettlementApiRoute(blockchainUpdater)
       )
 
       val httpService = CompositeHttpService(apiRoutes, settings.restAPISettings)

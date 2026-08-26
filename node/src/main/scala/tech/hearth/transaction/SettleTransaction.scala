@@ -2,7 +2,7 @@ package tech.hearth.transaction
 
 import cats.instances.list.*
 import cats.syntax.traverse.*
-import com.google.common.primitives.Longs
+import com.google.common.primitives.{Ints, Longs, Shorts}
 import tech.hearth.account.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
@@ -13,6 +13,8 @@ import tech.hearth.transaction.validation.TxValidator
 import tech.hearth.transaction.validation.impl.SettleTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.{JsObject, Json, OFormat}
+
+import java.nio.charset.StandardCharsets
 
 /** See SettleTransactionDiff for the real semantics: a miner submits an enclave-signed batch of (client, cumulative
   * spent) settlements, retiring the settled portion of what that client reserved with it (see ReserveTransaction).
@@ -61,19 +63,28 @@ object SettleTransaction {
       } yield Settlement(address, assetId.getOrElse(Asset.Hearth), amount)
     }
 
-  /** The message the enclave signs: each settlement as client(20 bytes) ++ assetId(32 bytes, zero-padded for
-    * Hearth) ++ cumulativeSpent(8 bytes, big-endian), concatenated in order. Fixed-width fields throughout, so the
-    * concatenation has no parsing ambiguity between entries - but only because SettleTxValidator separately rejects
-    * an assetId of any length other than 32 (see its own comment): the wire format itself (PBAmounts
-    * .toVanillaAssetId) does not bound an IssuedAsset id's length, so this function alone cannot guarantee a unique
-    * factorization back into (client, assetId, cumulativeSpent) triples. Every SettleTransaction that reaches here
-    * has already gone through that check, via SettleTransaction.create's `validatedEither` call.
+  private val SettleDomain: Array[Byte] = "hearth-settle-v1".getBytes(StandardCharsets.UTF_8)
+
+  /** The enclave-signed preimage, bound to context so a batch cannot be replayed on another network, operator or
+    * period: domain(16) ++ chainId(1) ++ enclaveKey(32) ++ operator(20) ++ periodStart(4 BE) ++ count(2 BE) ++ then
+    * client(20) ++ assetId(32, zero for Hearth) ++ cumulativeSpent(8 BE) per settlement. Fixed-width fields,
+    * unambiguous only because SettleTxValidator rejects any assetId whose length is not 32. The diff rebuilds this
+    * from the transaction and chain state, never from the batch alone.
     */
-  def mkSettlementMessage(settlements: Seq[Settlement]): Array[Byte] =
-    settlements.foldLeft(Array.emptyByteArray) { (acc, s) =>
+  def mkSettlementMessage(
+      chainId: Byte,
+      enclaveKey: ByteStr,
+      operator: Address,
+      periodStart: Int,
+      settlements: Seq[Settlement]
+  ): Array[Byte] = {
+    val prefix = SettleDomain ++ Array(chainId) ++ enclaveKey.arr ++ operator.toBytes ++
+      Ints.toByteArray(periodStart) ++ Shorts.toByteArray(settlements.length.toShort)
+    settlements.foldLeft(prefix) { (acc, s) =>
       val assetIdBytes = s.assetId.compatId.fold(new Array[Byte](32))(_.arr)
       acc ++ s.client.toBytes ++ assetIdBytes ++ Longs.toByteArray(s.cumulativeSpent.value)
     }
+  }
 
   def create(
       sender: PublicKey,

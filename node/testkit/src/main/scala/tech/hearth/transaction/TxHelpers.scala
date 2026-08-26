@@ -500,10 +500,14 @@ object TxHelpers {
       ),
       fee: Long = FeeConstants(TransactionType.Settle) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      chainId: Byte = AddressScheme.current.chainId,
+      // The diff rebuilds the signed message with currentGenerationPeriod.start, which is 1 for every low-height
+      // test here (the genesis period).
+      periodStart: Int = 1
   ): SettleTransaction = {
     val enclavePublicKey = ByteStr(enclaveKey.publicKey())
-    val enclaveSignature = ByteStr(enclaveKey.sign(SettleTransaction.mkSettlementMessage(settlements)))
+    val message          = SettleTransaction.mkSettlementMessage(chainId, enclavePublicKey, sender.toAddress, periodStart, settlements)
+    val enclaveSignature = ByteStr(enclaveKey.sign(message))
     SettleTransaction
       .create(PublicKey(sender.publicKey), enclavePublicKey, settlements, enclaveSignature, fee, timestamp, Proofs.empty, chainId)
       .map(_.signWith(sender))

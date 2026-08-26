@@ -34,6 +34,7 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
   traffic and rarely contains the failure reason); grep the sbt output for `*** FAILED ***`/`*** ABORTED ***` and the
   lines immediately following instead.
 - `sbt scalafmtAll`: auto-format before committing.
+- sbt 2's thin client keeps the server JVM alive across `sbt --batch` runs; a suite that loads the Amazon Corretto crypto provider after a recompile can abort with `IllegalAccessError: ... ZombieClassLoader` (the provider registers once per JVM, from the old layer). `sbt --client shutdown`, then rerun.
 
 ## Modules
 
@@ -577,10 +578,10 @@ planned). The diff:
   generated inside the TEE, and so the only one worth registering), and `blockId` (`report_data[0:32]`) must name a
   block within the last `FreshnessWindowBlocks` (100) blocks below the current height. Both values are embedded raw,
   not hashed - unforgeability comes from the quote's own TDX hardware signature over `report_data`, not from hiding
-  either value. The transaction sender is deliberately *not* bound into the quote: the sender becomes the enclave's
+  either value. The transaction sender is deliberately *not* bound into the quote (see #32): the sender becomes the enclave's
   `operator` on a first-registration-wins basis (see below), so a hijacked registration is escaped by restarting the
-  enclave (which mints a fresh key) rather than contested. A quote whose enclave key already has an entry in
-  `registeredEnclaves(next)` is rejected outright, before signature verification runs;
+  enclave (which mints a fresh key) rather than contested. An all-zero enclave key, or one already carrying an entry in
+  `registeredEnclaves(next)`, is rejected outright, before signature verification runs;
 - verifies the full quote signature chain: the quote's own embedded PCK certificate chain (leaf, PCK CA, root) is
   checked against `IntelPki`'s pinned Intel root and the on-chain `pckCrl` (revocation) - it does *not* need the
   on-chain `pckCaIssuerChain` too, since the chain a quote itself carries is already self-contained; that field
@@ -620,20 +621,7 @@ freshness at StartBoost time (only at the `UpdateCollateral` submission that put
 a since-downgraded TCB is not yet rejected. Neither has a settled design yet; don't guess at either without
 checking whether one has landed since.
 
-**Testing gap, also flagged rather than silently accepted:** no real, currently-valid PCK CRL fixture exists to
-vendor - Intel's DCAP PKI has no static "PCK CRL for this specific PCK CA" sample the way a Root CA CRL or TCB
-Signing CA chain does, and even upstream `dcap-rs`'s own test suite fetches this collateral live from Intel PCS at
-test time rather than vendoring it, which this repo's tests never do (see "Cross-language test vectors"/real-fixture
-convention above). `StartBoostTransactionDiffTest`'s deepest deterministically-reachable reject path is therefore
-"PCK CRL not set" - the accept path, and the PCK-chain/QE/ISV signature verification beyond it, are exercised only
-indirectly: `IntelPkiTest`'s synthetic-fixture groups cover `verifyIssuerChain`/`verifyCrl` in isolation with an
-injectable trust anchor, and `DcapQuoteTest` confirms `isvSignedMessage`/`qeReportBodyMessage` slice the exact
-expected byte ranges against real quote fixtures - but nothing currently exercises `StartBoostTransactionDiff`'s
-full signature-chain wiring end to end against a quote that actually verifies. A future pass wanting to close this
-would need either a live Intel PCS fetch (a new kind of test dependency this repo doesn't have) or threading an
-injectable trust anchor through `StartBoostTransactionDiff` itself (mirroring `IntelPki.verifyIssuerChain`'s own
-`trustAnchor` parameter) so a synthetic PCK chain built in-test with BouncyCastle could stand in for Intel's real
-one.
+**Testing gap, also flagged rather than silently accepted:** no real, currently-valid PCK CRL fixture exists to vendor - Intel's DCAP PKI has no static "PCK CRL for this specific PCK CA" sample the way a Root CA CRL or TCB Signing CA chain does, and even upstream `dcap-rs`'s own test suite fetches this collateral live from Intel PCS at test time rather than vendoring it, which this repo's tests never do (see "Cross-language test vectors"/real-fixture convention above). `StartBoostTransactionDiffTest`'s deepest deterministically-reachable reject path is therefore "PCK CRL not set" - the accept path, and the PCK-chain/QE/ISV signature verification beyond it, are exercised only indirectly: `IntelPkiTest`'s synthetic-fixture groups cover `verifyIssuerChain`/`verifyCrl` in isolation with an injectable trust anchor, and `DcapQuoteTest` confirms `isvSignedMessage`/`qeReportBodyMessage` slice the exact expected byte ranges against real quote fixtures - but nothing currently exercises `StartBoostTransactionDiff`'s full signature-chain wiring end to end against a quote that actually verifies. A future pass wanting to close this would need either a live Intel PCS fetch (a new kind of test dependency this repo doesn't have) or threading an injectable trust anchor through `StartBoostTransactionDiff` itself (mirroring `IntelPki.verifyIssuerChain`'s own `trustAnchor` parameter) so a synthetic PCK chain built in-test with BouncyCastle could stand in for Intel's real one. The accept path has since been exercised end to end, outside the unit tests, against a real Intel-signed quote and live PCS collateral on the docker/private image (see "Live StartBoost on docker/private" below); the unit-test gap itself is unchanged.
 
 ### REST: signing and broadcasting
 
@@ -1196,6 +1184,35 @@ liquid (not-yet-solidified) key block on every microblock, so it only becomes du
 block supersedes it; a restart while the quorate block is still the liquid tip would lose that in-memory state
 regardless of whether finalization succeeded. Not yet confirmed as the actual cause vs. some other timing mismatch.
 
+## Reserves and settlements on the BlockchainUpdates stream
+
+`events.StateUpdate` mirrors only a subset of `StateSnapshot`; every hearth-specific field it doesn't name is
+silently dropped from the event stream. Two of them are now carried: `reserves`/`settlements`
+(`StateUpdate.ReserveUpdate`/`SettleUpdate`, protobuf `StateUpdate.reserves`/`settlements` in the sibling
+`protobuf-schemas` repo), mirroring `snapshot.reservedAmounts`/`settledAmounts`. The rest (`workDone`,
+`apiKeyBindings`, `registeredEnclaves`, ...) are still dropped - adding one means touching all five places at once:
+the domain case class (plus `reverse`, or a ROLLBACK event reports the wrong direction), `fromPB`/`toPB`, the
+`Monoid` merge, `atomic`, and **`isEmpty`** - `serde`'s `Some(blockStateUpdate).filterNot(_.isEmpty)` drops the
+whole key-block/microblock update when `isEmpty` says so, so a field missing from `isEmpty` makes a block carrying
+only that field emit nothing at all.
+
+Both ledgers hold the final absolute total, not a delta, so `atomic` reads each "before" off the pre-snapshot
+`Blockchain` (`reservedAmount`/`settledAmount`), the same way it already does for balances, and skips entries whose
+before equals their after. Both merge by `(client, operator, asset)`, the key the node's own ledgers use.
+`operator` is the address `ReserveTransaction` names in its `miner` field (`RegisteredEnclave.operator`), never the
+enclave's `validator` - see "Reserve and BindApiKey" above for why conflating the two is a real bug, not a naming
+preference.
+
+Testing hits the same constraint as `ReserveTransactionDiffTest`/`SettleTransactionDiffTest`: no fixture can drive
+a `StartBoostTransaction` to its accept path, so no real `Reserve`/`Settle` can be appended through a subscription.
+`ReserveSettleStateUpdateSpec` instead calls the two diffs directly against `blockchainWithRegisteredEnclave` and
+feeds the resulting snapshot to `StateUpdate.atomic`, covering the combine and reverse paths by composing the
+per-transaction updates the way `BlockAppended.reverseStateUpdate` does.
+
+`docker/private` now enables the extension (`hearth.extensions`, gRPC on 6881, also `EXPOSE`d by `docker/Dockerfile`).
+It keeps its own RocksDB at `<hearth.directory>/blockchain-updates` and refuses to start when its height or last
+update id disagrees with the node's, so that directory has to be wiped together with the chain.
+
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
 `WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with the full configured
@@ -1557,16 +1574,18 @@ rebuilding one after this kind of rot, the account, its generator keys, and the 
 need rebuilding together from scratch (old base58 addresses and pre-migration key material don't carry over) - see
 `docker/private/README.md`'s "Rebuilding genesis" for the `Block.genesis(...)`-based process.
 
-A stale genesis timestamp is a separate, non-obvious production bug: a block's target timestamp is `parentTimestamp
-+ delay` (PoS-derived, not the system clock), so a genesis timestamped years in the past makes the miner treat
-every subsequent block as already overdue and mine as fast as it can compute them, each one still stamped near the
-stale date - real transactions then fail `max-transaction-time-forward-offset` against a chain tip that hasn't
-caught up, for however many blocks it takes to close a gap that can be years wide. Retimestamp genesis close to
-now. This is also why predefined DCAP collateral (see "DCAP collateral registry") can't just be grafted onto a
-config's genesis: collateral validity is checked against genesis's own pinned timestamp, and a real Intel-signed
-fixture's validity window won't reach into whatever "now" a rebuilt genesis uses - `docker/private/README.md`
-documents the mechanism and constraint for whoever fetches fresh collateral and rebuilds genesis to match it.
+A stale genesis timestamp is not a catch-up bug: `Miner.forgeBlock` stamps a block `max(parentTimestamp + delay, now - 1 minute)`, so the chain bursts roughly 35 blocks in its first minute and then runs at the configured pace, with transactions timestamped "now" accepted throughout (measurements in `docker/private/README.md`, "Why genesis timestamp should stay close to now"); the cost is a third of the K=100 StartBoost freshness window, so keep genesis reasonably fresh. This is also why predefined DCAP collateral (see "DCAP collateral registry") can't just be grafted onto a config's genesis: collateral validity is checked against genesis's own pinned timestamp, and a real Intel-signed fixture's validity window won't reach into whatever "now" a rebuilt genesis uses - `docker/private/README.md` documents the mechanism and constraint for whoever fetches fresh collateral and rebuilds genesis to match it.
 
 Nothing sets a default bech32 HRP in `Application.scala` (`-Dhearth.hrp` has no fallback) - a real node crashes
 rendering its first address without it. `docker/private` works around this in its own Dockerfile; the
 mainnet/testnet/stagenet-targeting `docker/Dockerfile`/`entrypoint.sh` still doesn't, a genuine open gap.
+
+## Live StartBoost on docker/private
+
+The StartBoost accept path has been exercised end to end against a real Intel-signed TDX v4 quote (`report_data` = the private image's genesis block id ++ a known enclave key) and live Intel PCS collateral. The runbook is a live Go test in the miner repo (`internal/nodecompat`, run against this repo's docker/private stack); `docker/private/README.md` ("Live TEE-miner cycle check") has the fixture contract, measurements and run log. What the code does not say by itself:
+
+- Collateral goes in two transactions: `DcapCollateral` resolves the Root CA CRL for revocation checking from chain state (`blockchain.dcapRootCaCrl`), never from the transaction being applied, so `rootCaCrl` is mined first and the rest (`pckCaIssuerChain` + `pckCrl`, `tcbSigningIssuerChain` + `tcbInfo` + `qeIdentity`) follows in one. The PCK CRL must come from the CA that issued the quote's PCK leaf (Intel publishes a Platform and a Processor one). Formats: CRLs DER, issuer chains PEM, TCB Info / QE Identity the raw signed JSON as served, all hex in the request. Validity is checked at the transaction timestamp, so the collateral must be fresh even when the quote is old.
+- `utils.byteStrFormat` writes base16 unconditionally, never `ByteStr.toString`'s `base64:` form at 1024+ bytes, so `/transactions/sign` output round-trips through `/transactions/broadcast` for quotes and collateral blobs (`TransactionFactorySpec`, "round-trips a signed transaction's own JSON").
+- `GET /blockchain/finality` carries `currentRegisteredEnclaves` / `nextRegisteredEnclaves` (`FinalityApiRoute`, `FinalityApiRouteSpec`), the per-period shape of `currentGenerators` / `nextGenerators`; a registration always targets the next period.
+- The private node generates its wallet's nonce-0 account (the funded generator) at startup: `GET /addresses` lists it and `POST /addresses` returns nonce 1. `CommitToGeneration` via `/transactions/sign` needs only `{"type": 6, "sender": <addr>}`; the node fills the period start and generator keys from `hearth.miner.accounts`.
+- The runbook covers the whole TEE-miner cycle: after StartBoost it runs Reserve, BindApiKey and two miner-signed Settle batches plus a no-op replay; adversarial rejections stay in `SettleTransactionDiffTest`. `/transactions/sign` fills the default fee for every type involved except Transfer, whose request demands explicit `fee` and `timestamp`. Settle's genesis prerequisite holds from block 1: the genesis-committed generator counts as a committed generator of the first period (`SnapshotBlockchain`), which `SettleTransactionDiff` requires of the registered validator.

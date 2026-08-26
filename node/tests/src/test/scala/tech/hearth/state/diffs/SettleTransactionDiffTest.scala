@@ -1,7 +1,8 @@
 package tech.hearth.state.diffs
 
-import tech.hearth.account.{Address, PublicKey}
+import tech.hearth.account.{Address, AddressScheme, PublicKey}
 import tech.hearth.common.state.ByteStr
+import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
@@ -67,12 +68,44 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       val settlements = Seq(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(50L)))
       // Same (registered) enclavePublicKey as settleTx, but signed by a different key - the registry lookup
       // succeeds, so this actually exercises the signature check rather than failing earlier on it.
-      val wrongSignature = ByteStr(TxHelpers.signer(10).sign(SettleTransaction.mkSettlementMessage(settlements)))
+      val message        = SettleTransaction.mkSettlementMessage(AddressScheme.current.chainId, enclavePublicKey, miner, 1, settlements)
+      val wrongSignature = ByteStr(TxHelpers.signer(10).sign(message))
       val forged = SettleTransaction
         .create(PublicKey(sender.publicKey()), enclavePublicKey, settlements, wrongSignature, 100000, TxHelpers.timestamp, Proofs.empty)
         .explicitGet()
         .signWith(sender)
       SettleTransactionDiff(blockchain)(forged) should produce("Invalid enclave signature")
+    }
+
+    // The diff rebuilds the signed message from the transaction's chainId, the sender (operator) and the chain's
+    // current period, never from the batch, so a batch the enclave signed for a different context does not verify.
+    // Each case signs a valid batch with the correct enclave key but a wrong prefix field.
+    def settleSignedFor(chainId: Byte, operator: Address, periodStart: Int): SettleTransaction = {
+      val settlements = Seq(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(50L)))
+      val message     = SettleTransaction.mkSettlementMessage(chainId, enclavePublicKey, operator, periodStart, settlements)
+      val signature   = ByteStr(enclaveKey.sign(message))
+      SettleTransaction
+        .create(PublicKey(sender.publicKey()), enclavePublicKey, settlements, signature, 100000, TxHelpers.timestamp, Proofs.empty)
+        .explicitGet()
+        .signWith(sender)
+    }
+
+    "rejects a batch the enclave signed for another operator" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      SettleTransactionDiff(blockchain)(settleSignedFor(AddressScheme.current.chainId, client, 1)) should
+        produce("Invalid enclave signature")
+    }
+
+    "rejects a batch the enclave signed for another period" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      SettleTransactionDiff(blockchain)(settleSignedFor(AddressScheme.current.chainId, miner, 2)) should
+        produce("Invalid enclave signature")
+    }
+
+    "rejects a batch the enclave signed for another chain" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
+      SettleTransactionDiff(blockchain)(settleSignedFor((AddressScheme.current.chainId + 1).toByte, miner, 1)) should
+        produce("Invalid enclave signature")
     }
 
     "rejects settling for a client with no open reservation" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
@@ -285,6 +318,26 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
         TxHelpers.timestamp,
         Proofs.empty
       ) should produce("Every settlement's assetId must be")
+    }
+
+    // Cross-language vector shared with the miner's internal/settle: identical inputs must yield this exact
+    // preimage, so a batch the miner signs verifies here byte for byte.
+    "mkSettlementMessage matches the cross-language vector" in {
+      val enclave  = ByteStr((0 until 32).map(_.toByte).toArray)
+      val operator = Address.fromBytes(Array.fill(20)(0xaa.toByte)).explicitGet()
+      val c1       = Address.fromBytes(Array.fill(20)(0x11.toByte)).explicitGet()
+      val c2       = Address.fromBytes(Array.fill(20)(0x22.toByte)).explicitGet()
+      val a2       = IssuedAsset(ByteStr(Array.fill(32)(0x33.toByte)))
+      val settlements = Seq(
+        Settlement(c1, Hearth, TxNonNegativeAmount.unsafeFrom(600000L)),
+        Settlement(c2, a2, TxNonNegativeAmount.unsafeFrom(800000L))
+      )
+      val message = SettleTransaction.mkSettlementMessage(82.toByte, enclave, operator, 1000001, settlements)
+      Base16.encode(message) shouldBe
+        "6865617274682d736574746c652d763152000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1faaaaaaaaaaaaaaaaaaaaaa" +
+        "aaaaaaaaaaaaaaaaaa000f42410002111111111111111111111111111111111111111100000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000927c0222222222222222222222222222222222222222233333333333333333333333333333333333333333333333333" +
+        "3333333333333300000000000c3500"
     }
   }
 }

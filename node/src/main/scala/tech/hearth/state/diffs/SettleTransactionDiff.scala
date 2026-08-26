@@ -7,7 +7,6 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.state.diffs.BlockDiffer.Fraction
 import tech.hearth.transaction.Asset
-import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
 import tech.hearth.transaction.SettleTransaction
 import tech.hearth.transaction.TxValidationError.GenericError
 
@@ -62,13 +61,16 @@ object SettleTransactionDiff {
       _ <- Either.raiseUnless(registered.operator == sender) {
         GenericError(s"$sender is not the operator of enclave ${tx.enclavePublicKey}")
       }
-      _ <- Either.raiseUnless {
-        crypto.verify(tx.enclaveSignature, SettleTransaction.mkSettlementMessage(tx.settlements), PublicKey(tx.enclavePublicKey))
-      }(GenericError("Invalid enclave signature over settlements"))
       // registeredEnclave above only ever resolves when Blockchain.currentGenerationPeriod is defined (see
       // Blockchain.findRegisteredEnclave), so this can't actually fail here - kept as an explicit Either for
       // clarity rather than a partial .get, not because this branch is reachable.
       period <- blockchain.currentGenerationPeriod.toRight(GenericError("DeterministicFinality is not yet activated"))
+      // The signature is rebuilt from the transaction and `period`, not from the batch, so a batch signed for a
+      // different network, operator or period does not verify here.
+      message = SettleTransaction.mkSettlementMessage(tx.chainId, tx.enclavePublicKey, sender, period.start.toInt, tx.settlements)
+      _ <- Either.raiseUnless(crypto.verify(tx.enclaveSignature, message, PublicKey(tx.enclavePublicKey))) {
+        GenericError("Invalid enclave signature over settlements")
+      }
       // registeredEnclave only confirms registered.validator was a committed generator of the period the enclave
       // registered *for* (StartBoostTransactionDiff's own check) - not necessarily of `period` here, since
       // findRegisteredEnclave's current-or-next-period window lets a Settle land one period earlier than that
@@ -87,9 +89,9 @@ object SettleTransactionDiff {
             val previouslySettled = settledSoFar.getOrElse(key, blockchain.settledAmount(settlement.client, sender, settlement.assetId))
             val newCumulative     = settlement.cumulativeSpent.value
             for {
-              // Defence in depth, mirroring ReserveTransactionDiff.assetIssued: reservedAmount > 0 already implies
-              // the asset was issued (Reserve itself checks this), but Settle shouldn't rely solely on that to
-              // reject a nonexistent asset.
+              // Defence in depth via the shared assetIssued check: reservedAmount > 0 already implies the asset was
+              // issued (Reserve itself checks this), but Settle shouldn't rely solely on that to reject a nonexistent
+              // asset.
               _ <- assetIssued(blockchain, settlement.assetId)
               _ <- Either.raiseUnless(reserved > 0) {
                 GenericError(s"${settlement.client} has no open reservation with $sender for ${settlement.assetId}")
@@ -136,8 +138,4 @@ object SettleTransactionDiff {
     def empty(initialWorkDone: Long): SettleAccumulator = SettleAccumulator(Map.empty, Portfolio.empty, initialWorkDone)
   }
 
-  private def assetIssued(blockchain: Blockchain, asset: Asset): Either[ValidationError, Unit] = asset match {
-    case Hearth                 => ().asRight
-    case asset @ IssuedAsset(_) => Either.cond(blockchain.assetDescription(asset).isDefined, (), GenericError(s"Asset $asset is not issued"))
-  }
 }

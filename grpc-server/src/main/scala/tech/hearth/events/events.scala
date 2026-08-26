@@ -7,7 +7,7 @@ import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.block.{Block, MicroBlock}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.events.StateUpdate.LeaseUpdate.LeaseStatus
-import tech.hearth.events.StateUpdate.{AssetStateUpdate, BalanceUpdate, LeaseUpdate, LeasingBalanceUpdate}
+import tech.hearth.events.StateUpdate.{AssetStateUpdate, BalanceUpdate, LeaseUpdate, LeasingBalanceUpdate, ReserveUpdate, SettleUpdate}
 import tech.hearth.events.protobuf.TransactionMetadata
 import tech.hearth.protobuf.*
 import tech.hearth.protobuf.transaction.PBAmounts
@@ -25,15 +25,19 @@ final case class StateUpdate(
     balances: Seq[BalanceUpdate],
     leasingForAddress: Seq[LeasingBalanceUpdate],
     assets: Seq[AssetStateUpdate],
-    leases: Seq[LeaseUpdate]
+    leases: Seq[LeaseUpdate],
+    reserves: Seq[ReserveUpdate],
+    settlements: Seq[SettleUpdate]
 ) {
-  def isEmpty: Boolean = balances.isEmpty && leases.isEmpty && assets.isEmpty
+  def isEmpty: Boolean = balances.isEmpty && leases.isEmpty && assets.isEmpty && reserves.isEmpty && settlements.isEmpty
 
   def reverse: StateUpdate = copy(
     balances.map(_.reverse).reverse,
     leasingForAddress.map(_.reverse).reverse,
     assets.map(_.reverse).reverse,
-    leases.map(_.reverse).reverse
+    leases.map(_.reverse).reverse,
+    reserves.map(_.reverse).reverse,
+    settlements.map(_.reverse).reverse
   )
 }
 
@@ -55,6 +59,41 @@ object StateUpdate {
       val afterAmount = PBAmounts.fromAssetAndAmount(v.asset, v.after)
       PBBalanceUpdate(v.address.toByteString, Some(afterAmount), v.before)
     }
+  }
+
+  // `operator` is the account that settles for an enclave, which ReserveTransaction names in its `miner` field. It
+  // is never the enclave's `validator`, a distinct role, so the two must not be used interchangeably here.
+  case class ReserveUpdate(client: Address, operator: Address, asset: Asset, before: Long, after: Long) {
+    def reverse: ReserveUpdate = copy(before = after, after = before)
+  }
+
+  object ReserveUpdate {
+    import tech.hearth.events.protobuf.StateUpdate.ReserveUpdate as PBReserveUpdate
+
+    def fromPB(v: PBReserveUpdate): ReserveUpdate = {
+      val (asset, after) = PBAmounts.toAssetAndAmount(v.getAmountAfter)
+      ReserveUpdate(v.client.toAddress, v.operator.toAddress, asset, v.amountBefore, after)
+    }
+
+    def toPB(v: ReserveUpdate): PBReserveUpdate =
+      PBReserveUpdate(v.client.toByteString, v.operator.toByteString, Some(PBAmounts.fromAssetAndAmount(v.asset, v.after)), v.before)
+  }
+
+  // Both values are lifetime cumulative totals, matching the ledger SettleTransaction keeps, not per-batch deltas.
+  case class SettleUpdate(client: Address, operator: Address, asset: Asset, before: Long, after: Long) {
+    def reverse: SettleUpdate = copy(before = after, after = before)
+  }
+
+  object SettleUpdate {
+    import tech.hearth.events.protobuf.StateUpdate.SettleUpdate as PBSettleUpdate
+
+    def fromPB(v: PBSettleUpdate): SettleUpdate = {
+      val (asset, after) = PBAmounts.toAssetAndAmount(v.getSettledAfter)
+      SettleUpdate(v.client.toAddress, v.operator.toAddress, asset, v.settledBefore, after)
+    }
+
+    def toPB(v: SettleUpdate): PBSettleUpdate =
+      PBSettleUpdate(v.client.toByteString, v.operator.toByteString, Some(PBAmounts.fromAssetAndAmount(v.asset, v.after)), v.before)
   }
 
   case class LeasingBalanceUpdate(address: Address, before: LeaseBalance, after: LeaseBalance) {
@@ -226,7 +265,9 @@ object StateUpdate {
       v.balances.map(BalanceUpdate.fromPB),
       v.leasingForAddress.map(LeasingBalanceUpdate.fromPB),
       v.assets.map(AssetStateUpdate.fromPB),
-      v.individualLeases.map(LeaseUpdate.fromPB)
+      v.individualLeases.map(LeaseUpdate.fromPB),
+      v.reserves.map(ReserveUpdate.fromPB),
+      v.settlements.map(SettleUpdate.fromPB)
     )
   }
 
@@ -235,12 +276,14 @@ object StateUpdate {
       v.balances.map(BalanceUpdate.toPB),
       v.leasingForAddress.map(LeasingBalanceUpdate.toPB),
       v.assets.map(AssetStateUpdate.toPB),
-      v.leases.map(LeaseUpdate.toPB)
+      v.leases.map(LeaseUpdate.toPB),
+      v.reserves.map(ReserveUpdate.toPB),
+      v.settlements.map(SettleUpdate.toPB)
     )
   }
 
   implicit val monoid: Monoid[StateUpdate] = new Monoid[StateUpdate] {
-    override def empty: StateUpdate = StateUpdate(Seq.empty, Seq.empty, Seq.empty, Seq.empty)
+    override def empty: StateUpdate = StateUpdate(Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq.empty)
 
     override def combine(x: StateUpdate, y: StateUpdate): StateUpdate = {
       // merge balance updates, preserving order
@@ -275,11 +318,33 @@ object StateUpdate {
         leasesMap(lease.originTransactionId) = lease
       }
 
+      // merge reserves and settlements, preserving order; both are keyed the way the node keys the ledgers they
+      // mirror, by (client, operator, asset)
+      val reservesMap = mutable.LinkedHashMap.empty[(Address, Address, Asset), ReserveUpdate]
+      (x.reserves ++ y.reserves).foreach { case reserve @ ReserveUpdate(client, operator, asset, _, _) =>
+        val key = (client, operator, asset)
+        reservesMap(key) = reservesMap.get(key) match {
+          case Some(value) => reserve.copy(before = value.before)
+          case None        => reserve
+        }
+      }
+
+      val settlementsMap = mutable.LinkedHashMap.empty[(Address, Address, Asset), SettleUpdate]
+      (x.settlements ++ y.settlements).foreach { case settlement @ SettleUpdate(client, operator, asset, _, _) =>
+        val key = (client, operator, asset)
+        settlementsMap(key) = settlementsMap.get(key) match {
+          case Some(value) => settlement.copy(before = value.before)
+          case None        => settlement
+        }
+      }
+
       StateUpdate(
         balances = balancesMap.values.toList,
         leasingForAddress = addrLeasesMap.values.toList,
         assets = assetsMap.values.toList,
-        leases = leasesMap.values.toList
+        leases = leasesMap.values.toList,
+        reserves = reservesMap.values.toList,
+        settlements = settlementsMap.values.toList
       )
     }
   }
@@ -338,7 +403,21 @@ object StateUpdate {
 
     val updatedLeases = newLeaseUpdates ++ cancelledLeaseUpdates
 
-    StateUpdate(balances.toVector, leaseBalanceUpdates, assets, updatedLeases.toSeq)
+    // Both ledgers hold the final absolute total, not a delta, so the "before" comes from the state the snapshot
+    // is applied to, exactly as it does for balances above.
+    val reserves = ArrayBuffer.empty[ReserveUpdate]
+    for {
+      ((client, operator, asset), after) <- snapshot.reservedAmounts
+      before = blockchain.reservedAmount(client, operator, asset) if before != after
+    } reserves += ReserveUpdate(client, operator, asset, before, after)
+
+    val settlements = ArrayBuffer.empty[SettleUpdate]
+    for {
+      ((client, operator, asset), after) <- snapshot.settledAmounts
+      before = blockchain.settledAmount(client, operator, asset) if before != after
+    } settlements += SettleUpdate(client, operator, asset, before, after)
+
+    StateUpdate(balances.toVector, leaseBalanceUpdates, assets, updatedLeases.toSeq, reserves.toVector, settlements.toVector)
   }
 
   private def transactionsMetadata(snapshot: StateSnapshot): Seq[TransactionMetadata] =
