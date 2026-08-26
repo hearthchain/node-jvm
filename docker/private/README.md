@@ -12,7 +12,9 @@ Build the base node image first (see [`../README.md`](../README.md), "Building D
 `docker build -t hearth-private-node docker/private` (from the repository root)
 
 Run:\
-`docker run -d --name hearth-private-node -p 6869:6869 hearth-private-node`
+`docker run -d --name hearth-private-node -p 6869:6869 -p 6881:6881 hearth-private-node`
+
+6869 is the REST API, 6881 the BlockchainUpdates gRPC stream (see below); drop the second `-p` if nothing subscribes to the stream.
 
 Node API documentation: http://localhost:6869/
 
