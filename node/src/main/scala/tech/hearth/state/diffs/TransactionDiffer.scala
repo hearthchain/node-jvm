@@ -138,6 +138,9 @@ object TransactionDiffer {
           case cgtx: CommitToGenerationTransaction => CommitToGenerationTransactionDiff(blockchain)(cgtx).traced
           case uctx: UpdateCollateralTransaction   => UpdateCollateralTransactionDiff(blockchain)(uctx).traced
           case sbtx: StartBoostTransaction         => StartBoostTransactionDiff(blockchain)(sbtx).traced
+          case rtx: ReserveTransaction             => ReserveTransactionDiff(blockchain)(rtx).traced
+          case batx: BindApiKeyTransaction         => BindApiKeyTransactionDiff(blockchain)(batx).traced
+          case sttx: SettleTransaction             => SettleTransactionDiff(blockchain)(sttx).traced
           case _                                   => UnsupportedTransactionType.asLeft.traced
         }
       }

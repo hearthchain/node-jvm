@@ -5,7 +5,7 @@ import scalapb.compiler.Version.scalapbVersion
 object Dependencies {
   private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.17.Final"
 
-  val gProtoVersion = "4.35.1"
+  val gProtoVersion = "4.36.0"
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
   val overrides = Def.setting(
     Seq(
@@ -29,7 +29,7 @@ object Dependencies {
       jacksonModule("core", "databind"),
       jacksonModule("datatype", "datatype-jdk8"),
       jacksonModule("datatype", "datatype-jsr310"),
-      "tools.jackson.core" % "jackson-databind" % "3.2.1",
+      "tools.jackson.core" % "jackson-databind" % "3.2.2",
       gProto
     )
   )
@@ -52,10 +52,10 @@ object Dependencies {
   private def grpcModule(module: String) = "io.grpc" % module % "1.83.1"
 
   val pekkoHttp       = pekkoHttpModule("pekko-http")
-  val googleGuava     = "com.google.guava"    % "guava"             % "33.6.0-jre"
+  val googleGuava     = "com.google.guava"    % "guava"             % "33.7.1-jre"
   val kamonCore       = kamonModule("core")
   val machinist       = "org.typelevel"      %% "machinist"         % "0.6.8"
-  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.1"
+  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.3"
   val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "3.0.13"
   val curve25519      = "com.wavesplatform"   % "curve25519-java"   % "0.6.6"
   val nettyHandler    = nettyModule("handler")
@@ -70,7 +70,7 @@ object Dependencies {
 
   val cryptoProviders = Seq(
     // Windows x86_64, Windows x86, macOS x86_64, linux x86_64
-    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.6.1",
+    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.6.3",
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java

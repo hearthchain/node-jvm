@@ -12,7 +12,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
 import tech.hearth.state.{Height, TransactionId}
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Hearth
+import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
@@ -441,8 +441,9 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
 
-  // BindApiKey/Reserve/Withdraw/Settle have no implemented semantics yet (see TransactionDiffer); these helpers
-  // only exercise the wire-format (protobuf/JSON) plumbing.
+  // Withdraw has no implemented semantics yet (see TransactionDiffer); its helper below only exercises the
+  // wire-format (protobuf/JSON) plumbing. BindApiKey/Reserve/Settle are implemented - see
+  // BindApiKeyTransactionDiff/ReserveTransactionDiff/SettleTransactionDiff.
 
   def bindApiKey(
       sender: SigningKey = defaultSigner,
@@ -459,7 +460,7 @@ object TxHelpers {
 
   def reserve(
       sender: SigningKey = defaultSigner,
-      asset: Asset = Hearth,
+      asset: IssuedAsset,
       amount: Long = 1.hearth,
       miner: Address = secondAddress,
       feeAsset: Asset = Hearth,
@@ -487,17 +488,29 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
 
+  /** The enclave key defaults to a distinct signer from `sender` (its operator) - in production the two are
+    * unrelated keys (see RegisteredEnclave), and reusing `sender` here would hide a bug where the wrong key signs
+    * the settlement message.
+    */
   def settle(
       sender: SigningKey = defaultSigner,
-      senderAddress: Address = defaultAddress,
+      enclaveKey: SigningKey = signer(9),
+      settlements: Seq[SettleTransaction.Settlement],
       fee: Long = FeeConstants(TransactionType.Settle) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
-  ): SettleTransaction =
+      chainId: Byte = AddressScheme.current.chainId,
+      // The diff rebuilds the signed message with currentGenerationPeriod.start, which is 1 for every low-height
+      // test here (the genesis period).
+      periodStart: Int = 1
+  ): SettleTransaction = {
+    val enclavePublicKey = ByteStr(enclaveKey.publicKey())
+    val message          = SettleTransaction.mkSettlementMessage(chainId, enclavePublicKey, sender.toAddress, periodStart, settlements)
+    val enclaveSignature = ByteStr(enclaveKey.sign(message))
     SettleTransaction
-      .create(PublicKey(sender.publicKey), senderAddress, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), enclavePublicKey, settlements, enclaveSignature, fee, timestamp, Proofs.empty, chainId)
       .map(_.signWith(sender))
       .explicitGet()
+  }
 
   def updateCollateral(
       sender: SigningKey = defaultSigner,

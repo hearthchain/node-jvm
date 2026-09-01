@@ -7,7 +7,7 @@ object ReserveTxSerializer {
   def toJson(tx: ReserveTransaction): JsObject = {
     import tx.*
     BaseTxJson.toJson(tx) ++ Json.obj(
-      "assetId" -> assetId.maybeBase16Repr,
+      "assetId" -> assetId.id.toString,
       "amount"  -> amount.value,
       "miner"   -> miner.toString
     )

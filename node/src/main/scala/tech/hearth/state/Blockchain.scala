@@ -89,6 +89,25 @@ trait Blockchain {
 
   def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave]
 
+  // ReserveTransaction's accumulated total, keyed by (sender, miner, asset) - not tied to a generation period,
+  // unlike committedGenerators/registeredEnclaves, so it uses the DCAP-collateral-style history mechanism instead
+  // (see DcapCollateral): a single "current" value per key, wholesale-replaced at arbitrary heights, resolved
+  // through history so rollback can undo an accumulation.
+  def reservedAmount(sender: Address, miner: Address, asset: IssuedAsset): Long
+
+  // BindApiKeyTransaction's HPKE-sealed API key envelope, keyed by (enclavePublicKey, sender) so an enclave can
+  // eventually enumerate the bindings addressed to it. Same history mechanism as reservedAmount/DCAP collateral.
+  def apiKeyBinding(enclavePublicKey: ByteStr, sender: Address): Option[ByteStr]
+
+  // SettleTransaction's cumulative-settled counter, keyed by (client, miner, asset) - same history mechanism as
+  // reservedAmount above, and always <= reservedAmount(client, miner, asset) for the same triple.
+  def settledAmount(client: Address, miner: Address, asset: IssuedAsset): Long
+
+  // Work attributed to a validator within one generation period (epoch), fed by SettleTransaction's burned share
+  // and consumed by GeneratingBalanceProvider to boost that validator's generating balance in the *next* period -
+  // see "workBoost" in CLAUDE.md. Same history mechanism as reservedAmount/settledAmount above.
+  def workDone(validator: Address, period: GenerationPeriod): Long
+
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
 
@@ -237,6 +256,30 @@ object Blockchain {
       Some(GenerationPeriod.from(h, blockchain.settings.functionalitySettings))
 
     def currentGenerationPeriod: Option[GenerationPeriod] = this.generationPeriodOf(Height(blockchain.height))
+
+    /** The current-or-next-period scan every "registered enclave"/"registered miner" lookup below shares - only
+      * this and next period are ever in scope, mirroring registeredEnclaves' own "only this and next period" scope
+      * rather than a permanent registry.
+      */
+    private def findRegisteredEnclave(p: RegisteredEnclave => Boolean): Option[RegisteredEnclave] =
+      currentGenerationPeriod.flatMap { current =>
+        blockchain.registeredEnclaves(current).find(p).orElse(blockchain.registeredEnclaves(current.next).find(p))
+      }
+
+    /** An address counts as a "registered miner" (for ReserveTransaction/BindApiKeyTransaction) as long as it has
+      * at least one enclave registered via StartBoostTransaction for the current or the next generation period.
+      */
+    def isRegisteredMiner(address: Address): Boolean = findRegisteredEnclave(_.operator == address).isDefined
+
+    /** Same current-or-next-period scoping as isRegisteredMiner, keyed by enclave public key instead of operator
+      * address - looks up the full record, e.g. for SettleTransaction to check its sender against the enclave's
+      * operator.
+      */
+    def registeredEnclave(enclavePublicKey: ByteStr): Option[RegisteredEnclave] =
+      findRegisteredEnclave(_.enclavePublicKey == enclavePublicKey)
+
+    /** Used by BindApiKeyTransaction to check its enclave_public_key against the registry. */
+    def isRegisteredEnclave(enclavePublicKey: ByteStr): Boolean = registeredEnclave(enclavePublicKey).isDefined
 
     def supportsFinalizationVoting(height: Int = blockchain.height): Boolean = true
   }

@@ -3514,8 +3514,9 @@ components:
         - $ref: '#/components/schemas/Hash'
     Address:
       type: string
-      pattern: '^[1-9A-HJ-NP-Za-km-z]{35}$'
-      example: 3P274YB5qseSE9DTTL3bpSjosZrYBPDpJ8k
+      description: bech32m, HRP per network (-Dhearth.hrp)
+      pattern: '^[a-z]+1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38}$'
+      example: phrth1gxv7se8ueq623ukgwxmesapatdmhay84f0sfk0
     Alias:
       type: string
       pattern: '^alias\:.:[\-\.0-9@_a-z]{4,30}$'
@@ -4534,7 +4535,7 @@ components:
           $ref: '#/components/schemas/Height'
     FinalityInfoBase:
       type: object
-      required: [ height, finalizedHeight, currentGenerationPeriod, nextGenerationPeriod, nextGenerators ]
+      required: [ height, finalizedHeight, currentGenerationPeriod, nextGenerationPeriod, nextGenerators, currentRegisteredEnclaves, nextRegisteredEnclaves ]
       properties:
         height:
           $ref: '#/components/schemas/Height'
@@ -4548,6 +4549,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NextGeneratorData'
+        currentRegisteredEnclaves:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegisteredEnclaveData'
+        nextRegisteredEnclaves:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegisteredEnclaveData'
     FinalityInfo:
       allOf:
         - $ref: '#/components/schemas/FinalityInfoBase'
@@ -4568,6 +4577,22 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/GeneratorDataLSF'
+    RegisteredEnclaveData:
+      type: object
+      description: A TEE miner's enclave registered for the period via StartBoost, as of height (not finalizedHeight)
+      required:
+        - enclavePublicKey
+        - validator
+        - operator
+      properties:
+        enclavePublicKey:
+          type: string
+          description: The enclave's ephemeral Ed25519 public key (32 bytes, hex), from the quote's report_data
+          example: 4421c67f8c918bb146b286c8fd2f56c4a5b86c1917fb1b94557bfe2cccbbbdf5
+        validator:
+          $ref: '#/components/schemas/Address'
+        operator:
+          $ref: '#/components/schemas/Address'
     NextGeneratorData:
       type: object
       required:

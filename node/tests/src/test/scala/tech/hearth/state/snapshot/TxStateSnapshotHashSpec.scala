@@ -262,4 +262,28 @@ class TxStateSnapshotHashSpec extends PropSpec {
     base should not equal hashOf(StateSnapshot(dcapTcbSigningIssuerChain = Some(crlA)))
     base should not equal hashOf(StateSnapshot(dcapPckCaIssuerChain = Some(crlA)))
   }
+
+  property("Reserve/Settle/BindApiKey/workDone entries do not collide across families") {
+    def hashOf(s: StateSnapshot): ByteStr =
+      TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
+
+    val client     = signer101.toAddress
+    val miner      = signer102.toAddress
+    val enclave    = ByteStr(client.toBytes)          // 20-byte envelope: matches a registered-enclave entry's shape without a tag
+    val period     = GenerationPeriod(Height(1), 1000)
+    val asset      = IssuedAsset(ByteStr.fill(32)(7)) // only an issued asset is reservable/settleable
+    val base       = hashOf(StateSnapshot())
+    val reserved   = hashOf(StateSnapshot(reservedAmounts = Map((client, miner, asset) -> 5L)))
+    val settled    = hashOf(StateSnapshot(settledAmounts = Map((client, miner, asset) -> 5L)))
+    val bound      = hashOf(StateSnapshot(apiKeyBindings = Map((enclave, miner) -> ByteStr(miner.toBytes))))
+    val enclaveReg = hashOf(StateSnapshot(nextRegisteredEnclaves = Seq(RegisteredEnclave(enclave, miner, client))))
+    val work       = hashOf(StateSnapshot(workDone = Map((miner, period) -> 5L)))
+
+    // Same key/value in reserved vs settled must not hash alike (they shared a preimage before domain tags).
+    reserved should not equal settled
+    // A 20-byte api-key envelope must not reproduce a registered-enclave entry.
+    bound should not equal enclaveReg
+    List(reserved, settled, bound, enclaveReg, work).foreach(_ should not equal base)
+    List(reserved, settled, bound, enclaveReg, work).distinct.length shouldBe 5
+  }
 }

@@ -29,7 +29,7 @@ package object http {
 
       case _ => JsError("Can't read PublicKey")
     },
-    Writes(x => JsString(x.toString))
+    Writes(tech.hearth.utils.byteStrFormat.writes)
   )
 
   implicit val PublicKeyFormat: Format[PublicKey] = byteStrFormat.inmap[PublicKey](

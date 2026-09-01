@@ -93,7 +93,7 @@ package object requests {
   val LargeBlobDecodeLimit: Int = 65536
 
   val largeByteStrFormat: Format[ByteStr] = new Format[ByteStr] {
-    override def writes(o: ByteStr): JsValue = JsString(Base16.encode(o.arr))
+    override def writes(o: ByteStr): JsValue = byteStrFormat.writes(o)
     override def reads(json: JsValue): JsResult[ByteStr] = json match {
       case JsString(v) =>
         Base16

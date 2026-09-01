@@ -32,7 +32,8 @@ object TxStateSnapshotHashBuilder {
   case class TxStatusInfo(id: ByteStr, status: TxMeta.Status)
 
   def createHashFromSnapshot(snapshot: StateSnapshot, txStatusOpt: Option[TxStatusInfo]): Result = {
-    val changedKeys = mutable.SortedSet.empty[Array[Byte]]
+    val changedKeys                    = mutable.SortedSet.empty[Array[Byte]]
+    def tag(name: String): Array[Byte] = name.getBytes(StandardCharsets.UTF_8)
 
     snapshot.balances.foreach { case ((address, asset), balance) =>
       asset match {
@@ -91,6 +92,27 @@ object TxStateSnapshotHashBuilder {
     snapshot.dcapQeIdentity.foreach(v => changedKeys += "dcapQeIdentity".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapTcbSigningIssuerChain.foreach(v => changedKeys += "dcapTcbSigningIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
     snapshot.dcapPckCaIssuerChain.foreach(v => changedKeys += "dcapPckCaIssuerChain".getBytes(StandardCharsets.UTF_8) ++ v.arr)
+
+    // Domain tags keep these preimages distinct: reserved and settled are otherwise byte-identical, and an
+    // api-key binding with a 20-byte envelope would match a registered-enclave entry. The variable envelope is
+    // length-prefixed so it cannot borrow bytes from the trailing sender. Same UTF-8-tag scheme as the DCAP fields.
+    snapshot.reservedAmounts.foreach { case ((sender, miner, asset), amount) =>
+      changedKeys += tag("reservedAmount") ++ sender.toBytes ++ miner.toBytes ++ asset.id.arr ++ Longs.toByteArray(amount)
+    }
+
+    snapshot.apiKeyBindings.foreach { case ((enclavePublicKey, sender), encryptedApiKey) =>
+      changedKeys += tag("apiKeyBinding") ++ enclavePublicKey.arr ++ sender.toBytes ++ Longs.toByteArray(
+        encryptedApiKey.arr.length.toLong
+      ) ++ encryptedApiKey.arr
+    }
+
+    snapshot.settledAmounts.foreach { case ((client, miner, asset), amount) =>
+      changedKeys += tag("settledAmount") ++ client.toBytes ++ miner.toBytes ++ asset.id.arr ++ Longs.toByteArray(amount)
+    }
+
+    snapshot.workDone.foreach { case ((validator, period), work) =>
+      changedKeys += tag("workDone") ++ validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
+    }
 
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {

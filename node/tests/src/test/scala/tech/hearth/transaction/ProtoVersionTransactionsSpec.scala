@@ -1,5 +1,6 @@
 package tech.hearth.transaction
 
+import com.google.protobuf.ByteString
 import tech.hearth.account.{AddressScheme, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base64
@@ -8,7 +9,7 @@ import tech.hearth.protobuf.transaction.{PBSignedTransaction, PBTransactions}
 import tech.hearth.protobuf.utils.PBUtils
 import tech.hearth.settings.Constants
 import tech.hearth.state.Height
-import tech.hearth.test.FreeSpec
+import tech.hearth.test.*
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.assets.exchange.{ExchangeTransaction, Order}
 import tech.hearth.transaction.lease.LeaseTransaction
@@ -30,6 +31,8 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
   val Now: Long = ntpNow
 
   val Account: SigningKey = accountGen.sample.get
+
+  val TestAsset: IssuedAsset = IssuedAsset(ByteStr.fill(32)(3))
 
   "all txs" - {
     "ExchangeTransaction" in {
@@ -106,6 +109,37 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
       val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(massTransferTx)))
 
       decode(base64Str) shouldBe massTransferTx
+    }
+
+    "ReserveTransaction" in {
+      val tx        = TxHelpers.reserve(Account, asset = TestAsset, amount = 100L, miner = Account.toAddress, fee = MinFee, timestamp = Now)
+      val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(tx)))
+      decode(base64Str) shouldBe tx
+    }
+
+    "SettleTransaction" in {
+      val settlements = Seq(SettleTransaction.Settlement(Account.toAddress, TestAsset, TxNonNegativeAmount.unsafeFrom(100L)))
+      val tx          = TxHelpers.settle(Account, settlements = settlements, fee = MinFee, timestamp = Now)
+      val base64Str   = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(tx)))
+      decode(base64Str) shouldBe tx
+    }
+
+    // Hearth is neither reservable nor settleable, and an empty asset id on the wire decodes as Hearth - so a peer
+    // can't get one past PBTransactions.vanilla, however the transaction was assembled (see PBTransactions
+    // .issuedAsset).
+    "rejects a Reserve carrying an empty asset id" in {
+      val tx = TxHelpers.reserve(Account, asset = TestAsset, amount = 100L, miner = Account.toAddress, fee = MinFee, timestamp = Now)
+      val hearthOnTheWire =
+        PBTransactions.protobuf(tx).update(_.transaction.reserve.amount.assetId := ByteString.EMPTY)
+      PBTransactions.vanilla(hearthOnTheWire) should produce("issued asset is required")
+    }
+
+    "rejects a Settle carrying an empty asset id" in {
+      val settlements = Seq(SettleTransaction.Settlement(Account.toAddress, TestAsset, TxNonNegativeAmount.unsafeFrom(100L)))
+      val tx          = TxHelpers.settle(Account, settlements = settlements, fee = MinFee, timestamp = Now)
+      val hearthOnTheWire =
+        PBTransactions.protobuf(tx).update(_.transaction.settle.settlements.foreach(_.cumulativeSpent.assetId := ByteString.EMPTY))
+      PBTransactions.vanilla(hearthOnTheWire) should produce("issued asset is required")
     }
 
     "CommitToGenerationTransaction" in {

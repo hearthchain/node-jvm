@@ -6,7 +6,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash(sbt *), Bash(git status *), B
 
 ## Stack
 
-- **Scala 3** (`scalaVersion` in `build.sbt`, currently 3.8.4) on **JDK 17** (temurin in CI). No Scala 2 syntax in new code; use Scala 3 idioms (top-level definitions, `enum`, `given`/`using`, `extension`) where they simplify, but match the style of the file being edited.
+- **Scala 3** (`scalaVersion` in `build.sbt`, currently 3.8.4) on **JDK 25** (temurin in CI). No Scala 2 syntax in new code; use Scala 3 idioms (top-level definitions, `enum`, `given`/`using`, `extension`) where they simplify, but match the style of the file being edited.
 - **sbt** multi-module build; module graph and PR commands live in `build.sbt` (`compilePR`, `checkPR`). Never invent parallel build entry points.
 - **scalafmt** (`.scalafmt.conf`: version pinned, `maxColumn = 150`, `defaultWithAlign`). Format with `sbt scalafmtAll`; CI enforces via `scalafmtCheck` inside `compilePR`. Never hand-format to satisfy the checker.
 - **Compiler is the linter.** `-Wunused:all`, `-feature`, `-deprecation`, `-unchecked` are always on; PR commands add `-Werror`, so any warning fails CI. Fix the code, don't widen `-Wconf` suppressions; a new `-Wconf` filter is a build-config change that needs a stated reason.

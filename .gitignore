@@ -43,3 +43,5 @@ native
 
 lang/js/dist
 repl/js/dist
+
+__pycache__/

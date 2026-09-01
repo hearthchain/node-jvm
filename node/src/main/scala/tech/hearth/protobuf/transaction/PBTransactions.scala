@@ -18,6 +18,15 @@ import scalapb.UnknownFieldSet.empty
 
 object PBTransactions {
 
+  /** Reserve and Settle only ever name an issued asset (Hearth is neither reservable nor settleable), while the
+    * wire reads an empty asset id as Hearth - so that case is rejected here, before the transaction exists as a
+    * domain value.
+    */
+  private def issuedAsset(asset: vt.Asset): Either[ValidationError, vt.Asset.IssuedAsset] = asset match {
+    case issued: vt.Asset.IssuedAsset => Right(issued)
+    case vt.Asset.Hearth              => Left(GenericError("Hearth is not a valid asset here, an issued asset is required"))
+  }
+
   def create(
       sender: tech.hearth.account.PublicKey,
       chainId: Byte = 0,
@@ -162,9 +171,10 @@ object PBTransactions {
       case Data.Reserve(ReserveTransactionData(Some(amount), Some(miner), feeAssetId, `empty`)) =>
         for {
           minerAddress <- miner.toAddress
+          assetId      <- issuedAsset(amount.vanillaAssetId)
           tx <- vt.ReserveTransaction.create(
             sender.toPublicKey,
-            amount.vanillaAssetId,
+            assetId,
             amount.longAmount,
             minerAddress,
             PBAmounts.toVanillaAssetId(feeAssetId),
@@ -175,10 +185,25 @@ object PBTransactions {
           )
         } yield tx
 
-      case Data.Settle(SettleTransactionData(Some(senderAddress), `empty`)) =>
+      case Data.Settle(SettleTransactionData(enclavePublicKey, settlements, enclaveSignature, `empty`)) =>
         for {
-          address <- senderAddress.toAddress
-          tx      <- vt.SettleTransaction.create(sender.toPublicKey, address, feeAmount, timestamp, proofs, chainId)
+          parsedSettlements <- settlements.toList.traverse { s =>
+            for {
+              client  <- s.getClient.toAddress
+              assetId <- issuedAsset(s.getCumulativeSpent.vanillaAssetId)
+              amount  <- TxNonNegativeAmount(s.getCumulativeSpent.longAmount)(NegativeAmount(s.getCumulativeSpent.longAmount, "asset"))
+            } yield vt.SettleTransaction.Settlement(client, assetId, amount)
+          }
+          tx <- vt.SettleTransaction.create(
+            sender.toPublicKey,
+            enclavePublicKey.toByteStr,
+            parsedSettlements,
+            enclaveSignature.toByteStr,
+            feeAmount,
+            timestamp,
+            proofs,
+            chainId
+          )
         } yield tx
 
       case Data.Withdraw(WithdrawTransactionData(Some(fromMiner), Some(amount), feeAssetId, `empty`)) =>
@@ -293,7 +318,13 @@ object PBTransactions {
 
       case tx: vt.SettleTransaction =>
         import tx.*
-        val data = Data.Settle(SettleTransactionData(Some(senderAddress.toPB)))
+        val data = Data.Settle(
+          SettleTransactionData(
+            enclavePublicKey.toByteString,
+            settlements.map(s => SettleTransactionData.Settlement(Some(s.client.toPB), Some((s.assetId, s.cumulativeSpent.value)))),
+            enclaveSignature.toByteString
+          )
+        )
         PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
 
       case tx: vt.WithdrawTransaction =>

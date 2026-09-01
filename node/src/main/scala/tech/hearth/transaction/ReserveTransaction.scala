@@ -3,18 +3,24 @@ package tech.hearth.transaction
 import tech.hearth.account.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.serialization.impl.ReserveTxSerializer
 import tech.hearth.transaction.validation.TxValidator
 import tech.hearth.transaction.validation.impl.ReserveTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-/** Not yet semantically implemented: see TransactionDiffer, which has no case for this type yet and so rejects it
-  * with UnsupportedTransactionType. Only wire-format (protobuf/JSON) plumbing exists so far.
+/** See ReserveTransactionDiff for the real semantics: locking `amount` of `assetId` against a registered miner,
+  * accumulating into Blockchain.reservedAmount(sender, miner, assetId). Accumulate-only for now - there is no
+  * unreserve transaction yet (SettleTransaction only ever compares against the reserved total).
+  *
+  * `assetId` is an IssuedAsset, not an Asset: Hearth is not reservable, matching SettleTransaction.Settlement,
+  * which is the only way a reservation is ever drawn down. `feeAssetId` is unconstrained - a fee is payable in
+  * Hearth like every other transaction's.
   */
 final case class ReserveTransaction(
     sender: PublicKey,
-    assetId: Asset,
+    assetId: IssuedAsset,
     amount: TxPositiveAmount,
     miner: Address,
     feeAssetId: Asset,
@@ -38,7 +44,7 @@ object ReserveTransaction {
 
   def create(
       sender: PublicKey,
-      assetId: Asset,
+      assetId: IssuedAsset,
       amount: Long,
       miner: Address,
       feeAssetId: Asset,
@@ -48,7 +54,7 @@ object ReserveTransaction {
       chainId: Byte = AddressScheme.current.chainId
   ): Either[ValidationError, ReserveTransaction] =
     for {
-      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, assetId.maybeBase16Repr.getOrElse("hearth")))
+      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, assetId.id.toString))
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
       tx     <- ReserveTransaction(sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, chainId).validatedEither
     } yield tx
