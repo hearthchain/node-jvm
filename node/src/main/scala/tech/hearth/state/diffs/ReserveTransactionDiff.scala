@@ -3,13 +3,14 @@ package tech.hearth.state.diffs
 import cats.syntax.either.*
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.ReserveTransaction
 import tech.hearth.transaction.TxValidationError.GenericError
 
 /** ReserveTransaction semantics: lock `amount` of `assetId` from the sender's balance against a registered miner,
-  * accumulating into Blockchain.reservedAmount(sender, miner, assetId). Accumulate-only for now, by design - there
-  * is no unreserve/settlement transaction yet; SettleTransaction/WithdrawTransaction (still unimplemented stubs)
-  * look like the eventual counterpart, but that hasn't been designed.
+  * accumulating into Blockchain.reservedAmount(sender, miner, assetId). Accumulate-only by design: SettleTransaction
+  * only ever compares against this total (see SettleTransactionDiff), and WithdrawTransaction - the counterpart that
+  * would return the unsettled remainder - is still an unimplemented stub.
   *
   * The reserved amount is debited from the sender's portfolio balance (like CommitToGeneration's deposit is *not*,
   * see Portfolio.generationDeposit) and credited nowhere else - it is not moved to the miner or to any other
@@ -42,4 +43,7 @@ object ReserveTransactionDiff {
       )
     } yield snapshot
   }
+
+  private def assetIssued(blockchain: Blockchain, asset: IssuedAsset): Either[ValidationError, Unit] =
+    Either.cond(blockchain.assetDescription(asset).isDefined, (), GenericError(s"Asset $asset is not issued"))
 }

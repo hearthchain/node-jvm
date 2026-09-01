@@ -12,7 +12,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
 import tech.hearth.state.{Height, TransactionId}
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset.Hearth
+import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
@@ -460,7 +460,7 @@ object TxHelpers {
 
   def reserve(
       sender: SigningKey = defaultSigner,
-      asset: Asset = Hearth,
+      asset: IssuedAsset,
       amount: Long = 1.hearth,
       miner: Address = secondAddress,
       feeAsset: Asset = Hearth,
@@ -495,9 +495,7 @@ object TxHelpers {
   def settle(
       sender: SigningKey = defaultSigner,
       enclaveKey: SigningKey = signer(9),
-      settlements: Seq[SettleTransaction.Settlement] = Seq(
-        SettleTransaction.Settlement(secondAddress, Hearth, TxNonNegativeAmount.unsafeFrom(1.hearth))
-      ),
+      settlements: Seq[SettleTransaction.Settlement],
       fee: Long = FeeConstants(TransactionType.Settle) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
       chainId: Byte = AddressScheme.current.chainId,

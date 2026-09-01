@@ -31,7 +31,7 @@ object SettleTxValidator extends TxValidator[SettleTransaction] {
       // genuinely enclave-signed message for a *different* settlements list, and settle funds the enclave never
       // actually authorized.
       V.cond(
-        settlements.forall(_.assetId.compatId.forall(_.arr.length == AssetIdLength)),
+        settlements.forall(_.assetId.id.arr.length == AssetIdLength),
         GenericError(s"Every settlement's assetId must be $AssetIdLength bytes")
       )
     )

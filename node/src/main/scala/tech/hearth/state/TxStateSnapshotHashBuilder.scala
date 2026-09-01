@@ -10,7 +10,7 @@ import tech.hearth.lang.ValidationError
 import tech.hearth.state.TxMeta.Status
 import tech.hearth.state.diffs.BlockDiffer.CurrentBlockFeePart
 import tech.hearth.state.diffs.TransactionDiffer
-import tech.hearth.transaction.Asset.{AssetIdOps, IssuedAsset, Hearth}
+import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.smart.script.trace.TracedResult
 import tech.hearth.transaction.Transaction
 import org.bouncycastle.crypto.digests.Blake2bDigest
@@ -97,8 +97,7 @@ object TxStateSnapshotHashBuilder {
     // api-key binding with a 20-byte envelope would match a registered-enclave entry. The variable envelope is
     // length-prefixed so it cannot borrow bytes from the trailing sender. Same UTF-8-tag scheme as the DCAP fields.
     snapshot.reservedAmounts.foreach { case ((sender, miner, asset), amount) =>
-      val assetBytes = asset.compatId.fold(Array.emptyByteArray)(_.arr)
-      changedKeys += tag("reservedAmount") ++ sender.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+      changedKeys += tag("reservedAmount") ++ sender.toBytes ++ miner.toBytes ++ asset.id.arr ++ Longs.toByteArray(amount)
     }
 
     snapshot.apiKeyBindings.foreach { case ((enclavePublicKey, sender), encryptedApiKey) =>
@@ -108,8 +107,7 @@ object TxStateSnapshotHashBuilder {
     }
 
     snapshot.settledAmounts.foreach { case ((client, miner, asset), amount) =>
-      val assetBytes = asset.compatId.fold(Array.emptyByteArray)(_.arr)
-      changedKeys += tag("settledAmount") ++ client.toBytes ++ miner.toBytes ++ assetBytes ++ Longs.toByteArray(amount)
+      changedKeys += tag("settledAmount") ++ client.toBytes ++ miner.toBytes ++ asset.id.arr ++ Longs.toByteArray(amount)
     }
 
     snapshot.workDone.foreach { case ((validator, period), work) =>

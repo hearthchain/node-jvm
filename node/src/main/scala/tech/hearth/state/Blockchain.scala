@@ -93,7 +93,7 @@ trait Blockchain {
   // unlike committedGenerators/registeredEnclaves, so it uses the DCAP-collateral-style history mechanism instead
   // (see DcapCollateral): a single "current" value per key, wholesale-replaced at arbitrary heights, resolved
   // through history so rollback can undo an accumulation.
-  def reservedAmount(sender: Address, miner: Address, asset: Asset): Long
+  def reservedAmount(sender: Address, miner: Address, asset: IssuedAsset): Long
 
   // BindApiKeyTransaction's HPKE-sealed API key envelope, keyed by (enclavePublicKey, sender) so an enclave can
   // eventually enumerate the bindings addressed to it. Same history mechanism as reservedAmount/DCAP collateral.
@@ -101,7 +101,7 @@ trait Blockchain {
 
   // SettleTransaction's cumulative-settled counter, keyed by (client, miner, asset) - same history mechanism as
   // reservedAmount above, and always <= reservedAmount(client, miner, asset) for the same triple.
-  def settledAmount(client: Address, miner: Address, asset: Asset): Long
+  def settledAmount(client: Address, miner: Address, asset: IssuedAsset): Long
 
   // Work attributed to a validator within one generation period (epoch), fed by SettleTransaction's burned share
   // and consumed by GeneratingBalanceProvider to boost that validator's generating balance in the *next* period -

@@ -6,7 +6,7 @@ import tech.hearth.crypto
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.state.diffs.BlockDiffer.Fraction
-import tech.hearth.transaction.Asset
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.SettleTransaction
 import tech.hearth.transaction.TxValidationError.GenericError
 
@@ -129,7 +129,7 @@ object SettleTransactionDiff {
   }
 
   private case class SettleAccumulator(
-      settledAmounts: Map[(Address, Address, Asset), Long],
+      settledAmounts: Map[(Address, Address, IssuedAsset), Long],
       nodeCredit: Portfolio,
       workDone: Long
   )
@@ -138,4 +138,6 @@ object SettleTransactionDiff {
     def empty(initialWorkDone: Long): SettleAccumulator = SettleAccumulator(Map.empty, Portfolio.empty, initialWorkDone)
   }
 
+  private def assetIssued(blockchain: Blockchain, asset: IssuedAsset): Either[ValidationError, Unit] =
+    Either.cond(blockchain.assetDescription(asset).isDefined, (), GenericError(s"Asset $asset is not issued"))
 }

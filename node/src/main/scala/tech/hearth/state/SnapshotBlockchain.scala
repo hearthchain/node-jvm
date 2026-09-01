@@ -90,13 +90,13 @@ case class SnapshotBlockchain(
   override def dcapTcbSigningIssuerChain: Option[ByteStr]   = snapshot.dcapTcbSigningIssuerChain.orElse(inner.dcapTcbSigningIssuerChain)
   override def dcapPckCaIssuerChain: Option[ByteStr]        = snapshot.dcapPckCaIssuerChain.orElse(inner.dcapPckCaIssuerChain)
 
-  override def reservedAmount(sender: Address, miner: Address, asset: Asset): Long =
+  override def reservedAmount(sender: Address, miner: Address, asset: IssuedAsset): Long =
     snapshot.reservedAmounts.getOrElse((sender, miner, asset), inner.reservedAmount(sender, miner, asset))
 
   override def apiKeyBinding(enclavePublicKey: ByteStr, sender: Address): Option[ByteStr] =
     snapshot.apiKeyBindings.get((enclavePublicKey, sender)).orElse(inner.apiKeyBinding(enclavePublicKey, sender))
 
-  override def settledAmount(client: Address, miner: Address, asset: Asset): Long =
+  override def settledAmount(client: Address, miner: Address, asset: IssuedAsset): Long =
     snapshot.settledAmounts.getOrElse((client, miner, asset), inner.settledAmount(client, miner, asset))
 
   override def workDone(validator: Address, period: GenerationPeriod): Long =

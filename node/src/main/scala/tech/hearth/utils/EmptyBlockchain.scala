@@ -88,11 +88,11 @@ trait EmptyBlockchain extends Blockchain {
 
   override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = IndexedSeq.empty
 
-  override def reservedAmount(sender: Address, miner: Address, asset: Asset): Long = 0L
+  override def reservedAmount(sender: Address, miner: Address, asset: IssuedAsset): Long = 0L
 
   override def apiKeyBinding(enclavePublicKey: ByteStr, sender: Address): Option[ByteStr] = None
 
-  override def settledAmount(client: Address, miner: Address, asset: Asset): Long = 0L
+  override def settledAmount(client: Address, miner: Address, asset: IssuedAsset): Long = 0L
 
   override def workDone(validator: Address, period: GenerationPeriod): Long = 0L
 }

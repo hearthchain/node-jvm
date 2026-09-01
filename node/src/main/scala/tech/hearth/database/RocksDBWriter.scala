@@ -1163,7 +1163,7 @@ class RocksDBWriter(
   override def dcapPckCaIssuerChain: Option[ByteStr] =
     readOnly(_.fromHistory(Keys.dcapPckCaIssuerChainHistory, Keys.dcapPckCaIssuerChain))
 
-  override def reservedAmount(sender: Address, miner: Address, asset: Asset): Long = {
+  override def reservedAmount(sender: Address, miner: Address, asset: IssuedAsset): Long = {
     val suffix = Keys.reservedAmountSuffix(sender, miner, asset)
     readOnly(_.fromHistory(Keys.reservedAmountHistory(suffix), Keys.reservedAmount(suffix))).getOrElse(0L)
   }
@@ -1173,7 +1173,7 @@ class RocksDBWriter(
     readOnly(_.fromHistory(Keys.apiKeyBindingHistory(suffix), Keys.apiKeyBinding(suffix)))
   }
 
-  override def settledAmount(client: Address, miner: Address, asset: Asset): Long = {
+  override def settledAmount(client: Address, miner: Address, asset: IssuedAsset): Long = {
     val suffix = Keys.settledAmountSuffix(client, miner, asset)
     readOnly(_.fromHistory(Keys.settledAmountHistory(suffix), Keys.settledAmount(suffix))).getOrElse(0L)
   }

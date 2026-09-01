@@ -3,6 +3,7 @@ package tech.hearth.api.http.requests
 import tech.hearth.account.*
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.{Asset, Proofs, ReserveTransaction, TransactionType}
 import play.api.libs.json.*
 
@@ -12,7 +13,7 @@ object ReserveRequest {
 
 case class ReserveRequest(
     senderPublicKey: String,
-    assetId: Option[Asset] = None,
+    assetId: IssuedAsset,
     amount: Long,
     miner: String,
     feeAssetId: Option[Asset] = None,
@@ -27,7 +28,7 @@ case class ReserveRequest(
       minerAddr <- Address.fromString(miner)
       tx <- ReserveTransaction.create(
         senderPk,
-        assetId.getOrElse(Asset.Hearth),
+        assetId,
         amount,
         minerAddr,
         feeAssetId.getOrElse(Asset.Hearth),

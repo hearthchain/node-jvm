@@ -5,6 +5,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.state.Height
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.test.FreeSpec
 import play.api.libs.json.*
 
@@ -76,9 +77,11 @@ class TransactionFactorySpec extends FreeSpec {
 
     "builds a ReserveTransaction from a well-formed request" in forAll(accountGen, accountGen) { (sender, minerKey) =>
       val miner = minerKey.toAddress
+      val asset = IssuedAsset(ByteStr.fill(32)(3))
       val json = Json.obj(
         "type"            -> TransactionType.Reserve.id,
         "senderPublicKey" -> PublicKey(sender.publicKey()).toString,
+        "assetId"         -> asset.id.toString,
         "amount"          -> 100000000,
         "miner"           -> miner.toString,
         "fee"             -> 100000
@@ -89,7 +92,7 @@ class TransactionFactorySpec extends FreeSpec {
       val reserve = tx.asInstanceOf[ReserveTransaction]
       reserve.miner shouldBe miner
       reserve.amount.value shouldBe 100000000
-      reserve.assetId shouldBe Asset.Hearth
+      reserve.assetId shouldBe asset
     }
 
     // A real HPKE-sealed API key envelope is well under 280 hex chars, but exercise BindApiKeyRequest's large-blob
@@ -129,11 +132,14 @@ class TransactionFactorySpec extends FreeSpec {
       val client           = clientKey.toAddress
       val enclavePublicKey = ByteStr(Array.fill(32)(9: Byte))
       val enclaveSignature = ByteStr(Array.fill(64)(7: Byte))
+      val asset            = IssuedAsset(ByteStr.fill(32)(3))
       val json = Json.obj(
         "type"             -> TransactionType.Settle.id,
         "senderPublicKey"  -> PublicKey(sender.publicKey()).toString,
         "enclavePublicKey" -> Base16.encode(enclavePublicKey.arr),
-        "settlements"      -> Json.arr(Json.obj("client" -> client.toString, "cumulativeSpent" -> 100000000)),
+        "settlements" -> Json.arr(
+          Json.obj("client" -> client.toString, "assetId" -> asset.id.toString, "cumulativeSpent" -> 100000000)
+        ),
         "enclaveSignature" -> Base16.encode(enclaveSignature.arr),
         "fee"              -> 100000
       )
@@ -143,7 +149,7 @@ class TransactionFactorySpec extends FreeSpec {
       val settle = tx.asInstanceOf[SettleTransaction]
       settle.enclavePublicKey shouldBe enclavePublicKey
       settle.enclaveSignature shouldBe enclaveSignature
-      settle.settlements shouldBe Seq(SettleTransaction.Settlement(client, Asset.Hearth, TxNonNegativeAmount.unsafeFrom(100000000)))
+      settle.settlements shouldBe Seq(SettleTransaction.Settlement(client, asset, TxNonNegativeAmount.unsafeFrom(100000000)))
     }
 
     "rejects a Settle request with an empty settlements list" in forAll(accountGen) { sender =>

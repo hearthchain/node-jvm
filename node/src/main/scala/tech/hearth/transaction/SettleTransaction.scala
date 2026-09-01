@@ -6,6 +6,7 @@ import com.google.common.primitives.{Ints, Longs, Shorts}
 import tech.hearth.account.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.SettleTransaction.Settlement
 import tech.hearth.transaction.TxValidationError.*
 import tech.hearth.transaction.serialization.impl.SettleTxSerializer
@@ -45,11 +46,13 @@ object SettleTransaction {
 
   implicit val validator: TxValidator[SettleTransaction] = SettleTxValidator
 
-  /** One client's cumulative spend against what it reserved with this transaction's sender (the miner). */
-  final case class Settlement(client: Address, assetId: Asset, cumulativeSpent: TxNonNegativeAmount)
+  /** One client's cumulative spend against what it reserved with this transaction's sender (the miner). Only an
+    * issued asset can be settled - Hearth is not a settleable asset.
+    */
+  final case class Settlement(client: Address, assetId: IssuedAsset, cumulativeSpent: TxNonNegativeAmount)
 
   /** The REST-facing shape of a Settlement, mirroring TransferTransaction.Transfer/parseTransfersList. */
-  final case class SettlementRequest(client: String, assetId: Option[Asset] = None, cumulativeSpent: Long)
+  final case class SettlementRequest(client: String, assetId: IssuedAsset, cumulativeSpent: Long)
 
   object SettlementRequest {
     implicit val jsonFormat: OFormat[SettlementRequest] = Json.format[SettlementRequest]
@@ -60,16 +63,16 @@ object SettleTransaction {
       for {
         address <- Address.fromString(client)
         amount  <- TxNonNegativeAmount(cumulativeSpent)(NegativeAmount(cumulativeSpent, "asset"))
-      } yield Settlement(address, assetId.getOrElse(Asset.Hearth), amount)
+      } yield Settlement(address, assetId, amount)
     }
 
-  private val SettleDomain: Array[Byte] = "hearth-settle-v1".getBytes(StandardCharsets.UTF_8)
-
-  /** The enclave-signed preimage, bound to context so a batch cannot be replayed on another network, operator or
-    * period: domain(16) ++ chainId(1) ++ enclaveKey(32) ++ operator(20) ++ periodStart(4 BE) ++ count(2 BE) ++ then
-    * client(20) ++ assetId(32, zero for Hearth) ++ cumulativeSpent(8 BE) per settlement. Fixed-width fields,
-    * unambiguous only because SettleTxValidator rejects any assetId whose length is not 32. The diff rebuilds this
-    * from the transaction and chain state, never from the batch alone.
+  /** The message the enclave signs: each settlement as client(20 bytes) ++ assetId(32 bytes) ++
+    * cumulativeSpent(8 bytes, big-endian), concatenated in order. Fixed-width fields throughout, so the
+    * concatenation has no parsing ambiguity between entries - but only because SettleTxValidator separately rejects
+    * an assetId of any length other than 32 (see its own comment): the wire format itself (PBAmounts
+    * .toVanillaAssetId) does not bound an IssuedAsset id's length, so this function alone cannot guarantee a unique
+    * factorization back into (client, assetId, cumulativeSpent) triples. Every SettleTransaction that reaches here
+    * has already gone through that check, via SettleTransaction.create's `validatedEither` call.
     */
   def mkSettlementMessage(
       chainId: Byte,
@@ -81,8 +84,7 @@ object SettleTransaction {
     val prefix = SettleDomain ++ Array(chainId) ++ enclaveKey.arr ++ operator.toBytes ++
       Ints.toByteArray(periodStart) ++ Shorts.toByteArray(settlements.length.toShort)
     settlements.foldLeft(prefix) { (acc, s) =>
-      val assetIdBytes = s.assetId.compatId.fold(new Array[Byte](32))(_.arr)
-      acc ++ s.client.toBytes ++ assetIdBytes ++ Longs.toByteArray(s.cumulativeSpent.value)
+      acc ++ s.client.toBytes ++ s.assetId.id.arr ++ Longs.toByteArray(s.cumulativeSpent.value)
     }
   }
 

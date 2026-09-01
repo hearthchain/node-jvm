@@ -6,8 +6,7 @@ import tech.hearth.crypto.bls.BlsPublicKey
 import tech.hearth.database.protobuf.{EthereumTransactionMeta, StaticAssetInfo, TransactionMeta, BlockMeta as PBBlockMeta}
 import tech.hearth.protobuf.snapshot.TransactionStateSnapshot
 import tech.hearth.state.*
-import tech.hearth.transaction.Asset
-import tech.hearth.transaction.Asset.{AssetIdOps, IssuedAsset}
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.Transaction
 import tech.hearth.crypto.Address
 
@@ -286,13 +285,13 @@ object Keys {
 
   // Shared by reservedAmountSuffix/settledAmountSuffix below - both key a Long ledger by a pair of addresses plus
   // an asset (sender/miner/asset, or client/miner/asset).
-  private def addressPairAssetSuffix(a: Address, b: Address, asset: Asset): ByteStr =
-    ByteStr(a.toBytes ++ b.toBytes ++ asset.compatId.fold(Array.emptyByteArray)(_.arr))
+  private def addressPairAssetSuffix(a: Address, b: Address, asset: IssuedAsset): ByteStr =
+    ByteStr(a.toBytes ++ b.toBytes ++ asset.id.arr)
 
   // ReserveTransaction's accumulated total, keyed by (sender, miner, asset) - not tied to a generation period, so
   // it reuses the DCAP-collateral-style "single current value, resolved through history" mechanism (see
   // dcapCollateralValue above) rather than committedGenerators/registeredEnclaves' period-keyed one.
-  def reservedAmountSuffix(sender: Address, miner: Address, asset: Asset): ByteStr =
+  def reservedAmountSuffix(sender: Address, miner: Address, asset: IssuedAsset): ByteStr =
     addressPairAssetSuffix(sender, miner, asset)
 
   def reservedAmountHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(ReservedAmountHistory, suffix.arr)
@@ -318,7 +317,7 @@ object Keys {
 
   // SettleTransaction's cumulative-settled counter, keyed by (client, miner, asset) - same triple ReserveTransaction
   // accumulates into, same history mechanism as reservedAmount above.
-  def settledAmountSuffix(client: Address, miner: Address, asset: Asset): ByteStr =
+  def settledAmountSuffix(client: Address, miner: Address, asset: IssuedAsset): ByteStr =
     addressPairAssetSuffix(client, miner, asset)
 
   def settledAmountHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(SettledAmountHistory, suffix.arr)

@@ -7,7 +7,7 @@ import play.api.libs.json.{JsObject, JsValue, Json}
 object SettleTxSerializer {
   def settlementsJson(settlements: Seq[Settlement]): JsValue =
     Json.toJson(settlements.map { case Settlement(client, assetId, cumulativeSpent) =>
-      Json.obj("client" -> client.toString, "assetId" -> assetId.maybeBase16Repr, "cumulativeSpent" -> cumulativeSpent.value)
+      Json.obj("client" -> client.toString, "assetId" -> assetId.id.toString, "cumulativeSpent" -> cumulativeSpent.value)
     })
 
   def toJson(tx: SettleTransaction): JsObject = {

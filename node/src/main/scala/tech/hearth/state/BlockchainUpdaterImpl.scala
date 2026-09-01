@@ -703,7 +703,7 @@ class BlockchainUpdaterImpl(
   override def dcapTcbSigningIssuerChain: Option[ByteStr] = readLock(snapshotBlockchain.dcapTcbSigningIssuerChain)
   override def dcapPckCaIssuerChain: Option[ByteStr]      = readLock(snapshotBlockchain.dcapPckCaIssuerChain)
 
-  override def reservedAmount(sender: Address, miner: Address, asset: Asset): Long = readLock {
+  override def reservedAmount(sender: Address, miner: Address, asset: IssuedAsset): Long = readLock {
     snapshotBlockchain.reservedAmount(sender, miner, asset)
   }
 
@@ -711,7 +711,7 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.apiKeyBinding(enclavePublicKey, sender)
   }
 
-  override def settledAmount(client: Address, miner: Address, asset: Asset): Long = readLock {
+  override def settledAmount(client: Address, miner: Address, asset: IssuedAsset): Long = readLock {
     snapshotBlockchain.settledAmount(client, miner, asset)
   }
 

@@ -36,14 +36,14 @@ case class StateSnapshot(
     // Blockchain.reservedAmount and adds tx.amount, so this already carries the final value, same "last write wins
     // within a block" convention as dcapTcbInfo above (harmless in practice: two Reserve txs to the same triple in
     // one block each read-then-write through SnapshotBlockchain in order, so the second sees the first's result).
-    reservedAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+    reservedAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
     // BindApiKeyTransaction's HPKE-sealed API key envelope, keyed by (enclavePublicKey, sender); upsert, same
     // "last write wins" convention.
     apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
     // SettleTransaction's new cumulative-settled counter per (client, miner, asset) - like reservedAmounts above,
     // the Diff reads the current value (via Blockchain.settledAmount) and writes the batch's final cumulative
     // value, so this already carries the final value, not a delta.
-    settledAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+    settledAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
     // Work attributed to a validator within the current generation period (epoch), fed by SettleTransaction's
     // burned share - see Keys.workDoneSuffix. Same "Diff reads current value, writes the final accumulated total"
     // convention as reservedAmounts/settledAmounts above, not a delta.
@@ -87,9 +87,9 @@ object StateSnapshot {
       dcapQeIdentity: Option[ByteStr] = None,
       dcapTcbSigningIssuerChain: Option[ByteStr] = None,
       dcapPckCaIssuerChain: Option[ByteStr] = None,
-      reservedAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+      reservedAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
       apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
-      settledAmounts: Map[(Address, Address, Asset), Long] = Map.empty,
+      settledAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
       workDone: Map[(Address, GenerationPeriod), Long] = Map.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
