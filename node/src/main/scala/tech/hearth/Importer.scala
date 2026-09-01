@@ -246,7 +246,7 @@ object Importer extends ScorexLogging {
             if (blocksToSkip > 0) {
               blocksToSkip -= 1
             } else {
-              lazy val parsedProtoBlock = PBBlocks.vanilla(PBBlocks.addChainId(protobuf.block.PBBlock.parseFrom(blockBytes)))
+              lazy val parsedProtoBlock = PBBlocks.vanilla(PBBlocks.addNetworkId(protobuf.block.PBBlock.parseFrom(blockBytes)))
               val block                 = parsedProtoBlock.get
               val blockSnapshot = snapshotsBytes.map { bytes =>
                 BlockSnapshotResponse(

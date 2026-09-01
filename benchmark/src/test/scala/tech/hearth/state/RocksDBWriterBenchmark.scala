@@ -78,9 +78,7 @@ object RocksDBWriterBenchmark {
       HearthSettings.fromRootConfig(config)
     }
 
-    AddressScheme.current = new AddressScheme {
-      override val chainId: Byte = hearthSettings.blockchainSettings.addressSchemeCharacter.toByte
-    }
+    tech.hearth.crypto.Address.setDefaultHrp(hearthSettings.blockchainSettings.networkId.value)
 
     private val rawDB: RDB = {
       val dir = new File(hearthSettings.dbSettings.directory)

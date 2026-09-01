@@ -1,5 +1,6 @@
 package tech.hearth.network.client
 
+import tech.hearth.account.NetworkId
 import tech.hearth.Version
 import tech.hearth.network.{Handshake, LegacyFrameCodec, LegacyFrameCodecL1, PeerDatabase, TrafficLogger}
 import tech.hearth.settings.*
@@ -24,8 +25,8 @@ class NetworkClient(
     trafficLoggerSettings: TrafficLogger.Settings = TrafficLogger.Settings(Set.empty, Set.empty),
     frameCodec: LegacyFrameCodec = LegacyFrameCodecL1(PeerDatabase.NoOp, 5.seconds)
 ) extends ScorexLogging {
-  def this(trafficLoggerSettings: TrafficLogger.Settings, chainId: Char, nodeName: String, nonce: Long, allChannels: ChannelGroup) =
-    this(Constants.ApplicationName + chainId, nodeName, nonce, allChannels, trafficLoggerSettings)
+  def this(trafficLoggerSettings: TrafficLogger.Settings, networkId: NetworkId, nodeName: String, nonce: Long, allChannels: ChannelGroup) =
+    this(Constants.ApplicationName + networkId.value, nodeName, nonce, allChannels, trafficLoggerSettings)
 
   private val workerGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
   private val handshake   = Handshake(applicationName, Version.VersionTuple, nodeName, nonce, None)

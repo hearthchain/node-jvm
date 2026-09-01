@@ -84,7 +84,7 @@ object TxHelpers {
       feeAsset: Asset = Hearth,
       attachment: ByteStr = ByteStr.empty,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): TransferTransaction =
     TransferTransaction
       .create(
@@ -95,7 +95,7 @@ object TxHelpers {
         timestamp,
         attachment,
         Proofs.empty,
-        chainId,
+        networkId,
         feeAsset
       )
       .map(_.signWith(from))
@@ -108,7 +108,7 @@ object TxHelpers {
       asset: Asset = Hearth,
       fee: Long = TestValues.fee,
       feeAsset: Asset = Hearth,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): TransferTransaction =
     TransferTransaction(
       PublicKey(from.publicKey),
@@ -119,7 +119,7 @@ object TxHelpers {
       timestamp,
       ByteStr.empty,
       Proofs.empty,
-      chainId
+      networkId
     )
 
   def massTransfer(
@@ -129,7 +129,7 @@ object TxHelpers {
       fee: Long = FeeConstants(TransactionType.Transfer) * FeeUnit,
       feeAsset: Asset = Hearth,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): TransferTransaction =
     TransferTransaction
       .create(
@@ -140,7 +140,7 @@ object TxHelpers {
         timestamp,
         ByteStr.empty,
         Proofs.empty,
-        chainId,
+        networkId,
         feeAsset
       )
       .map(_.signWith(from))
@@ -288,8 +288,8 @@ object TxHelpers {
       order2: Order,
       matcher: SigningKey = defaultSigner,
       fee: Long = TestValues.fee,
-      chainId: Byte = AddressScheme.current.chainId
-  ): ExchangeTransaction = exchangeFromOrders(order1, order2, order1.price.value, matcher, fee, chainId)
+      networkId: NetworkId = NetworkId.current
+  ): ExchangeTransaction = exchangeFromOrders(order1, order2, order1.price.value, matcher, fee, networkId)
 
   def exchangeFromOrders(
       order1: Order,
@@ -297,7 +297,7 @@ object TxHelpers {
       price: Long,
       matcher: SigningKey,
       fee: Long,
-      chainId: Byte
+      networkId: NetworkId
   ): ExchangeTransaction =
     ExchangeTransaction
       .create(
@@ -309,7 +309,7 @@ object TxHelpers {
         order2.matcherFee.value,
         fee,
         timestamp,
-        chainId = chainId
+        networkId = networkId
       )
       .map(_.signWith(matcher))
       .explicitGet()
@@ -324,7 +324,7 @@ object TxHelpers {
       sellMatcherFee: Long = 1L,
       fee: Long = TestValues.fee,
       timestamp: Long = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): ExchangeTransaction =
     ExchangeTransaction
       .create(
@@ -336,7 +336,7 @@ object TxHelpers {
         sellMatcherFee = sellMatcherFee,
         fee = fee,
         timestamp = timestamp,
-        chainId = chainId
+        networkId = networkId
       )
       .map(_.signWith(matcher))
       .explicitGet()
@@ -347,10 +347,10 @@ object TxHelpers {
       amount: Long = 10.hearth,
       fee: Long = FeeConstants(TransactionType.Lease) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): LeaseTransaction = {
     LeaseTransaction
-      .create(chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
+      .create(networkId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
   }
@@ -360,10 +360,10 @@ object TxHelpers {
       sender: SigningKey = defaultSigner,
       fee: Long = FeeConstants(TransactionType.LeaseCancel) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): LeaseCancelTransaction = {
     LeaseCancelTransaction
-      .create(PublicKey(sender.publicKey), leaseId, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), leaseId, fee, timestamp, Proofs.empty, networkId)
       .map(_.signWith(sender))
       .explicitGet()
   }
@@ -374,11 +374,11 @@ object TxHelpers {
       sender: SigningKey = defaultSigner,
       timestamp: TxTimestamp = timestamp,
       fee: Long = TestValues.commitToGenerationFee,
-      chainId: Byte = AddressScheme.current.chainId,
+      networkId: NetworkId = NetworkId.current,
       // Defaults to the sender's own derived key, see vrfKeyOf
       vrfKey: Option[VrfKey] = None
   ): CommitToGenerationTransaction =
-    commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, chainId, vrfKey)
+    commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, networkId, vrfKey)
 
   /** A generator's BLS key, derived per sender for the same reason as its VRF key. */
   def blsSeedOf(sender: SigningKey): Array[Byte] = Crypto.defaultBackend().sha256(sender.publicKey())
@@ -405,7 +405,7 @@ object TxHelpers {
       sender: SigningKey = defaultSigner,
       timestamp: TxTimestamp = timestamp,
       fee: Long = TestValues.commitToGenerationFee,
-      chainId: Byte = AddressScheme.current.chainId,
+      networkId: NetworkId = NetworkId.current,
       // Defaults to the sender's own derived key, see vrfKeyOf
       vrfKeyOpt: Option[VrfKey] = None
   ): CommitToGenerationTransaction = {
@@ -421,7 +421,7 @@ object TxHelpers {
         CommitToGenerationTransaction.mkPopSignature(endorserKp, generationPeriodStart),
         CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, generationPeriodStart),
         Proofs.empty,
-        chainId
+        networkId
       )
       .map(_.signWith(sender))
       .explicitGet()
@@ -434,10 +434,10 @@ object TxHelpers {
       generationPeriodStart: Height = Height(1),
       fee: Long = FeeConstants(TransactionType.StartBoost) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): StartBoostTransaction =
     StartBoostTransaction
-      .create(PublicKey(sender.publicKey), validator, tdxQuote, generationPeriodStart, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), validator, tdxQuote, generationPeriodStart, fee, timestamp, Proofs.empty, networkId)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -451,10 +451,10 @@ object TxHelpers {
       encryptedApiKey: ByteStr = ByteStr.empty,
       fee: Long = FeeConstants(TransactionType.BindApiKey) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): BindApiKeyTransaction =
     BindApiKeyTransaction
-      .create(PublicKey(sender.publicKey), enclavePublicKey, encryptedApiKey, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), enclavePublicKey, encryptedApiKey, fee, timestamp, Proofs.empty, networkId)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -466,10 +466,10 @@ object TxHelpers {
       feeAsset: Asset = Hearth,
       fee: Long = FeeConstants(TransactionType.Reserve) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): ReserveTransaction =
     ReserveTransaction
-      .create(PublicKey(sender.publicKey), asset, amount, miner, feeAsset, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), asset, amount, miner, feeAsset, fee, timestamp, Proofs.empty, networkId)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -481,10 +481,10 @@ object TxHelpers {
       feeAsset: Asset = Hearth,
       fee: Long = FeeConstants(TransactionType.Withdraw) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): WithdrawTransaction =
     WithdrawTransaction
-      .create(PublicKey(sender.publicKey), fromMiner, asset, amount, feeAsset, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), fromMiner, asset, amount, feeAsset, fee, timestamp, Proofs.empty, networkId)
       .map(_.signWith(sender))
       .explicitGet()
 
@@ -498,16 +498,16 @@ object TxHelpers {
       settlements: Seq[SettleTransaction.Settlement],
       fee: Long = FeeConstants(TransactionType.Settle) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId,
+      networkId: NetworkId = NetworkId.current,
       // The diff rebuilds the signed message with currentGenerationPeriod.start, which is 1 for every low-height
       // test here (the genesis period).
       periodStart: Int = 1
   ): SettleTransaction = {
     val enclavePublicKey = ByteStr(enclaveKey.publicKey())
-    val message          = SettleTransaction.mkSettlementMessage(chainId, enclavePublicKey, sender.toAddress, periodStart, settlements)
+    val message          = SettleTransaction.mkSettlementMessage(networkId, enclavePublicKey, sender.toAddress, periodStart, settlements)
     val enclaveSignature = ByteStr(enclaveKey.sign(message))
     SettleTransaction
-      .create(PublicKey(sender.publicKey), enclavePublicKey, settlements, enclaveSignature, fee, timestamp, Proofs.empty, chainId)
+      .create(PublicKey(sender.publicKey), enclavePublicKey, settlements, enclaveSignature, fee, timestamp, Proofs.empty, networkId)
       .map(_.signWith(sender))
       .explicitGet()
   }
@@ -522,7 +522,7 @@ object TxHelpers {
       pckCaIssuerChain: Option[ByteStr] = None,
       fee: Long = FeeConstants(TransactionType.UpdateCollateral) * FeeUnit,
       timestamp: TxTimestamp = timestamp,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): UpdateCollateralTransaction =
     UpdateCollateralTransaction
       .create(
@@ -536,7 +536,7 @@ object TxHelpers {
         fee,
         timestamp,
         Proofs.empty,
-        chainId
+        networkId
       )
       .map(_.signWith(sender))
       .explicitGet()

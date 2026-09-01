@@ -241,7 +241,7 @@ object Exporter extends ScorexLogging {
 
     def exportBlock(stream: OutputStream, maybeBlock: Option[Block], legacy: Boolean): Int = maybeBlock
       .map { block =>
-        val bytes       = if (legacy) block.bytes() else PBBlocks.clearChainId(PBBlocks.protobuf(block)).toByteArray
+        val bytes       = if (legacy) block.bytes() else PBBlocks.clearNetworkId(PBBlocks.protobuf(block)).toByteArray
         val bytesLength = bytes.length
 
         stream.write(Ints.toByteArray(bytesLength))

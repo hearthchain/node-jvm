@@ -109,7 +109,7 @@ object AssetInfo {
 class Transaction(
     val _type: Int,
     val id: String,
-    val chainId: Option[Byte],
+    val networkId: Option[String],
     val fee: Long,
     val timestamp: Long,
     val sender: Option[String],
@@ -152,7 +152,7 @@ object Transaction {
   def apply(
       _type: Int,
       id: String,
-      chainId: Option[Byte],
+      networkId: Option[String],
       fee: Long,
       timestamp: Long,
       sender: Option[String],
@@ -183,7 +183,7 @@ object Transaction {
   ): Transaction = new Transaction(
     _type,
     id,
-    chainId,
+    networkId,
     fee,
     timestamp,
     sender,
@@ -218,7 +218,7 @@ object Transaction {
       for {
         _type       <- (jsv \ "type").validate[Int]
         id          <- (jsv \ "id").validate[String]
-        chainId     <- (jsv \ "chainId").validateOpt[Byte]
+        networkId   <- (jsv \ "networkId").validateOpt[String]
         fee         <- (jsv \ "fee").validate[Long]
         timestamp   <- (jsv \ "timestamp").validate[Long]
         sender      <- (jsv \ "sender").validateOpt[String]
@@ -252,7 +252,7 @@ object Transaction {
       } yield new Transaction(
         _type,
         id,
-        chainId,
+        networkId,
         fee,
         timestamp,
         sender,
@@ -286,7 +286,7 @@ object Transaction {
       Json.obj(
         "type"                   -> t._type,
         "id"                     -> t.id,
-        "chainId"                -> t.chainId,
+        "networkId"              -> t.networkId,
         "fee"                    -> t.fee,
         "timestamp"              -> t.timestamp,
         "sender"                 -> t.sender,
@@ -331,7 +331,7 @@ trait TxInfo {
 case class TransactionInfo(
     _type: Int,
     id: String,
-    chainId: Option[Byte],
+    networkId: Option[String],
     fee: Long,
     timestamp: Long,
     sender: Option[String],
@@ -371,7 +371,7 @@ object TransactionInfo {
         description          <- (jsv \ "description").validateOpt[String]
         recipient            <- (jsv \ "recipient").validateOpt[String]
         script               <- (jsv \ "script").validateOpt[String]
-        chainId              <- (jsv \ "chainId").validateOpt[Byte]
+        networkId            <- (jsv \ "networkId").validateOpt[String]
         price                <- (jsv \ "price").validateOpt[Long]
         sellMatcherFee       <- (jsv \ "sellMatcherFee").validateOpt[Long]
         buyMatcherFee        <- (jsv \ "buyMatcherFee").validateOpt[Long]
@@ -385,7 +385,7 @@ object TransactionInfo {
       } yield TransactionInfo(
         _type,
         id,
-        chainId,
+        networkId,
         fee,
         timestamp,
         sender,
@@ -533,7 +533,7 @@ object StateChanges {
 case class IssueTransactionInfo(
     `type`: Int,
     id: String,
-    chainId: Option[Byte],
+    networkId: Option[String],
     senderPublicKey: String,
     quantity: Long,
     fee: Long,
@@ -554,7 +554,7 @@ object IssueTransactionInfo {
 case class TransferTransactionInfo(
     _type: Int,
     id: String,
-    chainId: Option[Byte],
+    networkId: Option[String],
     fee: Long,
     timestamp: Long,
     sender: Option[String],
@@ -571,7 +571,7 @@ object TransferTransactionInfo {
       for {
         _type     <- (jsv \ "type").validate[Int]
         id        <- (jsv \ "id").validate[String]
-        _         <- (jsv \ "chainId").validateOpt[Byte]
+        _         <- (jsv \ "networkId").validateOpt[String]
         fee       <- (jsv \ "fee").validate[Long]
         timestamp <- (jsv \ "timestamp").validate[Long]
         sender    <- (jsv \ "sender").validateOpt[String]
@@ -579,7 +579,7 @@ object TransferTransactionInfo {
         amount    <- (jsv \ "amount").validateOpt[Long]
         recipient <- (jsv \ "recipient").validateOpt[String]
         version   <- (jsv \ "version").validateOpt[Byte]
-        chainId   <- (jsv \ "chainId").validateOpt[Byte]
+        networkId <- (jsv \ "networkId").validateOpt[String]
         attachment <- version match {
           case Some(_) if _type == 4 || _type == 11 => (jsv \ "attachment").validateOpt[String]
           case _                                    => JsSuccess(None)
@@ -588,7 +588,7 @@ object TransferTransactionInfo {
       } yield TransferTransactionInfo(
         _type,
         id,
-        chainId,
+        networkId,
         fee,
         timestamp,
         sender,
@@ -607,7 +607,7 @@ object TransferTransactionInfo {
 case class MassTransferTransactionInfo(
     _type: Int,
     id: String,
-    chainId: Option[Byte],
+    networkId: Option[String],
     fee: Long,
     timestamp: Long,
     sender: Option[String],
@@ -632,7 +632,7 @@ object MassTransferTransactionInfo {
         amount    <- (jsv \ "amount").validateOpt[Long]
         recipient <- (jsv \ "recipient").validateOpt[String]
         version   <- (jsv \ "version").validateOpt[Byte]
-        chainId   <- (jsv \ "chainId").validateOpt[Byte]
+        networkId <- (jsv \ "networkId").validateOpt[String]
         attachment <- version match {
           case Some(_) if _type == 4 || _type == 11 => (jsv \ "attachment").validateOpt[String]
           case _                                    => JsSuccess(None)
@@ -642,7 +642,7 @@ object MassTransferTransactionInfo {
       } yield MassTransferTransactionInfo(
         _type,
         id,
-        chainId,
+        networkId,
         fee,
         timestamp,
         sender,
@@ -662,7 +662,7 @@ object MassTransferTransactionInfo {
 case class BurnTransactionInfo(
     _type: Int,
     id: String,
-    chainId: Option[Byte],
+    networkId: Option[String],
     fee: Long,
     timestamp: Long,
     sender: String,
@@ -688,11 +688,11 @@ object BurnTransactionInfo {
         amount          <- (jsv \ "amount").validate[Long]
         assetId         <- (jsv \ "assetId").validate[String]
         feeAssetId      <- (jsv \ "feeAssetId").validateOpt[String]
-        chainId         <- (jsv \ "chainId").validateOpt[Byte]
+        networkId       <- (jsv \ "networkId").validateOpt[String]
       } yield BurnTransactionInfo(
         _type,
         id,
-        chainId,
+        networkId,
         fee,
         timestamp,
         sender,

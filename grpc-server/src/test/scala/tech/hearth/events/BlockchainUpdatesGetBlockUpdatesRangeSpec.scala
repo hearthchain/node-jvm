@@ -1,7 +1,7 @@
 package tech.hearth.events
 
 import tech.hearth.TestValues.fee
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.api.grpc.protobuf.GetBlockUpdatesRangeRequest
 import tech.hearth.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
@@ -37,7 +37,7 @@ class BlockchainUpdatesGetBlockUpdatesRangeSpec extends BlockchainUpdatesTestBas
         // V3 orders are always AssetDecimals-normalized: price / 10^(priceDecimals - amountDecimals), here
         // firstTokenAsset(2)/secondTokenAsset(6), a 10^4 factor - the tx's own price field must clear that
         val exchangeTx =
-          TxHelpers.exchangeFromOrders(order1, order2, order1.price.value * 10000, firstTxParticipant, fee, AddressScheme.current.chainId)
+          TxHelpers.exchangeFromOrders(order1, order2, order1.price.value * 10000, firstTxParticipant, fee, NetworkId.current)
         withAddedBlocksAndGetBlockUpdateRange(exchangeTx, GetBlockUpdatesRangeRequest.of(1, 2)) { getBlockUpdateRange =>
           val append = getBlockUpdateRange.apply(1).getAppend
           checkExchangeTx(append, exchangeTx, normalizedPrice, order1.amount.value)

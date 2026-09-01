@@ -138,7 +138,7 @@ class TransactionsRouteSpec
                   |  "timestamp" : ${leaseCancel.timestamp},
                   |  "proofs" : [ "${leaseCancel.signature}" ],
                   |  "leaseId" : "${lease.id()}",
-                  |  "chainId" : 84,
+                  |  "networkId" : "thrth",
                   |  "spentComplexity" : 0,
                   |  "lease" : {
                   |    "id" : "${lease.id()}",
@@ -281,7 +281,7 @@ class TransactionsRouteSpec
                                     |  "timestamp" : ${leaseCancel.timestamp},
                                     |  "proofs" : [ "${leaseCancel.signature}" ],
                                     |  "leaseId" : "${lease.id()}",
-                                    |  "chainId" : 84,
+                                    |  "networkId" : "thrth",
                                     |  "height" : $cancelHeight,
                                     |  "applicationStatus" : "succeeded",
                                     |  "spentComplexity": 0,

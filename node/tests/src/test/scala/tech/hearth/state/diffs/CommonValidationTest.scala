@@ -1,6 +1,6 @@
 package tech.hearth.state.diffs
 
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState
 import tech.hearth.db.WithState.AddrWithBalance
@@ -45,25 +45,25 @@ class CommonValidationTest extends PropSpec with WithState {
       val amount = 100.hearth
       val asset  = IssuedAsset(ByteStr.fill(32)(1))
 
-      val invChainId   = '#'.toByte
-      val invChainAddr = recipient.toAddress
+      val otherNetworkId = NetworkId.Mainnet
+      val invChainAddr   = recipient.toAddress
       Seq(
-        TxHelpers.transfer(master, invChainAddr, amount, chainId = invChainId),
-        TxHelpers.lease(master, invChainAddr, amount, chainId = invChainId),
+        TxHelpers.transfer(master, invChainAddr, amount, networkId = otherNetworkId),
+        TxHelpers.lease(master, invChainAddr, amount, networkId = otherNetworkId),
         TxHelpers.exchangeFromOrders(
           TxHelpers.order(OrderType.BUY, asset, Hearth, Hearth, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = master),
           TxHelpers.order(OrderType.SELL, asset, Hearth, Hearth, amount, 1_0000_0000L, fee = 1L, matcher = master, sender = recipient),
           master,
-          chainId = invChainId
+          networkId = otherNetworkId
         ),
-        TxHelpers.massTransfer(master, Seq(invChainAddr -> amount), chainId = invChainId),
-        TxHelpers.leaseCancel(asset.id, master, chainId = invChainId),
-        TxHelpers.commitToGeneration(Height(3000), chainId = invChainId)
+        TxHelpers.massTransfer(master, Seq(invChainAddr -> amount), networkId = otherNetworkId),
+        TxHelpers.leaseCancel(asset.id, master, networkId = otherNetworkId),
+        TxHelpers.commitToGeneration(Height(3000), networkId = otherNetworkId)
       )
     }
 
     preconditionsAndPayment.foreach { tx =>
-      tx.chainId should not be AddressScheme.current.chainId
+      tx.networkId should not be NetworkId.current
       assertDiffEi(Seq(TestBlock.create(Seq())), TestBlock.create(Seq(tx)), balances = masterBalance) { blockDiffEi =>
         blockDiffEi should produce("Transaction from another network")
       }

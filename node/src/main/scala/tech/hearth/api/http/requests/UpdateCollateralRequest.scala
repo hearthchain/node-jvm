@@ -24,7 +24,7 @@ case class UpdateCollateralRequest(
     pckCaIssuerChain: Option[ByteStr] = None,
     timestamp: Option[Long] = None,
     fee: Option[Long] = None,
-    chainId: Byte = AddressScheme.current.chainId,
+    networkId: NetworkId = NetworkId.current,
     proofs: Proofs = Proofs.empty
 ) extends TxBroadcastRequest[UpdateCollateralTransaction] {
   def toTx: Either[ValidationError, UpdateCollateralTransaction] =
@@ -41,7 +41,7 @@ case class UpdateCollateralRequest(
         fee.getOrElse(FeeConstants(TransactionType.UpdateCollateral) * FeeUnit),
         timestamp.getOrElse(defaultTimestamp),
         proofs,
-        chainId
+        networkId
       )
     } yield tx
 }

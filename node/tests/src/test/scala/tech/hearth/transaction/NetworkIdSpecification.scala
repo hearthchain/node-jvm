@@ -14,8 +14,9 @@ import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
 import org.scalacheck.Gen
 import tech.hearth.crypto.SigningKey
 
-class ChainIdSpecification extends PropSpec {
-  private val otherChainId = 'W'.toByte
+class NetworkIdSpecification extends PropSpec {
+  // Tests run on NetworkId.Testnet (BaseSuite.configureDefaultNetwork), so mainnet is somebody else's network.
+  private val otherNetworkId = NetworkId.Mainnet
 
   private def txParams: Gen[(SigningKey, TxPositiveAmount, TxPositiveAmount, TxTimestamp)] =
     for {
@@ -26,7 +27,7 @@ class ChainIdSpecification extends PropSpec {
     } yield (sender, TxPositiveAmount.unsafeFrom(amount), TxPositiveAmount.unsafeFrom(fee), ts)
 
   private def validateFromOtherNetwork(tx: Transaction): Unit = {
-    tx.chainId should not be AddressScheme.current.chainId
+    tx.networkId should not be NetworkId.current
 
     val protoTx       = PBTransactions.protobuf(tx)
     val recoveredTxEi = PBTransactions.vanilla(PBSignedTransaction.parseFrom(protoTx.toByteArray))
@@ -51,7 +52,7 @@ class ChainIdSpecification extends PropSpec {
           ts,
           ByteStr.empty,
           Proofs.empty,
-          otherChainId
+          otherNetworkId
         ).signWith(sender).validatedEither.explicitGet()
       )
     }
@@ -59,11 +60,11 @@ class ChainIdSpecification extends PropSpec {
 
   property("LeaseTransaction validation") {
     // An address does not carry the network it belongs to any more, so the sender's own address is its own address on
-    // every chain id - and leasing to it is a self-lease. Lease to somebody else instead.
+    // every network - and leasing to it is a self-lease. Lease to somebody else instead.
     forAll(txParams, accountGen) { case ((sender, amount, fee, ts), recipient) =>
       validateFromOtherNetwork(
         LeaseTransaction
-          .create(otherChainId, PublicKey(sender.publicKey), recipient.toAddress, amount.value, fee.value, ts, Proofs.empty)
+          .create(otherNetworkId, PublicKey(sender.publicKey), recipient.toAddress, amount.value, fee.value, ts, Proofs.empty)
           .explicitGet()
           .signWith(sender)
       )
@@ -84,7 +85,7 @@ class ChainIdSpecification extends PropSpec {
           fee,
           ts,
           Proofs.empty,
-          otherChainId
+          otherNetworkId
         ).signWith(sender).validatedEither.explicitGet()
       )
     }
@@ -99,7 +100,7 @@ class ChainIdSpecification extends PropSpec {
           fee,
           ts,
           Proofs.empty,
-          otherChainId
+          otherNetworkId
         ).signWith(sender).validatedEither.explicitGet()
       )
     }
@@ -113,7 +114,7 @@ class ChainIdSpecification extends PropSpec {
           sender = sender,
           timestamp = ts,
           fee = fee.value,
-          chainId = otherChainId
+          networkId = otherNetworkId
         )
       )
     }

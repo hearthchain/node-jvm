@@ -2,6 +2,7 @@ package tech.hearth.protobuf.transaction
 
 import cats.syntax.traverse.*
 import com.google.protobuf.ByteString
+import tech.hearth.account.NetworkId
 import tech.hearth.crypto.bls.{BlsPublicKey, BlsSignature}
 import tech.hearth.lang.ValidationError
 import tech.hearth.protobuf.*
@@ -29,14 +30,14 @@ object PBTransactions {
 
   def create(
       sender: tech.hearth.account.PublicKey,
-      chainId: Byte = 0,
+      networkId: NetworkId,
       fee: Long = 0L,
       timestamp: Long = 0L,
       proofsArray: Seq[tech.hearth.common.state.ByteStr] = Nil,
       data: tech.hearth.protobuf.transaction.Transaction.Data = tech.hearth.protobuf.transaction.Transaction.Data.Empty
   ): SignedTransaction =
     new SignedTransaction(
-      Some(Transaction(chainId, sender.toByteString, fee, timestamp, data)),
+      Some(Transaction(networkId.value, sender.toByteString, fee, timestamp, data)),
       proofsArray.map(bs => ByteString.copyFrom(bs.arr))
     )
 
@@ -44,9 +45,10 @@ object PBTransactions {
     signedTx.transaction match {
       case Some(parsedTx) =>
         for {
-          proofs <- Proofs.create(signedTx.proofs.map(_.toByteStr))
+          proofs    <- Proofs.create(signedTx.proofs.map(_.toByteStr))
+          networkId <- NetworkId.fromString(parsedTx.networkId).left.map(GenericError(_))
           tx <- createVanilla(
-            parsedTx.chainId.toByte,
+            networkId,
             parsedTx.senderPublicKey,
             parsedTx.fee,
             parsedTx.timestamp,
@@ -58,7 +60,7 @@ object PBTransactions {
     }
 
   private def createVanilla(
-      chainId: Byte,
+      networkId: NetworkId,
       sender: ByteString,
       feeAmount: Long,
       timestamp: Long,
@@ -83,7 +85,7 @@ object PBTransactions {
             timestamp,
             attachment.toByteStr,
             proofs,
-            chainId,
+            networkId,
             PBAmounts.toVanillaAssetId(feeAssetId)
           )
         } yield tx
@@ -91,11 +93,11 @@ object PBTransactions {
       case Data.Lease(LeaseTransactionData(Some(recipient), amount, `empty`)) =>
         for {
           address <- recipient.toAddress
-          tx      <- vt.lease.LeaseTransaction.create(chainId, sender.toPublicKey, address, amount, feeAmount, timestamp, proofs)
+          tx      <- vt.lease.LeaseTransaction.create(networkId, sender.toPublicKey, address, amount, feeAmount, timestamp, proofs)
         } yield tx
 
       case Data.LeaseCancel(LeaseCancelTransactionData(leaseId, `empty`)) =>
-        vt.lease.LeaseCancelTransaction.create(sender.toPublicKey, leaseId.toByteStr, feeAmount, timestamp, proofs, chainId)
+        vt.lease.LeaseCancelTransaction.create(sender.toPublicKey, leaseId.toByteStr, feeAmount, timestamp, proofs, networkId)
 
       case Data.Exchange(ExchangeTransactionData(amount, price, buyMatcherFee, sellMatcherFee, Seq(order1, order2), `empty`)) =>
         for {
@@ -111,7 +113,7 @@ object PBTransactions {
             feeAmount,
             timestamp,
             proofs,
-            chainId
+            networkId
           )
         } yield tx
 
@@ -138,7 +140,7 @@ object PBTransactions {
             sig,
             vrfCommitmentSignature.toByteStr,
             proofs,
-            chainId
+            networkId
           )
         } yield tx
 
@@ -153,7 +155,7 @@ object PBTransactions {
             feeAmount,
             timestamp,
             proofs,
-            chainId
+            networkId
           )
         } yield tx
 
@@ -165,7 +167,7 @@ object PBTransactions {
           feeAmount,
           timestamp,
           proofs,
-          chainId
+          networkId
         )
 
       case Data.Reserve(ReserveTransactionData(Some(amount), Some(miner), feeAssetId, `empty`)) =>
@@ -181,7 +183,7 @@ object PBTransactions {
             feeAmount,
             timestamp,
             proofs,
-            chainId
+            networkId
           )
         } yield tx
 
@@ -202,7 +204,7 @@ object PBTransactions {
             feeAmount,
             timestamp,
             proofs,
-            chainId
+            networkId
           )
         } yield tx
 
@@ -218,7 +220,7 @@ object PBTransactions {
             feeAmount,
             timestamp,
             proofs,
-            chainId
+            networkId
           )
         } yield tx
 
@@ -244,7 +246,7 @@ object PBTransactions {
           feeAmount,
           timestamp,
           proofs,
-          chainId
+          networkId
         )
 
       case _ =>
@@ -264,7 +266,7 @@ object PBTransactions {
           attachment.toByteString,
           PBAmounts.toPBAssetId(feeAssetId)
         )
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, Data.Transfer(data))
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, Data.Transfer(data))
 
       case tx: vt.assets.exchange.ExchangeTransaction =>
         import tx.*
@@ -275,17 +277,17 @@ object PBTransactions {
           sellMatcherFee.value,
           Seq(PBOrders.protobuf(order1), PBOrders.protobuf(order2))
         )
-        PBTransactions.create(tx.sender, chainId, fee.value, timestamp, proofs, Data.Exchange(data))
+        PBTransactions.create(tx.sender, networkId, fee.value, timestamp, proofs, Data.Exchange(data))
 
       case tx: vt.lease.LeaseTransaction =>
         import tx.*
         val data = LeaseTransactionData(Some(recipient.toPB), amount.value)
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, Data.Lease(data))
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, Data.Lease(data))
 
       case tx: vt.lease.LeaseCancelTransaction =>
         import tx.*
         val data = LeaseCancelTransactionData(leaseId.toByteString)
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, Data.LeaseCancel(data))
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, Data.LeaseCancel(data))
 
       case tx: CommitToGenerationTransaction =>
         import tx.*
@@ -298,23 +300,23 @@ object PBTransactions {
             vrfCommitmentSignature = vrfCommitmentSignature.toByteString
           )
         )
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs.proofs, data)
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs.proofs, data)
 
       case tx: vt.StartBoostTransaction =>
         import tx.*
         val data =
           Data.StartBoost(StartBoostTransactionData(Some(validator.toPB), tdxQuote.toByteString, generationPeriodStart.toInt))
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
 
       case tx: vt.BindApiKeyTransaction =>
         import tx.*
         val data = Data.BindApiKey(BindApiKeyTransactionData(enclavePublicKey.toByteString, encryptedApiKey.toByteString))
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
 
       case tx: vt.ReserveTransaction =>
         import tx.*
         val data = Data.Reserve(ReserveTransactionData(Some((assetId, amount.value)), Some(miner.toPB), PBAmounts.toPBAssetId(feeAssetId)))
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
 
       case tx: vt.SettleTransaction =>
         import tx.*
@@ -325,14 +327,14 @@ object PBTransactions {
             enclaveSignature.toByteString
           )
         )
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
 
       case tx: vt.WithdrawTransaction =>
         import tx.*
         val data = Data.Withdraw(
           WithdrawTransactionData(Some(fromMiner.toPB), Some((assetId, amount.value)), PBAmounts.toPBAssetId(feeAssetId))
         )
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
 
       case tx: vt.UpdateCollateralTransaction =>
         import tx.*
@@ -346,7 +348,7 @@ object PBTransactions {
             pckCaIssuerChain.map(_.toByteString)
           )
         )
-        PBTransactions.create(sender, chainId, fee.value, timestamp, proofs, data)
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
 
       case _ =>
         throw new IllegalArgumentException(s"Unsupported transaction: ${tx.tpe}")

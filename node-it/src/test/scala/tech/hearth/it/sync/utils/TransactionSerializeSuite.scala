@@ -1,6 +1,6 @@
 package tech.hearth.it.sync.utils
 
-import tech.hearth.account.{Address, AddressScheme, PublicKey}
+import tech.hearth.account.{Address, NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.api.SyncHttpApi.*
@@ -90,7 +90,7 @@ class TransactionSerializeSuite extends BaseTransactionSuite with TableDrivenPro
 
   private lazy val lease = LeaseTransaction
     .create(
-      AddressScheme.current.chainId,
+      NetworkId.current,
       publicKey,
       Address.fromString(sender.address).explicitGet(),
       10000000,

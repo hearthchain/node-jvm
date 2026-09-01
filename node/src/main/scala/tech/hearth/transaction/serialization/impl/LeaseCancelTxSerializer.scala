@@ -6,8 +6,7 @@ import play.api.libs.json.{JsObject, Json}
 object LeaseCancelTxSerializer {
   def toJson(tx: LeaseCancelTransaction): JsObject =
     BaseTxJson.toJson(tx) ++ Json.obj(
-      "leaseId" -> tx.leaseId.toString,
-      "chainId" -> tx.chainId
+      "leaseId" -> tx.leaseId.toString
     )
 
   def bodyBytes(tx: LeaseCancelTransaction): Array[Byte] =

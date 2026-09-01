@@ -2,7 +2,7 @@ package tech.hearth.generator
 
 import cats.Show
 import com.typesafe.scalalogging.Logger
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.generator.config.ConfigReaders
 import tech.hearth.generator.utils.Universe
@@ -122,7 +122,7 @@ class NarrowTransactionGenerator(
               tx <- logOption(
                 LeaseTransaction
                   .create(
-                    AddressScheme.current.chainId,
+                    NetworkId.current,
                     PublicKey(sender.publicKey()),
                     recipient,
                     random.nextLong(1, 100),
@@ -142,7 +142,7 @@ class NarrowTransactionGenerator(
               sender <- accountByAddress(lease.sender.toAddress.toString)
               tx <- logOption(
                 LeaseCancelTransaction
-                  .create(PublicKey(sender.publicKey()), lease.id(), 500000L, timestamp, Proofs.empty, AddressScheme.current.chainId)
+                  .create(PublicKey(sender.publicKey()), lease.id(), 500000L, timestamp, Proofs.empty, NetworkId.current)
                   .map(_.signWith(sender))
               )
             } yield tx

@@ -8,7 +8,6 @@ import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.ConfigFactory.*
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
-import tech.hearth.account.AddressScheme
 import tech.hearth.block.Block
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.api.AsyncHttpApi.*
@@ -234,7 +233,7 @@ class Docker(
         val maxCacheSize = Option(System.getenv("MAX_CACHE_SIZE")).fold("")(x => s"-Dhearth.max-cache-size=$x ")
 
         var config = s"$javaOptions ${renderProperties(asProperties(overrides))} " +
-          s"-Dlogback.stdout.level=TRACE -Dlogback.file.level=OFF -Dhearth.network.declared-address=$ip:$networkPort -Dhearth.hrp=thrth $ntpServer $maxCacheSize"
+          s"-Dlogback.stdout.level=TRACE -Dlogback.file.level=OFF -Dhearth.network.declared-address=$ip:$networkPort $ntpServer $maxCacheSize"
 
         // Debugger
         if (enableDebugger) config += s"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$internalDebuggerPort "
@@ -628,15 +627,11 @@ object Docker {
                    |}""".stripMargin).withFallback(timestampOverrides)
   }
 
-  AddressScheme.current = new AddressScheme {
-    override val chainId: Byte =
-      ConfigSource.fromConfig(configTemplate).at("hearth.blockchain.custom.address-scheme-character").loadOrThrow[String].charAt(0).toByte
-  }
-
-  // Addresses are bech32m, keyed by a process-wide default HRP rather than the chain id above (see
-  // tech.hearth.crypto.Address); this JVM (running the test/genesis-computation code) needs it set the same way
-  // the containerized node does, via the -Dhearth.hrp JAVA_OPTS added in startNodeInternal.
-  tech.hearth.crypto.Address.setDefaultHrp("thrth")
+  // A container's node pins this itself from its own config (Application.startNode); this JVM runs the
+  // test/genesis-computation code outside any container, so it has to pin the same network by hand.
+  tech.hearth.crypto.Address.setDefaultHrp(
+    ConfigSource.fromConfig(configTemplate).at("hearth.blockchain.custom.network-id").loadOrThrow[String]
+  )
 
   def apply(owner: Class[?]): Docker = new Docker(tag = owner.getSimpleName)
 

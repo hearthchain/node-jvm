@@ -46,12 +46,13 @@ which has no way to express an absent value: a `null` HOCON key becomes an empty
 `GenesisSettings`'s `Option[ByteStr]` fields decode that as `Some(ByteStr.empty)`, not `None`. Left unpinned,
 `custom-defaults.conf`'s placeholders (e.g. `state-hash = "BASE58STATEHASH"`) leak through as a real, failing mismatch.
 
-Addresses are bech32m keyed by a process-wide default HRP (`tech.hearth.crypto.Address.setDefaultHrp`/`-Dhearth.hrp`),
-a *different* setting from `AddressScheme.current.chainId` (which only affects a transaction's `chain_id` byte).
-Nothing in `Application.scala` calls `setDefaultHrp` — a real node crashes the first time it renders or parses any
-address (`IllegalStateException: default HRP not configured`) unless `-Dhearth.hrp` is set some other way. node-it
-works around this for itself (`Docker.scala` calls `setDefaultHrp("thrth")` for its own JVM and passes
-`-Dhearth.hrp=thrth` to every container's `JAVA_OPTS`), but this is a genuine unfixed gap for real deployments.
+Addresses are bech32m keyed by a process-wide default HRP, and that HRP *is* the network id (see "Network id" in `docs/notes/keys-and-signatures.md`):
+`Application.startNode` calls `Address.setDefaultHrp(settings.blockchainSettings.networkId.value)` before anything
+renders an address, and `NetworkId.current` reads it back. A node therefore needs no `-Dhearth.hrp` any more — its
+config already says which network it is on. Code that runs *outside* a node still has to pin it by hand and does:
+node-it's `Docker.scala` reads `hearth.blockchain.custom.network-id` out of its own config template, testkit's
+`BaseSuite.configureDefaultNetwork` pins `thrth`, and `GenesisBlockGenerator` pins its config's `network-id`.
+Without one, the first address rendered throws `IllegalStateException: default HRP not configured`.
 
 `entrypoint.sh` runs `exec java $JAVA_OPTS ...` with `$JAVA_OPTS` unquoted, so any config value containing a space
 (e.g. a genesis asset `description`) is split into separate argv words by the shell; the first bareword-looking piece

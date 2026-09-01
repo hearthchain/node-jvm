@@ -2,7 +2,7 @@ package tech.hearth.it.api
 
 import com.google.protobuf.ByteString
 import com.google.protobuf.empty.Empty
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.api.grpc.{TransactionStatus as PBTransactionStatus, *}
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
@@ -34,7 +34,8 @@ object AsyncGrpcApi {
     private lazy val blocks       = BlocksApiGrpc.stub(n.grpcChannel)
     private lazy val transactions = TransactionsApiGrpc.stub(n.grpcChannel)
 
-    val chainId: Byte = AddressScheme.current.chainId
+    // Straight into protobuf messages, which carry the network id as a plain string.
+    val networkId: String = NetworkId.current.value
 
     def blockAt(height: Int): Future[Block] = {
       blocks
@@ -53,7 +54,7 @@ object AsyncGrpcApi {
         timestamp: Long = System.currentTimeMillis
     ): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
-        chainId,
+        networkId,
         ByteString.copyFrom(source.publicKey()),
         fee,
         timestamp,
@@ -87,7 +88,7 @@ object AsyncGrpcApi {
     ): Future[PBSignedTransaction] = {
 
       val unsigned = PBTransaction(
-        chainId,
+        networkId,
         ByteString.copyFrom(matcher.publicKey()),
         fee,
         timestamp,
@@ -168,7 +169,7 @@ object AsyncGrpcApi {
         fee: Long
     ): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
-        chainId,
+        networkId,
         ByteString.copyFrom(sender.publicKey()),
         fee,
         System.currentTimeMillis(),
@@ -187,7 +188,7 @@ object AsyncGrpcApi {
 
     def broadcastLease(source: SigningKey, recipient: Recipient, amount: Long, fee: Long): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
-        chainId,
+        networkId,
         ByteString.copyFrom(source.publicKey()),
         fee,
         System.currentTimeMillis,
@@ -199,7 +200,7 @@ object AsyncGrpcApi {
 
     def broadcastLeaseCancel(source: SigningKey, leaseId: String, fee: Long): Future[PBSignedTransaction] = {
       val unsigned = PBTransaction(
-        chainId,
+        networkId,
         ByteString.copyFrom(source.publicKey()),
         fee,
         System.currentTimeMillis,

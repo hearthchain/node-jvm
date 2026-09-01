@@ -27,6 +27,40 @@ sign a hit source with an arbitrary key any more.
 `Address` is `tech.hearth.crypto.Address` — bech32, `thrth1…` on testnet — so base58 address literals from before the
 migration no longer parse (`InvalidAddress`).
 
+## Network id
+
+There is one chain identifier, not two: `tech.hearth.account.NetworkId`, an `opaque type NetworkId = String` holding
+the bech32m HRP (`hrth` mainnet, `thrth` testnet, `shrth` stagenet). It replaced both the legacy Waves
+`AddressScheme.current.chainId` byte (deleted) and `BlockchainSettings.addressSchemeCharacter` (now
+`BlockchainSettings.networkId`, config key `network-id` rather than `address-scheme-character`). `NetworkId.current`
+reads `Address.defaultHrp()`, so there is no second global that can disagree with the one addresses are rendered
+with - a node pins it once in `Application.startNode` from its own config.
+
+`NetworkId.fromString` enforces `Address`'s own HRP rule (1 to `NetworkId.MaxLength` = 83 lowercase ASCII letters)
+but, unlike `Address.setDefaultHrp`, does *not* trim or lowercase: a value decoded off the wire is accepted only in
+the exact form it was signed in, so `HRTH` is not silently the same network as `hrth`. Two gotchas when adding
+instances inside the companion object: the opaque type is transparent there, so `ConfigReader[String]` and
+`Reads[String]` resolve to the `NetworkId` instances being defined and recurse until the stack overflows (the
+symptom is a `StackOverflowError` in every JSON-parsing test at once) - name `ConfigReader.fromString` /
+`Reads.StringReads` explicitly instead.
+
+On the wire the field is `string network_id = 1` in `transaction.proto`, `block.proto` (`Block.Header`) and
+`order.proto` - it was `int32 chain_id` in all three. `PBTransactions.vanilla` validates it through
+`NetworkId.fromString`, so a malformed one is rejected at parse rather than reaching the diff layer. In REST JSON a
+transaction carries `"networkId": "thrth"`, not `"chainId": 84`. This changes every transaction's body bytes, hence
+its id and signature: any pinned id/signature/JSON fixture had to be rebaselined, including
+`SettleTransaction.mkSettlementMessage`'s cross-language vector (`domain(16) ++ networkId ++ enclaveKey(32) ++ …`,
+where the chain id byte used to sit). The miner repo's `internal/settle` holds the other copy of that vector.
+
+The network id is the only variable-width field in that preimage and deliberately carries *no* length prefix. Nothing
+parses the preimage, but it still has to be injective - verification is a byte equality check, so two field tuples
+encoding alike would let one enclave signature authorise both, which is exactly why the fixed-32-byte `assetId` check
+in `SettleTxValidator` is load-bearing. Injectivity holds here without a prefix by counting: the total is
+`74 + k + 60n` for a k-character network id and n settlements, so equal encodings force `k1 - k2 = 60(n2 - n1)`, and
+with `k <= NetworkId.MaxLength` the only non-trivial solution needs the longer network id to end in a `periodStart`
+whose big-endian bytes are all lowercase ASCII - impossible below height `0x61616161`. Relaxing `NetworkId`'s charset
+to the full bech32 HRP range would weaken that argument, so revisit it if that ever changes.
+
 `tech.hearth.crypto` (the external key/address library) and `tech.hearth.account` (this repo's own package, whose
 `Recipient.scala` defines `Address`/`PublicKey`-friendly companions) both now have a member named `Address`, which
 matters for import shadowing: a wildcard `import tech.hearth.crypto.*` inside code that lives in
@@ -105,7 +139,7 @@ on locally, this order stops mattering and can be reverted.
 
 **Transfer + MassTransfer merged.** There is only one `TransferTransaction` now, and it is inherently multi-
 recipient (`sender, assetId, transfers: Seq[ParsedTransfer], fee, feeAssetId, timestamp, attachment, proofs,
-chainId`, `TransactionType.Transfer`) — the shape the old `MassTransferTransaction` already had. The old single-
+networkId`, `TransactionType.Transfer`) — the shape the old `MassTransferTransaction` already had. The old single-
 recipient `TransferTransaction` (with its own `recipient`/`amount` fields) is gone; `tx.recipient`/`tx.amount` don't
 exist any more, only `tx.transfers` (a `Seq[ParsedTransfer]`, `ParsedTransfer(address, amount)`). A single-recipient
 transfer is just `Seq(ParsedTransfer(recipient, amount))`. `TxHelpers.transfer(...)` keeps its old single-recipient

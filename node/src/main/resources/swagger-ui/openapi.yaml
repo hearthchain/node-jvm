@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   version: '{{version}}'
-  title: Waves Full Node ({{chainId}})
+  title: Waves Full Node ({{networkId}})
   description: >-
     The Waves node REST API is the main interface for interacting with the
     blockchain. See
@@ -6147,7 +6147,7 @@ components:
         feeAssetId: null
         timestamp: 1666095438770
         version: 3
-        chainId: 87
+        networkId: hrth
         sender: 3PEjHv3JGjcWNpYEEkif2w8NXV4kbhnoGgu
         senderPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
         proofs:
@@ -6206,7 +6206,7 @@ components:
           feeAssetId: null
           timestamp: 1666095438770
           version: 3
-          chainId: 87
+          networkId: hrth
           sender: 3PEjHv3JGjcWNpYEEkif2w8NXV4kbhnoGgu
           senderPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
           proofs:
@@ -6265,7 +6265,7 @@ components:
             feeAssetId: null
             timestamp: 1666095438770
             version: 3
-            chainId: 87
+            networkId: hrth
             sender: 3PEjHv3JGjcWNpYEEkif2w8NXV4kbhnoGgu
             senderPublicKey: 800ab6ba0cde0c5eac906d533bd5e3f4dce2242ffbe9ce03b6ba439cbfd57b6e
             proofs:

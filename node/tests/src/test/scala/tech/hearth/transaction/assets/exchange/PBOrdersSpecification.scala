@@ -2,7 +2,7 @@ package tech.hearth.transaction.assets.exchange
 
 import com.google.protobuf.ByteString
 import tech.hearth.TestValues
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.protobuf.order.AssetPair as PBAssetPair
@@ -13,7 +13,7 @@ import tech.hearth.transaction.Asset.Hearth
 class PBOrdersSpecification extends FlatSpec {
   // Order.sender is a plain field now, rather than a oneof of a public key and an ethereum signature
   private val protoOrder = PBOrder(
-    chainId = AddressScheme.current.chainId.toInt,
+    networkId = NetworkId.current.value,
     senderPublicKey = ByteString.copyFrom(TestValues.keyPair.publicKey),
     matcherPublicKey = ByteString.copyFrom(TestValues.keyPair.publicKey),
     assetPair = Some(PBAssetPair(PBAmounts.toPBAssetId(TestValues.asset), PBAmounts.toPBAssetId(Hearth))),
@@ -76,7 +76,7 @@ class PBOrdersSpecification extends FlatSpec {
           proofs = Seq(
             ByteString.copyFrom(
               Base16.decode(
-                "a2a49109c977ba45f29a40d32259c3944f33c348ef6b27e68054d5c8348dfe63e11e1a2dadc057d5aca0612ad132ee01a899e3bd32d240d059bf691fc10c6006"
+                "2b7c933627252ea5e8cd1ad840f32b8e33da0565690c2465d63edea13ecebb90f907c0f0658346f40fbf39dfe0ee084208a81a8d8970d5c66dba0c848f853a05"
               )
             )
           )
@@ -92,7 +92,7 @@ class PBOrdersSpecification extends FlatSpec {
           proofs = Seq(
             ByteString.copyFrom(
               Base16.decode(
-                "2f630dd7728251552b23f5b56e4d6472377cf9368da151539b12b24fffb3abe367dbcad68c144c52c2183c2f619e425da1ee754ebb28be1d661ca3328968c400"
+                "d00c480210fccb2dfc03ac9661fc2d4253738c0b2830044d2b1696c63271a8402b05bc41cae6fc5e149db94dd9e390ca3abe6f20294de432a75d65d391661e07"
               )
             )
           )

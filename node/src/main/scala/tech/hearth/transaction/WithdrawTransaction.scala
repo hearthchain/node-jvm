@@ -21,7 +21,7 @@ final case class WithdrawTransaction(
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.Withdraw),
       ProvenTransaction,
       TxWithFee.InCustomAsset,
@@ -45,11 +45,11 @@ object WithdrawTransaction {
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, WithdrawTransaction] =
     for {
       amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, assetId.maybeBase16Repr.getOrElse("hearth")))
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx     <- WithdrawTransaction(sender, fromMiner, assetId, amount, feeAssetId, fee, timestamp, proofs, chainId).validatedEither
+      tx     <- WithdrawTransaction(sender, fromMiner, assetId, amount, feeAssetId, fee, timestamp, proofs, networkId).validatedEither
     } yield tx
 }

@@ -1,7 +1,7 @@
 package tech.hearth.state.diffs
 
 import tech.hearth.history.withFlatReward
-import tech.hearth.account.{Address, AddressScheme, PublicKey}
+import tech.hearth.account.{Address, NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
@@ -928,7 +928,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
         price = txPrice,
         matcher = matcher,
         fee = TestValues.fee,
-        chainId = AddressScheme.current.chainId
+        networkId = NetworkId.current
       )
 
       withDomain(domainSettingsWithFS(fsWithRideV6), genesis, assets = assetSettings) { d =>

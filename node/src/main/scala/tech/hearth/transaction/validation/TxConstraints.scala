@@ -3,6 +3,7 @@ package tech.hearth.transaction.validation
 import cats.data.Validated
 import cats.data.Validated.{Invalid, Valid}
 import cats.syntax.validated.*
+import tech.hearth.account.NetworkId
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.TxValidationError.GenericError
@@ -61,10 +62,10 @@ object TxConstraints {
       )
   }
 
-  def chainIds(chainId: Byte, ids: Byte*): ValidatedV[Byte] = {
-    val chainIds = ids.distinct
-    if (chainIds.length <= 1 && chainIds.headOption.forall(_ == chainId)) Valid(chainId)
-    else GenericError(s"One of chain ids not match: $ids").invalidNel
+  def networkIds(networkId: NetworkId, ids: NetworkId*): ValidatedV[NetworkId] = {
+    val networkIds = ids.distinct
+    if (networkIds.length <= 1 && networkIds.headOption.forall(_ == networkId)) Valid(networkId)
+    else GenericError(s"One of network ids not match: $ids").invalidNel
   }
 
   // Transaction specific

@@ -1,5 +1,5 @@
 ---
-purpose: Build, run and exercise the docker/private Hearth node (private chain id R, genesis and DCAP notes, live StartBoost check)
+purpose: Build, run and exercise the docker/private Hearth node (private network id phrth, genesis and DCAP notes, live StartBoost check)
 ---
 
 # Hearth private node
@@ -30,15 +30,15 @@ The node is configured with:
 
 - faster block generation (**10 sec** interval)
 - feature 1 (`SmallerMinimalGeneratingBalance`) pre-activated - the only transaction/consensus feature this fork currently implements gating for; nothing else is
-- custom chain id - **R**, bech32 address prefix `phrth`
+- custom network id - **phrth**, which is also the bech32 address prefix
 - api_key `hearth-private-node`
 - a single pre-funded, pre-committed generator account (`phrth1gxv7se8ueq623ukgwxmesapatdmhay84f0sfk0`, nonce 0 of `wallet.seed`) - the node mines with it immediately and controls it from its own wallet: it generates the wallet's first account itself, so `GET /addresses` already lists it and `POST /addresses` yields nonce 1 onwards, never this one
 
 Full node configuration: [`hearth.custom.conf`](./hearth.custom.conf).
 
-### Why the node needs `-Dhearth.hrp`
+### Where the bech32 prefix comes from
 
-Nothing in the node picks a default bech32 address prefix (HRP) - it crashes the first time it renders or parses any address unless one is set. [`Dockerfile`](./Dockerfile) sets `-Dhearth.hrp=phrth` via `JAVA_OPTS`; a config-only setup needs the same system property however it launches the node.
+The node's bech32 address prefix (HRP) is its network id: it reads `hearth.blockchain.custom.network-id` at startup and pins it with `Address.setDefaultHrp`. Nothing extra to set - but the genesis balances a config credits have to be written in that same prefix, or they will not parse.
 
 ### The BlockchainUpdates extension and its own state
 

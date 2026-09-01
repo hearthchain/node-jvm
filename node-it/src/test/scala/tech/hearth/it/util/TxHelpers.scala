@@ -1,7 +1,7 @@
 package tech.hearth.it.util
 
 import com.google.protobuf.ByteString
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.*
 import tech.hearth.protobuf.transaction.{TransferTransactionData, PBTransaction}
@@ -18,7 +18,7 @@ object TxHelpers {
       timestamp: Long
   ): ByteStr = {
     val unsigned = PBTransaction(
-      AddressScheme.current.chainId,
+      NetworkId.current.value,
       ByteString.copyFrom(sender.publicKey()),
       fee,
       timestamp,

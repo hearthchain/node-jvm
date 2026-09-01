@@ -1,6 +1,6 @@
 package tech.hearth.transaction.lease
 
-import tech.hearth.account.{Address, PublicKey}
+import tech.hearth.account.{Address, NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.*
@@ -17,7 +17,7 @@ final case class LeaseTransaction(
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.Lease),
       ProvenTransaction,
       TxWithFee.InHearth,
@@ -33,7 +33,7 @@ object LeaseTransaction {
   implicit val validator: TxValidator[LeaseTransaction] = LeaseTxValidator
 
   def create(
-      chainId: Byte,
+      networkId: NetworkId,
       sender: PublicKey,
       recipient: Address,
       amount: Long,
@@ -44,7 +44,7 @@ object LeaseTransaction {
     for {
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
       amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, "hearth"))
-      tx     <- LeaseTransaction(sender, recipient, amount, fee, timestamp, proofs, chainId).validatedEither
+      tx     <- LeaseTransaction(sender, recipient, amount, fee, timestamp, proofs, networkId).validatedEither
     } yield tx
 
   }

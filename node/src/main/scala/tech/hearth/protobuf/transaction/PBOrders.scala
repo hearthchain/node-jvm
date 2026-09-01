@@ -1,6 +1,6 @@
 package tech.hearth.protobuf.transaction
 
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.protobuf.*
@@ -49,7 +49,7 @@ object PBOrders {
 
   def protobuf(order: VanillaOrder): PBOrder = {
     PBOrder(
-      chainId = AddressScheme.current.chainId,
+      networkId = NetworkId.current.value,
       senderPublicKey = order.orderAuthentication match {
         case OrderAuthentication.OrderProofs(key, _) => key.toByteString
       },

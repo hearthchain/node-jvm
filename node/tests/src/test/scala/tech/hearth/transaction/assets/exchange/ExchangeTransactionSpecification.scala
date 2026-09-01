@@ -302,7 +302,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
-         "chainId":${tx.chainId},
+         "networkId":"${tx.networkId.value}",
          "proofs":["db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"],
          "order1":{
             "version": 1,
@@ -423,7 +423,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
-         "chainId":${tx.chainId},
+         "networkId":"${tx.networkId.value}",
          "proofs":["db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"],
          "order1":{
             "version": 2,
@@ -545,7 +545,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
          "fee":1,
          "feeAssetId": null,
          "timestamp":1526992336241,
-         "chainId":${tx.chainId},
+         "networkId":"${tx.networkId.value}",
          "proofs":["db003c16b5ca17661e989e4c61013a4c20e82d277407acdab261799a54f6e6f3f36ce1cfbe6364ebb0c7076b16a0845644bd352a339334fed738aac0491cf58d"],
          "order1":{
             "version": 3,

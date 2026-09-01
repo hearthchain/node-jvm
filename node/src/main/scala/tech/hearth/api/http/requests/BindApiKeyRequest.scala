@@ -21,7 +21,7 @@ case class BindApiKeyRequest(
     encryptedApiKey: ByteStr,
     timestamp: Option[Long] = None,
     fee: Option[Long] = None,
-    chainId: Byte = AddressScheme.current.chainId,
+    networkId: NetworkId = NetworkId.current,
     proofs: Proofs = Proofs.empty
 ) extends TxBroadcastRequest[BindApiKeyTransaction] {
   def toTx: Either[ValidationError, BindApiKeyTransaction] =
@@ -34,7 +34,7 @@ case class BindApiKeyRequest(
         fee.getOrElse(FeeConstants(TransactionType.BindApiKey) * FeeUnit),
         timestamp.getOrElse(defaultTimestamp),
         proofs,
-        chainId
+        networkId
       )
     } yield tx
 }

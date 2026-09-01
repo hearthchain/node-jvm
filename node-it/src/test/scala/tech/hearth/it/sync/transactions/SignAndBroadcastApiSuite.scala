@@ -127,7 +127,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     assertBroadcastBadJson(json - "type", WrongJson.WrongJsonDataMessage)
     assertBroadcastBadJson(json - "type" + ("type" -> Json.toJson(88)), "Bad transaction type")
     assertBroadcastBadJson(json - "recipient", WrongJson.WrongJsonDataMessage)
-    // A chainId mismatch case used to be tested here, but TransferRequest has no chainId field of its own - the reader
+    // A network mismatch case used to be tested here, but TransferRequest has no networkId field of its own - the reader
     // ignores whatever the request JSON carries and always builds the transaction against the server's own network -
     // so a Transfer broadcast can never actually reach CommonValidation.disallowFromAnotherNetwork this way.
   }

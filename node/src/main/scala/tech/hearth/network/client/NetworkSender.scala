@@ -1,5 +1,6 @@
 package tech.hearth.network.client
 
+import tech.hearth.account.NetworkId
 import tech.hearth.network.TrafficLogger
 import tech.hearth.utils.ScorexLogging
 import io.netty.channel.group.DefaultChannelGroup
@@ -11,12 +12,12 @@ import java.net.InetSocketAddress
 import java.nio.channels.ClosedChannelException
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-class NetworkSender(trafficLoggerSettings: TrafficLogger.Settings, chainId: Char, name: String, nonce: Long)(implicit ec: ExecutionContext)
+class NetworkSender(trafficLoggerSettings: TrafficLogger.Settings, networkId: NetworkId, name: String, nonce: Long)(implicit ec: ExecutionContext)
     extends ScorexLogging {
   private val MessagesBatchSize = 100
 
   private val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
-  private val client      = new NetworkClient(trafficLoggerSettings, chainId, name, nonce, allChannels)
+  private val client      = new NetworkClient(trafficLoggerSettings, networkId, name, nonce, allChannels)
 
   def connect(address: InetSocketAddress): Future[Channel] =
     client.connect(address)

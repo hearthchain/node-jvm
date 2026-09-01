@@ -22,7 +22,7 @@ case class StartBoostRequest(
     generationPeriodStart: Height,
     timestamp: Option[Long] = None,
     fee: Option[Long] = None,
-    chainId: Byte = AddressScheme.current.chainId,
+    networkId: NetworkId = NetworkId.current,
     proofs: Proofs = Proofs.empty
 ) extends TxBroadcastRequest[StartBoostTransaction] {
   def toTx: Either[ValidationError, StartBoostTransaction] =
@@ -37,7 +37,7 @@ case class StartBoostRequest(
         fee.getOrElse(FeeConstants(TransactionType.StartBoost) * FeeUnit),
         timestamp.getOrElse(defaultTimestamp),
         proofs,
-        chainId
+        networkId
       )
     } yield tx
 }

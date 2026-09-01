@@ -1,7 +1,7 @@
 package tech.hearth
 
 import com.typesafe.config.{Config, ConfigFactory}
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
@@ -37,7 +37,7 @@ object GenesisBlockGenerator {
   }
 
   case class Settings(
-      networkType: String,
+      networkId: NetworkId,
       baseTarget: Option[Long],
       averageBlockDelay: FiniteDuration,
       timestamp: Option[Long],
@@ -48,8 +48,6 @@ object GenesisBlockGenerator {
   ) derives ConfigReader {
 
     val initialBalance: Share = distributions.map(_.amount).sum
-
-    val chainId: Byte = networkType.head.toByte
 
     private val features: Map[Short, Int] =
       preActivatedFeatures
@@ -150,9 +148,8 @@ object GenesisBlockGenerator {
       confBody
     }
 
-    tech.hearth.account.AddressScheme.current = new AddressScheme {
-      override val chainId: Byte = settings.chainId
-    }
+    // Every address this tool emits is rendered bech32m, so the network's HRP has to be pinned before that starts.
+    tech.hearth.crypto.Address.setDefaultHrp(settings.networkId.value)
 
     val shares: Seq[(FullAddressInfo, Share)] = settings.distributions
       .map(x => (toFullAddressInfo(x), x.amount))
@@ -183,9 +180,9 @@ object GenesisBlockGenerator {
       val snapshot        = PredefinedSnapshotSettings(GenesisBlockHeight.toInt, generators = genesisGenerators, balances = genesisBalances)
 
       // Build the very block the node will build from these settings, so the emitted commitments are the ones it
-      // computes. functionalitySettings/rewardsSettings/addressSchemeCharacter don't affect Block.genesis.
+      // computes. functionalitySettings/rewardsSettings/networkId don't affect Block.genesis.
       val blockchainSettings = BlockchainSettings(
-        settings.chainId.toChar,
+        settings.networkId,
         settings.functionalitySettings,
         unpinnedGenesis,
         RewardsSettings.MAINNET,

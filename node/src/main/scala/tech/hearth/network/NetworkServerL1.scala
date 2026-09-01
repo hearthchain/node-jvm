@@ -19,7 +19,7 @@ object NetworkServerL1 {
       allChannels: ChannelGroup,
       peerInfo: ConcurrentHashMap[Channel, PeerInfo]
   ): NetworkServer = {
-    val applicationName = Constants.ApplicationName + settings.blockchainSettings.addressSchemeCharacter
+    val applicationName = Constants.ApplicationName + settings.blockchainSettings.networkId.value
 
     def peerSynchronizer = if (settings.networkSettings.enablePeersExchange) {
       new PeerSynchronizer(peerDatabase, settings.networkSettings.peersBroadcastInterval)

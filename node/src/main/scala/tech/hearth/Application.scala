@@ -5,7 +5,7 @@ import cats.instances.bigInt.*
 import cats.syntax.option.*
 import com.typesafe.config.*
 import com.typesafe.scalalogging.Logger
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.actor.RootActorSystem
 import tech.hearth.api.BlockMeta
 import tech.hearth.api.common.*
@@ -588,10 +588,8 @@ object Application extends ScorexLogging {
 
     val settings = HearthSettings.fromRootConfig(config)
 
-    // Initialize global var with actual address scheme
-    AddressScheme.current = new AddressScheme {
-      override val chainId: Byte = settings.blockchainSettings.addressSchemeCharacter.toByte
-    }
+    // Pin the network before anything renders or parses an address: NetworkId.current reads it back from here.
+    tech.hearth.crypto.Address.setDefaultHrp(settings.blockchainSettings.networkId.value)
 
     // IMPORTANT: to make use of default settings for histograms and timers, it's crucial to reconfigure Kamon with
     //            our merged config BEFORE initializing any metrics, including in settings-related companion objects
@@ -691,7 +689,7 @@ object Application extends ScorexLogging {
 
     RootActorSystem.start("wavesplatform", settings.config) { actorSystem =>
       dumpMinerConfig()
-      log.info(s"${Constants.AgentName} Blockchain Id: ${settings.blockchainSettings.addressSchemeCharacter}")
+      log.info(s"${Constants.AgentName} Network Id: ${settings.blockchainSettings.networkId.value}")
       new Application(actorSystem, settings, settings.config.root(), time).run()
     }
   }

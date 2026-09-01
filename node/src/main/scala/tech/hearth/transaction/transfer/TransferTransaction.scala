@@ -27,7 +27,7 @@ case class TransferTransaction(
     timestamp: TxTimestamp,
     attachment: ByteStr,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.Transfer),
       ProvenTransaction,
       TxWithFee.InCustomAsset,
@@ -74,12 +74,12 @@ object TransferTransaction {
       timestamp: TxTimestamp,
       attachment: ByteStr,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId,
+      networkId: NetworkId = NetworkId.current,
       feeAssetId: Asset = Hearth
   ): Either[ValidationError, TransferTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- TransferTransaction(sender, assetId, transfers, fee, feeAssetId, timestamp, attachment, proofs, chainId).validatedEither
+      tx  <- TransferTransaction(sender, assetId, transfers, fee, feeAssetId, timestamp, attachment, proofs, networkId).validatedEither
     } yield tx
 
   def parseTransfersList(transfers: List[Transfer]): Validation[List[ParsedTransfer]] =

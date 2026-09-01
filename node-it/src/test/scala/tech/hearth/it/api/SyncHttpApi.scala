@@ -374,8 +374,7 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
           Address.fromString(recipient).explicitGet(),
           leasingAmount,
           leasingFee,
-          System.currentTimeMillis(),
-          2.toByte
+          System.currentTimeMillis()
         )
 
       maybeWaitForTransaction(sync(async(n).broadcastRequest(tx.json())), wait = waitForTx)
@@ -414,8 +413,7 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
           ByteStr.decodeBase16(leaseId).get,
           source,
           fee,
-          System.currentTimeMillis(),
-          2.toByte
+          System.currentTimeMillis()
         )
 
       maybeWaitForTransaction(sync(async(n).broadcastRequest(tx.json())), wait = waitForTx)

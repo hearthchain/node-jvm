@@ -1,6 +1,6 @@
 package tech.hearth.state.patch
 
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.features.BlockchainFeature
 import tech.hearth.state.{Blockchain, StateSnapshot}
 import play.api.libs.json.{Json, Reads}
@@ -12,7 +12,7 @@ trait PatchDataLoader {
     Json
       .parse(
         Source
-          .fromResource(s"patches/${getClass.getSimpleName.replace("$", "")}-${AddressScheme.current.chainId.toChar}.json")
+          .fromResource(s"patches/${getClass.getSimpleName.replace("$", "")}-${NetworkId.current.value}.json")
           .mkString
       )
       .as[T]
@@ -20,17 +20,17 @@ trait PatchDataLoader {
 
 trait DiffPatchFactory extends PartialFunction[Blockchain, StateSnapshot]
 
-abstract class PatchAtHeight(chainIdToHeight: (Char, Int)*) extends PatchDataLoader with DiffPatchFactory {
-  private val chainIdToHeightMap         = chainIdToHeight.toMap
-  protected def patchHeight: Option[Int] = chainIdToHeightMap.get(AddressScheme.current.chainId.toChar)
+abstract class PatchAtHeight(networkIdToHeight: (NetworkId, Int)*) extends PatchDataLoader with DiffPatchFactory {
+  private val networkIdToHeightMap       = networkIdToHeight.toMap
+  protected def patchHeight: Option[Int] = networkIdToHeightMap.get(NetworkId.current)
 
   override def isDefinedAt(blockchain: Blockchain): Boolean =
-    chainIdToHeightMap.get(blockchain.settings.addressSchemeCharacter).contains(blockchain.height)
+    networkIdToHeightMap.get(blockchain.settings.networkId).contains(blockchain.height)
 }
 
-abstract class PatchOnFeature(feature: BlockchainFeature, networks: Set[Char] = Set.empty) extends PatchDataLoader with DiffPatchFactory {
+abstract class PatchOnFeature(feature: BlockchainFeature, networks: Set[NetworkId] = Set.empty) extends PatchDataLoader with DiffPatchFactory {
   override def isDefinedAt(blockchain: Blockchain): Boolean = {
-    (networks.isEmpty || networks.contains(blockchain.settings.addressSchemeCharacter)) &&
+    (networks.isEmpty || networks.contains(blockchain.settings.networkId)) &&
     blockchain.featureActivationHeight(feature).contains(blockchain.height)
   }
 }

@@ -1,6 +1,6 @@
 package tech.hearth.it.api
 
-import tech.hearth.account.{Address, AddressScheme, PublicKey}
+import tech.hearth.account.{Address, NetworkId, PublicKey}
 import tech.hearth.api.http.DebugMessage.*
 import tech.hearth.api.http.RewardApiRoute.RewardStatus
 import tech.hearth.api.http.requests.TransferRequest
@@ -381,7 +381,7 @@ object AsyncHttpApi extends Assertions {
           System.currentTimeMillis(),
           attachment.fold(ByteStr.empty)(s => ByteStr(s.getBytes)),
           Proofs.empty,
-          AddressScheme.current.chainId
+          NetworkId.current
         ).signWith(sender)
           .json()
       )
@@ -398,7 +398,7 @@ object AsyncHttpApi extends Assertions {
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
           Proofs.empty,
-          AddressScheme.current.chainId
+          NetworkId.current
         ).signWith(sender)
           .json()
       )
@@ -411,7 +411,7 @@ object AsyncHttpApi extends Assertions {
           TxPositiveAmount.unsafeFrom(fee),
           System.currentTimeMillis(),
           Proofs.empty,
-          AddressScheme.current.chainId
+          NetworkId.current
         ).signWith(sender).json()
       )
 
@@ -446,7 +446,7 @@ object AsyncHttpApi extends Assertions {
           System.currentTimeMillis(),
           attachment.fold(ByteStr.empty)(s => ByteStr(s.getBytes())),
           Proofs.empty,
-          AddressScheme.current.chainId
+          NetworkId.current
         ).signWith(sender).json(),
         amountsAsStrings
       )
@@ -516,7 +516,7 @@ object AsyncHttpApi extends Assertions {
         fee = TxPositiveAmount.unsafeFrom(fee),
         proofs = Proofs.empty,
         timestamp = System.currentTimeMillis(),
-        chainId = AddressScheme.current.chainId
+        networkId = NetworkId.current
       ).signWith(matcher)
 
       val json = if (validate) tx.validatedEither.explicitGet().json() else tx.json()

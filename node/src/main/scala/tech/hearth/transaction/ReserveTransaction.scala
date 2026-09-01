@@ -27,7 +27,7 @@ final case class ReserveTransaction(
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.Reserve),
       ProvenTransaction,
       TxWithFee.InCustomAsset,
@@ -51,11 +51,11 @@ object ReserveTransaction {
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, ReserveTransaction] =
     for {
       amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, assetId.id.toString))
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx     <- ReserveTransaction(sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, chainId).validatedEither
+      tx     <- ReserveTransaction(sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, networkId).validatedEither
     } yield tx
 }

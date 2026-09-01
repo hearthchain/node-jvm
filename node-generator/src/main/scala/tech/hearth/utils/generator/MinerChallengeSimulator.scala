@@ -61,7 +61,7 @@ object MinerChallengeSimulator {
         .loadOrThrow[GenesisSettings]
 
     val blockchainSettings = BlockchainSettings(
-      genSettings.chainId.toChar,
+      genSettings.networkId,
       genSettings.functionalitySettings.copy(preActivatedFeatures = BlockchainFeatures.implemented.map(_ -> 0).toMap),
       genesis,
       RewardsSettings.MAINNET

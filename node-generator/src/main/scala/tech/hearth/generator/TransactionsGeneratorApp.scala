@@ -4,7 +4,6 @@ import cats.implicits.showInterpolator
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.Logger
 import tech.hearth.Application
-import tech.hearth.account.AddressScheme
 import tech.hearth.generator.GeneratorSettings.NodeAddress
 import tech.hearth.generator.Preconditions.{PGenSettings, UniverseHolder}
 import tech.hearth.generator.cli.ScoptImplicits
@@ -112,9 +111,7 @@ object TransactionsGeneratorApp extends ScoptImplicits {
       case Some(finalConfig) =>
         log.info(show"The final configuration: \n$finalConfig")
 
-        AddressScheme.current = new AddressScheme {
-          override val chainId: Byte = finalConfig.addressScheme.toByte
-        }
+        tech.hearth.crypto.Address.setDefaultHrp(finalConfig.networkId.value)
 
         val time = new NTP("pool.ntp.org")
 
@@ -138,7 +135,7 @@ object TransactionsGeneratorApp extends ScoptImplicits {
         implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(threadPool)
 
         val sender =
-          new NetworkSender(hearthSettings.networkSettings.trafficLogger, finalConfig.addressScheme, "generator", nonce = Random.nextLong())
+          new NetworkSender(hearthSettings.networkSettings.trafficLogger, finalConfig.networkId, "generator", nonce = Random.nextLong())
 
         sys.addShutdownHook(sender.close())
 

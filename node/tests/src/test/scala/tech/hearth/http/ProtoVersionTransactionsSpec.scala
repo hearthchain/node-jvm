@@ -1,6 +1,6 @@
 package tech.hearth.http
 
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.api.http.{RouteTimeout, TransactionsApiRoute}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base64
@@ -80,13 +80,13 @@ class ProtoVersionTransactionsSpec
 
       decode(base64Str) shouldBe exchangeTx
 
-      (exchangeTx.json() \ "chainId").asOpt[Byte].value shouldBe exchangeTx.chainId
+      (exchangeTx.json() \ "networkId").asOpt[String].value shouldBe exchangeTx.networkId.value
     }
 
     "LeaseTransaction/LeaseCancelTransaction" in {
       val recipient = TxHelpers.secondAddress
       val leaseTxUnsigned = LeaseTransaction
-        .create(AddressScheme.current.chainId, PublicKey(account.publicKey), recipient, 100L, MinFee, now, Proofs.empty)
+        .create(NetworkId.current, PublicKey(account.publicKey), recipient, 100L, MinFee, now, Proofs.empty)
         .explicitGet()
 
       val (leaseProofs, leaseTxJson) = Post(routePath("/sign"), leaseTxUnsigned.json()) ~> ApiKeyHeader ~> route ~> check {
@@ -118,8 +118,8 @@ class ProtoVersionTransactionsSpec
       decode(base64LeaseStr) shouldBe leaseTx
       decode(base64CancelLeaseStr) shouldBe leaseCancelTx
 
-      (leaseTx.json() \ "chainId").asOpt[Byte].value shouldBe leaseTx.chainId
-      (leaseCancelTx.json() \ "chainId").asOpt[Byte].value shouldBe leaseCancelTx.chainId
+      (leaseTx.json() \ "networkId").asOpt[String].value shouldBe leaseTx.networkId.value
+      (leaseCancelTx.json() \ "networkId").asOpt[String].value shouldBe leaseCancelTx.networkId.value
     }
 
     "TransferTransaction" in {
@@ -150,7 +150,7 @@ class ProtoVersionTransactionsSpec
 
       decode(base64Str) shouldBe transferTx
 
-      (transferTx.json() \ "chainId").asOpt[Byte].value shouldBe transferTx.chainId
+      (transferTx.json() \ "networkId").asOpt[String].value shouldBe transferTx.networkId.value
 
     }
 
@@ -178,7 +178,7 @@ class ProtoVersionTransactionsSpec
 
       decode(base64Str) shouldBe massTransferTx
 
-      (massTransferTx.json() \ "chainId").asOpt[Byte].value shouldBe massTransferTx.chainId
+      (massTransferTx.json() \ "networkId").asOpt[String].value shouldBe massTransferTx.networkId.value
     }
 
     def checkProofs(response: HttpResponse): (Proofs, JsObject) = {

@@ -1,7 +1,6 @@
 package tech.hearth.state
 
 import tech.hearth.Application
-import tech.hearth.account.AddressScheme
 import tech.hearth.database.{RDB, RocksDBWriter}
 import tech.hearth.settings.HearthSettings
 import tech.hearth.utils.ScorexLogging
@@ -25,7 +24,7 @@ abstract class DBState extends ScorexLogging {
     settings.enableLightMode
   )
 
-  AddressScheme.current = new AddressScheme { override val chainId: Byte = 'W' }
+  tech.hearth.crypto.Address.setDefaultHrp(settings.blockchainSettings.networkId.value)
 
   @TearDown
   def close(): Unit = {
