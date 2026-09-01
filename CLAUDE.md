@@ -10,7 +10,11 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
 
 - `sbt compilePR`: clean, `scalafmtCheck`, compile everything (Test included) with `-Werror`; warnings block.
 - `sbt checkPR`: `compilePR` + unit tests (`node-tests`, `grpc-server`) + `node/assembly` + docker tarballs. This is what CI (`check-pr.yaml`) runs.
-- `sbt node-tests/test`: unit tests only; single suite via `sbt "node-tests/testOnly *SuiteName"`.
+- `sbt node-tests/testFull`: unit tests only; single suite via `sbt "node-tests/testOnly *SuiteName"`. In sbt 2 `test`
+  is incremental (it reruns only what changed) and happily prints `[success]` having run zero tests, so it can never
+  confirm a suite is green; `testFull` is the real run, and is what `checkPR` invokes. Chain several tasks with one
+  quoted `;` argument (`sbt "a/testFull; b/testFull"`) - passing them as separate arguments concatenates them into a
+  single malformed command.
 - `sbt "node-it/docker;node-it/test"`: integration tests (needs Docker); slow, don't run by default. `node-it/docker`
   builds the image from whatever `node`/`grpc-server` currently compile to; it is not rebuilt automatically, so re-run
   it by hand after touching either module's sources before `node-it/testOnly ...`.

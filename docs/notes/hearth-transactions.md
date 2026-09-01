@@ -201,10 +201,14 @@ once-registered identity, made to stay consistent with every other period-scoped
 one.
 
 **`ReserveTransaction`** (`sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, chainId`) locks
-`amount` of `assetId` from the sender's balance against a registered miner. `state/diffs/
-ReserveTransactionDiff.scala` checks `assetId` is `Hearth` or an already-issued `IssuedAsset` (`feeAssetId`'s
-existence is already checked upstream by `TransactionDiffer.feePortfolios`, driven by `TxWithFee.InCustomAsset`, so
-the diff doesn't re-check it) and that `miner` is registered, then debits `amount` (from `assetId`) and `fee` (from
+`amount` of `assetId` from the sender's balance against a registered miner. **`assetId` is typed `IssuedAsset`, not
+`Asset`: Hearth itself is not reservable.** That is a type-level guarantee, not a diff check - it matches
+`SettleTransaction.Settlement.assetId`, the only way a reservation is ever drawn down, so a reservation that could
+never be settled cannot be expressed in the first place. `feeAssetId` stays an unconstrained `Asset` - the fee is
+payable in Hearth like every other transaction's. `state/diffs/ReserveTransactionDiff.scala` still checks `assetId`
+names an *already-issued* asset (`assetIssued`, a state lookup the type cannot make; `feeAssetId`'s existence is
+already checked upstream by `TransactionDiffer.feePortfolios`, driven by `TxWithFee.InCustomAsset`, so the diff
+doesn't re-check it) and that `miner` is registered, then debits `amount` (from `assetId`) and `fee` (from
 `feeAssetId`) from the sender's portfolio and accumulates the total into a new `(sender, miner, asset) -> Long`
 ledger, `Blockchain.reservedAmount`. Multiple `Reserve` transactions to the same triple keep adding to the same
 total - **accumulate-only, by design**: `reservedAmount` is never decremented, it is only ever compared against
@@ -295,11 +299,14 @@ than a bare `int64`, matching `ReserveTransactionData.amount`'s shape). `enclave
 the raw 32-byte Ed25519 key and 64-byte signature of the *enclave itself* attesting to the batch - a second,
 enclave-level signature alongside the transaction's own `proofs` (signed by `sender`'s account key), the same
 two-signer split `CommitToGeneration`'s VRF/BLS proof-of-possession fields use. The signed message
-(`SettleTransaction.mkSettlementMessage`) is each settlement's `client.toBytes`(20, `tech.hearth.crypto.Address
-.HASH_LEN`) `++` `assetId`(32, zero-padded for `Hearth`) `++` `cumulativeSpent`(8, big-endian), concatenated in
-order - fixed-width fields throughout specifically so concatenating several settlements has no parsing-boundary
-ambiguity, but only because `SettleTxValidator` separately rejects any `IssuedAsset` id whose length isn't exactly
-32 bytes. That check is load-bearing, not cosmetic: the wire format itself (`PBAmounts.toVanillaAssetId`) accepts
+(`SettleTransaction.mkSettlementMessage`) is a context-binding prefix - `domain`(16, `hearth-settle-v1`) `++`
+`chainId`(1) `++` `enclaveKey`(32) `++` `operator`(20) `++` `periodStart`(4, big-endian) `++` `count`(2,
+big-endian) - followed by each settlement's `client.toBytes`(20, `tech.hearth.crypto.Address.HASH_LEN`) `++`
+`assetId`(32) `++` `cumulativeSpent`(8, big-endian), concatenated in order. The prefix is what stops a batch being
+replayed on another network, operator or period; the diff rebuilds it from the transaction and chain state, never
+from the batch. Fixed-width fields throughout specifically so concatenating several settlements has no
+parsing-boundary ambiguity, but only because `SettleTxValidator` separately rejects any `IssuedAsset` id whose
+length isn't exactly 32 bytes. That check is load-bearing, not cosmetic: the wire format itself (`PBAmounts.toVanillaAssetId`) accepts
 an `assetId` of *any* length with no validation, so without it a malicious `sender` (the operator relaying the
 batch - exactly the party the enclave signature exists to constrain) could submit a settlements list whose
 concatenated bytes collide with a genuinely enclave-signed message for a *different* settlements list, settling
@@ -336,8 +343,8 @@ are tracked independently.
 - verifies `tx.enclaveSignature` against `mkSettlementMessage(tx.settlements)` using `crypto.verify` with the
   enclave's raw public key (`PublicKey(tx.enclavePublicKey)`) - this is what "enclave-signed batch" means in
   practice: the account-level `proofs` only prove the operator relayed the batch, not that the enclave produced it;
-- per settlement: rejects an asset that isn't `Hearth` and isn't an already-issued `IssuedAsset` (mirroring
-  `ReserveTransactionDiff.assetIssued`, defence in depth - `reservedAmount(...) > 0` already implies this in
+- per settlement: rejects an asset that was never issued (mirroring `ReserveTransactionDiff.assetIssued`; Hearth
+  itself cannot reach here at all, since `Settlement.assetId` is typed `IssuedAsset` - defence in depth - `reservedAmount(...) > 0` already implies this in
   practice, since `Reserve` itself checks it, but `Settle` shouldn't depend solely on that); rejects
   `reservedAmount(client, miner, asset) <= 0` ("reservation open" - also blocks writing a `settledAmount` entry
   for a client that never reserved anything at all, which the other two rules alone wouldn't); rejects a new

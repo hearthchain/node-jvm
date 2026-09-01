@@ -11,7 +11,6 @@ import tech.hearth.protobuf.snapshot.{TransactionStatus, TransactionStateSnapsho
 import tech.hearth.protobuf.{Amount, PBSnapshots}
 import tech.hearth.state.*
 import tech.hearth.test.*
-import tech.hearth.transaction.Asset
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxHelpers
 import org.bouncycastle.util.encoders.Hex
@@ -270,11 +269,12 @@ class TxStateSnapshotHashSpec extends PropSpec {
 
     val client     = signer101.toAddress
     val miner      = signer102.toAddress
-    val enclave    = ByteStr(client.toBytes) // 20-byte envelope: matches a registered-enclave entry's shape without a tag
+    val enclave    = ByteStr(client.toBytes)          // 20-byte envelope: matches a registered-enclave entry's shape without a tag
     val period     = GenerationPeriod(Height(1), 1000)
+    val asset      = IssuedAsset(ByteStr.fill(32)(7)) // only an issued asset is reservable/settleable
     val base       = hashOf(StateSnapshot())
-    val reserved   = hashOf(StateSnapshot(reservedAmounts = Map((client, miner, Asset.Hearth) -> 5L)))
-    val settled    = hashOf(StateSnapshot(settledAmounts = Map((client, miner, Asset.Hearth) -> 5L)))
+    val reserved   = hashOf(StateSnapshot(reservedAmounts = Map((client, miner, asset) -> 5L)))
+    val settled    = hashOf(StateSnapshot(settledAmounts = Map((client, miner, asset) -> 5L)))
     val bound      = hashOf(StateSnapshot(apiKeyBindings = Map((enclave, miner) -> ByteStr(miner.toBytes))))
     val enclaveReg = hashOf(StateSnapshot(nextRegisteredEnclaves = Seq(RegisteredEnclave(enclave, miner, client))))
     val work       = hashOf(StateSnapshot(workDone = Map((miner, period) -> 5L)))

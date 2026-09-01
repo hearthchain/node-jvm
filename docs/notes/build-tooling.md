@@ -145,3 +145,22 @@ Same class of bug already fixed for `classpathOrdering`, `compilePRRaw`, `Integr
 `Def.uncached`. Any task in this build that writes to a path outside its own declared outputs is a candidate for
 the same bug.
 
+
+## `protobuf-schemas` resolves from `~/.m2` first, and a stale copy shadows the published snapshot
+
+`tech.hearth:protobuf-schemas:0.1.0-SNAPSHOT` (classifier `protobuf-src`, `Dependencies.protoSchemasLib`) carries
+every `.proto` this build compiles - there are no `.proto` files in this repo. `build.sbt` lists
+`Resolver.mavenLocal` *before* `Resolver.sonatypeCentralSnapshots`, so a copy left in `~/.m2` by an old
+`publishM2`/`publishLocal` from the sibling `protobuf-schemas` repo wins over the published snapshot forever - it
+has no timestamp to compare against and no TTL to expire. The symptom is not a resolution error but a compile
+error in code that consumes a *newer* schema than the local copy: fields and nested messages simply "are not a
+member of" the generated class (this is how `StateUpdate.reserves`/`settlements` broke `grpc-server/events.scala`
+while CI, which has no `~/.m2` copy, stayed green). Check
+`~/.m2/repository/tech/hearth/protobuf-schemas/*/` against the schema the code expects before assuming the Scala
+is wrong; the fix is to refresh or delete the local copy (delete `maven-metadata-local.xml` alongside it, or
+mavenLocal still claims to serve the version), not to edit the consuming code.
+
+Two follow-ons once the local copy is gone: sbt's *resolution* is cached too, so the next build fails with
+`ArtifactError$NotFound` still pointing at the `~/.m2` path - `sbt --client shutdown` and rerun to force
+re-resolution. And a schema change is only visible here after the sibling repo's CI publishes a new snapshot, so
+a node-jvm branch that consumes new proto fields depends on the schemas PR having merged *and* published first.

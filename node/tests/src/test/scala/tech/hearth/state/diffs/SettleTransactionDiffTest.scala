@@ -96,7 +96,7 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
     // current period, never from the batch, so a batch the enclave signed for a different context does not verify.
     // Each case signs a valid batch with the correct enclave key but a wrong prefix field.
     def settleSignedFor(chainId: Byte, operator: Address, periodStart: Int): SettleTransaction = {
-      val settlements = Seq(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(50L)))
+      val settlements = Seq(Settlement(client, asset, TxNonNegativeAmount.unsafeFrom(50L)))
       val message     = SettleTransaction.mkSettlementMessage(chainId, enclavePublicKey, operator, periodStart, settlements)
       val signature   = ByteStr(enclaveKey.sign(message))
       SettleTransaction
@@ -318,9 +318,12 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       val operator = Address.fromBytes(Array.fill(20)(0xaa.toByte)).explicitGet()
       val c1       = Address.fromBytes(Array.fill(20)(0x11.toByte)).explicitGet()
       val c2       = Address.fromBytes(Array.fill(20)(0x22.toByte)).explicitGet()
-      val a2       = IssuedAsset(ByteStr(Array.fill(32)(0x33.toByte)))
+      // a1's all-zero id keeps this vector byte-identical to the one pinned before Hearth stopped being
+      // settleable: Hearth used to encode as 32 zero bytes, so the miner side's copy still matches unchanged.
+      val a1 = IssuedAsset(ByteStr(new Array[Byte](32)))
+      val a2 = IssuedAsset(ByteStr(Array.fill(32)(0x33.toByte)))
       val settlements = Seq(
-        Settlement(c1, Hearth, TxNonNegativeAmount.unsafeFrom(600000L)),
+        Settlement(c1, a1, TxNonNegativeAmount.unsafeFrom(600000L)),
         Settlement(c2, a2, TxNonNegativeAmount.unsafeFrom(800000L))
       )
       val message = SettleTransaction.mkSettlementMessage(82.toByte, enclave, operator, 1000001, settlements)

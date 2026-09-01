@@ -3,14 +3,17 @@ package tech.hearth.events
 import cats.Monoid
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
+import tech.hearth.TestValues
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
+import tech.hearth.history.Domain
+import tech.hearth.settings.GenesisAssetSettings
 import tech.hearth.events.StateUpdate.{ReserveUpdate, SettleUpdate}
 import tech.hearth.state.diffs.{ReserveTransactionDiff, SettleTransactionDiff}
 import tech.hearth.state.{Blockchain, RegisteredEnclave, SnapshotBlockchain, StateSnapshot}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
-import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.SettleTransaction.Settlement
 import tech.hearth.transaction.{SettleTransaction, TxHelpers, TxNonNegativeAmount}
 
@@ -31,13 +34,25 @@ class ReserveSettleStateUpdateSpec extends FreeSpec with WithDomain {
   private val enclaveKey       = TxHelpers.signer(9)
   private val enclavePublicKey = ByteStr(enclaveKey.publicKey())
 
-  private val balances = AddrWithBalance.enoughBalances(operatorSigner, clientSigner)
+  // Only an issued asset is reservable or settleable (see ReserveTransaction), so the client holds a genesis asset
+  // in full rather than reserving the native one.
+  private val asset         = IssuedAsset(ByteStr.fill(32)(3))
+  private val assetQuantity = 1000.hearth
+
+  private val balances = Seq(AddrWithBalance(operator), AddrWithBalance(client, assets = Map(asset -> assetQuantity)))
+
+  private def withReserveSettleDomain[A](f: Domain => A): A =
+    withDomain(
+      DeterministicFinality,
+      balances,
+      assets = Seq(GenesisAssetSettings(asset.id, "RESV", decimals = 8, quantity = assetQuantity, minFee = TestValues.fee))
+    )(f)
 
   private def withRegisteredEnclave(blockchain: Blockchain): Blockchain =
     blockchainWithRegisteredEnclave(blockchain, RegisteredEnclave(enclavePublicKey, operator, operator))
 
   private def withReservation(blockchain: Blockchain, amount: Long): Blockchain = {
-    val snapshot = StateSnapshot.build(blockchain, reservedAmounts = Map((client, operator, Hearth) -> amount)).explicitGet()
+    val snapshot = StateSnapshot.build(blockchain, reservedAmounts = Map((client, operator, asset) -> amount)).explicitGet()
     SnapshotBlockchain(blockchain, snapshot)
   }
 
@@ -45,68 +60,69 @@ class ReserveSettleStateUpdateSpec extends FreeSpec with WithDomain {
     TxHelpers.settle(
       sender = operatorSigner,
       enclaveKey = enclaveKey,
-      settlements = Seq(Settlement(client, Hearth, TxNonNegativeAmount.unsafeFrom(cumulativeSpent)))
+      settlements = Seq(Settlement(client, asset, TxNonNegativeAmount.unsafeFrom(cumulativeSpent)))
     )
 
   "StateUpdate.atomic" - {
-    "records a reserve as a (client, operator, asset) update" in withDomain(DeterministicFinality, balances) { d =>
+    "records a reserve as a (client, operator, asset) update" in withReserveSettleDomain { d =>
       val blockchain = withRegisteredEnclave(d.blockchain)
-      val snapshot   = ReserveTransactionDiff(blockchain)(TxHelpers.reserve(clientSigner, amount = 100.hearth, miner = operator)).explicitGet()
+      val snapshot =
+        ReserveTransactionDiff(blockchain)(TxHelpers.reserve(clientSigner, asset = asset, amount = 100.hearth, miner = operator)).explicitGet()
 
       val update = StateUpdate.atomic(blockchain, snapshot)
 
-      update.reserves shouldBe Seq(ReserveUpdate(client, operator, Hearth, before = 0L, after = 100.hearth))
+      update.reserves shouldBe Seq(ReserveUpdate(client, operator, asset, before = 0L, after = 100.hearth))
       update.settlements shouldBe empty
     }
 
-    "records a settlement as a (client, operator, asset) update" in withDomain(DeterministicFinality, balances) { d =>
+    "records a settlement as a (client, operator, asset) update" in withReserveSettleDomain { d =>
       val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100.hearth)
       val snapshot   = SettleTransactionDiff(blockchain)(settleTx(40L)).explicitGet()
 
       val update = StateUpdate.atomic(blockchain, snapshot)
 
-      update.settlements shouldBe Seq(SettleUpdate(client, operator, Hearth, before = 0L, after = 40L))
+      update.settlements shouldBe Seq(SettleUpdate(client, operator, asset, before = 0L, after = 40L))
       // Settle never writes reservedAmounts, it only reads them as a ceiling.
       update.reserves shouldBe empty
     }
   }
 
   "StateUpdate.monoid" - {
-    "keeps the earliest before and the latest after across several reserves in one block" in withDomain(DeterministicFinality, balances) { d =>
+    "keeps the earliest before and the latest after across several reserves in one block" in withReserveSettleDomain { d =>
       val (first, second) = twoReserveUpdates(d.blockchain)
 
-      Monoid.combine(first, second).reserves shouldBe Seq(ReserveUpdate(client, operator, Hearth, before = 0L, after = 150.hearth))
+      Monoid.combine(first, second).reserves shouldBe Seq(ReserveUpdate(client, operator, asset, before = 0L, after = 150.hearth))
     }
 
-    "keeps the earliest before and the latest after across several settlements in one block" in withDomain(DeterministicFinality, balances) { d =>
+    "keeps the earliest before and the latest after across several settlements in one block" in withReserveSettleDomain { d =>
       val (first, second) = twoSettleUpdates(d.blockchain)
 
-      Monoid.combine(first, second).settlements shouldBe Seq(SettleUpdate(client, operator, Hearth, before = 0L, after = 100L))
+      Monoid.combine(first, second).settlements shouldBe Seq(SettleUpdate(client, operator, asset, before = 0L, after = 100L))
     }
 
-    "keeps reserves of different assets to the same operator apart" in withDomain(DeterministicFinality, balances) { d =>
+    "keeps reserves of different assets to the same operator apart" in withReserveSettleDomain { d =>
       val otherAsset = IssuedAsset(ByteStr.fill(32)(7))
-      val first      = StateUpdate.atomic(d.blockchain, StateSnapshot(reservedAmounts = Map((client, operator, Hearth) -> 10L)))
+      val first      = StateUpdate.atomic(d.blockchain, StateSnapshot(reservedAmounts = Map((client, operator, asset) -> 10L)))
       val second     = StateUpdate.atomic(d.blockchain, StateSnapshot(reservedAmounts = Map((client, operator, otherAsset) -> 5L)))
 
       Monoid.combine(first, second).reserves shouldBe Seq(
-        ReserveUpdate(client, operator, Hearth, before = 0L, after = 10L),
+        ReserveUpdate(client, operator, asset, before = 0L, after = 10L),
         ReserveUpdate(client, operator, otherAsset, before = 0L, after = 5L)
       )
     }
   }
 
   "StateUpdate.reverse" - {
-    "restores the block's starting reserve on a rollback" in withDomain(DeterministicFinality, balances) { d =>
+    "restores the block's starting reserve on a rollback" in withReserveSettleDomain { d =>
       val (first, second) = twoReserveUpdates(d.blockchain)
 
-      reverseOf(first, second).reserves shouldBe Seq(ReserveUpdate(client, operator, Hearth, before = 150.hearth, after = 0L))
+      reverseOf(first, second).reserves shouldBe Seq(ReserveUpdate(client, operator, asset, before = 150.hearth, after = 0L))
     }
 
-    "restores the block's starting settled total on a rollback" in withDomain(DeterministicFinality, balances) { d =>
+    "restores the block's starting settled total on a rollback" in withReserveSettleDomain { d =>
       val (first, second) = twoSettleUpdates(d.blockchain)
 
-      reverseOf(first, second).settlements shouldBe Seq(SettleUpdate(client, operator, Hearth, before = 100L, after = 0L))
+      reverseOf(first, second).settlements shouldBe Seq(SettleUpdate(client, operator, asset, before = 100L, after = 0L))
     }
   }
 
@@ -117,7 +133,7 @@ class ReserveSettleStateUpdateSpec extends FreeSpec with WithDomain {
         leasingForAddress = Seq.empty,
         assets = Seq.empty,
         leases = Seq.empty,
-        reserves = Seq(ReserveUpdate(client, operator, Hearth, before = 1L, after = 2L)),
+        reserves = Seq(ReserveUpdate(client, operator, asset, before = 1L, after = 2L)),
         settlements = Seq(SettleUpdate(client, operator, IssuedAsset(ByteStr.fill(32)(7)), before = 3L, after = 4L))
       )
 
@@ -130,10 +146,12 @@ class ReserveSettleStateUpdateSpec extends FreeSpec with WithDomain {
   private def reverseOf(updates: StateUpdate*): StateUpdate = Monoid.combineAll(updates.map(_.reverse).reverse)
 
   private def twoReserveUpdates(base: Blockchain): (StateUpdate, StateUpdate) = {
-    val blockchain   = withRegisteredEnclave(base)
-    val snapshot     = ReserveTransactionDiff(blockchain)(TxHelpers.reserve(clientSigner, amount = 100.hearth, miner = operator)).explicitGet()
-    val next         = SnapshotBlockchain(blockchain, snapshot)
-    val nextSnapshot = ReserveTransactionDiff(next)(TxHelpers.reserve(clientSigner, amount = 50.hearth, miner = operator)).explicitGet()
+    val blockchain = withRegisteredEnclave(base)
+    val snapshot =
+      ReserveTransactionDiff(blockchain)(TxHelpers.reserve(clientSigner, asset = asset, amount = 100.hearth, miner = operator)).explicitGet()
+    val next = SnapshotBlockchain(blockchain, snapshot)
+    val nextSnapshot =
+      ReserveTransactionDiff(next)(TxHelpers.reserve(clientSigner, asset = asset, amount = 50.hearth, miner = operator)).explicitGet()
     (StateUpdate.atomic(blockchain, snapshot), StateUpdate.atomic(next, nextSnapshot))
   }
 

@@ -1,10 +1,9 @@
 package tech.hearth.api.http
 
-import tech.hearth.state.Blockchain
-import tech.hearth.transaction.Asset
-import tech.hearth.utils.byteStrFormat
 import org.apache.pekko.http.scaladsl.server.Route
 import play.api.libs.json.*
+import tech.hearth.state.Blockchain
+import tech.hearth.utils.byteStrFormat
 
 /** Point reads the TEE miner needs to build a settlement batch: the HPKE api-key envelope a client bound to its
   * enclave key (BindApiKey), and the reserved/settled counters for a (client, miner) pair. Kept out of
@@ -19,13 +18,11 @@ case class SettlementApiRoute(blockchain: Blockchain) extends ApiRoute {
           .map(envelope => Json.obj("envelope" -> byteStrFormat.writes(envelope)))
           .toRight(ApiError.ApiKeyBindingDoesNotExist)
       )
-    } ~ (get & path("settlement" / AddrSegment / AddrSegment)) { (client, miner) =>
-      // Hearth only for now: Reserve/Settle run on the native asset in this repo's flows, and the miner reads these
-      // two counters to cap and assert its settlement batches.
+    } ~ (get & path("settlement" / AddrSegment / AddrSegment / AssetId)) { (client, miner, assetId) =>
       complete(
         Json.obj(
-          "reserved" -> blockchain.reservedAmount(client, miner, Asset.Hearth),
-          "settled"  -> blockchain.settledAmount(client, miner, Asset.Hearth)
+          "reserved" -> blockchain.reservedAmount(client, miner, assetId),
+          "settled"  -> blockchain.settledAmount(client, miner, assetId)
         )
       )
     }

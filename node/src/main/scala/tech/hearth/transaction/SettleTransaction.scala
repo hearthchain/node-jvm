@@ -66,13 +66,19 @@ object SettleTransaction {
       } yield Settlement(address, assetId, amount)
     }
 
-  /** The message the enclave signs: each settlement as client(20 bytes) ++ assetId(32 bytes) ++
-    * cumulativeSpent(8 bytes, big-endian), concatenated in order. Fixed-width fields throughout, so the
-    * concatenation has no parsing ambiguity between entries - but only because SettleTxValidator separately rejects
-    * an assetId of any length other than 32 (see its own comment): the wire format itself (PBAmounts
-    * .toVanillaAssetId) does not bound an IssuedAsset id's length, so this function alone cannot guarantee a unique
-    * factorization back into (client, assetId, cumulativeSpent) triples. Every SettleTransaction that reaches here
-    * has already gone through that check, via SettleTransaction.create's `validatedEither` call.
+  private val SettleDomain: Array[Byte] = "hearth-settle-v1".getBytes(StandardCharsets.UTF_8)
+
+  /** The enclave-signed preimage, bound to context so a batch cannot be replayed on another network, operator or
+    * period: domain(16) ++ chainId(1) ++ enclaveKey(32) ++ operator(20) ++ periodStart(4 BE) ++ count(2 BE), then
+    * client(20) ++ assetId(32) ++ cumulativeSpent(8 BE) per settlement. The diff rebuilds this from the
+    * transaction and chain state, never from the batch alone.
+    *
+    * Fixed-width fields throughout, so the concatenation has no parsing ambiguity between entries - but only
+    * because SettleTxValidator separately rejects an assetId of any length other than 32 (see its own comment):
+    * the wire format itself (PBAmounts.toVanillaAssetId) does not bound an IssuedAsset id's length, so this
+    * function alone cannot guarantee a unique factorization back into (client, assetId, cumulativeSpent) triples.
+    * Every SettleTransaction that reaches here has already gone through that check, via SettleTransaction
+    * .create's `validatedEither` call.
     */
   def mkSettlementMessage(
       chainId: Byte,
