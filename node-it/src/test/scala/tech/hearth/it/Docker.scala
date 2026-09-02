@@ -677,9 +677,14 @@ object Docker {
     lazy val hostNetworkAddress: InetSocketAddress = new InetSocketAddress("localhost", externalPort(networkPort))
     val containerNetworkAddress: InetSocketAddress = new InetSocketAddress(hearthIpAddress, networkPort)
 
+    // An exposed-but-unpublished port is still a key here, with an empty binding list rather than a missing entry, so
+    // emptiness is what "not published" actually looks like.
     def externalPort(internalPort: Int): Int = {
       val bindings = ports.get(s"$internalPort/tcp")
-      require(bindings != null, s"Port $internalPort is not published, published: ${ports.keySet().asScala.mkString(", ")}")
+      require(
+        bindings != null && !bindings.isEmpty,
+        s"Port $internalPort is not published, published: ${ports.asScala.collect { case (p, b) if !b.isEmpty => p }.mkString(", ")}"
+      )
       bindings.get(0).hostPort().toInt
     }
   }
