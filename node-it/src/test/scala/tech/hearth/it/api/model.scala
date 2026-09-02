@@ -6,7 +6,7 @@ import tech.hearth.it.api.FinalizationVoting.ConflictEndorsement
 import tech.hearth.state.Height
 import tech.hearth.transaction.assets.exchange.AssetPair
 import tech.hearth.transaction.transfer.TransferTransaction.Transfer
-import io.grpc.{Metadata, Status as GrpcStatus}
+import io.grpc.{Status as GrpcStatus, StatusRuntimeException}
 import play.api.libs.json.*
 
 import scala.util.{Failure, Success}
@@ -16,7 +16,15 @@ import scala.util.{Failure, Success}
 case class UnexpectedStatusCodeException(requestMethod: String, requestUrl: String, statusCode: Int, responseBody: String)
     extends Exception(s"Request: $requestMethod $requestUrl; Unexpected status code ($statusCode): $responseBody")
 
-case class GrpcStatusRuntimeException(status: GrpcStatus, metaData: Metadata) extends Exception(s"$status $metaData")
+// Same rationale as USCE above: io.grpc's Metadata is not serializable, so keep only its rendering.
+case class GrpcStatusRuntimeException(status: GrpcStatus.Code, description: String, metaData: String)
+    extends Exception(s"$status($description) $metaData")
+
+object GrpcStatusRuntimeException {
+  def apply(e: StatusRuntimeException): GrpcStatusRuntimeException =
+    // A server-side crash arrives as UNKNOWN with a null description, and assertGrpcError matches a regex on it.
+    GrpcStatusRuntimeException(e.getStatus.getCode, Option(e.getStatus.getDescription).getOrElse(""), String.valueOf(e.getTrailers))
+}
 
 case class Status(blockchainHeight: Int, stateHeight: Int, updatedTimestamp: Long, updatedDate: String)
 object Status {

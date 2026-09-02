@@ -27,11 +27,11 @@ import scala.util.{Failure, Success, Try}
 object SyncGrpcApi extends Assertions {
 
   def assertGrpcError[R](f: => R, errorRegex: String = "", expectedCode: Code = Code.INVALID_ARGUMENT): Assertion = Try(f) match {
-    case Failure(GrpcStatusRuntimeException(status, _)) =>
+    case Failure(GrpcStatusRuntimeException(status, description, _)) =>
       Assertions.assert(
-        status.getCode == expectedCode
-          && status.getDescription.matches(s".*$errorRegex.*"),
-        s"\nexpected '$errorRegex'\nactual '${status.getDescription}'"
+        status == expectedCode
+          && description.matches(s".*$errorRegex.*"),
+        s"\nexpected '$errorRegex'\nactual '${description}'"
       )
     case Failure(e) => Assertions.fail(e)
     case Success(s) => Assertions.fail(s"Expecting bad request but handle $s")
@@ -61,7 +61,7 @@ object SyncGrpcApi extends Assertions {
     def sync[A](awaitable: Awaitable[A], atMost: Duration = RequestAwaitTime): A =
       try Await.result(awaitable, atMost)
       catch {
-        case gsre: StatusRuntimeException => throw GrpcStatusRuntimeException(gsre.getStatus, gsre.getTrailers)
+        case gsre: StatusRuntimeException => throw GrpcStatusRuntimeException(gsre)
         case te: TimeoutException         => throw te
         case NonFatal(cause)              => throw new Exception(cause)
       }
