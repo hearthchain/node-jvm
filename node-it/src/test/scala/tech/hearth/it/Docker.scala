@@ -44,6 +44,9 @@ class Docker(
     tag: String = "",
     enableProfiling: Boolean = false,
     enableDebugger: Boolean = false,
+    // Nodes peer over the container network, so the node-to-node port is only worth publishing for a suite that
+    // speaks the binary protocol from the test JVM itself (see networkAddressAccessibleFromHost).
+    publishNetworkPort: Boolean = false,
     imageName: String = Docker.NodeImageName
 ) extends AutoCloseable
     with ScorexLogging {
@@ -248,10 +251,32 @@ class Docker(
 
       val debuggerPort = if (enableDebugger) Docker.freeDebuggerPort() else 0
 
+      // Every published port costs a host bind out of the ephemeral range that dockerd shares with the test JVM's own
+      // outbound connections; publishing all of them for every node exhausted it under CI's parallelism and failed
+      // container starts with "address already in use". Publish only what this node is actually reached by from the
+      // host - the extensions a suite enables say which servers are even running inside it.
+      val extensions = actualConfig.getStringList("hearth.extensions").asScala.toSeq
+      val publishedPorts = Seq(
+        Some(actualConfig.getInt("hearth.rest-api.port")),
+        Option.when(extensions.contains(GrpcExtension))(actualConfig.getInt("hearth.grpc.port")),
+        Option.when(extensions.contains(BlockchainUpdatesExtension))(actualConfig.getInt("hearth.blockchain-updates.grpc-port")),
+        Option.when(publishNetworkPort)(networkPort.toInt),
+        Option.when(enableDebugger)(internalDebuggerPort)
+      ).flatten
+
       val hostConfig = HostConfig
         .builder()
-        .portBindings(if (enableDebugger) Map(s"$internalDebuggerPort" -> Seq(PortBinding.of("0.0.0.0", debuggerPort)).asJava).asJava else null)
-        .publishAllPorts(true)
+        .portBindings(
+          publishedPorts
+            .map { port =>
+              // An empty host ip keeps the dual-stack binding publishAllPorts used to give these ports, so `localhost`
+              // reaches them whichever way it resolves.
+              val binding = if (port == internalDebuggerPort) PortBinding.of("0.0.0.0", debuggerPort) else PortBinding.randomPort("")
+              s"$port" -> Seq(binding).asJava
+            }
+            .toMap
+            .asJava
+        )
         .build()
 
       val envs = Seq(
@@ -259,16 +284,10 @@ class Docker(
         profilerConfigEnv
       ).filter(_.nonEmpty)
 
-      val exposedPorts = new java.util.HashSet[String]()
-      exposedPorts.add(s"$internalDebuggerPort")
-      if (Try(nodeConfig.getStringList("hearth.extensions").contains("tech.hearth.events.BlockchainUpdates")).getOrElse(false)) {
-        exposedPorts.add("6881")
-      }
-
       val containerConfig = ContainerConfig
         .builder()
         .image(imageName)
-        .exposedPorts(exposedPorts)
+        .exposedPorts(publishedPorts.map(_.toString)*)
         .networkingConfig(ContainerConfig.NetworkingConfig.create(Map(hearthNetwork.name() -> endpointConfigFor(nodeName)).asJava))
         .hostConfig(hostConfig)
         .env(envs*)
@@ -568,6 +587,9 @@ class Docker(
 object Docker {
   val NodeImageName: String = "hearth/node-it:latest"
 
+  val GrpcExtension              = "tech.hearth.api.grpc.GRPCServerExtension"
+  val BlockchainUpdatesExtension = "tech.hearth.events.BlockchainUpdates"
+
   private val ContainerRoot = Paths.get("/usr/share/hearth")
   private val ProfilerPort  = 10001
 
@@ -650,11 +672,16 @@ object Docker {
       .mkString(" ")
 
   case class NodeInfo(restApiPort: Int, networkPort: Int, hearthIpAddress: String, ports: JMap[String, JList[PortBinding]]) {
-    val nodeApiEndpoint: URL                       = URI.create(s"http://localhost:${externalPort(restApiPort)}").toURL
-    val hostNetworkAddress: InetSocketAddress      = new InetSocketAddress("localhost", externalPort(networkPort))
+    val nodeApiEndpoint: URL = URI.create(s"http://localhost:${externalPort(restApiPort)}").toURL
+    // Lazy: only suites that ask for the node-to-node port have it published (see Docker's publishNetworkPort).
+    lazy val hostNetworkAddress: InetSocketAddress = new InetSocketAddress("localhost", externalPort(networkPort))
     val containerNetworkAddress: InetSocketAddress = new InetSocketAddress(hearthIpAddress, networkPort)
 
-    def externalPort(internalPort: Int): Int = ports.get(s"$internalPort/tcp").get(0).hostPort().toInt
+    def externalPort(internalPort: Int): Int = {
+      val bindings = ports.get(s"$internalPort/tcp")
+      require(bindings != null, s"Port $internalPort is not published, published: ${ports.keySet().asScala.mkString(", ")}")
+      bindings.get(0).hostPort().toInt
+    }
   }
 
   class DockerNode(config: Config, val containerId: String, private[Docker] var nodeInfo: NodeInfo) extends Node(config) {

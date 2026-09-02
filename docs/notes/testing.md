@@ -160,6 +160,18 @@ feature, migrate what's still meaningful to current APIs (`account.KeyPair` → 
 generates the six surviving transaction types; `Exchange` generation needs an explicit pre-existing `tradeAssetId`
 since there's no way to mint a fresh asset any more.
 
+### node-it: published ports
+
+`Docker.startNodeInternal` publishes only the container ports a suite actually reaches from the host, one explicit `PortBinding.randomPort` each, never `publishAllPorts`.
+
+Publishing everything the image `EXPOSE`s was a real CI failure, not just waste: `publishAllPorts` binds each of the image's ports (plus anything in `ContainerConfig.exposedPorts`, which adds to the image's set rather than replacing it) on both `0.0.0.0` and `::`, taking host ports out of `ip_local_port_range`, and dockerd shares that range with every outbound connection the test JVM makes. Under CI's parallelism (`maxParallelSuites` defaults to docker's CPU count times two, so 8 on a GitHub runner) container starts began failing with `driver failed programming external connectivity ... failed to listen on TCP socket: address already in use`, which aborts the whole suite because `startNodeInternal` has no retry.
+
+Which ports a node needs is derived from its own resolved config: the REST port always, `hearth.grpc.port` iff `hearth.extensions` contains `GRPCServerExtension`, `hearth.blockchain-updates.grpc-port` iff it contains `BlockchainUpdates`. Read that list from `actualConfig`, never from the suite's own `nodeConfig` fragment, which does not see `template.conf` or `suiteConfig`. The gRPC extension is therefore off in `template.conf` and switched on per suite by `GrpcBaseTransactionSuiteLike`'s `createDocker`, so ~40 of the ~48 suites no longer start a gRPC server they never call.
+
+Two ports do not follow from the config. The node-to-node port is always listening inside the container, but nodes peer over the container network (`peersFor` uses `containerNetworkAddress`, and `declared-address` is the container IP), so it only needs publishing for a suite that speaks the binary protocol from the test JVM itself: `Docker`'s `publishNetworkPort` flag, used only by `SimpleTransactionsSuite` via `sendByNetwork`. The debugger port (5005) is published only under `enableDebugger`.
+
+Consequences to keep in mind: `NodeInfo.hostNetworkAddress` must stay `lazy`, or constructing any node without a published network port dies; `externalPort` fails with the port number and the published set rather than an NPE; and a suite that starts using a new port has to say so, either by enabling the extension that owns it or by adding a flag. Bindings deliberately use an empty host ip so they stay dual-stack, since suites connect to `localhost`, which resolves to `::1` first on some hosts.
+
 ### node-it: known gaps
 
 `EndorsementFilter.simulate` correctly detects quorum reached via the miner's own balance alone, with nobody left

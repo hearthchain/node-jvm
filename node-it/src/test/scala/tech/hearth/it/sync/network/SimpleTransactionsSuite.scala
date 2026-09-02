@@ -3,6 +3,7 @@ package tech.hearth.it.sync.network
 import com.typesafe.config.Config
 import tech.hearth.account.Address
 import tech.hearth.common.utils.EitherExt2.*
+import tech.hearth.it.Docker
 import tech.hearth.it.api.AsyncNetworkApi.*
 import tech.hearth.it.api.SyncHttpApi.*
 import tech.hearth.it.sync.*
@@ -17,6 +18,10 @@ import scala.concurrent.duration.*
 class SimpleTransactionsSuite extends BaseTransactionSuite {
   import tech.hearth.it.NodeConfigs.*
   override val nodeConfigs: Seq[Config] = Seq(BiggestMiner.quorum(0))
+
+  // The only suite that speaks the binary network protocol from the test JVM (sendByNetwork), so the only one that
+  // needs the node-to-node port reachable from the host.
+  override protected def createDocker: Docker = new Docker(tag = getClass.getSimpleName, publishNetworkPort = true)
 
   private def node = nodes.head
 
