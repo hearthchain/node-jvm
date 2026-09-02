@@ -39,7 +39,7 @@ jobs:
           java-version: '25'
           cache: 'sbt'
       - uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
-      - run: sbt -Dproject.version=${{ steps.ghd.outputs.describe }} --batch ';lang-tests/test;lang-tests-js/test;repl/test;langJS/fullOptJS;replJS/fullOptJS'
+      - run: sbt --server -Dproject.version=${{ steps.ghd.outputs.describe }} --batch ';lang-tests/test;lang-tests-js/test;repl/test;langJS/fullOptJS;replJS/fullOptJS'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           registry-url: 'https://registry.npmjs.org'

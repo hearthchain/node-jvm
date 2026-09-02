@@ -164,3 +164,21 @@ Two follow-ons once the local copy is gone: sbt's *resolution* is cached too, so
 `ArtifactError$NotFound` still pointing at the `~/.m2` path - `sbt --client shutdown` and rerun to force
 re-resolution. And a schema change is only visible here after the sibling repo's CI publishes a new snapshot, so
 a node-jvm branch that consumes new proto fields depends on the schemas PR having merged *and* published first.
+
+## CI runs sbt with `--server`: the thin client races its own server on a cold checkout
+
+sbt 2's `sbt` script is the native thin client (`sbtn`) by default: it forks a server in the background, then reads
+`project/target/active.json` for the socket to connect to. On a cold CI checkout that file is being written while
+the client polls it, and the client can read a truncated document
+(`sbt connection file ... is corrupt or unreadable: IncompleteParseException: exhausted input; starting a new
+server`), decide the server is stale, fork a second one, and exit 1 with `failed to connect to server` - before a
+single task has run. Run 33628223824 died this way 44 seconds in.
+
+Every workflow therefore invokes `sbt --server ...`, which runs the server in the foreground and never touches
+`active.json`. CI has no second command to attach to, so the thin client buys nothing there. Do not "simplify" the
+flag away.
+
+`-Dsbt.ci=true` is *not* needed on top of it: `Terminal.isCI` is
+`System.getProperty("sbt.ci") == "true" || sys.env.contains("BUILD_NUMBER") || sys.env.contains("CI")`, and GitHub
+Actions sets `CI=true` on every runner. `BUILD_NUMBER` in that list is Jenkins/Hudson; GitHub Actions does not
+define it (its equivalents are `GITHUB_RUN_NUMBER`/`GITHUB_RUN_ID`/`GITHUB_RUN_ATTEMPT`).
