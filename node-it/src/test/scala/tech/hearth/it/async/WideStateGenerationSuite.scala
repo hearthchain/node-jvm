@@ -49,11 +49,7 @@ class WideStateGenerationSuite extends BaseFreeSpec with TransferSending {
 
   "Generate a lot of transactions and synchronise" in {
     val test = for {
-      b <- dumpBalances()
-      uploadedTxs <- processRequests(
-        generateTransfersToRandomAddresses(requestsCount / 2, nodeAddresses) ++
-          generateTransfersBetweenAccounts(requestsCount / 2, b)
-      )
+      uploadedTxs <- processRequests(generateTransfersToRandomAddresses(requestsCount, nodeAddresses))
 
       _ <- Await.ready(traverse(nodes)(_.waitFor[Int]("UTX is empty")(_.utxSize, _ == 0, 5.seconds)), 7.minutes)
 

@@ -13,7 +13,7 @@ class MicroblocksGenerationSuite extends BaseFreeSpec with TransferSending {
   import MicroblocksGenerationSuite.*
 
   override protected val nodeConfigs: Seq[Config] =
-    Seq(ConfigOverrides.withFallback(NodeConfigs.randomMiner))
+    Seq(ConfigOverrides.withFallback(NodeConfigs.Miners.head))
 
   private val nodeAddresses = nodeConfigs.map(_.getString("address")).toSet
 
