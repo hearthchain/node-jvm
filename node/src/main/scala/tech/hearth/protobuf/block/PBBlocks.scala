@@ -1,7 +1,7 @@
 package tech.hearth.protobuf.block
 
 import com.google.protobuf.ByteString
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.block.{BlockHeader, ChallengedHeader}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
@@ -43,7 +43,7 @@ object PBBlocks {
   }
 
   def protobuf(header: BlockHeader): PBHeader = PBBlock.Header.of(
-    AddressScheme.current.chainId,
+    NetworkId.current.value,
     header.reference.toByteString,
     header.baseTarget,
     header.generationSignature.toByteString,
@@ -77,19 +77,19 @@ object PBBlocks {
     )
   }
 
-  // SignedTransaction no longer wraps the transaction in a oneof, so the chain id is set on the field directly
-  def clearChainId(block: PBBlock): PBBlock =
+  // SignedTransaction no longer wraps the transaction in a oneof, so the network id is set on the field directly
+  def clearNetworkId(block: PBBlock): PBBlock =
     block.update(
-      _.header.chainId := 0,
-      _.transactions.foreach(_.transaction.chainId := 0)
+      _.header.networkId := "",
+      _.transactions.foreach(_.transaction.networkId := "")
     )
 
-  def addChainId(block: PBBlock): PBBlock = {
-    val chainId = AddressScheme.current.chainId
+  def addNetworkId(block: PBBlock): PBBlock = {
+    val networkId = NetworkId.current.value
 
     block.update(
-      _.header.chainId := chainId,
-      _.transactions.foreach(_.transaction.chainId := chainId)
+      _.header.networkId := networkId,
+      _.transactions.foreach(_.transaction.networkId := networkId)
     )
   }
 }

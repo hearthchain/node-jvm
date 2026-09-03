@@ -1,6 +1,7 @@
 package tech.hearth
 
 import com.typesafe.config.ConfigFactory
+import tech.hearth.account.NetworkId
 import tech.hearth.block.{Block, MicroBlock}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
@@ -37,7 +38,7 @@ package object history {
     settings.copy(initialReward = reward, decayRatioFixed = BigInt(1) << EmissionCurve.FixedPointBits)
 
   val DefaultBlockchainSettings = BlockchainSettings(
-    addressSchemeCharacter = 'N',
+    networkId = NetworkId.Testnet,
     functionalitySettings = TestFunctionalitySettings.Enabled,
     // Genesis balances are part of a predefined snapshot built from these settings, and tests declare their own
     // (or none at all, defaulting to an empty genesis - see Block.genesis), so this doesn't set predefinedSnapshots.

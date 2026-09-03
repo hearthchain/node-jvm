@@ -16,9 +16,9 @@ need rebuilding together from scratch (old base58 addresses and pre-migration ke
 
 A stale genesis timestamp is not a catch-up bug: `Miner.forgeBlock` stamps a block `max(parentTimestamp + delay, now - 1 minute)`, so the chain bursts roughly 35 blocks in its first minute and then runs at the configured pace, with transactions timestamped "now" accepted throughout (measurements in `docker/private/README.md`, "Why genesis timestamp should stay close to now"); the cost is a third of the K=100 StartBoost freshness window, so keep genesis reasonably fresh. This is also why predefined DCAP collateral (see "DCAP collateral registry" in `docs/notes/hearth-transactions.md`) can't just be grafted onto a config's genesis: collateral validity is checked against genesis's own pinned timestamp, and a real Intel-signed fixture's validity window won't reach into whatever "now" a rebuilt genesis uses - `docker/private/README.md` documents the mechanism and constraint for whoever fetches fresh collateral and rebuilds genesis to match it.
 
-Nothing sets a default bech32 HRP in `Application.scala` (`-Dhearth.hrp` has no fallback) - a real node crashes
-rendering its first address without it. `docker/private` works around this in its own Dockerfile; the
-mainnet/testnet/stagenet-targeting `docker/Dockerfile`/`entrypoint.sh` still doesn't, a genuine open gap.
+The node pins its own bech32 HRP from `hearth.blockchain.custom.network-id` at startup, so the private image no
+longer needs the `-Dhearth.hrp=phrth` `JAVA_OPTS` its Dockerfile used to carry. `network-id` and the HRP of the
+addresses a config credits at genesis have to agree: `phrth` here, and the genesis balances are `phrth1...`.
 
 ## Live StartBoost on docker/private
 

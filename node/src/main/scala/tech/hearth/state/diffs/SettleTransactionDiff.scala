@@ -67,7 +67,7 @@ object SettleTransactionDiff {
       period <- blockchain.currentGenerationPeriod.toRight(GenericError("DeterministicFinality is not yet activated"))
       // The signature is rebuilt from the transaction and `period`, not from the batch, so a batch signed for a
       // different network, operator or period does not verify here.
-      message = SettleTransaction.mkSettlementMessage(tx.chainId, tx.enclavePublicKey, sender, period.start.toInt, tx.settlements)
+      message = SettleTransaction.mkSettlementMessage(tx.networkId, tx.enclavePublicKey, sender, period.start.toInt, tx.settlements)
       _ <- Either.raiseUnless(crypto.verify(tx.enclaveSignature, message, PublicKey(tx.enclavePublicKey))) {
         GenericError("Invalid enclave signature over settlements")
       }

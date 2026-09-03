@@ -7,6 +7,7 @@ import tech.hearth.generator.GeneratorSettings.NodeAddress
 import tech.hearth.generator.config.ConfigReaders
 import pureconfig.ConfigReader
 import pureconfig.generic.derivation.*
+import tech.hearth.account.NetworkId
 import tech.hearth.crypto.SigningKey
 
 import java.net.{InetSocketAddress, URI, URL}
@@ -14,7 +15,7 @@ import java.nio.charset.StandardCharsets
 import scala.util.Try
 
 case class GeneratorSettings(
-    chainId: String,
+    networkId: NetworkId,
     accounts: Seq[String],
     sendTo: Seq[NodeAddress],
     worker: Worker.Settings,
@@ -23,7 +24,6 @@ case class GeneratorSettings(
     wide: WideTransactionGenerator.Settings,
     dynWide: DynamicWideTransactionGenerator.Settings
 ) derives ConfigReader {
-  val addressScheme: Char                 = chainId.head
   val privateKeyAccounts: Seq[SigningKey] = accounts.map(s => GeneratorSettings.toKeyPair(s))
 }
 
@@ -48,7 +48,7 @@ object GeneratorSettings extends ConfigReaders {
       case Mode.DYN_WIDE => show"$dynWide"
     }
 
-    s"""network byte: $chainId
+    s"""network id: ${networkId.value}
        |rich accounts:
        |  ${accounts.mkString("\n  ")}
        |recipient nodes:

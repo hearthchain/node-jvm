@@ -200,7 +200,7 @@ once-registered identity, made to stay consistent with every other period-scoped
 (`committedGenerators`, `isConflict`) rather than introduce a second, unbounded registry alongside the period-scoped
 one.
 
-**`ReserveTransaction`** (`sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, chainId`) locks
+**`ReserveTransaction`** (`sender, assetId, amount, miner, feeAssetId, fee, timestamp, proofs, networkId`) locks
 `amount` of `assetId` from the sender's balance against a registered miner. **`assetId` is typed `IssuedAsset`, not
 `Asset`: Hearth itself is not reservable.** That is a type-level guarantee, not a diff check - it matches
 `SettleTransaction.Settlement.assetId`, the only way a reservation is ever drawn down, so a reservation that could
@@ -218,7 +218,7 @@ only recorded in `reservedAmounts`; until `Withdraw` exists, whatever a client r
 never covered by a `Settle`) is **unspendable and unrecoverable**. This is a real, currently-open fund-safety gap,
 not an oversight: it is not yet safe to expose `Reserve` on a network carrying real value.
 
-**`BindApiKeyTransaction`** (`sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, chainId`) binds an
+**`BindApiKeyTransaction`** (`sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, networkId`) binds an
 HPKE-sealed API key envelope to a registered enclave's public key. `state/diffs/
 BindApiKeyTransactionDiff.scala` checks `enclavePublicKey` is registered, then upserts `encryptedApiKey` into a new
 `(enclavePublicKey, sender) -> ByteStr` store, `Blockchain.apiKeyBinding` - keyed enclave-first so a future read
@@ -291,7 +291,7 @@ ever reserved") and, on acceptance, "Settled Cred is retired" while "value settl
 beneficiary validator's workBoost in E+1".
 
 **`SettleTransaction`** (`sender, enclavePublicKey, settlements, enclaveSignature, fee, timestamp, proofs,
-chainId`) is submitted by a miner (`sender`, the same *TEE miner*/operator identity as `ReserveTransaction.miner`
+networkId`) is submitted by a miner (`sender`, the same *TEE miner*/operator identity as `ReserveTransaction.miner`
 and `RegisteredEnclave.operator` - see "Reserve and BindApiKey" above) and carries a batch of
 `Settlement(client, assetId, cumulativeSpent)` entries, protobuf `SettleTransactionData.Settlement{client:
 Recipient, cumulative_spent: Amount}` (asset piggybacks on the existing `Amount{asset_id, amount}` message rather
@@ -300,11 +300,12 @@ the raw 32-byte Ed25519 key and 64-byte signature of the *enclave itself* attest
 enclave-level signature alongside the transaction's own `proofs` (signed by `sender`'s account key), the same
 two-signer split `CommitToGeneration`'s VRF/BLS proof-of-possession fields use. The signed message
 (`SettleTransaction.mkSettlementMessage`) is a context-binding prefix - `domain`(16, `hearth-settle-v1`) `++`
-`chainId`(1) `++` `enclaveKey`(32) `++` `operator`(20) `++` `periodStart`(4, big-endian) `++` `count`(2,
+`networkId`(1 to 83) `++` `enclaveKey`(32) `++` `operator`(20) `++` `periodStart`(4, big-endian) `++` `count`(2,
 big-endian) - followed by each settlement's `client.toBytes`(20, `tech.hearth.crypto.Address.HASH_LEN`) `++`
 `assetId`(32) `++` `cumulativeSpent`(8, big-endian), concatenated in order. The prefix is what stops a batch being
 replayed on another network, operator or period; the diff rebuilds it from the transaction and chain state, never
-from the batch. Fixed-width fields throughout specifically so concatenating several settlements has no
+from the batch. The network id is the only variable-width field and needs no length prefix to keep the encoding injective
+(see `docs/notes/keys-and-signatures.md`); every other field is fixed-width specifically so concatenating several settlements has no
 parsing-boundary ambiguity, but only because `SettleTxValidator` separately rejects any `IssuedAsset` id whose
 length isn't exactly 32 bytes. That check is load-bearing, not cosmetic: the wire format itself (`PBAmounts.toVanillaAssetId`) accepts
 an `assetId` of *any* length with no validation, so without it a malicious `sender` (the operator relaying the

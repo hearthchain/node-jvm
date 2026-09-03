@@ -12,7 +12,7 @@ object TransferTxValidator extends TxValidator[TransferTransaction] {
       V.noOverflow((fee.value +: transfers.map(_.amount.value))*),
       V.cond(transfers.length <= MaxTransferCount, GenericError(s"Number of transfers ${transfers.length} is greater than $MaxTransferCount")),
       V.transferAttachment(attachment),
-      V.chainIds(chainId)
+      V.networkIds(networkId)
     )
   }
 }

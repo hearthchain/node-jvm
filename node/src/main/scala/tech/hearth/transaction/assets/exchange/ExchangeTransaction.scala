@@ -1,6 +1,6 @@
 package tech.hearth.transaction.assets.exchange
 
-import tech.hearth.account.{AddressScheme, PrivateKey, PublicKey}
+import tech.hearth.account.{NetworkId, PrivateKey, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
 import tech.hearth.lang.ValidationError
@@ -22,7 +22,7 @@ case class ExchangeTransaction(
     fee: TxPositiveAmount,
     timestamp: Long,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.Exchange),
       ProvenTransaction,
       TxWithFee.InHearth,
@@ -68,7 +68,7 @@ object ExchangeTransaction {
       fee: Long,
       timestamp: Long,
       proofs: Proofs = Proofs.empty,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, ExchangeTransaction] =
     for {
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
@@ -86,7 +86,7 @@ object ExchangeTransaction {
         fee,
         timestamp,
         proofs,
-        chainId
+        networkId
       ).validatedEither
     } yield tx
 }

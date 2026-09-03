@@ -22,7 +22,7 @@ jobs:
       lang-changed: ${{ steps.filter.outputs.lang == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: 'temurin'
           java-version: '25'
@@ -35,7 +35,7 @@ jobs:
         with:
           default: v1.0.0
       - name: Check PR
-        run: sbt -Dproject.version=$(echo ${{ steps.ghd.outputs.describe }} | cut -c 2-) -J-Xlog:gc*=debug:file=./gc.log --batch checkPR
+        run: sbt --server -Dproject.version=$(echo ${{ steps.ghd.outputs.describe }} | cut -c 2-) -J-Xlog:gc*=debug:file=./gc.log --batch checkPR
       - uses: ScalableCapital/action-surefire-report@4004a71652495d6ed111f5b717c2cf9aa0f37627 # v2.0.5
         if: always()
         with:
@@ -65,7 +65,7 @@ jobs:
       matrix:
         os: [macos-15-intel, macos-15, ubuntu-24.04, ubuntu-24.04-arm, windows-2022]
     steps:
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: 'temurin'
           java-version: '25'
@@ -80,14 +80,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: 'temurin'
           java-version: '25'
           cache: 'sbt'
       - uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
       - name: Run Integration Tests
-        run: sbt --batch "node-it/docker;node-it/test"
+        run: sbt --server -Dhearth.it.max-parallel-suites=4 --batch "node-it/docker;node-it/test"
         env:
           RUN_ID: ${{ github.head_ref }}-${{ github.run_number }}-${{ github.run_attempt }}
       - uses: ScalableCapital/action-surefire-report@4004a71652495d6ed111f5b717c2cf9aa0f37627 # v2.0.5
@@ -115,7 +115,7 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: 'temurin'
           java-version: '25'
@@ -123,7 +123,7 @@ jobs:
           gpg-private-key: ${{ secrets.OSSRH_GPG_KEY }}
           gpg-passphrase: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
       - uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
-      - run: sbt -Dproject.version=$(awk -F '[".]' '{print $3"."$4"."$5+1}' version.sbt)-$PR_NUMBER-SNAPSHOT --batch publish
+      - run: sbt --server -Dproject.version=$(awk -F '[".]' '{print $3"."$4"."$5+1}' version.sbt)-$PR_NUMBER-SNAPSHOT --batch publish
         env:
           SONATYPE_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           SONATYPE_USERNAME: ${{ secrets.OSSRH_USERNAME }}

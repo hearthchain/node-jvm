@@ -16,10 +16,11 @@ class RollbackSuite extends BaseFunSuite with TransferSending with TableDrivenPr
   // Zeroed so that the block reward - which scales with however many blocks the same 190 transactions happen to spread
   // across on each mining attempt - doesn't dominate the state comparison below; without this, "Apply the same transfer
   // transactions twice with return to UTX" fails whenever the two attempts don't mine into the same number of blocks.
+  // The key is initial-reward (RewardsSettings): an unknown key under rewards is silently ignored, not rejected.
   override def nodeConfigs: Seq[Config] = Seq(
     BiggestMiner.quorum(0),
     NotMiner
-  ).map(_.overrides("hearth.blockchain.custom.rewards.initial = 0"))
+  ).map(_.overrides("hearth.blockchain.custom.rewards.initial-reward = 0"))
 
   private lazy val nodeAddresses = nodeConfigs.map(_.getString("address")).toSet
 

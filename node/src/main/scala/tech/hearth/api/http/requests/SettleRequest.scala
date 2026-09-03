@@ -19,7 +19,7 @@ case class SettleRequest(
     enclaveSignature: ByteStr,
     timestamp: Option[Long] = None,
     fee: Option[Long] = None,
-    chainId: Byte = AddressScheme.current.chainId,
+    networkId: NetworkId = NetworkId.current,
     proofs: Proofs = Proofs.empty
 ) extends TxBroadcastRequest[SettleTransaction] {
   def toTx: Either[ValidationError, SettleTransaction] =
@@ -34,7 +34,7 @@ case class SettleRequest(
         fee.getOrElse(FeeConstants(TransactionType.Settle) * FeeUnit),
         timestamp.getOrElse(defaultTimestamp),
         proofs,
-        chainId
+        networkId
       )
     } yield tx
 }

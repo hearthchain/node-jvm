@@ -1,7 +1,7 @@
 package tech.hearth.it.sync.transactions
 
 import com.google.protobuf.ByteString
-import tech.hearth.account.{Address, AddressScheme, PublicKey}
+import tech.hearth.account.{Address, NetworkId, PublicKey}
 import tech.hearth.api.http.requests.TransferRequest
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
@@ -46,8 +46,8 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
     val massTransferTransactionFee = calcMassTransferFee(transfers.size)
     val massTransferTx             = sender.massTransfer(firstKeyPair, transfers, massTransferTransactionFee, assetId = Some(assetId))
     nodes.waitForHeightAriseAndTxPresent(massTransferTx.id)
-    massTransferTx.chainId shouldBe Some(AddressScheme.current.chainId)
-    sender.transactionInfo[MassTransferTransactionInfo](massTransferTx.id).chainId shouldBe Some(AddressScheme.current.chainId)
+    massTransferTx.networkId shouldBe Some(NetworkId.current.value)
+    sender.transactionInfo[MassTransferTransactionInfo](massTransferTx.id).networkId shouldBe Some(NetworkId.current.value)
 
     miner.assertBalances(firstAddress, balance1 - massTransferTransactionFee, eff1 - massTransferTransactionFee)
     sender.assetBalance(firstAddress, assetId).balance shouldBe firstAssetBalanceBefore - 1000

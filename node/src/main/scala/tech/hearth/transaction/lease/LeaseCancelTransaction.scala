@@ -1,6 +1,6 @@
 package tech.hearth.transaction.lease
 
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.*
@@ -16,7 +16,7 @@ final case class LeaseCancelTransaction(
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.LeaseCancel),
       ProvenTransaction,
       TxWithFee.InHearth,
@@ -39,10 +39,10 @@ object LeaseCancelTransaction {
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, TransactionT] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- LeaseCancelTransaction(sender, leaseId, fee, timestamp, proofs, chainId).validatedEither
+      tx  <- LeaseCancelTransaction(sender, leaseId, fee, timestamp, proofs, networkId).validatedEither
     } yield tx
 }

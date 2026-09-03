@@ -1,6 +1,6 @@
 package tech.hearth.api.http.requests
 
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.Proofs
@@ -15,7 +15,7 @@ case class LeaseCancelRequest(
     timestamp: Option[Long],
     signature: Option[ByteStr],
     proofs: Option[Proofs],
-    chainId: Byte
+    networkId: NetworkId
 ) extends TxBroadcastRequest[LeaseCancelTransaction] {
   def toTx: Either[ValidationError, LeaseCancelTransaction] =
     for {
@@ -41,7 +41,7 @@ object LeaseCancelRequest {
       (JsPath \ "timestamp").readNullable[Long] and
       (JsPath \ "signature").readNullable[ByteStr] and
       (JsPath \ "proofs").readNullable[Proofs] and
-      (JsPath \ "chainId").readWithDefault(AddressScheme.current.chainId))(LeaseCancelRequest.apply),
+      (JsPath \ "networkId").readWithDefault(NetworkId.current))(LeaseCancelRequest.apply),
     Json.writes[LeaseCancelRequest]
   )
 }

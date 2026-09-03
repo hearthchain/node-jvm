@@ -102,11 +102,11 @@ trait TransactionGenBase extends NTPTime { suite: Suite =>
 
   def createLease(sender: SigningKey, amount: Long, fee: Long, timestamp: Long, recipient: Address): Gen[LeaseTransaction] = {
     val v1 = LeaseTransaction
-      .create(AddressScheme.current.chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
+      .create(NetworkId.current, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
     val v2 = LeaseTransaction
-      .create(AddressScheme.current.chainId, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
+      .create(NetworkId.current, PublicKey(sender.publicKey), recipient, amount, fee, timestamp, Proofs.empty)
       .map(_.signWith(sender))
       .explicitGet()
     Gen.oneOf(v1, v2)

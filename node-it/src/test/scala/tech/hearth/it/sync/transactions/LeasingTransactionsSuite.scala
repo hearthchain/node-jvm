@@ -1,6 +1,6 @@
 package tech.hearth.it.sync.transactions
 
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.api.http.TransactionsApiRoute
 import tech.hearth.api.http.TransactionsApiRoute.LeaseStatus
 import tech.hearth.it.api.SyncHttpApi.*
@@ -22,8 +22,8 @@ class LeasingTransactionsSuite extends AnyFreeSpecLike, BaseTransactionSuiteLike
 
     val createdLeaseTx = sender.lease(firstKeyPair, secondAddress, leasingAmount, leasingFee = minFee)
     nodes.waitForHeightAriseAndTxPresent(createdLeaseTx.id)
-    createdLeaseTx.chainId shouldBe Some(AddressScheme.current.chainId)
-    sender.transactionInfo[TransactionInfo](createdLeaseTx.id).chainId shouldBe Some(AddressScheme.current.chainId)
+    createdLeaseTx.networkId shouldBe Some(NetworkId.current.value)
+    sender.transactionInfo[TransactionInfo](createdLeaseTx.id).networkId shouldBe Some(NetworkId.current.value)
 
     miner.assertBalances(firstAddress, balance1 - minFee, eff1 - leasingAmount - minFee)
     miner.assertBalances(secondAddress, balance2, eff2 + leasingAmount)
@@ -87,8 +87,8 @@ class LeasingTransactionsSuite extends AnyFreeSpecLike, BaseTransactionSuiteLike
 
     val createdCancelLeaseTx = sender.cancelLease(firstKeyPair, createdLeaseTxId, minFee)
     nodes.waitForHeightAriseAndTxPresent(createdCancelLeaseTx.id)
-    createdCancelLeaseTx.chainId shouldBe Some(AddressScheme.current.chainId)
-    sender.transactionInfo[TransactionInfo](createdCancelLeaseTx.id).chainId shouldBe Some(AddressScheme.current.chainId)
+    createdCancelLeaseTx.networkId shouldBe Some(NetworkId.current.value)
+    sender.transactionInfo[TransactionInfo](createdCancelLeaseTx.id).networkId shouldBe Some(NetworkId.current.value)
 
     miner.assertBalances(firstAddress, balance1 - 2 * minFee, eff1 - 2 * minFee)
     miner.assertBalances(secondAddress, balance2, eff2)

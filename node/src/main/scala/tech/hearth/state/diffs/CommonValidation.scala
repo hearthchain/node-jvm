@@ -1,7 +1,7 @@
 package tech.hearth.state.diffs
 
 import cats.implicits.toBifunctorOps
-import tech.hearth.account.{Address, AddressScheme}
+import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.lang.ValidationError
 import tech.hearth.settings.FunctionalitySettings
 import tech.hearth.state.*
@@ -95,13 +95,11 @@ object CommonValidation {
       case _                    => Right(tx)
     }
 
-  def disallowFromAnotherNetwork[T <: Transaction](tx: T, currentChainId: Byte): Either[ValidationError, T] =
+  def disallowFromAnotherNetwork[T <: Transaction](tx: T, currentNetworkId: NetworkId): Either[ValidationError, T] =
     Either.cond(
-      tx.chainId == currentChainId,
+      tx.networkId == currentNetworkId,
       tx,
-      GenericError(
-        s"Transaction from another network, expected: ${AddressScheme.current.chainId}(${AddressScheme.current.chainId.toChar}), actual: ${tx.chainId}(${tx.chainId.toChar})"
-      )
+      GenericError(s"Transaction from another network, expected: ${currentNetworkId.value}, actual: ${tx.networkId.value}")
     )
 
   def disallowTxFromFuture[T <: Transaction](settings: FunctionalitySettings, time: Long, tx: T): Either[ValidationError, T] = {

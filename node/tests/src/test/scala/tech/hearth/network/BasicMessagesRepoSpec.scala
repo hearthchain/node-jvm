@@ -1,6 +1,7 @@
 package tech.hearth.network
 
 import com.google.protobuf.{ByteString, CodedOutputStream, WireFormat}
+import tech.hearth.account.NetworkId
 import tech.hearth.mining.MiningConstraints
 import tech.hearth.protobuf.block.*
 import tech.hearth.protobuf.transaction.*
@@ -10,9 +11,12 @@ import tech.hearth.transaction.{Proofs, TxHelpers}
 import java.io.ByteArrayOutputStream
 
 class BasicMessagesRepoSpec extends FreeSpec {
+  // The longest network id the wire can carry, so these stay worst-case size checks.
+  private val MaxSizedNetworkId = "a" * NetworkId.MaxLength
+
   "PBBlockSpec max length" in {
     val maxSizedHeader = PBBlock.Header(
-      Byte.MaxValue,
+      MaxSizedNetworkId,
       ByteString.copyFrom(bytes64gen.sample.get),
       Long.MaxValue,
       ByteString.copyFrom(byteArrayGen(VanillaBlock.GenerationVRFSignatureLength).sample.get),
@@ -59,7 +63,7 @@ class BasicMessagesRepoSpec extends FreeSpec {
     val maxSizeTransaction = PBSignedTransaction(
       Some(
         PBTransaction(
-          Byte.MaxValue,
+          MaxSizedNetworkId,
           ByteString.copyFrom(bytes32gen.sample.get),
           Long.MaxValue,
           Long.MaxValue

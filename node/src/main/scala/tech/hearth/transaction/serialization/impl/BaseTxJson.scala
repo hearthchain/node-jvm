@@ -11,7 +11,7 @@ object BaseTxJson {
       "fee"        -> tx.assetFee._2,
       "feeAssetId" -> tx.assetFee._1.maybeBase16Repr,
       "timestamp"  -> tx.timestamp,
-      "chainId"    -> tx.chainId
+      "networkId"  -> tx.networkId.value
     ) ++ (tx match {
       case p: ProvenTransaction =>
         Json.obj(

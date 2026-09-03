@@ -1,7 +1,7 @@
 package tech.hearth.transaction
 
 import com.google.protobuf.ByteString
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base64
 import tech.hearth.common.utils.EitherExt2.*
@@ -60,7 +60,7 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
       val recipient = accountOrAliasGen.sample.get
 
       val leaseTx = LeaseTransaction
-        .create(AddressScheme.current.chainId, PublicKey(Account.publicKey), recipient, 100, MinFee, Now, Proofs.empty)
+        .create(NetworkId.current, PublicKey(Account.publicKey), recipient, 100, MinFee, Now, Proofs.empty)
         .map(_.signWith(Account))
         .explicitGet()
       val leaseCancelTx =

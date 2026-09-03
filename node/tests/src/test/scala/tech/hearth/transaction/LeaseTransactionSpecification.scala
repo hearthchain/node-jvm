@@ -1,6 +1,6 @@
 package tech.hearth.transaction
 
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.PropSpec
@@ -12,7 +12,7 @@ class LeaseTransactionSpecification extends PropSpec {
   property("JSON format validation for LeaseTransaction") {
     val tx = LeaseTransaction
       .create(
-        AddressScheme.current.chainId,
+        NetworkId.current,
         PublicKey(ByteStr(TxHelpers.signer(1020).publicKey())),
         TxHelpers.address(1021),
         10000000,

@@ -93,11 +93,7 @@ case class CompositeHttpService(routes: Seq[ApiRoute], settings: RestAPISettings
 
   private lazy val patchedSwaggerJson = {
     import tech.hearth.Version
-    import tech.hearth.account.AddressScheme
-
-    def chainIdString: String =
-      if (Character.isAlphabetic(AddressScheme.current.chainId)) AddressScheme.current.chainId.toChar.toString
-      else s"#${AddressScheme.current.chainId}"
+    import tech.hearth.account.NetworkId
 
     HttpEntity(
       MediaType.customWithFixedCharset("text", "x-yaml", HttpCharsets.`UTF-8`, List("yaml")),
@@ -105,7 +101,7 @@ case class CompositeHttpService(routes: Seq[ApiRoute], settings: RestAPISettings
         .fromResource("swagger-ui/openapi.yaml")
         .mkString
         .replace("{{version}}", Version.VersionString)
-        .replace("{{chainId}}", chainIdString)
+        .replace("{{networkId}}", NetworkId.current.value)
     )
   }
 }

@@ -1,6 +1,6 @@
 package tech.hearth.it.sync.transactions
 
-import tech.hearth.account.{Address, AddressScheme, PublicKey}
+import tech.hearth.account.{Address, NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.NodeConfigs.GenesisAssets
@@ -77,7 +77,7 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
         timestamp = timestamp,
         attachment = ByteStr(attachment),
         proofs = Proofs.empty,
-        chainId = AddressScheme.current.chainId
+        networkId = NetworkId.current
       )
 
       tx.signWith(sender.keyPair)

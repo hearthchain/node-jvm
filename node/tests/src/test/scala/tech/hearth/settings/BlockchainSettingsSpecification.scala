@@ -1,6 +1,7 @@
 package tech.hearth.settings
 
 import com.typesafe.config.ConfigFactory
+import tech.hearth.account.NetworkId
 import tech.hearth.common.state.ByteStr
 import tech.hearth.state.EmissionCurve
 import tech.hearth.test.FlatSpec
@@ -17,7 +18,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |  blockchain {
           |    type = CUSTOM
           |    custom {
-          |      address-scheme-character = "C"
+          |      network-id = "chrth"
           |      functionality {
           |        feature-check-blocks-period = 10000
           |        blocks-for-feature-activation = 9000
@@ -70,7 +71,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
     )
     val settings = BlockchainSettings.fromRootConfig(config)
 
-    settings.addressSchemeCharacter should be('C')
+    settings.networkId should be(NetworkId.unsafeFromString("chrth"))
     settings.functionalitySettings.featureCheckBlocksPeriod should be(10000)
     settings.functionalitySettings.blocksForFeatureActivation should be(9000)
     settings.functionalitySettings.preActivatedFeatures should be(Map(19 -> 100, 20 -> 200))
@@ -125,7 +126,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
     )
     val settings = BlockchainSettings.fromRootConfig(config)
 
-    settings.addressSchemeCharacter should be('T')
+    settings.networkId should be(NetworkId.Testnet)
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(120.minutes)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(90.minutes)
     settings.rewardsSettings.cEmit should be(9500000000000000L)
@@ -159,7 +160,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
     )
     val settings = BlockchainSettings.fromRootConfig(config)
 
-    settings.addressSchemeCharacter should be('W')
+    settings.networkId should be(NetworkId.Mainnet)
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(120.minutes)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(90.minutes)
     settings.rewardsSettings.cEmit should be(9500000000000000L)
@@ -190,13 +191,25 @@ class BlockchainSettingsSpecification extends FlatSpec {
 
   it should "derive hardCap from this network's own premine + cEmit, not the global TotalHearth constant" in {
     val mainnet =
-      BlockchainSettings('W', FunctionalitySettings.MAINNET, GenesisSettings.MAINNET, RewardsSettings.MAINNET, PredefinedSnapshotSettings.MAINNET)
+      BlockchainSettings(
+        NetworkId.Mainnet,
+        FunctionalitySettings.MAINNET,
+        GenesisSettings.MAINNET,
+        RewardsSettings.MAINNET,
+        PredefinedSnapshotSettings.MAINNET
+      )
     mainnet.hardCap should be(Constants.TotalHearth * Constants.UnitsInHearth)
 
     // STAGENET premines the full TotalHearth *and* still emits cEmit on top (see PredefinedSnapshotSettings.STAGENET's
     // comment) - its hardCap must reflect that instead of silently going negative against the global constant.
     val stagenet =
-      BlockchainSettings('S', FunctionalitySettings.STAGENET, GenesisSettings.STAGENET, RewardsSettings.STAGENET, PredefinedSnapshotSettings.STAGENET)
+      BlockchainSettings(
+        NetworkId.Stagenet,
+        FunctionalitySettings.STAGENET,
+        GenesisSettings.STAGENET,
+        RewardsSettings.STAGENET,
+        PredefinedSnapshotSettings.STAGENET
+      )
     stagenet.hardCap should be(Constants.TotalHearth * Constants.UnitsInHearth + RewardsSettings.STAGENET.cEmit)
   }
 }

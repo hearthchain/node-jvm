@@ -1,6 +1,6 @@
 package tech.hearth.api.http
 
-import tech.hearth.account.Address
+import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.Height
@@ -49,7 +49,7 @@ object ApiError {
       case TxValidationError.OrderValidationError(o, m)      => OrderInvalid(o, m)
       case TxValidationError.UnsupportedTransactionType      => UnsupportedTransactionType
       case TxValidationError.Mistiming(err)                  => Mistiming(err)
-      case TxValidationError.WrongChain(ex, pr)              => InvalidChainId(ex, pr)
+      case TxValidationError.WrongChain(ex, pr)              => InvalidNetworkId(ex, pr)
       case err: TxValidationError.TooManyProofs              => InvalidProofs(err.toString())
       case err: TxValidationError.ToBigProof                 => InvalidProofs(err.toString())
       case TransactionValidationError(cause, tx) =>
@@ -382,9 +382,9 @@ object ApiError {
     )
   }
 
-  case class InvalidChainId(expected: Byte, provided: Byte) extends ApiError {
+  case class InvalidNetworkId(expected: NetworkId, provided: NetworkId) extends ApiError {
     override val id: Int          = 404
-    override val message: String  = s"Wrong chain-id. Expected - $expected, provided - $provided"
+    override val message: String  = s"Wrong network-id. Expected - ${expected.value}, provided - ${provided.value}"
     override val code: StatusCode = StatusCodes.BadRequest
   }
 

@@ -19,7 +19,7 @@ case class ReserveRequest(
     feeAssetId: Option[Asset] = None,
     timestamp: Option[Long] = None,
     fee: Option[Long] = None,
-    chainId: Byte = AddressScheme.current.chainId,
+    networkId: NetworkId = NetworkId.current,
     proofs: Proofs = Proofs.empty
 ) extends TxBroadcastRequest[ReserveTransaction] {
   def toTx: Either[ValidationError, ReserveTransaction] =
@@ -35,7 +35,7 @@ case class ReserveRequest(
         fee.getOrElse(FeeConstants(TransactionType.Reserve) * FeeUnit),
         timestamp.getOrElse(defaultTimestamp),
         proofs,
-        chainId
+        networkId
       )
     } yield tx
 }

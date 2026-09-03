@@ -84,8 +84,7 @@ package object settings {
       val bc = config.getString("hearth.blockchain.type")
       val suffix =
         if (bc == "CUSTOM") {
-          val char = config.getString("hearth.blockchain.custom.address-scheme-character").headOption.getOrElse(0.toChar)
-          s"custom-${Integer.toHexString(char)}"
+          s"custom-${config.getString("hearth.blockchain.custom.network-id")}"
         } else
           bc.toLowerCase
 

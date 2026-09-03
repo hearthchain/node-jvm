@@ -1,6 +1,6 @@
 package tech.hearth.transaction
 
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.*
@@ -32,7 +32,7 @@ class TransferTransactionSpecification extends PropSpec {
   )
 
   private val massTransfers = for {
-    chainId   <- Seq(Byte.MinValue, 0: Byte, AddressScheme.current.chainId, Byte.MaxValue)
+    networkId <- Seq(NetworkId.current, NetworkId.Mainnet)
     version   <- massTransferTxSupportedVersions
     asset     <- Seq(Hearth, asset)
     recipient <- Seq(recipient.toAddress)
@@ -44,7 +44,7 @@ class TransferTransactionSpecification extends PropSpec {
     )
     attachment <- Seq(ByteStr.empty, ByteStr(Random.nextBytes(TransferTransaction.MaxAttachmentSize)))
     proofs     <- proofs
-  } yield (chainId, version, asset, recipient, fee, transfers, attachment, proofs)
+  } yield (networkId, version, asset, recipient, fee, transfers, attachment, proofs)
 
   property("property validation") {
     import TransferTransaction.create
@@ -84,11 +84,11 @@ class TransferTransactionSpecification extends PropSpec {
   property("JSON format validation") {
     val js = Json.parse("""{
       "type": 2,
-      "id": "c3d3baad394e99703b903701b2431684f2fdf159e4d22437349b6d05ad8ead09",
+      "id": "82511f4349ad8cd8c8496265da1357ec17c32b9edc23de666a874def899e01ba",
       "fee": 200000,
       "feeAssetId": null,
       "timestamp": 1518091313964,
-      "chainId": 84,
+      "networkId": "thrth",
       "sender": "thrth1ryd2f987gg464uf4q5jte5rcmc2xgq6kr3qe39",
       "senderPublicKey": "d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22",
       "proofs": [

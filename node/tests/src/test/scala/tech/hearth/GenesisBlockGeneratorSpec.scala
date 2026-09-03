@@ -1,7 +1,7 @@
 package tech.hearth
 
 import com.typesafe.config.ConfigFactory
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.block.Block
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.settings.{BlockchainSettings, FunctionalitySettings, GenesisSettings, PredefinedSnapshotSettings, RewardsSettings}
@@ -11,12 +11,12 @@ import org.scalatest.EitherValues
 import pureconfig.ConfigSource
 
 class GenesisBlockGeneratorSpec extends FreeSpec with EitherValues {
-  // The generator sets AddressScheme.current from network-type; keep it at what the rest of the suite runs with
-  private val networkType = AddressScheme.current.chainId.toChar
+  // The generator pins the default HRP from network-id; keep it at what the rest of the suite runs with
+  private val networkId = NetworkId.current
 
   private val input = ConfigFactory.parseString(
     s"""genesis-generator {
-       |  network-type = "$networkType"
+       |  network-id = "${networkId.value}"
        |  base-target = 153722867
        |  average-block-delay = 60s
        |  timestamp = 1500635421931
@@ -42,8 +42,8 @@ class GenesisBlockGeneratorSpec extends FreeSpec with EitherValues {
   }
 
   private lazy val generatedBlockchainSettings: BlockchainSettings =
-    // functionalitySettings/rewardsSettings/addressSchemeCharacter don't affect Block.genesis
-    BlockchainSettings(networkType, FunctionalitySettings(), generatedGenesis, RewardsSettings.MAINNET, Seq(generatedSnapshot))
+    // functionalitySettings/rewardsSettings/networkId don't affect Block.genesis
+    BlockchainSettings(networkId, FunctionalitySettings(), generatedGenesis, RewardsSettings.MAINNET, Seq(generatedSnapshot))
 
   "the generated genesis config" - {
     "carries the commitments a node checks on start" in {

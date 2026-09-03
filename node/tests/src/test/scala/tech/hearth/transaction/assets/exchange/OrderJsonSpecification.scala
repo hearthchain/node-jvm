@@ -115,7 +115,7 @@ class OrderJsonSpecification extends PropSpec with JsonMatchers {
       case JsSuccess(o, _) =>
         // Pinned against the fixed sender above, so a change in how an order id is computed shows up here. Rebaselined
         // when that sender changed: the id is a function of it, and the old key could not be kept
-        o.id().toString shouldBe "f662623495d2a0f036d3a4f6773b6167e3c2cdd150556b425984757654936d3a"
+        o.id().toString shouldBe "12488fbafbdc676916681cef74aec27c5d053a8cd9b1f3a5ab7aecee8acc3511"
         o.senderPublicKey shouldBe PublicKey(keyPair.publicKey)
         o.matcherPublicKey shouldBe PublicKey(Base16.tryDecodeWithLimit("ba9e7203ca62efbaa49098ec408bdf8a3dfed5a7fa7c200ece40aade905e535f").get)
         o.assetPair.amountAsset shouldBe IssuedAsset(ByteStr.decodeBase16("111d57a6c010051999929d46fc33d829c116c13c99f0f26b76aed9d26e1302d4").get)

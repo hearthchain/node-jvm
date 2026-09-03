@@ -61,7 +61,10 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
     val exchanger      = keyPairFromSeed("exchanger".getBytes)
     val transferTxId   = sender.transfer(firstKeyPair, exchanger.toAddress.toString, transferAmount, minFee, waitForTx = true).id
     val transferTxInfo = sender.transactionInfo[TransactionInfo](transferTxId, amountsAsStrings = true)
-    transferTxInfo.amount shouldBe Some(transferAmount)
+    // A Transfer carries a transfers list (see TransferTxSerializer.toJson), so its JSON has totalAmount, never a
+    // top-level amount - and TransactionInfo's reader falls back to None rather than failing when amount is absent.
+    transferTxInfo.totalAmount shouldBe Some(transferAmount)
+    transferTxInfo.transfers.get.head.amount shouldBe transferAmount
     transferTxInfo.fee shouldBe minFee
 
     val amount = 1000000

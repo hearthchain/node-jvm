@@ -1,6 +1,6 @@
 package tech.hearth.state
 
-import tech.hearth.account.Address
+import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.api.common.AddressTransactions
 import tech.hearth.common.state.ByteStr
 import tech.hearth.database.{RDB, RocksDBWriter, TestStorageFactory}
@@ -41,6 +41,6 @@ package object utils {
       )._2
 
     def createTestBlockchainSettings(fs: FunctionalitySettings): BlockchainSettings =
-      BlockchainSettings('T', fs, GenesisSettings.TESTNET, DefaultRewardsSettings)
+      BlockchainSettings(NetworkId.Testnet, fs, GenesisSettings.TESTNET, DefaultRewardsSettings)
   }
 }

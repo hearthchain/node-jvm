@@ -1,6 +1,7 @@
 package tech.hearth.it
 
 import com.google.protobuf.ByteString
+import com.typesafe.config.ConfigFactory
 import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.api.SyncGrpcApi.*
@@ -14,6 +15,15 @@ import tech.hearth.crypto.SigningKey
 
 trait GrpcIntegrationSuiteWithThreeAddress extends BaseSuite with ScalaFutures with IntegrationPatience with RecoverMethods with ScorexLogging {
   this: TestSuite & Nodes =>
+
+  // Every suite mixing this in talks gRPC (beforeAll already does), and the extension is off by default in
+  // template.conf, so this is where it gets switched on and its port published. A suite overriding
+  // hearth.extensions in its own nodeConfigs replaces this list and must repeat GrpcExtension itself.
+  override protected def createDocker: Docker =
+    new Docker(
+      suiteConfig = ConfigFactory.parseString(s"hearth.extensions = [${Docker.GrpcExtension}]"),
+      tag = getClass.getSimpleName
+    )
 
   // Same seeds as IntegrationSuiteWithThreeAddresses (the REST fixture), so grpc suites trading the shared
   // genesis test asset (see template.conf) reach the same accounts it was distributed to.

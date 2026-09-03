@@ -2,7 +2,7 @@ package tech.hearth.utx
 
 import tech.hearth
 import tech.hearth.*
-import tech.hearth.account.{Address, PublicKey}
+import tech.hearth.account.{Address, NetworkId, PublicKey}
 import tech.hearth.block.Block
 import tech.hearth.crypto.SigningKey
 import tech.hearth.common.state.ByteStr
@@ -62,7 +62,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
     val origSettings    = HearthSettings.default()
     val settings = origSettings.copy(
       blockchainSettings = BlockchainSettings(
-        'T',
+        NetworkId.Testnet,
         FunctionalitySettings.TESTNET,
         genesisSettings,
         DefaultRewardsSettings,

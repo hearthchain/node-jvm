@@ -19,7 +19,7 @@ final case class BindApiKeyTransaction(
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.BindApiKey),
       ProvenTransaction,
       TxWithFee.InHearth,
@@ -41,10 +41,10 @@ object BindApiKeyTransaction {
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, BindApiKeyTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- BindApiKeyTransaction(sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, chainId).validatedEither
+      tx  <- BindApiKeyTransaction(sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, networkId).validatedEither
     } yield tx
 }

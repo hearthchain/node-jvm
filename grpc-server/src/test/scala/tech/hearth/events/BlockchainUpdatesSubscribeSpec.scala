@@ -1,7 +1,7 @@
 package tech.hearth.events
 
 import tech.hearth.TestValues.fee
-import tech.hearth.account.AddressScheme
+import tech.hearth.account.NetworkId
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
 import tech.hearth.transaction.Asset.Hearth
@@ -32,7 +32,7 @@ class BlockchainUpdatesSubscribeSpec extends BlockchainUpdatesTestBase {
         // V3 orders are always AssetDecimals-normalized: price / 10^(priceDecimals - amountDecimals), here
         // firstTokenAsset(2)/secondTokenAsset(6), a 10^4 factor - the tx's own price field must clear that
         val exchangeTx =
-          TxHelpers.exchangeFromOrders(order1, order2, order1.price.value * 10000, firstTxParticipant, fee, AddressScheme.current.chainId)
+          TxHelpers.exchangeFromOrders(order1, order2, order1.price.value * 10000, firstTxParticipant, fee, NetworkId.current)
         withAddedBlocksAndSubscribeExchangeTx(exchangeTx) { updated =>
           val append = updated.apply(0).getAppend
           checkExchangeTx(append, exchangeTx, normalizedPrice, order1.amount.value)

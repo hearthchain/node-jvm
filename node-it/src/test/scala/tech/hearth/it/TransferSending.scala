@@ -1,25 +1,21 @@
 package tech.hearth.it
 
-import java.util.concurrent.ThreadLocalRandom
 import com.google.common.primitives.Ints
 import com.typesafe.config.Config
+import org.scalatest.Suite
 import tech.hearth.account.*
-import tech.hearth.api.http.requests.TransferRequest
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.it.TransferSending.Req
 import tech.hearth.it.api.AsyncHttpApi.*
-import tech.hearth.it.api.Transaction
-import tech.hearth.transaction.TxHelpers
+import tech.hearth.it.api.{Transaction, UnexpectedStatusCodeException}
 import tech.hearth.transaction.Asset.Hearth
-import tech.hearth.transaction.TransactionType
+import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.transfer.*
 import tech.hearth.utils.ScorexLogging
-import org.scalatest.Suite
-import play.api.libs.json.Json.toJson
-import play.api.libs.json.{JsObject, Json}
 
+import java.util.concurrent.ThreadLocalRandom
 import scala.concurrent.Future
 import scala.util.Random
 
@@ -107,43 +103,25 @@ trait TransferSending extends ScorexLogging {
     val start = System.currentTimeMillis() - requests.size
     val signedTransfers = requests.zipWithIndex
       .map { case (x, i) =>
-        createSignedTransferRequest(
-          TxHelpers.transfer(
-            keyPairFromSeed(Base16.decode(x.senderSeed)),
-            Address.fromString(x.targetAddress).explicitGet(),
-            x.amount,
-            Hearth,
-            x.fee,
-            Hearth,
-            if (includeAttachment)
-              ByteStr(Array.fill(TransferTransaction.MaxAttachmentSize)(ThreadLocalRandom.current().nextInt().toByte))
-            else ByteStr.empty,
-            timestamp = start + i
-          )
+        TxHelpers.transfer(
+          keyPairFromSeed(Base16.decode(x.senderSeed)),
+          Address.fromString(x.targetAddress).explicitGet(),
+          x.amount,
+          Hearth,
+          x.fee,
+          Hearth,
+          if (includeAttachment)
+            ByteStr(Array.fill(TransferTransaction.MaxAttachmentSize)(ThreadLocalRandom.current().nextInt().toByte))
+          else ByteStr.empty,
+          timestamp = start + i
         )
       }
 
-    signedTransfers.zip(Iterator.continually(nodes).flatten).foldLeft(Future.successful(Seq.empty[Transaction])) {
-      case (resultFuture, (transferRequest, node)) =>
-        for {
-          result <- resultFuture
-          tx     <- node.signedBroadcast(toJson(transferRequest).as[JsObject] ++ Json.obj("type" -> TransactionType.Transfer.id))
-        } yield tx +: result
-    }
+    Future.sequence(signedTransfers.zip(Iterator.continually(nodes).flatten).map { case (tx, node) =>
+      node.signedBroadcast(tx.json()).recoverWith {
+        case u: UnexpectedStatusCodeException if u.responseBody.contains("already in the state") =>
+          Future.successful(tx.json().as[Transaction])
+      }
+    })
   }
-
-  protected def createSignedTransferRequest(tx: TransferTransaction): TransferRequest = {
-    import tx.*
-    TransferRequest(
-      tx.sender.toString,
-      Some(assetId),
-      transfers.map(t => TransferTransaction.Transfer(t.address.toString, t.amount.value)).toList,
-      fee.value,
-      Some(feeAssetId),
-      timestamp,
-      attachment,
-      proofs
-    )
-  }
-
 }

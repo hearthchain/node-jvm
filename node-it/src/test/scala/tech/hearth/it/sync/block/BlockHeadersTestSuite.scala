@@ -28,7 +28,7 @@ class BlockHeadersTestSuite
         _.raw(
           s"""hearth {
              |  blockchain.custom.rewards {
-             |    initial = $initialReward
+             |    initial-reward = $initialReward
              |  }
              |  miner.quorum = 1
              |}""".stripMargin

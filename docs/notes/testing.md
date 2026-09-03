@@ -46,12 +46,13 @@ which has no way to express an absent value: a `null` HOCON key becomes an empty
 `GenesisSettings`'s `Option[ByteStr]` fields decode that as `Some(ByteStr.empty)`, not `None`. Left unpinned,
 `custom-defaults.conf`'s placeholders (e.g. `state-hash = "BASE58STATEHASH"`) leak through as a real, failing mismatch.
 
-Addresses are bech32m keyed by a process-wide default HRP (`tech.hearth.crypto.Address.setDefaultHrp`/`-Dhearth.hrp`),
-a *different* setting from `AddressScheme.current.chainId` (which only affects a transaction's `chain_id` byte).
-Nothing in `Application.scala` calls `setDefaultHrp` — a real node crashes the first time it renders or parses any
-address (`IllegalStateException: default HRP not configured`) unless `-Dhearth.hrp` is set some other way. node-it
-works around this for itself (`Docker.scala` calls `setDefaultHrp("thrth")` for its own JVM and passes
-`-Dhearth.hrp=thrth` to every container's `JAVA_OPTS`), but this is a genuine unfixed gap for real deployments.
+Addresses are bech32m keyed by a process-wide default HRP, and that HRP *is* the network id (see "Network id" in `docs/notes/keys-and-signatures.md`):
+`Application.startNode` calls `Address.setDefaultHrp(settings.blockchainSettings.networkId.value)` before anything
+renders an address, and `NetworkId.current` reads it back. A node therefore needs no `-Dhearth.hrp` any more — its
+config already says which network it is on. Code that runs *outside* a node still has to pin it by hand and does:
+node-it's `Docker.scala` reads `hearth.blockchain.custom.network-id` out of its own config template, testkit's
+`BaseSuite.configureDefaultNetwork` pins `thrth`, and `GenesisBlockGenerator` pins its config's `network-id`.
+Without one, the first address rendered throws `IllegalStateException: default HRP not configured`.
 
 `entrypoint.sh` runs `exec java $JAVA_OPTS ...` with `$JAVA_OPTS` unquoted, so any config value containing a space
 (e.g. a genesis asset `description`) is split into separate argv words by the shell; the first bareword-looking piece
@@ -158,6 +159,46 @@ feature, migrate what's still meaningful to current APIs (`account.KeyPair` → 
 `BlockchainUpdaterImpl` constructor signatures, `TxHelpers` current builders). `NarrowTransactionGenerator` only
 generates the six surviving transaction types; `Exchange` generation needs an explicit pre-existing `tradeAssetId`
 since there's no way to mint a fresh asset any more.
+
+### node-it: published ports
+
+`Docker.startNodeInternal` publishes only the container ports a suite actually reaches from the host, one explicit `PortBinding.randomPort` each, never `publishAllPorts`.
+
+Publishing everything the image `EXPOSE`s was a real CI failure, not just waste: `publishAllPorts` binds each of the image's ports (plus anything in `ContainerConfig.exposedPorts`, which adds to the image's set rather than replacing it) on both `0.0.0.0` and `::`, taking host ports out of `ip_local_port_range`, and dockerd shares that range with every outbound connection the test JVM makes. Under CI's parallelism (`maxParallelSuites` defaults to docker's CPU count times two, so 8 on a GitHub runner) container starts began failing with `driver failed programming external connectivity ... failed to listen on TCP socket: address already in use`, which aborts the whole suite because `startNodeInternal` has no retry.
+
+Which ports a node needs is derived from its own resolved config: the REST port always, `hearth.grpc.port` iff `hearth.extensions` contains `GRPCServerExtension`, `hearth.blockchain-updates.grpc-port` iff it contains `BlockchainUpdates`. Read that list from `actualConfig`, never from the suite's own `nodeConfig` fragment, which does not see `template.conf` or `suiteConfig`. The gRPC extension is therefore off in `template.conf` and switched on per suite by `GrpcIntegrationSuiteWithThreeAddress`'s `createDocker`, so ~40 of the ~48 suites no longer start a gRPC server they never call. That override belongs on `GrpcIntegrationSuiteWithThreeAddress`, not on the narrower `GrpcBaseTransactionSuiteLike`: `BlockV5GrpcSuite` mixes in the former directly and got no gRPC port when only the latter enabled the extension.
+
+An exposed-but-unpublished port is a key in docker's port map with an *empty* binding list, not a missing entry, so `externalPort`'s guard has to reject emptiness as well as `null` - a `null` check alone lets it through to an `IndexOutOfBoundsException: Index: 0` that says nothing about which port was missing.
+
+Two ports do not follow from the config. The node-to-node port is always listening inside the container, but nodes peer over the container network (`peersFor` uses `containerNetworkAddress`, and `declared-address` is the container IP), so it only needs publishing for a suite that speaks the binary protocol from the test JVM itself: `Docker`'s `publishNetworkPort` flag, used only by `SimpleTransactionsSuite` via `sendByNetwork`. The debugger port (5005) is published only under `enableDebugger`.
+
+Consequences to keep in mind: `NodeInfo.hostNetworkAddress` must stay `lazy`, or constructing any node without a published network port dies; `externalPort` fails with the port number and the published set rather than an NPE; and a suite that starts using a new port has to say so, either by enabling the extension that owns it or by adding a flag. Bindings deliberately use an empty host ip so they stay dual-stack, since suites connect to `localhost`, which resolves to `::1` first on some hosts.
+
+### node-it: reward overrides
+
+The rewards config key is `initial-reward` (`RewardsSettings`), not `initial`. A suite that overrides
+`hearth.blockchain.custom.rewards.initial` is silently overriding nothing - pureconfig ignores the unknown key rather
+than rejecting it, so the suite runs with `template.conf`'s `initial-reward = 600000000` intact. `RollbackSuite` zeroes
+the reward so the block reward doesn't dominate its two-attempt state comparison, and failed on exactly this: its two
+mining attempts spanned a different number of blocks, leaving the miner's balance 3 * 600000000 apart. Both this and
+`BlockHeadersTestSuite` had the wrong key.
+
+### node-it: signing over the API
+
+`/transactions/sign` (and `/transactions/sign/{signerAddress}`) resolves its signer only through the node's own wallet,
+which derives its accounts from `hearth.wallet.seed` - a *different* seed from the `account-seed` behind `Node.address`.
+The miner's own address is therefore never in it, and signing as `sender.address` fails with
+`no private key for sender address in wallet`. A suite that needs server-side signing has to use an address from
+`createAddressServerSide()` and fund it itself if the signed transaction is then broadcast. That address's public key
+is not retrievable from any endpoint (`/addresses/publicKey` maps key to address, not back), so the only way to learn
+it is to sign a request that omits `senderPublicKey` and read back the one the node filled in - which is what
+`SignAndBroadcastApiSuite` does to verify a `sign/{signerAddress}` proof.
+
+A Transfer request carries a `transfers` list (`TransferRequest`), never a top-level `recipient`/`amount`; several
+suites still built the old single-transfer shape and got a `json data validation error` that reads like an unrelated
+failure. `TransactionInfo`'s node-it reader compounds this on the response side: its `amount` falls back to `quantity`
+via `orElse`, so an absent `amount` silently reads as `None` instead of failing, and a Transfer's amount lives in
+`totalAmount`/`transfers` anyway.
 
 ### node-it: known gaps
 

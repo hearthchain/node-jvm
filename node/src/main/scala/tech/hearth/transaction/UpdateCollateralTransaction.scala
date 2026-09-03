@@ -31,7 +31,7 @@ final case class UpdateCollateralTransaction(
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.UpdateCollateral),
       ProvenTransaction,
       TxWithFee.InHearth,
@@ -57,7 +57,7 @@ object UpdateCollateralTransaction {
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, UpdateCollateralTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
@@ -72,7 +72,7 @@ object UpdateCollateralTransaction {
         fee,
         timestamp,
         proofs,
-        chainId
+        networkId
       ).validatedEither
     } yield tx
 }

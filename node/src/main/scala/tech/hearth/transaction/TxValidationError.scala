@@ -1,6 +1,6 @@
 package tech.hearth.transaction
 
-import tech.hearth.account.Address
+import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.block.{Block, MicroBlock}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
@@ -57,7 +57,7 @@ object TxValidationError {
     override def toString: String = s"Duplicated keys found"
   }
 
-  case class WrongChain(expected: Byte, provided: Byte) extends ValidationError {
+  case class WrongChain(expected: NetworkId, provided: NetworkId) extends ValidationError {
     override def toString: String = s"Wrong chain-id. Expected - $expected, provided - $provided"
   }
 

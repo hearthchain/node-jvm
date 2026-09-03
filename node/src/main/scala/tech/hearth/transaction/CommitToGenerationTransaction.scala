@@ -33,7 +33,7 @@ final case class CommitToGenerationTransaction(
     commitmentSignature: BlsSignature,
     vrfCommitmentSignature: ByteStr,
     proofs: Proofs,
-    override val chainId: Byte
+    override val networkId: NetworkId
 ) extends Transaction(TransactionType.CommitToGeneration)
     with ProvenTransaction
     with TxWithFee.InHearth
@@ -90,7 +90,7 @@ object CommitToGenerationTransaction {
       commitmentSignature: BlsSignature,
       vrfCommitmentSignature: ByteStr,
       proofs: Proofs,
-      chainId: Byte
+      networkId: NetworkId
   ): Either[ValidationError, CommitToGenerationTransaction] =
     for {
       feeInHearth <- TxPositiveAmount(feeInHearth)(TxValidationError.InsufficientFee)
@@ -104,7 +104,7 @@ object CommitToGenerationTransaction {
         commitmentSignature,
         vrfCommitmentSignature,
         proofs,
-        chainId
+        networkId
       ).validatedEither
     } yield tx
 }

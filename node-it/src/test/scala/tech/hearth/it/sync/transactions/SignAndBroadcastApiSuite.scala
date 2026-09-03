@@ -94,12 +94,14 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
 
   test("/transactions/sign should respect timestamp if specified") {
     val timestamp = 1500000000000L
+    // A Transfer request carries a transfers list, not a top-level recipient/amount (TransferRequest's reader), and
+    // the signer is resolved against the node's own wallet, which sender.address is not registered in. Nothing is
+    // broadcast here, so an unfunded wallet address is enough.
     val json =
       Json.obj(
         "type"      -> TransactionType.Transfer.id,
-        "sender"    -> sender.address,
-        "recipient" -> firstAddress,
-        "amount"    -> 1,
+        "sender"    -> sender.createAddressServerSide(),
+        "transfers" -> Json.toJson(Seq(Transfer(firstAddress, 1))),
         "fee"       -> 100000,
         "timestamp" -> timestamp
       )
@@ -116,8 +118,7 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     val json = Json.obj(
       "type"            -> TransactionType.Transfer.id,
       "senderPublicKey" -> sender.publicKey.toString,
-      "recipient"       -> firstAddress,
-      "amount"          -> 1,
+      "transfers"       -> Json.toJson(Seq(Transfer(firstAddress, 1))),
       "fee"             -> 100000,
       "timestamp"       -> timestamp,
       "proofs"          -> List("A" * 64)
@@ -126,8 +127,8 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     assertBroadcastBadJson(json, "Proof doesn't validate")
     assertBroadcastBadJson(json - "type", WrongJson.WrongJsonDataMessage)
     assertBroadcastBadJson(json - "type" + ("type" -> Json.toJson(88)), "Bad transaction type")
-    assertBroadcastBadJson(json - "recipient", WrongJson.WrongJsonDataMessage)
-    // A chainId mismatch case used to be tested here, but TransferRequest has no chainId field of its own - the reader
+    assertBroadcastBadJson(json - "transfers", WrongJson.WrongJsonDataMessage)
+    // A network mismatch case used to be tested here, but TransferRequest has no networkId field of its own - the reader
     // ignores whatever the request JSON carries and always builds the transaction against the server's own network -
     // so a Transfer broadcast can never actually reach CommonValidation.disallowFromAnotherNetwork this way.
   }
@@ -136,7 +137,6 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     signBroadcastAndCalcFee(
       Json.obj(
         "type"       -> TransactionType.Transfer.id,
-        "sender"     -> sender.address,
         "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, transferAmount))),
         "attachment" -> Base16.encode("falafel".getBytes("UTF-8"))
       )
@@ -147,7 +147,6 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     signBroadcastAndCalcFee(
       Json.obj(
         "type"       -> TransferTransaction.typeId,
-        "sender"     -> sender.address,
         "transfers"  -> Json.toJson(Seq(Transfer(secondAddress, 1.hearth), Transfer(thirdAddress, 2.hearth))),
         "attachment" -> Base16.encode("masspay".getBytes("UTF-8"))
       )
@@ -156,40 +155,35 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
 
   test("/transactions/sign should produce lease/cancel transactions that are good for /transactions/broadcast") {
     val leaseId =
-      signBroadcastAndCalcFee(
-        Json.obj("type" -> TransactionType.Lease.id, "sender" -> sender.address, "amount" -> leasingAmount, "recipient" -> secondAddress)
-      )
+      signBroadcastAndCalcFee(Json.obj("type" -> TransactionType.Lease.id, "amount" -> leasingAmount, "recipient" -> secondAddress))
 
-    signBroadcastAndCalcFee(
-      Json.obj("type" -> TransactionType.LeaseCancel.id, "sender" -> sender.address, "txId" -> leaseId)
-    )
+    signBroadcastAndCalcFee(Json.obj("type" -> TransactionType.LeaseCancel.id, "txId" -> leaseId))
   }
 
   test("/transactions/sign/{signerAddress} should sign a transaction by key of signerAddress") {
-    // Only the public key is embedded in the request JSON below; the actual signing is done server-side by
-    // sender's own wallet (see the /transactions/sign/{sender.address} call), so a purely local key pair
-    // suffices here (there is no API to recover a key/seed from a server-generated address any more).
-    val firstAddress = sender.createKeyPair()
+    // The transaction declares one sender public key while the node signs it with the signerAddress's own key, so
+    // these have to be two different accounts: a purely local key pair for the declared sender (there is no API to
+    // recover a key/seed from a server-generated address any more) and the wallet-backed address as the signer.
+    val declaredSender = sender.createKeyPair()
 
     val json = Json.obj(
       "type"            -> TransactionType.Transfer.id,
-      "senderPublicKey" -> PublicKey(firstAddress.publicKey()).toString,
+      "senderPublicKey" -> PublicKey(declaredSender.publicKey()).toString,
       "transfers"       -> Json.toJson(Seq(Transfer(secondAddress, transferAmount))),
       "fee"             -> minFee
     )
 
-    val signedRequestResponse = sender.postJsonWithApiKey(s"/transactions/sign/${sender.address}", json)
+    val signedRequestResponse = sender.postJsonWithApiKey(s"/transactions/sign/$walletAddress", json)
     assert(signedRequestResponse.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
     val signedRequestJson = Json.parse(signedRequestResponse.getResponseBody)
     val signedRequest     = signedRequestJson.as[TransferRequest]
-    assert(PublicKey.fromBase16String(signedRequest.senderPublicKey).explicitGet() == PublicKey(firstAddress.publicKey()))
+    assert(PublicKey.fromBase16String(signedRequest.senderPublicKey).explicitGet() == PublicKey(declaredSender.publicKey()))
     assert(signedRequest.transfers.head.recipient == secondAddress)
     assert(signedRequest.fee == minFee)
     assert(signedRequest.transfers.head.amount == transferAmount)
     val signature = Base16.tryDecodeWithLimit((signedRequestJson \ "proofs")(0).as[String]).get
     val tx        = signedRequest.toTx.explicitGet()
-    val keyPair   = sender.keyPair
-    assert(crypto.verify(ByteStr(signature), tx.bodyBytes(), PublicKey(keyPair.publicKey())))
+    assert(crypto.verify(ByteStr(signature), tx.bodyBytes(), walletPublicKey))
   }
 
   test("/transactions/broadcast should produce ExchangeTransaction with genesis asset") {
@@ -201,7 +195,9 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     } yield (o1ver.toByte, o2ver.toByte)
 
     for ((o1ver, o2ver) <- versions) {
-      val buyer               = sender.keyPair
+      // The buy order pays in the genesis test asset, which is distributed to the firstKeyPair/secondKeyPair fixture
+      // accounts and to no node (see template.conf's predefined-snapshots) - the miner holds none of it.
+      val buyer               = firstKeyPair
       val seller              = secondKeyPair
       val matcher             = thirdKeyPair
       val ts                  = ntpTime.correctedTime()
@@ -262,17 +258,34 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     }
   }
 
+  // /transactions/sign only ever signs with a key from the node's own wallet, and the miner's own account
+  // (sender.address) is not registered in it - the wallet derives its accounts from a separate seed. Everything below
+  // that signs server-side does so as this address, funded in beforeAll so the signed transactions can also be
+  // broadcast. Its public key is only discoverable by signing something and reading back what the node filled in.
+  private lazy val walletAddress: String = sender.createAddressServerSide()
+
+  private lazy val walletPublicKey: PublicKey = {
+    val probe = Json.obj(
+      "type"      -> TransactionType.Transfer.id,
+      "sender"    -> walletAddress,
+      "transfers" -> Json.toJson(Seq(Transfer(secondAddress, 1))),
+      "fee"       -> minFee
+    )
+    val rs = sender.postJsonWithApiKey("/transactions/sign", probe)
+    assert(rs.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
+    PublicKey.fromBase16String((Json.parse(rs.getResponseBody) \ "senderPublicKey").as[String]).explicitGet()
+  }
+
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    // explicitly create three more addresses in node's wallet
-    sender.postForm("/addresses")
-    sender.postForm("/addresses")
-    sender.postForm("/addresses")
+    sender.transfer(firstKeyPair, walletAddress, 50.hearth, minFee, waitForTx = true)
   }
 
   private def signBroadcastAndCalcFee(json: JsObject): String = {
-    val jsWithPK  = json ++ Json.obj("senderPublicKey" -> sender.publicKey.toString)
-    val jsWithFee = jsWithPK ++ Json.obj("fee" -> sender.calculateFee(jsWithPK).feeAmount)
+    // calculateFee insists on a senderPublicKey, but the fee it returns does not depend on which key that is; the
+    // sign request must carry only "sender", so the node fills in the wallet key it actually signs with.
+    val fee       = sender.calculateFee(json ++ Json.obj("senderPublicKey" -> sender.publicKey.toString)).feeAmount
+    val jsWithFee = json ++ Json.obj("sender" -> walletAddress, "fee" -> fee)
     val rs        = sender.postJsonWithApiKey("/transactions/sign", jsWithFee)
     assert(rs.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
     val body   = Json.parse(rs.getResponseBody)

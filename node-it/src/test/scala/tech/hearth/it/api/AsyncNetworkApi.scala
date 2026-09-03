@@ -14,7 +14,7 @@ object AsyncNetworkApi {
     def sendByNetwork(messages: Any*): Future[Unit] = {
       val sender = new NetworkSender(
         node.settings.networkSettings.trafficLogger,
-        node.settings.blockchainSettings.addressSchemeCharacter,
+        node.settings.blockchainSettings.networkId,
         s"it-client-to-${node.name}",
         nonce
       )

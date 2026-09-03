@@ -24,7 +24,7 @@ final case class StartBoostTransaction(
     fee: TxPositiveAmount,
     timestamp: TxTimestamp,
     proofs: Proofs,
-    chainId: Byte
+    networkId: NetworkId
 ) extends Transaction(TransactionType.StartBoost),
       ProvenTransaction,
       TxWithFee.InHearth,
@@ -47,10 +47,10 @@ object StartBoostTransaction {
       fee: Long,
       timestamp: TxTimestamp,
       proofs: Proofs,
-      chainId: Byte = AddressScheme.current.chainId
+      networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, StartBoostTransaction] =
     for {
       fee <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
-      tx  <- StartBoostTransaction(sender, validator, tdxQuote, generationPeriodStart, fee, timestamp, proofs, chainId).validatedEither
+      tx  <- StartBoostTransaction(sender, validator, tdxQuote, generationPeriodStart, fee, timestamp, proofs, networkId).validatedEither
     } yield tx
 }

@@ -2,7 +2,7 @@ package tech.hearth.transaction
 
 import com.google.common.primitives.Ints
 import tech.hearth.crypto.{Crypto, VrfKey}
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
@@ -39,12 +39,12 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
         )
         .get
     ),
-    chainId = AddressScheme.current.chainId
+    networkId = NetworkId.current
   )
 
   "JSON parsing" in {
     val js = Json.parse(s"""{
-      "id": "1bfc8715b78148faaed3ce3d1e5a33f81ad12baec690efe994e24a93e43bc064",
+      "id": "a86a11189e58104e702a2c06444127c89cf46b4cecf52b37a53165e804b15636",
       "type": 6,
       "fee": 100000000,
       "feeAssetId": null,
@@ -59,7 +59,7 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
       "proofs": [
         "38b23a9854990fde3dce854aa91b78f120cd3674e858efaf52c9ad09d7a2c7bc07e514243b061042f4048505bf7e63429acae66d6d8832ded21a39c2bcf5bd81"
       ],
-      "chainId": 84
+      "networkId": "thrth"
     }""")
     origTx.json() shouldEqual js
   }

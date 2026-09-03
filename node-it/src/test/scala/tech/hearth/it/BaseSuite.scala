@@ -1,7 +1,6 @@
 package tech.hearth.it
 
 import com.typesafe.config.{Config, ConfigFactory}
-import tech.hearth.account.AddressScheme
 import tech.hearth.it.transactions.NodesFromDocker
 import tech.hearth.test.TestUtils
 import monix.eval.Coeval
@@ -38,9 +37,6 @@ trait BaseSuite
     require(isRunning, "Do not attempt to access node instances from suite constructors")
     Option(System.getProperty("hearth.it.config.file")) match {
       case None =>
-        AddressScheme.current = new AddressScheme {
-          override val chainId: Byte = 'I'
-        }
         dockerNodes()
       case Some(filePath) =>
         val defaultConfig = ConfigFactory.load()

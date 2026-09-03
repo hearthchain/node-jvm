@@ -2,7 +2,7 @@ package tech.hearth.it.grpc
 
 import com.google.common.primitives.Ints
 import com.typesafe.config.Config
-import tech.hearth.account.{AddressScheme, PublicKey}
+import tech.hearth.account.{NetworkId, PublicKey}
 import tech.hearth.api.grpc.{BlockRangeRequest, BlockRequest, BlocksApiGrpc}
 import tech.hearth.it.NodeConfigs
 import tech.hearth.it.api.SyncGrpcApi.*
@@ -22,7 +22,7 @@ class BlocksApiSuite extends GrpcBaseTransactionSuite {
   override protected def nodeConfigs: Seq[Config] =
     Seq(
       // Block format is a single, unconditional version now (no more per-height feature-gated transitions), and
-      // every check below is version-agnostic (chainId), so BlockV4Height/BlockV5Height just pick heights to
+      // every check below is version-agnostic (networkId), so BlockV4Height/BlockV5Height just pick heights to
       // sample rather than gate an actual behavior change.
       Default(6).overrides(s"""hearth {
                               |  miner {
@@ -63,21 +63,21 @@ class BlocksApiSuite extends GrpcBaseTransactionSuite {
   test("Validate Block v3 header fields") {
     sender.waitForHeight(BlockV4Height)
     validateHeaders(2 to BlockV4Height) { header =>
-      header.chainId shouldEqual AddressScheme.current.chainId
+      header.networkId shouldEqual NetworkId.current
     }
   }
 
   test("Validate Block v4 header fields") {
     sender.waitForHeight(BlockV5Height)
     validateHeaders(BlockV4Height + 1 until BlockV5Height) { header =>
-      header.chainId shouldEqual AddressScheme.current.chainId
+      header.networkId shouldEqual NetworkId.current
     }
   }
 
   test("Validate Block v5 header fields") {
     sender.waitForHeight(BlockV5Height + 2)
     validateHeaders(BlockV5Height until BlockV5Height + 2) { header =>
-      header.chainId shouldEqual AddressScheme.current.chainId
+      header.networkId shouldEqual NetworkId.current
     }
   }
 }

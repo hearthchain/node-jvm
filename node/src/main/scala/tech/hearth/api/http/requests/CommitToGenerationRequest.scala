@@ -22,7 +22,7 @@ case class CommitToGenerationRequest(
     fee: Option[Long] = None,
     commitmentSignature: ByteStr,
     vrfCommitmentSignature: ByteStr,
-    chainId: Byte = AddressScheme.current.chainId,
+    networkId: NetworkId = NetworkId.current,
     proofs: Proofs = Proofs.empty
 ) extends TxBroadcastRequest[CommitToGenerationTransaction] {
   def toTx: Either[ValidationError, CommitToGenerationTransaction] = {
@@ -40,7 +40,7 @@ case class CommitToGenerationRequest(
         blsSignature,
         vrfCommitmentSignature,
         proofs,
-        chainId
+        networkId
       )
     } yield tx
   }

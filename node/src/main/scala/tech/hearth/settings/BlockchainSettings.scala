@@ -3,7 +3,7 @@ package tech.hearth.settings
 import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.typesafe.config.Config
-import tech.hearth.account.Address
+import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.state.{EmissionCurve, GenesisBlockHeight, Height}
 import pureconfig.*
@@ -287,7 +287,7 @@ object GenesisSettings { // TODO: Move to network-defaults.conf
 }
 
 case class BlockchainSettings(
-    addressSchemeCharacter: Char,
+    networkId: NetworkId,
     functionalitySettings: FunctionalitySettings,
     genesisSettings: GenesisSettings,
     rewardsSettings: RewardsSettings,
@@ -329,18 +329,30 @@ object BlockchainSettings {
     for {
       objCur               <- cur.asObjectCursor
       blockchainTypeString <- objCur.atKey("type").flatMap(_.asString).map(_.toUpperCase)
-      (addressSchemeCharacter, functionalitySettings, genesisSettings, rewardsSettings, predefinedSnapshots) <- blockchainTypeString match {
+      (networkId, functionalitySettings, genesisSettings, rewardsSettings, predefinedSnapshots) <- blockchainTypeString match {
         case BlockchainType.STAGENET =>
-          Right(('S', FunctionalitySettings.STAGENET, GenesisSettings.STAGENET, RewardsSettings.STAGENET, PredefinedSnapshotSettings.STAGENET))
+          Right(
+            (
+              NetworkId.Stagenet,
+              FunctionalitySettings.STAGENET,
+              GenesisSettings.STAGENET,
+              RewardsSettings.STAGENET,
+              PredefinedSnapshotSettings.STAGENET
+            )
+          )
         case BlockchainType.TESTNET =>
-          Right(('T', FunctionalitySettings.TESTNET, GenesisSettings.TESTNET, RewardsSettings.TESTNET, PredefinedSnapshotSettings.TESTNET))
+          Right(
+            (NetworkId.Testnet, FunctionalitySettings.TESTNET, GenesisSettings.TESTNET, RewardsSettings.TESTNET, PredefinedSnapshotSettings.TESTNET)
+          )
         case BlockchainType.MAINNET =>
-          Right(('W', FunctionalitySettings.MAINNET, GenesisSettings.MAINNET, RewardsSettings.MAINNET, PredefinedSnapshotSettings.MAINNET))
+          Right(
+            (NetworkId.Mainnet, FunctionalitySettings.MAINNET, GenesisSettings.MAINNET, RewardsSettings.MAINNET, PredefinedSnapshotSettings.MAINNET)
+          )
         case _ =>
           // Custom
           for {
             customObjCur       <- objCur.atKey("custom").flatMap(_.asObjectCursor)
-            networkId          <- customObjCur.atKey("address-scheme-character").flatMap(_.asString).map(_.charAt(0))
+            networkId          <- customObjCur.atKey("network-id").flatMap(ConfigReader[NetworkId].from)
             functionality      <- customObjCur.atKey("functionality").flatMap(ConfigReader[FunctionalitySettings].from)
             genesis            <- customObjCur.atKey("genesis").flatMap(ConfigReader[GenesisSettings].from)
             rewards            <- customObjCur.atKey("rewards").flatMap(ConfigReader[RewardsSettings].from)
@@ -351,6 +363,6 @@ object BlockchainSettings {
           }
       }
 
-    } yield BlockchainSettings(addressSchemeCharacter, functionalitySettings, genesisSettings, rewardsSettings, predefinedSnapshots)
+    } yield BlockchainSettings(networkId, functionalitySettings, genesisSettings, rewardsSettings, predefinedSnapshots)
   )
 }

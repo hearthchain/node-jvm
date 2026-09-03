@@ -108,7 +108,7 @@ object BlockchainGeneratorApp extends ScorexLogging {
 
     log.info(s"Initial base target is ${genesis.initialBaseTarget}")
 
-    val blockchainSettings = BlockchainSettings(genSettings.chainId.toChar, genSettings.functionalitySettings, genesis, RewardsSettings.MAINNET)
+    val blockchainSettings = BlockchainSettings(genSettings.networkId, genSettings.functionalitySettings, genesis, RewardsSettings.MAINNET)
     val hearthSettings = {
       val settings = HearthSettings.fromRootConfig(loadConfig(options.configFile.map(readConfFile)))
       settings.copy(blockchainSettings = blockchainSettings, minerSettings = settings.minerSettings.copy(quorum = 0))

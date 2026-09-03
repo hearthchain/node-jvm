@@ -4,7 +4,7 @@ import cats.implicits.catsSyntaxSemigroup
 import cats.instances.either.*
 import cats.syntax.either.*
 import cats.syntax.functor.*
-import tech.hearth.account.{Address, AddressScheme}
+import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.lang.ValidationError
 import tech.hearth.metrics.TxProcessingStats
 import tech.hearth.metrics.TxProcessingStats.measureForType
@@ -88,7 +88,7 @@ object TransactionDiffer {
             // Authenticity first: it is the cheaper rejection - ParSignatureChecker has usually computed it already -
             // and there is no point doing blockchain lookups for a transaction that is not genuine.
             _ <- CommonValidation.disallowInvalidProofs(tx)
-            _ <- CommonValidation.disallowFromAnotherNetwork(tx, AddressScheme.current.chainId)
+            _ <- CommonValidation.disallowFromAnotherNetwork(tx, NetworkId.current)
             _ <- CommonValidation.disallowTxFromFuture(blockchain.settings.functionalitySettings, currentBlockTs, tx)
             _ <- CommonValidation.disallowTxFromPast(blockchain.settings.functionalitySettings, prevBlockTs, tx)
             _ <- CommonValidation.disallowDuplicateIds(blockchain, tx)
