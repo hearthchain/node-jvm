@@ -43,7 +43,6 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |      genesis {
           |        timestamp = 1460678400000
           |        block-timestamp = 1460678400000
-          |        signature = "aa11bb22cc33dd44"
           |        state-hash = "ee55ff66aa77bb88"
           |        block-id = "1122334455667788"
           |        initial-base-target = 153722867
@@ -83,7 +82,6 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.halfLifeBlocks should be(5256000L)
     settings.genesisSettings.blockTimestamp should be(1460678400000L)
     settings.genesisSettings.timestamp should be(1460678400000L)
-    settings.genesisSettings.signature should be(ByteStr.decodeBase16("aa11bb22cc33dd44").toOption)
     settings.genesisSettings.stateHash should be(ByteStr.decodeBase16("ee55ff66aa77bb88").toOption)
     settings.genesisSettings.blockId should be(ByteStr.decodeBase16("1122334455667788").toOption)
     settings.genesisSettings.initialBaseTarget should be(153722867)
@@ -134,7 +132,6 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.decayRatioFixed should be(BigInt("340281918165977088157076486680406733895"))
     settings.rewardsSettings.halfLifeBlocks should be(525_600L)
     settings.genesisSettings.timestamp should be(1478000000000L)
-    settings.genesisSettings.signature should be(None)  // The genesis block is signed by Block.GenesisGenerator
     settings.initialBalance should be(500000000000000L) // 5% premine; the other 95% is emitted, not genesis-credited
 
     settings.predefinedSnapshots.find(_.height == 1).get.balances should be(
@@ -168,7 +165,6 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.decayRatioFixed should be(BigInt("340282322045415694657836056900309514630"))
     settings.rewardsSettings.halfLifeBlocks should be(5256000L)
     settings.genesisSettings.timestamp should be(1465742577614L)
-    settings.genesisSettings.signature should be(None)  // The genesis block is signed by Block.GenesisGenerator
     settings.initialBalance should be(500000000000000L) // 5% premine; the other 95% is emitted, not genesis-credited
     settings.predefinedSnapshots.find(_.height == 1).get.balances should be(
       Seq(
@@ -189,7 +185,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
       RewardsSettings(cEmit = 1, initialReward = 1, decayRatioFixed = oneFixed + 1, halfLifeBlocks = 1)
   }
 
-  it should "derive hardCap from this network's own premine + cEmit, not the global TotalHearth constant" in {
+  it should "derive hardCap from this network's own premine + cEmit" in {
     val mainnet =
       BlockchainSettings(
         NetworkId.Mainnet,
@@ -198,10 +194,10 @@ class BlockchainSettingsSpecification extends FlatSpec {
         RewardsSettings.MAINNET,
         PredefinedSnapshotSettings.MAINNET
       )
-    mainnet.hardCap should be(Constants.TotalHearth * Constants.UnitsInHearth)
+    mainnet.hardCap should be(100_000_000L * Constants.UnitsInHearth) // 5% premine + 95% cEmit
 
-    // STAGENET premines the full TotalHearth *and* still emits cEmit on top (see PredefinedSnapshotSettings.STAGENET's
-    // comment) - its hardCap must reflect that instead of silently going negative against the global constant.
+    // STAGENET premines the full 100M cap *and* still emits cEmit on top (see PredefinedSnapshotSettings.STAGENET's
+    // comment) - its hardCap must reflect that instead of assuming every network's premine and cEmit sum to the cap.
     val stagenet =
       BlockchainSettings(
         NetworkId.Stagenet,
@@ -210,6 +206,6 @@ class BlockchainSettingsSpecification extends FlatSpec {
         RewardsSettings.STAGENET,
         PredefinedSnapshotSettings.STAGENET
       )
-    stagenet.hardCap should be(Constants.TotalHearth * Constants.UnitsInHearth + RewardsSettings.STAGENET.cEmit)
+    stagenet.hardCap should be(100_000_000L * Constants.UnitsInHearth + RewardsSettings.STAGENET.cEmit)
   }
 }

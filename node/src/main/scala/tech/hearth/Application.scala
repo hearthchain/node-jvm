@@ -288,7 +288,7 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
 
     // Network server should be started only after all extensions initialized
     val networkServer =
-      NetworkServerL1(
+      NetworkServer(
         settings,
         lastBlockInfo,
         historyReplier,

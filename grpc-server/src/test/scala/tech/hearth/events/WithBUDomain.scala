@@ -21,9 +21,14 @@ import org.scalatest.concurrent.ScalaFutures.convertScalaFuture
 
 trait WithBUDomain extends WithDomain { suite: Suite =>
   private given scheduler: Scheduler = Schedulers.singleThread("bu-domain", executionModel = SynchronousExecution)
+
+  /** What `defaultSigner` is funded with when the caller names no balances of its own: the whole 100M supply the
+    * predefined networks declare at genesis, so no test here ever runs short.
+    */
+  val DefaultSignerBalance: Long = 100_000_000L * Constants.UnitsInHearth
   def withDomainAndRepo(
       settings: HearthSettings,
-      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalHearth * Constants.UnitsInHearth)),
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, DefaultSignerBalance)),
       assets: Seq[GenesisAssetSettings] = Seq.empty,
       generators: Seq[tech.hearth.crypto.SigningKey] = Nil
   )(f: (Domain, Repo) => Unit, wrapDB: RocksDB => RocksDB = identity): Unit = {
@@ -38,7 +43,7 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   }
 
   def withManualHandle(settings: HearthSettings, setSendUpdate: (() => Unit) => Unit)(f: (Domain, Repo) => Unit): Unit =
-    withDomain(settings, balances = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalHearth * Constants.UnitsInHearth))) { d =>
+    withDomain(settings, balances = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, DefaultSignerBalance))) { d =>
       tempDb { rdb =>
         val repo = new Repo(rdb.db, d.blocksApi) {
           override def newHandler(
@@ -61,7 +66,7 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   def withGenerateSubscription(
       request: SubscribeRequest = SubscribeRequest.of(1, Int.MaxValue),
       settings: HearthSettings,
-      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalHearth * Constants.UnitsInHearth)),
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, DefaultSignerBalance)),
       assets: Seq[GenesisAssetSettings] = Seq.empty
   )(generateBlocks: Domain => Unit)(f: Seq[PBBlockchainUpdated] => Unit): Unit = {
     withDomainAndRepo(settings, balances, assets) { (d, repo) =>
@@ -76,7 +81,7 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   def withGenerateGetBlockUpdate(
       height: Int = 1,
       settings: HearthSettings,
-      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalHearth * Constants.UnitsInHearth)),
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, DefaultSignerBalance)),
       assets: Seq[GenesisAssetSettings] = Seq.empty
   )(generateBlocks: Domain => Unit)(f: GetBlockUpdateResponse => Unit): Unit = {
     withDomainAndRepo(settings, balances, assets) { (d, repo) =>
@@ -89,7 +94,7 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
   def withGenerateGetBlockUpdateRange(
       request: GetBlockUpdatesRangeRequest,
       settings: HearthSettings,
-      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalHearth * Constants.UnitsInHearth)),
+      balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, DefaultSignerBalance)),
       assets: Seq[GenesisAssetSettings] = Seq.empty
   )(generateBlocks: Domain => Unit)(f: Seq[PBBlockchainUpdated] => Unit): Unit = {
     withDomainAndRepo(settings, balances, assets) { (d, repo) =>

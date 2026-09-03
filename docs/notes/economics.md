@@ -91,8 +91,8 @@ then re-transcribe into this repo (and whichever others carry a copy), never the
 | `initialReward` (R0, embers) | 1,252,834,515 | 4,572,845,982,860 | 65,848,982,153,194 |
 | `decayRatioFixed` (Q128) | 340282322045415694657836056900309514630 | 340118610667410880413344550167336787510 | 337931864918735857425456001828432707560 |
 
-`cEmit` is `95,000,000 * Constants.UnitsInHearth` on every network (95% of the 100M-HRTH cap, matching
-`Constants.TotalHearth`). Only `halfLifeBlocks` differs by design: MAINNET carries the spec's real 10-year figure
+`cEmit` is `95,000,000 * Constants.UnitsInHearth` on every network (95% of the 100M-HRTH cap the tokenomics spec
+sets). Only `halfLifeBlocks` differs by design: MAINNET carries the spec's real 10-year figure
 (`R0 ≈ 12.52834515 HRTH`, and the curve's year-1/2/4/8/12/20/40 rewards match the spec's own illustrative table to
 the precision it's given - `EmissionCurveTest`'s golden vectors pin the exact ember counts). TESTNET/STAGENET get
 deliberately short half-lives purely so the decay is observable on a running chain within a practical time, instead
@@ -105,16 +105,19 @@ vectors" below. Re-run that generator to audit or change any of these literals; 
 (unlike `GenesisBlockGenerator` for genesis commitments, which is local because nothing outside this repo needs to
 agree with it).
 
-### Hard cap, not the global constant
+### Hard cap comes from the genesis settings, not a constant
 
 `BlockchainSettings.hardCap` (`= initialBalance + rewardsSettings.cEmit`) is this **network's own** supply ceiling,
-deliberately not `Constants.TotalHearth * Constants.UnitsInHearth`: MAINNET/TESTNET's premine (5%, below) plus `cEmit`
-(95%) sum to exactly that constant, but STAGENET's predefined snapshot premines the *entire* `Constants.TotalHearth`
-at genesis *and* still carries a `cEmit` of 95M on top (STAGENET is an internal-only devnet, premined in full for
-fast bring-up rather than following the 5%/95% split - see `PredefinedSnapshotSettings.STAGENET`'s comment), so its
-real ceiling is `Constants.TotalHearth * Constants.UnitsInHearth + cEmit`. `RewardApiRoute`'s `remainingToCap` field
-(`hardCap - totalHearthAmount`) reads this per-network value for exactly that reason - reading the global constant
-instead makes STAGENET's remaining-to-cap go negative.
+derived from the network's own genesis snapshot rather than from any global total-supply constant. There used to be a
+`Constants.TotalHearth = 100000000L`; it was removed because the total supply is a property of a network's genesis
+settings, not of the code. Nothing holds every network to the same ceiling: MAINNET/TESTNET's premine (5%, below) plus
+`cEmit` (95%) sum to exactly 100M HRTH, but STAGENET's predefined snapshot premines the *entire* 100M at genesis *and*
+still carries a `cEmit` of 95M on top (an internal-only devnet, premined in full for fast bring-up rather than
+following the 5%/95% split - see `PredefinedSnapshotSettings.STAGENET`'s comment), so its real ceiling is 195M.
+`RewardApiRoute`'s `remainingToCap` field (`hardCap - totalHearthAmount`) reads this per-network value for exactly
+that reason - a global constant makes STAGENET's remaining-to-cap go negative. `Explorer`'s `WB` command checks the
+summed account balances against `blockchainSettings.initialBalance + <total minted reward>` for the same reason: it
+has to hold on whatever network the node it is pointed at is running.
 
 ### Genesis premine
 

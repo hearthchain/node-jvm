@@ -47,7 +47,7 @@ resolved earlier in the same environment.
 
 The native currency's code-level naming was renamed to match the "Hearth"/"HRTH" branding the tokenomics spec
 already used: `Waves`/`waves`/`WAVES` → `Hearth`/`hearth`/`HRTH` (`Asset.Waves` → `Asset.Hearth`,
-`Constants.TotalWaves`/`UnitsInWave` → `TotalHearth`/`UnitsInHearth`, `WavesSettings` → `HearthSettings`, the
+`Constants.TotalWaves`/`UnitsInWave` → `TotalHearth`/`UnitsInHearth` (`TotalHearth` has since been removed), `WavesSettings` → `HearthSettings`, the
 `waves {}` HOCON config root → `hearth {}` and every `-Dwaves.*` system property → `-Dhearth.*`, REST/gRPC JSON
 fields like `totalWavesAmount`/`totalFeeInWaves` → `totalHearthAmount`/`totalFeeInHearth`), and the base unit
 `wavelet` → `ember` (`CommitToGenerationTransaction.DepositInWavelets` → `DepositInEmbers`). `Constants.UnitsInHearth

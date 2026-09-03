@@ -11,7 +11,7 @@ info:
   termsOfService: ''
   license:
     name: MIT License
-    url: 'https://github.com/wavesplatform/Waves/blob/version-1.3.x/LICENSE'
+    url: 'https://github.com/hearthchain/node-jvm/blob/HEAD/LICENSE'
 servers:
   - url: /
 tags:

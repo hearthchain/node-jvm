@@ -629,7 +629,6 @@ object Docker {
     val timestampOverrides = parseString(s"""hearth.blockchain.custom.genesis {
                                             |  timestamp = $genesisTs
                                             |  block-timestamp = $genesisTs
-                                            |  signature = null # To calculate it in Block.genesis
                                             |  state-hash = null
                                             |  block-id = null
                                             |}""".stripMargin)
@@ -637,13 +636,12 @@ object Docker {
     val genesisConfig = timestampOverrides.withFallback(configTemplate)
     val bs            = ConfigSource.fromConfig(genesisConfig).at("hearth.blockchain").loadOrThrow[BlockchainSettings]
     // The final config sent to a container is flattened into -D system properties (see startNodeInternal), which
-    // cannot represent an absent/null value, so all three commitments are pinned here to the concrete values this
-    // genesis block actually computes, rather than left null and risking custom-defaults.conf's placeholders (or an
-    // empty string from the properties round-trip) leaking through as a mismatched commitment.
+    // cannot represent an absent/null value, so both commitments are pinned here to the concrete values this genesis
+    // block actually computes, rather than left null and risking custom-defaults.conf's placeholders (or an empty
+    // string from the properties round-trip) leaking through as a mismatched commitment.
     val genesisBlock = Block.genesis(bs).explicitGet()
 
     parseString(s"""hearth.blockchain.custom.genesis {
-                   |  signature = ${genesisBlock.signature}
                    |  state-hash = ${genesisBlock.header.stateHash.get}
                    |  block-id = ${genesisBlock.id()}
                    |}""".stripMargin).withFallback(timestampOverrides)

@@ -39,8 +39,8 @@ endorsement can only land in the *next* block (one shot at the immediate parent,
 `finalizedHeight` baseline taken right at the period boundary itself still reflects the stuck genesis-period value;
 it has to be read one block later, not "waited out" over several.
 
-`Docker.genesisOverride` computes and pins all three genesis commitments (`signature`, `state-hash`, `block-id`) fresh
-on every run, from the `Block.genesis` this config actually produces — it cannot leave any of them unset, because the
+`Docker.genesisOverride` computes and pins both genesis commitments (`state-hash`, `block-id`) fresh
+on every run, from the `Block.genesis` this config actually produces — it cannot leave either of them unset, because the
 config that reaches a container is flattened into `-D` system properties (`Docker.asProperties`/`renderProperties`),
 which has no way to express an absent value: a `null` HOCON key becomes an empty string once flattened, and
 `GenesisSettings`'s `Option[ByteStr]` fields decode that as `Some(ByteStr.empty)`, not `None`. Left unpinned,
@@ -216,8 +216,9 @@ regardless of whether finalization succeeded. Not yet confirmed as the actual ca
 
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
-`WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with the full configured
-supply (`Constants.TotalHearth * Constants.UnitsInHearth`), matching `withGenerateSubscription`'s existing convention.
+`WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with
+`WithBUDomain.DefaultSignerBalance` (the whole 100M supply the predefined networks premine), matching
+`withGenerateSubscription`'s existing convention.
 A test whose miner must start at a *specific* small balance (not the full supply) needs an explicit `balances` entry
 naming that account — the auto-fund only backs off when the caller already named the address, same dedup-keep-first
 rule as `node/testkit`'s `withDomain`. A committed generator can never be funded with a literal 0 either way: genesis

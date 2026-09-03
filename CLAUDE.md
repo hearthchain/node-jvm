@@ -72,3 +72,4 @@ Hard-won implementation knowledge lives in `docs/notes/`, one file per subsystem
 - Touching the BlockchainUpdates extension or events.StateUpdate: read `docs/notes/blockchain-updates.md` first.
 - Touching build.sbt, sbt plugins or tasks, the crypto/protobuf-schemas dependencies, or doing a package or naming migration: read `docs/notes/build-tooling.md` first.
 - Touching docker/private configs or rebuilding its genesis: read `docs/notes/docker-private.md` first.
+- Touching the served OpenAPI UI, the vendored Scalar bundle, or `vendor-scalar.sh`: read `docs/notes/api-docs.md` first.

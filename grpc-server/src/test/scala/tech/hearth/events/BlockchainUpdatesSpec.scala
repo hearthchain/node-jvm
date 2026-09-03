@@ -20,7 +20,7 @@ import tech.hearth.events.protobuf.{TransactionMetadata, BlockchainUpdated as PB
 import tech.hearth.history.Domain
 import tech.hearth.protobuf.*
 import tech.hearth.protobuf.block.PBBlocks
-import tech.hearth.settings.{Constants, GenesisAssetSettings, HearthSettings}
+import tech.hearth.settings.{GenesisAssetSettings, HearthSettings}
 import tech.hearth.state.{BlockRewardCalculator, Height, LeaseBalance}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
@@ -597,7 +597,7 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
       withDomainAndRepo(
         settings = TransactionStateSnapshot,
         balances = Seq(
-          AddrWithBalance(TxHelpers.defaultSigner.toAddress, Constants.TotalHearth * Constants.UnitsInHearth),
+          AddrWithBalance(TxHelpers.defaultSigner.toAddress, DefaultSignerBalance),
           AddrWithBalance(challengingMiner.toAddress, initChallengingBalance),
           AddrWithBalance(challengedMiner.toAddress, initChallengedBalance),
           AddrWithBalance(sender.toAddress, initSenderBalance)

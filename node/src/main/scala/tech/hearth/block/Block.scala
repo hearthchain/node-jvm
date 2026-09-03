@@ -226,11 +226,9 @@ object Block {
         challengedHeader = None,
         finalizationVoting = None
       )
-      signedBlock = genesisSettings.signature match {
-        case None             => block.sign(GenesisGenerator)
-        case Some(predefined) => block.copy(signature = predefined)
-      }
-      validBlock <- signedBlock.validateGenesis
+      // The id is the header hash, so the signature identifies nothing a peer compares; it is derived here rather
+      // than pinned in the settings.
+      validBlock <- block.sign(GenesisGenerator).validateGenesis
       _          <- checkPredefined("block id", genesisSettings.blockId, validBlock.id())
     } yield validBlock
 

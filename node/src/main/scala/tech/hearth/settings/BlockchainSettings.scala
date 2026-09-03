@@ -81,7 +81,7 @@ case class FunctionalitySettings(
     generationPeriodLength: Int = 1000
 ) {
   lazy val daoAddressParsed: Either[String, Option[Address]] =
-    daoAddress.traverse(Address.fromString(_)).leftMap(_ => "Incorrect dao-address")
+    daoAddress.traverse(Address.fromString).leftMap(_ => "Incorrect dao-address")
 
   require(featureCheckBlocksPeriod > 0, "feature-check-blocks-period must be greater than 0")
   require(
@@ -245,7 +245,7 @@ object PredefinedSnapshotSettings {
     PredefinedSnapshotSettings(
       height = GenesisBlockHeight.toInt,
       balances = List(
-        GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInHearth * Constants.TotalHearth)
+        GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", 100_000_000L * Constants.UnitsInHearth) // the whole 100M cap
       )
     )
   )
@@ -261,12 +261,10 @@ object PredefinedSnapshotSettings {
   *   block carries.
   * @param blockId
   *   The id of the genesis block, which is the hash of its header, so it covers the state hash along with `timestamp`
-  *   and `initial-base-target`. It does not cover `signature`, which is not part of the header and is verified on its
-  *   own. This is the value peers compare when they decide whether they are on the same chain.
+  *   and `initial-base-target`. This is the value peers compare when they decide whether they are on the same chain.
   */
 case class GenesisSettings(
     timestamp: Long,
-    signature: Option[ByteStr],
     initialBaseTarget: Long,
     averageBlockDelay: FiniteDuration,
     stateHash: Option[ByteStr] = None,
@@ -275,15 +273,16 @@ case class GenesisSettings(
   def blockTimestamp: Long = timestamp
 }
 
-object GenesisSettings { // TODO: Move to network-defaults.conf
+object GenesisSettings {
   // This given is required for default args to work, see FunctionalitySettings.
   given ConfigReader[GenesisSettings] = deriveReader
 
   // Note: the predefined signatures of the pre-snapshot genesis blocks are gone along with the genesis transactions
-  // they were made over. The blocks below are signed by Block.GenesisGenerator instead.
-  val MAINNET: GenesisSettings  = GenesisSettings(1465742577614L, None, 153722867L, 60.seconds)
-  val TESTNET: GenesisSettings  = GenesisSettings(1478000000000L, None, 153722867L, 60.seconds)
-  val STAGENET: GenesisSettings = GenesisSettings(1561705836768L, None, 5000, 1.minute)
+  // they were made over. The block id is the hash of the header, so nothing needs a signature to identify a chain;
+  // the genesis block is signed by Block.GenesisGenerator, whose key is derived in code.
+  val MAINNET: GenesisSettings  = GenesisSettings(1465742577614L, 153722867L, 60.seconds)
+  val TESTNET: GenesisSettings  = GenesisSettings(1478000000000L, 153722867L, 60.seconds)
+  val STAGENET: GenesisSettings = GenesisSettings(1561705836768L, 5000, 1.minute)
 }
 
 case class BlockchainSettings(
@@ -308,9 +307,9 @@ case class BlockchainSettings(
   lazy val initialBalance: Long = genesisSnapshot.balances.map(_.hearth).foldLeft(0L)(Math.addExact)
 
   /** This network's own supply ceiling: genesis premine plus everything the emission curve still has left to mint
-    * (`hearth-tokenomics-spec` S2.1: `Cmax = Pgen + Cemit`). Derived from this network's own settings rather than
-    * the global `Constants.TotalHearth`, so it holds for every network including STAGENET, whose premine/emission
-    * deliberately don't sum to `Constants.TotalHearth` (see `PredefinedSnapshotSettings.STAGENET`).
+    * (`hearth-tokenomics-spec` S2.1: `Cmax = Pgen + Cemit`). There is no global supply constant to read instead:
+    * every network declares its own premine, and STAGENET's deliberately doesn't follow the 5%/95% split the others
+    * do (see `PredefinedSnapshotSettings.STAGENET`).
     */
   lazy val hardCap: Long = Math.addExact(initialBalance, rewardsSettings.cEmit)
 }

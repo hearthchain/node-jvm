@@ -123,7 +123,6 @@ object GenesisBlockGenerator {
            |  initial-base-target = ${genesisSettings.initialBaseTarget}
            |  timestamp = ${genesisSettings.timestamp}
            |  block-timestamp = ${genesisSettings.blockTimestamp}
-           |  signature = "${genesisSettings.signature.get}"
            |  state-hash = "${genesisSettings.stateHash.get}"
            |  block-id = "${genesisSettings.blockId.get}"
            |}
@@ -176,7 +175,7 @@ object GenesisBlockGenerator {
         .getOrElse(mkGenesisSettings(calcInitialBaseTarget()))
 
     def mkGenesisSettings(baseTarget: Long): (GenesisSettings, PredefinedSnapshotSettings) = {
-      val unpinnedGenesis = GenesisSettings(timestamp, None, baseTarget, settings.averageBlockDelay)
+      val unpinnedGenesis = GenesisSettings(timestamp, baseTarget, settings.averageBlockDelay)
       val snapshot        = PredefinedSnapshotSettings(GenesisBlockHeight.toInt, generators = genesisGenerators, balances = genesisBalances)
 
       // Build the very block the node will build from these settings, so the emitted commitments are the ones it
@@ -191,7 +190,6 @@ object GenesisBlockGenerator {
       val genesis = Block.genesis(blockchainSettings).explicitGet()
 
       val pinnedGenesis = unpinnedGenesis.copy(
-        signature = Some(genesis.signature),
         stateHash = genesis.header.stateHash,
         blockId = Some(genesis.id())
       )

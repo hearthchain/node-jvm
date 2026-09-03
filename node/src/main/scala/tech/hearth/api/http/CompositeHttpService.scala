@@ -15,13 +15,13 @@ import scala.io.Source
 
 case class CompositeHttpService(routes: Seq[ApiRoute], settings: RestAPISettings) extends ScorexLogging {
 
-  private val redirectToSwagger = redirect("/api-docs/index.html", StatusCodes.PermanentRedirect)
-  private val swaggerRoute: Route =
-    (pathEndOrSingleSlash | path("swagger"))(redirectToSwagger) ~
+  private val redirectToApiDocs = redirect("/api-docs/index.html", StatusCodes.PermanentRedirect)
+  private val apiDocsRoute: Route =
+    (pathEndOrSingleSlash | path("swagger"))(redirectToApiDocs) ~
       pathPrefix("api-docs") {
-        pathEndOrSingleSlash(redirectToSwagger) ~
-          path("openapi.yaml")(complete(patchedSwaggerJson)) ~
-          getFromResourceDirectory("swagger-ui")
+        pathEndOrSingleSlash(redirectToApiDocs) ~
+          path("openapi.yaml")(complete(patchedOpenApiYaml)) ~
+          getFromResourceDirectory("api-docs")
       }
 
   private val requestTimestamp = AttributeKey[Long]("timestamp")
@@ -35,7 +35,7 @@ case class CompositeHttpService(routes: Seq[ApiRoute], settings: RestAPISettings
 
     extractRequest { req =>
       mapRouteResultPF(logRequestResponse(req)) {
-        extendRoute(routes.map(_.route).reduce(_ ~ _)) ~ swaggerRoute ~ complete(StatusCodes.NotFound)
+        extendRoute(routes.map(_.route).reduce(_ ~ _)) ~ apiDocsRoute ~ complete(StatusCodes.NotFound)
       }
     }
   }
@@ -91,14 +91,14 @@ case class CompositeHttpService(routes: Seq[ApiRoute], settings: RestAPISettings
     }
   }
 
-  private lazy val patchedSwaggerJson = {
+  private lazy val patchedOpenApiYaml = {
     import tech.hearth.Version
     import tech.hearth.account.NetworkId
 
     HttpEntity(
       MediaType.customWithFixedCharset("text", "x-yaml", HttpCharsets.`UTF-8`, List("yaml")),
       Source
-        .fromResource("swagger-ui/openapi.yaml")
+        .fromResource("api-docs/openapi.yaml")
         .mkString
         .replace("{{version}}", Version.VersionString)
         .replace("{{networkId}}", NetworkId.current.value)

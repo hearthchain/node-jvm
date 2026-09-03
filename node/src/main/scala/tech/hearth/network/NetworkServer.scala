@@ -14,6 +14,7 @@ import io.netty.handler.codec.{LengthFieldBasedFrameDecoder, LengthFieldPrepende
 import io.netty.util.concurrent.{DefaultThreadFactory, GenericFutureListener}
 import monix.reactive.Observable
 import org.influxdb.dto.Point
+import tech.hearth.transaction.LastBlockInfo
 
 import java.net.{InetSocketAddress, NetworkInterface, SocketAddress}
 import java.nio.channels.ClosedChannelException
@@ -32,6 +33,43 @@ object NetworkServer extends ScorexLogging {
   val MaxFrameLength: Int            = 100 * 1024 * 1024
   private val AverageHandshakePeriod = 1.second
   private val LengthFieldSize        = 4
+
+  def apply(
+      settings: HearthSettings,
+      lastBlockInfos: Observable[LastBlockInfo],
+      historyReplier: HistoryReplier,
+      peerDatabase: PeerDatabase,
+      messageObserver: MessageObserver,
+      allChannels: ChannelGroup,
+      peerInfo: ConcurrentHashMap[Channel, PeerInfo]
+  ): NetworkServer = {
+    def peerSynchronizer = if (settings.networkSettings.enablePeersExchange) {
+      new PeerSynchronizer(peerDatabase, settings.networkSettings.peersBroadcastInterval)
+    } else PeerSynchronizer.Disabled
+
+    val trafficWatcher    = new TrafficWatcher
+    val discardingHandler = new DiscardingHandler(lastBlockInfos.map(_.ready), settings.enableLightMode)
+    val messageCodec      = new MessageCodec(peerDatabase)
+    val trafficLogger     = new BasicMessagesRepo.MessageLogger(settings.networkSettings.trafficLogger)
+
+    NetworkServer(
+      settings.blockchainSettings.networkId.value,
+      settings.networkSettings,
+      peerDatabase,
+      allChannels,
+      peerInfo,
+      Seq(
+        new LegacyFrameCodecL1(peerDatabase, settings.networkSettings.receivedTxsCacheTimeout),
+        trafficWatcher,
+        discardingHandler,
+        messageCodec,
+        trafficLogger,
+        peerSynchronizer,
+        historyReplier,
+        messageObserver
+      )
+    )
+  }
 
   def apply(
       applicationName: String,

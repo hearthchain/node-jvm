@@ -30,7 +30,7 @@ object CommonSettings extends AutoPlugin {
       case "logback.xml" |
            PathList("scala", "util", "control", "compat") |
            PathList("scala", "collection", "compat") |
-           PathList("swagger-ui", "openapi.yaml") |
+           PathList("api-docs", "openapi.yaml") |
            "META-INF/FastDoubleParser-LICENSE" =>
         MergeStrategy.last
       case other => (assembly / assemblyMergeStrategy).value(other)
