@@ -56,6 +56,28 @@ docker run \
 
 See [docker/README.md](./docker/README.md) for configuration options, environment variables, and network ports.
 
+On Debian and Ubuntu there is a single package, `hearth-jvm`:
+
+```bash
+sbt buildDebPackages
+sudo apt-get install ./target/out/jvm/u/node/hearth-jvm_*_amd64.deb
+```
+
+It ships a systemd template unit and starts one instance, `hearth-jvm@mainnet`. An instance is a directory under
+`/etc/hearth-jvm`, with its own data under `/var/lib/hearth-jvm/<instance>` and logs under
+`/var/log/hearth-jvm/<instance>`, so several networks (or several nodes on one network) run side by side:
+
+```bash
+sudo mkdir /etc/hearth-jvm/testnet
+sudo cp /usr/share/hearth-jvm/doc/hearth.conf.sample /etc/hearth-jvm/testnet/hearth.conf
+# set hearth.blockchain.type = TESTNET in it, then
+sudo systemctl enable --now hearth-jvm@testnet
+```
+
+Each instance directory can also hold an optional `env` file for JVM options (`JAVA_OPTS="-Xmx8g"`) and an
+optional `logback.xml`. The same variable works for the tools: `JAVA_OPTS="-Xmx16g" hearth-jvm -main
+tech.hearth.Importer -c /etc/hearth-jvm/mainnet/hearth.conf -i blockchain.bin`.
+
 Alternatively, run the assembled jar directly:
 
 ```bash

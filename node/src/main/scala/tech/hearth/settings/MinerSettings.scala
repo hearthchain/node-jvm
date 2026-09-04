@@ -16,7 +16,8 @@ case class MinerSettings(
     maxTransactionsInMicroBlock: Int,
     minMicroBlockAge: FiniteDuration,
     accounts: Seq[MiningAccount],
-    supportedFeatures: Seq[Short]
+    supportedFeatures: Seq[Short],
+    desiredRewards: Option[Long]
 ) derives ConfigReader {
   require(maxTransactionsInMicroBlock <= Miner.MaxTransactionsPerMicroblock)
 }

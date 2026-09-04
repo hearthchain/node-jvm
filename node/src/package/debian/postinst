@@ -1,50 +1,47 @@
 ${{header}}
-${{loader-functions}}
 
-config_file=/etc/${{app_name}}/waves.conf
+app_name=${{app_name}}
+default_instance=mainnet
+config_dir="/etc/$app_name/$default_instance"
+config_file="$config_dir/hearth.conf"
+
+# Every instance the operator has configured, enabled or not
+instance_units() {
+    {
+        systemctl list-units --all --no-legend --no-pager --plain "$app_name@*.service" 2>/dev/null || true
+        systemctl list-unit-files --no-legend --no-pager --plain "$app_name@*.service" 2>/dev/null || true
+    } | awk '{print $1}' | sort -u
+}
 
 if [ "$1" = configure ]; then
-    # make sure the user exists
-    if ! getent passwd ${{app_name}} > /dev/null; then
-        adduser --system $quiet --home /var/lib/${{app_name}} --no-create-home --shell /bin/false --group \
-            --gecos "${{app_name}} node" ${{app_name}}
-    fi
-    # if the user was created manually, make sure the group is there as well
-    if ! getent group ${{app_name}} > /dev/null; then
-        addgroup --system $quiet ${{app_name}}
-    fi
-    # make sure ${{app_name}} is in the ${{app_name}} group
-    if ! id -Gn ${{app_name}} | grep -qw ${{app_name}}; then
-        adduser $quiet ${{app_name}} ${{app_name}}
-    fi
-
-    if [ ! -d /var/lib/${{app_name}} ] ; then
-        # ensure home directory ownership
-        mkdir -p /var/lib/${{app_name}}
-        chown -R ${{app_name}}:${{app_name}} /var/lib/${{app_name}}
-    fi
-
-    if [ ! -d /var/log/${{app_name}} ] ; then
-        # nicer log directory permissions
-        mkdir -p /var/log/${{app_name}}
-        chmod 770 /var/log/${{app_name}}
-        chown root:${{app_name}} /var/log/${{app_name}}
-    fi
-    chown -R ${{app_name}}:${{app_name}} /usr/share/${{app_name}}
+    chown -R "$app_name:$app_name" "/usr/share/$app_name"
 
     if [ ! -f "$config_file" ]; then
-        echo Creating default config file ...
-        cp /usr/share/${{app_name}}/doc/waves.conf.sample "$config_file"
-        chmod 600 "$config_file"
-        chown ${{app_name}}:${{app_name}} "$config_file"
+        echo "Creating default config file $config_file ..."
+        mkdir -p "$config_dir"
+        chmod 750 "$config_dir"
+        chown "root:$app_name" "$config_dir"
+        cp "/usr/share/$app_name/doc/hearth.conf.sample" "$config_file"
+        chmod 640 "$config_file"
+        chown "root:$app_name" "$config_file"
     fi
 
+    if command -v systemctl > /dev/null; then
+        systemctl daemon-reload || true
 
-    echo Installing systemd service ...
-    addService ${{app_name}} || true
+        if [ -z "$2" ]; then
+            # Fresh install: one mainnet instance, more are added with `systemctl enable $app_name@<name>`
+            echo "Enabling $app_name@$default_instance ..."
+            systemctl enable "$app_name@$default_instance.service" || true
+            if [ -d /run/systemd/system ]; then
+                systemctl start "$app_name@$default_instance.service" || true
+            fi
+        else
+            for unit in $(instance_units); do
+                systemctl try-restart "$unit" || true
+            done
+        fi
+    fi
 fi
-
-echo Restarting systemd service ...
-restartService ${{app_name}} || true
 
 exit 0

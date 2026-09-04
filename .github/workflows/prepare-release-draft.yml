@@ -4,13 +4,13 @@ run-name: Prepare release draft for ${{ inputs.version }} from ${{ github.ref_na
 on:
   workflow_dispatch:
     inputs:
-      networks:
-        description: 'Networks'
-        required: true
-        default: 'mainnet testnet stagenet'
       version:
         description: 'Version'
         required: true
+      prerelease:
+        description: 'Mark the release as a prerelease'
+        type: boolean
+        default: false
 
 jobs:
   prepare-release-draft:
@@ -31,7 +31,7 @@ jobs:
         id: prepare-release-draft
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_NETWORKS: ${{ inputs.networks }}
+          RELEASE_PRERELEASE: ${{ inputs.prerelease }}
           RELEASE_BRANCH: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}

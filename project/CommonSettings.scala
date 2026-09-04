@@ -43,7 +43,6 @@ object Amd64 extends DebArchitecture("amd64", "x86_64")
 object Arm64 extends DebArchitecture("arm64", "aarch64")
 
 trait CommonKeys {
-  val network         = settingKey[Network]("The network for artifacts")
   val packageSource   = settingKey[File]("Additional files for DEB")
   val instrumentation = settingKey[Boolean]("Include kanela java agent in start script")
   val debArchitecture = settingKey[DebArchitecture]("DEB package architecture")

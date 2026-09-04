@@ -2,7 +2,6 @@ package tech.hearth.state.diffs
 
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.settings.RewardsVotingSettings
 import tech.hearth.test.{NumericExt, PropSpec}
 import tech.hearth.transaction.TxHelpers
 
@@ -14,7 +13,7 @@ class TransferTransactionDiffTest extends PropSpec with WithDomain {
     val recipient = TxHelpers.address(2)
 
     withDomain(
-      DomainPresets.mostRecent.copy(rewardsSettings = RewardsVotingSettings(None)),
+      DomainPresets.mostRecent,
       AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, senderKp)
     ) { d =>
       val hearthTransfer = TxHelpers.transfer(senderKp, recipient)

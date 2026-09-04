@@ -19,7 +19,6 @@ case class HearthSettings(
     restAPISettings: RestAPISettings,
     synchronizationSettings: SynchronizationSettings,
     utxSettings: UtxSettings,
-    rewardsSettings: RewardsVotingSettings,
     metrics: Metrics.Settings,
     enableLightMode: Boolean,
     autoShutdownOnUnsupportedFeature: Boolean,
@@ -44,7 +43,6 @@ object HearthSettings {
     val restAPISettings           = hearthConfigSource.at("rest-api").loadOrThrow[RestAPISettings]
     val synchronizationSettings   = hearthConfigSource.at("synchronization").loadOrThrow[SynchronizationSettings]
     val utxSettings               = hearthConfigSource.at("utx").loadOrThrow[UtxSettings]
-    val rewardsSettings           = hearthConfigSource.at("rewards").loadOrThrow[RewardsVotingSettings]
     val metrics                   = hearthConfigSource.at("metrics").loadOrThrow[Metrics.Settings]
     val enableLightMode           = hearthConfigSource.at("enable-light-mode").loadOrThrow[Boolean]
 
@@ -65,7 +63,6 @@ object HearthSettings {
       restAPISettings,
       synchronizationSettings,
       utxSettings,
-      rewardsSettings,
       metrics,
       enableLightMode,
       autoShutdownOnUnsupportedFeature,

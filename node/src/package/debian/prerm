@@ -1,8 +1,15 @@
 ${{header}}
-${{loader-functions}}
 
-if [ "$1" = remove ]; then
-    stopService ${{app_name}} || true
+app_name=${{app_name}}
+
+if [ "$1" = remove ] && command -v systemctl > /dev/null; then
+    for unit in $({
+        systemctl list-units --all --no-legend --no-pager --plain "$app_name@*.service" 2>/dev/null || true
+        systemctl list-unit-files --no-legend --no-pager --plain "$app_name@*.service" 2>/dev/null || true
+    } | awk '{print $1}' | sort -u); do
+        systemctl stop "$unit" || true
+        systemctl disable "$unit" || true
+    done
 fi
 
 exit 0

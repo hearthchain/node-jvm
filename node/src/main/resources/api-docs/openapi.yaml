@@ -1116,7 +1116,7 @@ paths:
                 port:
                   type: integer
                   format: int32
-                  example: 6868
+                  example: 5510
         required: true
       responses:
         '200':

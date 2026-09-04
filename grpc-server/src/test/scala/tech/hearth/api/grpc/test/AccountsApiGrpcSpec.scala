@@ -55,7 +55,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
         val expectedHearthBalance = hearthTransferAmount - TestValues.fee - reverseTransferAmount
         val expectedResult = List(
           BalanceResponse.of(
-            BalanceResponse.Balance.Waves(BalanceResponse.WavesBalances(expectedHearthBalance, 0, expectedHearthBalance, expectedHearthBalance))
+            BalanceResponse.Balance.Hearth(BalanceResponse.HearthBalances(expectedHearthBalance, 0, expectedHearthBalance, expectedHearthBalance))
           ),
           BalanceResponse.of(BalanceResponse.Balance.Asset(Amount(ByteString.copyFrom(asset.id.arr), assetTransferAmount)))
         )
@@ -125,7 +125,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     ): Assertion = {
       val expectedResult = List(
         BalanceResponse.of(
-          BalanceResponse.Balance.Waves(BalanceResponse.WavesBalances(expectedRegular, expectedGenerating, expectedAvailable, expectedEffective))
+          BalanceResponse.Balance.Hearth(BalanceResponse.HearthBalances(expectedRegular, expectedGenerating, expectedAvailable, expectedEffective))
         )
       )
 

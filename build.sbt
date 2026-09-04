@@ -80,7 +80,6 @@ inScope(Global)(
      */
     testOptions += Tests.Argument("-oIDOF", "-u", "target/test-reports"),
     testOptions += Tests.Setup(() => sys.props("sbt-testing") = "true"),
-    network := Network.default(),
     resolvers ++= Resolver.mavenLocal +: Seq(Resolver.sonatypeCentralSnapshots),
     Compile / packageDoc / publishArtifact := false,
     concurrentRestrictions                 := Seq(Tags.limit(Tags.Test, math.min(EvaluateTask.SystemProcessors, 8))),
@@ -196,10 +195,8 @@ buildPlatformIndependentArtifacts := Def.uncached {
   (`grpc-server` / Universal / packageZipTarball).value
 }
 
-commands += Command("buildReleaseArtifacts")(_ => Network.networkParser) { (state, args) =>
-  args.toSet[Network].toList.flatMap { n =>
-    s"set Global / network := $n" :: "buildDebPackages" :: Nil
-  } ::: "buildPlatformIndependentArtifacts" :: state
+commands += Command.command("buildReleaseArtifacts") { state =>
+  "buildDebPackages" :: "buildPlatformIndependentArtifacts" :: state
 }
 
 /** Command: generateGenesis <path-to-config>

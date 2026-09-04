@@ -22,6 +22,7 @@ class MinerSettingsSpecification extends FlatSpec {
                       |    min-micro-block-age = 3s
                       |    accounts = []
                       |    supported-features = [1, 2, 4]
+                      |    desired-rewards = 700000000
                       |  }
                       |}
       """.stripMargin)
@@ -37,5 +38,6 @@ class MinerSettingsSpecification extends FlatSpec {
     settings.maxTransactionsInMicroBlock should be(400)
     settings.minMicroBlockAge should be(3.seconds)
     settings.supportedFeatures shouldBe Seq(1, 2, 4)
+    settings.desiredRewards should be(Some(700000000L))
   }
 }

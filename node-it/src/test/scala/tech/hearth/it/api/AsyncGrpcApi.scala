@@ -151,11 +151,11 @@ object AsyncGrpcApi {
       waitFor[Int](s"height >= $expectedHeight")(_.height, h => h >= expectedHeight, 5.seconds)
     }
 
-    def hearthBalance(address: ByteString): Future[BalanceResponse.WavesBalances] = {
+    def hearthBalance(address: ByteString): Future[BalanceResponse.HearthBalances] = {
       val (obs, result) = createCallObserver[BalanceResponse]
       val req           = BalancesRequest.of(address, Seq(ByteString.EMPTY))
       accounts.getBalances(req, obs)
-      result.map(_.headOption.getOrElse(throw new NoSuchElementException("Balances not found for address")).getWaves).runToFuture
+      result.map(_.headOption.getOrElse(throw new NoSuchElementException("Balances not found for address")).getHearth).runToFuture
     }
 
     def broadcast(unsignedTx: PBTransaction, proofs: Seq[ByteString]): Future[PBSignedTransaction] =

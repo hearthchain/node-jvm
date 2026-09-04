@@ -67,18 +67,20 @@ name (`waves-grpc-server` → `hearth-grpc-server`, matching `node`'s already-re
 package name/summary in `node/build.sbt`/`ExtensionPackaging.scala` (`waves${network}` → `hearth${network}`,
 `maintainer` → `tech.hearth`).
 
-Several things were deliberately left saying "waves", each for a different reason:
+The external `tech.hearth % protobuf-schemas` dependency's own fields were the last holdouts, and are now
+renamed upstream too, so nothing local says "waves" any more. `SignedTransaction.waves_transaction` went first
+(see "Transaction schema: Transfer merge, fee restructuring, new tx types" in `docs/notes/keys-and-signatures.md`):
+`transaction.proto`'s top-level field is now `transaction`, with `.wavesTransaction`/`.getWavesTransaction`/
+`.withWavesTransaction` renamed to `.transaction`/`.getTransaction`/`.withTransaction`. `BalanceResponse`'s
+`WavesBalances`/`waves` (`accounts_api.proto`) then became `HearthBalances`/`hearth`, and `BlockAppend`'s
+`updated_waves_amount` (`events.proto`) became `updated_hearth_amount`. Both sides of the wire are renamed
+together: `AccountsApiGrpcImpl` (`withHearth`), the `node-it` gRPC helpers (`getHearth`), and `grpc-server`'s
+vanilla event mirror (`events.scala`'s `BlockAppended.updatedHearthAmount`, `events/repo/LiquidState.scala`,
+`events/protobuf/serde/package.scala`). A generated-code rename in `protobuf-schemas` surfaces here only as a
+compile error, so `sbt Test/compile` after an upstream `mvn install` is the way to find every call site.
 
-- **The external `tech.hearth % protobuf-schemas` dependency's own fields** — `BalanceResponse.WavesBalances`/`.waves`
-  (`accounts_api.proto`) and `StateUpdate`'s `updatedWavesAmount` (`events.proto`) are defined in the sibling
-  `protobuf-schemas` repo, out of scope here. The local hand-written code that talks to them keeps matching names
-  too, rather than renaming just one side of the wire: `grpc-server`'s vanilla event mirror (`events.scala`,
-  `events/repo/LiquidState.scala`, `events/protobuf/serde/package.scala`) and `events/fixtures/HearthTxChecks.scala`'s
-  pattern matches all still say `updatedWavesAmount`. A future rename of `protobuf-schemas` itself needs to update
-  all of these together. `SignedTransaction.wavesTransaction` *was* one of these (see "Transaction schema: Transfer
-  merge, fee restructuring, new tx types" in `docs/notes/keys-and-signatures.md`) — `transaction.proto`'s top-level field is now `transaction`, not
-  `waves_transaction`, and every local `.wavesTransaction`/`.getWavesTransaction`/`.withWavesTransaction` call site
-  was renamed to `.transaction`/`.getTransaction`/`.withTransaction` to match.
+Other things are deliberately still saying "waves", each for a different reason:
+
 - **CI publish destinations** — Docker Hub (`wavesplatform/wavesnode`, `wavesplatform/waves-private-node`,
   `wavesplatform/ride-runner`), `ghcr.io/wavesplatform/waves*`, `apt.wavesplatform.com`, and the `@waves/ride-lang`
   npm package (`.github/workflows/*.yml`, `create-aptly-repo.sh`) are real registries tied to existing
@@ -182,3 +184,89 @@ flag away.
 `System.getProperty("sbt.ci") == "true" || sys.env.contains("BUILD_NUMBER") || sys.env.contains("CI")`, and GitHub
 Actions sets `CI=true` on every runner. `BUILD_NUMBER` in that list is Jenkins/Hudson; GitHub Actions does not
 define it (its equivalents are `GITHUB_RUN_NUMBER`/`GITHUB_RUN_ID`/`GITHUB_RUN_ATTEMPT`).
+
+## Linux packaging: one package, one systemd template unit
+
+Waves shipped one deb per network (`waves`, `waves-testnet`, `waves-stagenet`), built from a `network` sbt setting
+that suffixed the package name and generated three `-D` lines into `conf/application.ini`. The binaries were
+identical; only those lines differed. That is gone. There is one deb, `hearth-jvm`, and the network is runtime
+configuration, the way every other chain does it (bitcoind `-chain=`, geth `--sepolia`, cosmos `--home`,
+polkadot `--chain=`). `project/Network.scala`, the `network` setting and the `buildReleaseArtifacts <networks...>`
+parser were deleted along with it; `buildReleaseArtifacts` now takes no arguments.
+
+Everything derives from `Linux / packageName` = `hearth-jvm`: install dir `/usr/share/hearth-jvm`, config dir
+`/etc/hearth-jvm`, data `/var/lib/hearth-jvm`, logs `/var/log/hearth-jvm`, daemon user and group `hearth-jvm`.
+The Docker image is unaffected and keeps its own `/etc/hearth`, `/var/lib/hearth` paths: one container, one node.
+
+Multiple nodes on one host are instances of a systemd template unit, `hearth-jvm@.service`
+(`Debian / linuxStartScriptName := Some("hearth-jvm@.service")`), one directory per instance:
+
+- `/etc/hearth-jvm/<instance>/hearth.conf` - the node config, passed to the launcher as its argument. Sets the
+  network via `hearth.blockchain.type`; without it the package default from `application.ini` (mainnet) applies.
+- `/etc/hearth-jvm/<instance>/env` - optional, `EnvironmentFile=-`, and the only place an operator sets JVM
+  options (see below).
+- `/etc/hearth-jvm/<instance>/logback.xml` - optional, included by the packaged `logback.xml` because the unit
+  passes `-Dhearth.config.directory=/etc/hearth-jvm/%i`. This is why instances get a directory rather than a flat
+  `<instance>.conf`: that include is keyed off the config directory, so flat files would force one logback config
+  on every instance.
+- `/var/lib/hearth-jvm/<instance>` and `/var/log/hearth-jvm/<instance>` - created and chowned by systemd through
+  `StateDirectory=`/`LogsDirectory=`, passed to the node as `-Dhearth.defaults.directory` and
+  `-Dlogback.file.directory`.
+
+`hearth.defaults.*` rather than `hearth.*` for the data directory on purpose: `settings.loadConfig` promotes the
+`hearth.defaults` subtree to `hearth` as a *fallback*, so an instance config file still wins over what the unit
+passes.
+
+### JVM options live in exactly one place
+
+The launcher builds its java command line as `$JAVA_OPTS`, then the options it reads from
+`<install>/conf/application.ini`, then its own command-line arguments. Later flags win, so **`application.ini`
+silently overrides `JAVA_OPTS`**: with `-J-Xmx2g` in that file, `JAVA_OPTS="-Xmx8g"` left the heap at 2 GiB
+(measured with `-J-XX:+PrintFlagsFinal`, `MaxHeapSize = 2147483648`). Waves shipped exactly that combination, so
+an operator's heap setting was quietly ignored, `hearth-jvm -main tech.hearth.Importer` included, which is the one
+invocation that most wants a large heap.
+
+The split is therefore by ownership, and the rule is: **`Universal / javaOptions` carries only what the node
+cannot run without; anything an operator might want to change goes in `JAVA_OPTS`, never in the ini.** What
+remains in `application.ini` is `-XX:+ExitOnOutOfMemoryError`, `-Dfile.encoding=UTF-8` (consensus-relevant:
+deterministic `getBytes`), the two `--add-opens` and `--enable-native-access`. Dropped: `-Xmx2g` (the JVM's
+ergonomic 25% of RAM applies instead), `-XX:+UseG1GC` and `-XX:+ParallelRefProcEnabled` (already the JDK 25
+defaults) and `-XX:+UseStringDeduplication` (now opt-in per instance). Do not add tuning flags back there:
+`application.ini` is read by every entry point, the service and `-main` tool runs alike, and it cannot hold
+anything instance-specific.
+
+`/etc/default/hearth-jvm` is deliberately **not** shipped, though the launcher still sources it if it exists: it
+is sourced *after* systemd has applied the instance's `env` file, so a `JAVA_OPTS` set there would override every
+instance's own. The same variable works for tool runs: `JAVA_OPTS="-Xmx16g" hearth-jvm -main tech.hearth.Importer
+-c /etc/hearth-jvm/mainnet/hearth.conf -i blockchain.bin`.
+
+Notes on the packaging itself, all of them things that bit during this change:
+
+- `/etc/hearth-jvm` has to be filtered out of `linuxPackageSymlinks`. JavaServerAppPackaging makes `/etc/<pkg>` a
+  symlink to `/usr/share/<pkg>/conf`, which cannot hold per-instance config; it is now a real package-owned
+  directory (0750, `hearth-jvm:hearth-jvm`), as is `/var/lib/hearth-jvm`.
+- `application.ini` must stay at `/usr/share/hearth-jvm/conf/application.ini`: the launcher derives that path from
+  `realpath "$0"`, so it follows the *script*, not the config directory or the cwd, and there is no override hook.
+  A per-instance ini would need a per-instance copy of the generated launcher (which embeds the full classpath) or
+  a `BindPaths=` in the unit. Neither is worth it, hence the ownership split above.
+- `maintainerScripts` and `debianMaintainerScripts` are both wrapped in `Def.uncached`. The first reads
+  `src/package/debian/*` from disk, the second writes them to `(Universal / target)/tmp/debian`; sbt 2 tracks
+  neither, so a cache hit ships the *previous* build's maintainer scripts, and after a clean of that directory the
+  jdeb step fails with `Source file .../tmp/debian/preinst does not exist`. `debianMaintainerScripts` is defined at
+  project scope, not in `Debian`, and had to be reimplemented in `node/build.sbt` because the plugin's helper is
+  `private[debian]`. When editing a maintainer script, restart the sbt server too: the long-lived server can serve
+  a stale build definition across `sbt --batch` runs, which looks exactly like this cache staleness.
+- `defaultLinuxStartScriptLocation` is overridden to `/usr/lib/systemd/system`. The plugin default is
+  `/lib/systemd/system`, and shipping that aliased path makes dpkg fail on merged-usr systems.
+- A `preinst` creates the user and group. The package ships directories owned by `hearth-jvm`, so it has to exist
+  before dpkg unpacks, not in `postinst`.
+- Maintainer scripts enumerate instances with `systemctl list-units` plus `list-unit-files` (globbing
+  `hearth-jvm@*.service`), because an enabled-but-stopped instance shows up only in the second. They guard on
+  `command -v systemctl` and `/run/systemd/system` so installing in a container or chroot still works.
+- `postrm purge` deletes `/var/log/hearth-jvm` and every `/var/lib/hearth-jvm/*/data`, and deliberately keeps
+  wallets, configs and the daemon user. Blockchain state resyncs; a wallet seed does not come back.
+- Verify a change to the unit with `systemd-analyze verify /usr/lib/systemd/system/hearth-jvm@.service` on the
+  installed package. In sandboxed dev environments dpkg fails to unpack with
+  `unable to install new version of './usr/share/hearth-jvm': Invalid cross-device link` (overlayfs cannot rename
+  directories); mount volumes over `/usr/share`, `/var` and `/etc` (`docker run -v vol:/usr/share ...`) to test an
+  install.

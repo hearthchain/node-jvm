@@ -25,8 +25,8 @@ enablePlugins(RunApplicationSettings, ExtensionPackaging)
 Universal / maintainer := "tech.hearth"
 Debian / debianControlFile := {
   val generatedFile = (Debian / debianControlFile).value
-  IO.append(generatedFile, s"""Conflicts: grpc-server${network.value.packageSuffix}
-      |Replaces: grpc-server${network.value.packageSuffix}
+  IO.append(generatedFile, s"""Conflicts: grpc-server
+      |Replaces: grpc-server
       |""".stripMargin)
   generatedFile
 }
