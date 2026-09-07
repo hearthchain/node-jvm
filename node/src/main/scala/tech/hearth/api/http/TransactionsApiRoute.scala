@@ -198,7 +198,8 @@ case class TransactionsApiRoute(
   }
 
   def signedBroadcast: Route = path("broadcast") {
-    broadcast[JsObject](jsv => TransactionFactory.parseRequest(jsv))
+    // JSON first: an entity without a content type is treated as JSON, as it was before protobuf was accepted here
+    broadcast[JsObject](jsv => TransactionFactory.parseRequest(jsv)) ~ broadcastProtobuf
   }
 
   def merkleProof: Route = path("merkleProof") {

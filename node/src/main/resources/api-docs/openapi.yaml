@@ -1862,15 +1862,26 @@ paths:
           description: Return trace
       requestBody:
         description: >-
-          Transaction [data in
+          Either transaction [data in
           JSON](https://docs.waves.tech/en/blockchain/transaction/#json-representation)
           including
           [`type`](https://docs.waves.tech/en/blockchain/transaction-type/) and
-          `signature`/`proofs`
+          `signature`/`proofs`, or a raw protobuf-encoded `SignedTransaction`
+          message. The encoding is selected by the `Content-Type` header; a
+          request without one is read as JSON. The response is JSON in both
+          cases.
         content:
           application/json:
             schema:
               type: string
+          application/x-protobuf:
+            schema:
+              type: string
+              format: binary
+          application/protobuf:
+            schema:
+              type: string
+              format: binary
         required: true
       responses:
         '200':

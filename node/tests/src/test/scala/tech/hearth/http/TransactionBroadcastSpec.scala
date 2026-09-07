@@ -1,6 +1,7 @@
 package tech.hearth.http
 
-import tech.hearth.api.http.{RouteTimeout, TransactionsApiRoute}
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, MediaType, StatusCodes}
+import tech.hearth.api.http.{BroadcastRoute, RouteTimeout, TransactionsApiRoute}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithDomain
 import tech.hearth.mining.GeneratorKeys
@@ -9,6 +10,7 @@ import tech.hearth.test.TestTime
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.assets.exchange.*
 import tech.hearth.transaction.smart.script.trace.TracedResult
+import tech.hearth.transaction.serialization.impl.PBTransactionSerializer
 import tech.hearth.transaction.{AssetIdLength, Transaction, TxHelpers}
 import tech.hearth.utils.{EmptyBlockchain, SharedSchedulerMixin}
 import io.netty.channel.Channel
@@ -68,6 +70,46 @@ class TransactionBroadcastSpec extends RouteSpec("/transactions") with RestAPISe
           val result = responseAs[JsObject].toString
           result should include regex "Invalid validation. Size of asset id.*not equal 32 bytes"
         }
+      }
+    }
+  }
+
+  "protobuf-encoded transactions" - {
+    val tx = TxHelpers.transfer()
+
+    def protobufPost(bytes: Array[Byte], mediaType: MediaType.Binary = BroadcastRoute.`application/x-protobuf`) =
+      Post(routePath("/broadcast"), HttpEntity(mediaType.toContentType, bytes))
+
+    "are broadcast when sent as application/x-protobuf" in {
+      protobufPost(PBTransactionSerializer.bytes(tx)) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        (responseAs[JsObject] \ "id").as[String] shouldBe tx.id().toString
+      }
+    }
+
+    "are broadcast when sent as application/protobuf" in {
+      protobufPost(PBTransactionSerializer.bytes(tx), BroadcastRoute.`application/protobuf`) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        (responseAs[JsObject] \ "id").as[String] shouldBe tx.id().toString
+      }
+    }
+
+    "are rejected when the payload is not a valid SignedTransaction" in {
+      protobufPost(Array[Byte](1, 2, 3)) ~> route ~> check {
+        responseAs[JsObject].toString should include("Error while parsing protobuf transaction")
+      }
+    }
+
+    "do not affect JSON broadcast" in {
+      Post(routePath("/broadcast"), HttpEntity(ContentTypes.`application/json`, tx.json().toString())) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        (responseAs[JsObject] \ "id").as[String] shouldBe tx.id().toString
+      }
+    }
+
+    "reject other content types with 415" in {
+      Post(routePath("/broadcast"), HttpEntity(ContentTypes.`text/plain(UTF-8)`, "not a transaction")) ~> route ~> check {
+        status shouldBe StatusCodes.UnsupportedMediaType
       }
     }
   }
