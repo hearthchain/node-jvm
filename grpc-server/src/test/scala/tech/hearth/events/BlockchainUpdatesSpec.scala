@@ -586,7 +586,7 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
       val recipient        = TxHelpers.signer(4)
       val challengingMiner = TxHelpers.signer(5)
 
-      // both need to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth) net of the
+      // both need to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator (1000 hearth) net of the
       // deposit, and it has to be funded at genesis (not via a later transfer): generating balance is the minimum
       // effective balance over a lookback window, so a just-credited balance wouldn't count as eligible yet
       val initChallengingBalance = 1200.hearth

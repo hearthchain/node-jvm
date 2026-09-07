@@ -5,13 +5,12 @@ import tech.hearth.state.{Blockchain, GenerationPeriod, Height}
 import tech.hearth.crypto.Address
 
 object GeneratingBalanceProvider {
-  val MinimalEffectiveBalanceForGenerator1: Long = 1000000000000L
-  val MinimalEffectiveBalanceForGenerator2: Long = 100000000000L
+  val MinimalEffectiveBalanceForGenerator: Long = 100000000000L
 
   private val SecondDepth = 1000
 
   def isMiningAllowed(generatingBalance: Long): Boolean =
-    generatingBalance >= MinimalEffectiveBalanceForGenerator2
+    generatingBalance >= MinimalEffectiveBalanceForGenerator
 
   def isGeneratingBalanceValid(balance: Long): Boolean =
     isMiningAllowed(balance)

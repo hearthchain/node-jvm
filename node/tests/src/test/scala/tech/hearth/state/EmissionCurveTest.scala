@@ -19,31 +19,36 @@ class EmissionCurveTest extends PropSpec {
 
   private val BlocksPerYear = 525600L
 
-  private val MainnetR0             = 1252834515L
+  private val MainnetR0             = 1252834433L
   private val MainnetRatio          = BigInt("340282322045415694657836056900309514630")
   private val MainnetHalfLifeBlocks = 5256000L
 
-  private val TestnetR0             = 4572845982860L
-  private val TestnetRatio          = BigInt("340118610667410880413344550167336787510")
-  private val TestnetHalfLifeBlocks = 1440L
+  // TESTNET and STAGENET are configured identically (1-year half-life, same cEmit), so their vectors coincide;
+  // both are kept here so a change to either network's parameters is caught by name.
+  private val TestnetR0             = 12528336897L
+  private val TestnetRatio          = BigInt("340281918165977088157076486680406733895")
+  private val TestnetHalfLifeBlocks = 525600L
 
-  private val StagenetR0             = 65848982153194L
-  private val StagenetRatio          = BigInt("337931864918735857425456001828432707560")
-  private val StagenetHalfLifeBlocks = 100L
+  private val StagenetR0             = 12528336897L
+  private val StagenetRatio          = BigInt("340281918165977088157076486680406733895")
+  private val StagenetHalfLifeBlocks = 525600L
 
   property("reward at h=0 equals the initial reward exactly") {
-    EmissionCurve.rewardAt(0, initialReward = 1252834515L, decayRatioFixed = OneScaled) shouldBe 1252834515L
+    EmissionCurve.rewardAt(0, initialReward = MainnetR0, decayRatioFixed = OneScaled) shouldBe MainnetR0
+    // h = 0 is the *first rewarded block* (chain height 2), not genesis - so the very first reward is R0 itself,
+    // and any emission total that starts the sum at h = 1 is short by exactly R0.
+    EmissionCurve.rewardAt(0, MainnetR0, MainnetRatio) shouldBe MainnetR0
   }
 
   property("reward matches the spec's illustrative year table (S2.4)") {
     val yearToReward = Seq(
-      1  -> 1168935935L,
-      2  -> 1090655792L,
-      4  -> 949471014L,
-      8  -> 719564473L,
-      12 -> 545327896L,
-      20 -> 313208628L,
-      40 -> 78302157L
+      1  -> 1168935858L,
+      2  -> 1090655721L,
+      4  -> 949470952L,
+      8  -> 719564426L,
+      12 -> 545327860L,
+      20 -> 313208608L,
+      40 -> 78302152L
     )
 
     yearToReward.foreach { case (years, expectedEmbers) =>
@@ -58,9 +63,9 @@ class EmissionCurveTest extends PropSpec {
     // h=halfLifeBlocks can land a handful of embers either side of the idealized R0/2 - these are the actual,
     // correct values (hearth-specs/emission-curve/vectors.json), not a theoretical exact half.
     val networkToHalfLifeReward = Seq(
-      (MainnetR0, MainnetRatio, MainnetHalfLifeBlocks)    -> 626417257L,
-      (TestnetR0, TestnetRatio, TestnetHalfLifeBlocks)    -> 2286422991429L,
-      (StagenetR0, StagenetRatio, StagenetHalfLifeBlocks) -> 32924491076597L
+      (MainnetR0, MainnetRatio, MainnetHalfLifeBlocks)    -> 626417216L,
+      (TestnetR0, TestnetRatio, TestnetHalfLifeBlocks)    -> 6264168448L,
+      (StagenetR0, StagenetRatio, StagenetHalfLifeBlocks) -> 6264168448L
     )
 
     networkToHalfLifeReward.foreach { case ((r0, ratio, halfLife), expected) =>

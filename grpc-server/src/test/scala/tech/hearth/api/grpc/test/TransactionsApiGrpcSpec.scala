@@ -233,7 +233,7 @@ class TransactionsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffM
     val recipient        = TxHelpers.signer(4)
     val challengingMiner = TxHelpers.signer(5)
     val deposit          = CommitToGenerationTransaction.DepositInEmbers
-    // enough for a committed generator to still clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2
+    // enough for a committed generator to still clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
     // (1000 hearth) net of its deposit; matches the convention in node/tests' BlockChallengeTest
     val challengerBalance = 1000.hearth + deposit
     withDomain(

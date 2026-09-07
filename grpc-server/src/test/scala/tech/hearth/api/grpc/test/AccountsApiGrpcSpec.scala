@@ -151,7 +151,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
-      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth)
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator (1000 hearth)
       val initChallengingBalance = 1200.hearth
       val initChallengedBalance  = 2000.hearth
 

@@ -247,7 +247,7 @@ sellOrder.price = Y (assetDecimals price = X)`.
 `grpc-server`'s `Repo`/`Loader.scala` (untouched by the transaction-type-removal migration, confirmed via `git log`)
 mis-numbers replayed history when a subscriber attaches (or a range/GetBlockUpdate is requested) starting from
 height 1 after real blocks already exist: `Loader.loadBatch` computes each replayed row's height arithmetically from
-the requested `fromHeight`, assuming dense storage starting exactly there, but genesis is never persisted by `Repo`,
+the requested `h`, assuming dense storage starting exactly there, but genesis is never persisted by `Repo`,
 so the first replayed row is mislabeled and duplicated against the next one. Pre-existing, not something this pass
 fixed — six `BlockchainUpdatesSpec` tests that subscribe/query from height 1 against non-empty history are `ignore`d
 for this reason (mirroring the six `ignore`d suites in `node/tests` for the empty-generator-set rule), with a shared

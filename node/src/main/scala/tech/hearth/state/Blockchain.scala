@@ -82,7 +82,6 @@ trait Blockchain {
 
   def effectiveBalanceBanHeights(address: Address): Seq[Int]
 
-  // TODO: named?
   def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
   def conflictGenerators(at: GenerationPeriod): ConflictGenerators

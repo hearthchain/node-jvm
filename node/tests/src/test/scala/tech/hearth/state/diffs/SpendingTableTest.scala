@@ -25,7 +25,7 @@ class SpendingTableTest extends FreeSpec with WithState {
           )
 
         val spendingAmount = CommitToGenerationTransaction.DepositInEmbers + // To fit both leasing and deposit cases
-          Numbers.when(hasDeposit || spending == Spending.Deposit)(GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2)
+          Numbers.when(hasDeposit || spending == Spending.Deposit)(GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator)
 
         val miner     = TxHelpers.signer(0)
         val minerAddr = miner.toAddress

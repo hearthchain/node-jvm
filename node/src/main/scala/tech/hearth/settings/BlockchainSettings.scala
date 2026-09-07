@@ -18,9 +18,13 @@ import scala.concurrent.duration.*
   * [[GenesisSettings]]). This is what makes the curve reproducible bit-for-bit by any client implementation, not
   * only this one: nobody derives an irrational root or calls a transcendental function at runtime, every
   * implementation only ever does fixed-point integer multiply-and-shift against the same literal. `initialReward`
-  * (R0) is likewise pre-derived (`cEmit * ln(2) / halfLifeBlocks`, floored to the nearest ember) rather than
-  * computed at startup. `halfLifeBlocks` itself is not consensus-relevant - it is carried only for display
-  * (`RewardApiRoute`) and as documentation of how the two derived constants above were produced.
+  * (R0) is likewise pre-derived (`floor(cEmit * (1 - 2^(-1/halfLifeBlocks)))`, in embers) rather than computed at
+  * startup. That derivation comes from the *discrete* per-block sum `R0 / (1 - 2^(-1/halfLifeBlocks))`, not the
+  * continuous integral `cEmit * ln(2) / halfLifeBlocks`: the two agree to first order, but summing a decreasing
+  * curve block by block exceeds integrating it, and the integral form mints ~5.3 HRTH past MAINNET's cap
+  * (~62.5 HRTH at TESTNET/STAGENET's shorter half-life). See hearth-specs/emission-curve. `halfLifeBlocks` itself
+  * is not consensus-relevant - it is carried only for display (`RewardApiRoute`) and as documentation of how the
+  * two derived constants above were produced.
   */
 case class RewardsSettings(
     cEmit: Long,
@@ -45,7 +49,7 @@ object RewardsSettings {
   // 10-year half-life, 60s blocks (525,600 blocks/year): halfLifeBlocks = 5,256,000.
   val MAINNET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 1252834515L,
+    initialReward = 1252834433L,
     decayRatioFixed = BigInt("340282322045415694657836056900309514630"),
     halfLifeBlocks = 5_256_000L
   )
@@ -54,14 +58,14 @@ object RewardsSettings {
   // instead of only in unit tests. Not economically meaningful, purely for testing observability.
   val TESTNET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 12528345158L,
+    initialReward = 12528336897L,
     decayRatioFixed = BigInt("340281918165977088157076486680406733895"),
     halfLifeBlocks = 525_600L
   )
 
   val STAGENET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 12528345158L,
+    initialReward = 12528336897L,
     decayRatioFixed = BigInt("340281918165977088157076486680406733895"),
     halfLifeBlocks = 525_600L
   )

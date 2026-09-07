@@ -123,14 +123,14 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
           AddrWithBalance(sender.toAddress, 1000000.hearth),
           AddrWithBalance(
             newGenerator.toAddress,
-            GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 + CommitToGenerationTransaction.DepositInEmbers + txFee - 1
+            GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator + CommitToGenerationTransaction.DepositInEmbers + txFee - 1
           )
         )
       ) { d =>
         val tx = TxHelpers.commitToGeneration(Height(3001), newGenerator, fee = txFee)
 
         d.appendBlockE(tx) should produce(
-          s"is less than ${GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2} required for block generation"
+          s"is less than ${GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator} required for block generation"
         )
       }
     }

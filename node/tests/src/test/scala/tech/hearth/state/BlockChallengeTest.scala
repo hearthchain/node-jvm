@@ -363,7 +363,7 @@ class BlockChallengeTest
       AddrWithBalance(challengerNode.address, ENOUGH_AMT),
       AddrWithBalance(
         challengedMiner.address,
-        GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 + 2 * CommitToGenerationTransaction.DepositInEmbers +
+        GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator + 2 * CommitToGenerationTransaction.DepositInEmbers +
           TestValues.commitToGenerationFee + 1.hearth
       )
     )

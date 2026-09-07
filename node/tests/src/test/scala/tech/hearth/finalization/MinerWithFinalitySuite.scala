@@ -2,7 +2,7 @@ package tech.hearth.finalization
 
 import tech.hearth.TestValues
 import tech.hearth.block.BlockEndorsement
-import tech.hearth.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2
+import tech.hearth.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
 import tech.hearth.mining.{Miner, MinerImpl}
@@ -45,7 +45,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
+            MinimalEffectiveBalanceForGenerator + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
@@ -102,7 +102,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInEmbers
+            MinimalEffectiveBalanceForGenerator + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
@@ -261,7 +261,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInEmbers
+            MinimalEffectiveBalanceForGenerator + 2 * TestValues.commitToGenerationFee + 3 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
@@ -326,7 +326,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
             // Two deposits: committed in genesis for the current period, and by the transaction below for the next.
             // The first block of a period is checked against the committed set of the parent's period, so a generator
             // that only commits for the period it starts cannot produce that block.
-            MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
+            MinimalEffectiveBalanceForGenerator + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
           )
         ),
         generators = Seq(otherNodeAcc, thisNodeAcc),
