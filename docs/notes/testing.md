@@ -10,7 +10,7 @@ purpose: Implementation notes for testing (node-it fixtures, grpc-server tests, 
 `transactions`/`initial-balance` one, though the balances/generators/assets themselves now live in the height-1 entry
 of a `predefined-snapshots` array alongside `genesis`, not inside `genesis` itself (see "Predefined snapshots" in `docs/notes/state-and-blocks.md`).
 Every miner-eligible node in `nodes.conf` (node01-node09; node10 stays a plain account) is both a funded account and a
-committed generator: its `hearth.miner.accounts` entry's `signing-key` is the same hex seed as its own account (so the
+committed generator: its `hearth.miner.accounts` entry's `signing-key-seed` is the same hex seed as its own account (so the
 address that mines is also a regular funded address), with independently generated `vrf-key`/`bls-key` alongside it.
 `predefined-snapshots`' height-1 `assets` (`NodeConfigs.GenesisAssets`) are fully distributed between the
 "firstKeyPair"/"secondKeyPair" fixture accounts (`IntegrationSuiteWithThreeAddresses`), not to any node.
@@ -79,9 +79,9 @@ block v4/v5 fields, block-size-by-bytes limiting) are all unconditional now, so 
 activation" for one of them no longer has a meaningful "before" state and needs its assertions collapsed to just the
 always-on behavior (see `BlockSizeConstraintsSuite`, `BlocksApiSuite`).
 
-A generator account's `hearth.miner.accounts` entry now requires all three of `signing-key`/`vrf-key`/`bls-key` (a
-hex-encoded seed each) when not using a mnemonic; `GeneratorKeys.fromSettings` throws `bls-key is required when
-mnemonic is not provided` at node startup (another node-log-only crash) if a suite's hand-built account config only
+A generator account's `hearth.miner.accounts` entry now requires all three of `signing-key-seed` (or
+`signing-key-scalar`, see "Keys" in `docs/notes/keys-and-signatures.md`)/`vrf-key`/`bls-key` when not using a
+mnemonic; `GeneratorKeys.fromSettings` throws `bls-key is required when mnemonic is not provided` at node startup (another node-log-only crash) if a suite's hand-built account config only
 sets the first two, which several still did since bls-key postdates when they were written.
 
 Suites that pick `Miners.head`/`Default.head` (or any other low-index `NodeConfigs.Default` entry) as their sole

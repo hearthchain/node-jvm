@@ -75,8 +75,15 @@ Two different types are called `MiningAccount`, which is worth keeping straight:
 
 - `mining.MiningAccount` — the runtime pair, holding a constructed `SigningKey` and `VrfKey`;
 - `settings.MiningAccount` — a `MinerSettings.accounts` entry, holding either a `mnemonic` (plus
-  `signingAccount`/`vrfAccount`/`blsAccount` derivation nonces) or `signingKey`/`vrfKey`/`blsKey` as **hex-encoded
-  seeds**, not keys — `MinerImpl` builds the runtime pair from them with `SigningKey.fromSeed(Hex.decode(…))`.
+  `signingAccount`/`vrfAccount`/`blsAccount` derivation nonces) or `signingKeySeed`/`vrfKey`/`blsKey` as **hex-encoded
+  seeds**, not keys — `GeneratorKeys.fromSettings` builds the runtime account from them with
+  `SigningKey.fromSeed(Hex.decode(…))`. The signing key has a second, mutually exclusive way in: `signingKeyScalar`
+  (`signing-key-scalar`), the raw 32-byte secret scalar, fed to `SigningKey.fromScalar`. It exists because a key that
+  came off a grinder has no seed (a vanity search walks scalars by point addition, and nothing hashes to the winner);
+  `fromScalar` derives the nonce prefix from the scalar itself (`SHA-512(SCALAR_EXPAND_DST ‖ scalar)[32..64]`), so the
+  same 32 bytes rebuild the identical key in any implementation. The config key is `signing-key-seed`, not
+  `signing-key`, precisely so the two cannot be confused: the same 32 bytes read as a seed and read as a scalar give
+  different addresses, and neither reading errors.
 
 `MinerImpl` takes its accounts *only* from the settings, so handing a test helper a runtime `MiningAccount` configures
 nothing and leaves `nextBlockGenerationOffsets` empty (the miner then reports `No delay` for every address). A seed

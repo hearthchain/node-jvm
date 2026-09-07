@@ -620,7 +620,7 @@ object Domain {
     val account = Wallet.generateNewAccount(DefaultWalletSeed, nonce)
     MiningAccountSettings(
       mnemonic = None,
-      signingKey = Some(Hex.encode(Wallet.generateAccountSeed(DefaultWalletSeed, nonce))),
+      signingKeySeed = Some(Hex.encode(Wallet.generateAccountSeed(DefaultWalletSeed, nonce))),
       vrfKey = Some(Hex.encode(TxHelpers.vrfSeedOf(account))),
       blsKey = Some(Hex.encode(TxHelpers.blsSeedOf(account)))
     )

@@ -3,7 +3,7 @@ package tech.hearth.mining
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.bls.{BlsKeyPair, BlsPublicKey, BlsSignature}
-import tech.hearth.settings.MinerSettings
+import tech.hearth.settings.{MinerSettings, MiningAccount as MiningAccountSettings}
 import tech.hearth.state.Height
 import tech.hearth.transaction.CommitToGenerationTransaction
 import tech.hearth.crypto.{Bip39, Hex, KeyTree, SigningKey, VrfKey}
@@ -44,14 +44,14 @@ trait GeneratorKeys {
 object GeneratorKeys {
 
   /** The accounts as `hearth.miner.accounts` describes them: either derived from a mnemonic at the given nonces, or
-    * built from explicitly configured seeds. Parsed here rather than in the miner because the endorser and the REST
-    * API need the same set, and a node that mines is not the only one that has it.
+    * built from explicitly configured key material. Parsed here rather than in the miner because the endorser and the
+    * REST API need the same set, and a node that mines is not the only one that has it.
     */
   def fromSettings(settings: MinerSettings): GeneratorKeys = apply(settings.accounts.map { ma =>
     ma.mnemonic match {
       case Some(mnemonic) =>
         require(
-          ma.signingKey.isEmpty && ma.vrfKey.isEmpty && ma.blsKey.isEmpty,
+          ma.signingKeySeed.isEmpty && ma.signingKeyScalar.isEmpty && ma.vrfKey.isEmpty && ma.blsKey.isEmpty,
           "when mnemonic is specified, explicit private keys can not be specified"
         )
         val seed = Bip39.toSeed(mnemonic)
@@ -62,9 +62,7 @@ object GeneratorKeys {
         )
       case None =>
         MiningAccount(
-          SigningKey.fromSeed(
-            Hex.decode(ma.signingKey.getOrElse(throw new IllegalArgumentException("signing-key is required when mnemonic is not provided")))
-          ),
+          signingKeyOf(ma),
           VrfKey.fromSeed(Hex.decode(ma.vrfKey.getOrElse(throw new IllegalArgumentException("vrf-key is required when mnemonic is not provided")))),
           BlsKeyPair.fromSeed(
             Hex.decode(ma.blsKey.getOrElse(throw new IllegalArgumentException("bls-key is required when mnemonic is not provided")))
@@ -72,6 +70,17 @@ object GeneratorKeys {
         )
     }
   })
+
+  /** A signing key has no seed when it comes off a grinder: a vanity search walks scalars, and no seed hashes to the
+    * one that wins, so `signing-key-scalar` takes that scalar directly. Either way in produces the same key type.
+    */
+  private def signingKeyOf(ma: MiningAccountSettings): SigningKey = (ma.signingKeySeed, ma.signingKeyScalar) match {
+    case (Some(seed), None)   => SigningKey.fromSeed(Hex.decode(seed))
+    case (None, Some(scalar)) => SigningKey.fromScalar(Hex.decode(scalar))
+    case (Some(_), Some(_))   => throw new IllegalArgumentException("signing-key-seed and signing-key-scalar are mutually exclusive")
+    case (None, None) =>
+      throw new IllegalArgumentException("signing-key-seed or signing-key-scalar is required when mnemonic is not provided")
+  }
 
   case class Commitment(
       endorserPublicKey: BlsPublicKey,

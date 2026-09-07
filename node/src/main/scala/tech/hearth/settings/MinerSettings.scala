@@ -27,7 +27,8 @@ case class MiningAccount(
     signingAccount: Int = 0,
     vrfAccount: Int = 0,
     blsAccount: Int = 0,
-    signingKey: Option[String],
+    signingKeySeed: Option[String],
+    signingKeyScalar: Option[String] = None,
     vrfKey: Option[String],
     blsKey: Option[String]
 )

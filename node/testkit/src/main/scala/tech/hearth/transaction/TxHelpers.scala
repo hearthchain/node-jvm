@@ -393,7 +393,7 @@ object TxHelpers {
     val signer = TxHelpers.signer(i)
     MiningAccountSettings(
       mnemonic = None,
-      signingKey = Some(Hex.encode(signerSeed(i))),
+      signingKeySeed = Some(Hex.encode(signerSeed(i))),
       vrfKey = Some(Hex.encode(vrfSeedOf(signer))),
       blsKey = Some(Hex.encode(blsSeedOf(signer)))
     )

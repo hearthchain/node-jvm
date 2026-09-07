@@ -28,7 +28,7 @@ class OneNodeFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLog
 
   private def minerAccountEntry(rawConfig: Config): String = {
     val account = rawConfig.getConfigList("hearth.miner.accounts").get(0)
-    s"""{ signing-key = "${account.getString("signing-key")}", vrf-key = "${account.getString("vrf-key")}", bls-key = "${account.getString(
+    s"""{ signing-key-seed = "${account.getString("signing-key-seed")}", vrf-key = "${account.getString("vrf-key")}", bls-key = "${account.getString(
         "bls-key"
       )}" }"""
   }
