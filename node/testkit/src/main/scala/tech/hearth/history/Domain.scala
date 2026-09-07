@@ -83,7 +83,7 @@ case class Domain(
   def createDiff(tx: Transaction): StateSnapshot                           = createDiffE(tx).explicitGet()
 
   lazy val utxPool: UtxPoolImpl =
-    new UtxPoolImpl(SystemTime, blockchain, settings.utxSettings, settings.maxTxErrorLogSize, settings.minerSettings.enable)
+    new UtxPoolImpl(SystemTime, blockchain, settings.utxSettings, settings.minerSettings.enable)
 
   lazy val endorsementStorage: EndorsementStorage = EndorsementStorage.Disabled
 

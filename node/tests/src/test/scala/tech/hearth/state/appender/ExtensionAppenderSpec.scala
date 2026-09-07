@@ -16,7 +16,7 @@ class ExtensionAppenderSpec extends FlatSpec with WithDomain {
 
   "Extension appender" should "drop duplicate transactions from UTX" in
     withDomain(balances = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)) { d =>
-      val utx  = new UtxPoolImpl(SystemTime, d.blockchain, d.settings.utxSettings, d.settings.maxTxErrorLogSize, d.settings.minerSettings.enable)
+      val utx  = new UtxPoolImpl(SystemTime, d.blockchain, d.settings.utxSettings, d.settings.minerSettings.enable)
       val time = TestTime()
       val extensionAppender =
         ExtensionAppender(d.blockchain, utx, d.posSelector, time, InvalidBlockStorage.NoOp, PeerDatabase.NoOp, global)(new EmbeddedChannel(), _)

@@ -120,7 +120,7 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
     val stopProbe = fatalStopProbe(BaseTargetReachedMaximum)
     val pos       = PoSSelector(bcu, settings.synchronizationSettings.maxBaseTarget, stopProbe.onFatalStop)
 
-    val utxPoolStub = new UtxPoolImpl(ntpTime, bcu, settings0.utxSettings, settings.maxTxErrorLogSize, settings0.minerSettings.enable)
+    val utxPoolStub                        = new UtxPoolImpl(ntpTime, bcu, settings0.utxSettings, settings0.minerSettings.enable)
     val schedulerService: SchedulerService = Scheduler.singleThread("appender")
 
     try {

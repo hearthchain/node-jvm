@@ -40,7 +40,6 @@ case class UtxPoolImpl(
     time: Time,
     blockchain: Blockchain,
     utxSettings: UtxSettings,
-    maxTxErrorLogSize: Int,
     isMiningEnabled: Boolean,
     onEvent: UtxEvent => Unit = _ => (),
     nanoTimeSource: () => TxTimestamp = () => System.nanoTime()

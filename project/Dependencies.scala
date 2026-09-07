@@ -5,7 +5,7 @@ import scalapb.compiler.Version.scalapbVersion
 object Dependencies {
   private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.17.Final"
 
-  val gProtoVersion = "4.36.0"
+  val gProtoVersion = "4.36.1"
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
   val overrides = Def.setting(
     Seq(
@@ -70,7 +70,7 @@ object Dependencies {
 
   val cryptoProviders = Seq(
     // Windows x86_64, Windows x86, macOS x86_64, linux x86_64
-    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.6.3",
+    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.7.0",
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java

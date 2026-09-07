@@ -27,7 +27,6 @@ class RestAPISettingsSpecification extends FlatSpec {
         |    data-keys-request-limit = 1000
         |    asset-details-limit = 100
         |    blocks-request-limit  = 100
-        |    evaluate-script-complexity-limit = 4000
         |    limited-pool-threads = 2
         |    heavy-request-processor-pool-threads = 7
         |    minimum-peers = 2
@@ -47,7 +46,6 @@ class RestAPISettingsSpecification extends FlatSpec {
     settings.dataKeysRequestLimit shouldBe 1000
     settings.assetDetailsLimit shouldBe 100
     settings.blocksRequestLimit shouldBe 100
-    settings.evaluateScriptComplexityLimit shouldBe 4000
     settings.limitedPoolThreads shouldBe 2
     settings.heavyRequestProcessorPoolThreads shouldBe Some(7)
     settings.minimumPeers shouldBe 2

@@ -18,7 +18,6 @@ import java.security.SecureRandom
 case class UtilsApiRoute(
     timeService: Time,
     settings: RestAPISettings,
-    maxTxErrorLogSize: Int,
     limitedScheduler: Scheduler,
     blockchain: Blockchain
 ) extends ApiRoute

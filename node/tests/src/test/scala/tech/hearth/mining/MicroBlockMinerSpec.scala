@@ -29,7 +29,7 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
     val acc       = TestValues.keyPair
     val settings  = domainSettingsWithFS(TestFunctionalitySettings.Enabled)
     withDomain(settings, Seq(AddrWithBalance(acc.toAddress, TestValues.bigMoney))) { d =>
-      val utxPool = new UtxPoolImpl(ntpTime, d.blockchainUpdater, settings.utxSettings, settings.maxTxErrorLogSize, settings.minerSettings.enable)
+      val utxPool = new UtxPoolImpl(ntpTime, d.blockchainUpdater, settings.utxSettings, settings.minerSettings.enable)
       val microBlockMiner = new MicroBlockMinerImpl(
         setDebugState = _ => (),
         allChannels = null,
@@ -94,7 +94,6 @@ class MicroBlockMinerSpec extends FlatSpec with WithDomain {
         ntpTime,
         d.blockchainUpdater,
         RideV6.utxSettings,
-        RideV6.maxTxErrorLogSize,
         RideV6.minerSettings.enable,
         { event =>
           utxEvents.onNext(event)

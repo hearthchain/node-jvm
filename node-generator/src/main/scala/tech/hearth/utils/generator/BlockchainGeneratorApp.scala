@@ -135,7 +135,7 @@ object BlockchainGeneratorApp extends ScorexLogging {
         (info.signingKey, info.vrfKey)
     }
 
-    val utx = new UtxPoolImpl(fakeTime, blockchain, hearthSettings.utxSettings, hearthSettings.maxTxErrorLogSize, hearthSettings.minerSettings.enable)
+    val utx         = new UtxPoolImpl(fakeTime, blockchain, hearthSettings.utxSettings, hearthSettings.minerSettings.enable)
     val posSelector = PoSSelector(blockchain, None)
     val utxEvents   = ConcurrentSubject.publish[UtxEvent](using scheduler)
     val miner = new MinerImpl(

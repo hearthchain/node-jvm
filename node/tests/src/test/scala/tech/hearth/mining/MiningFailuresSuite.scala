@@ -154,7 +154,7 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
       val scheduler   = Scheduler.singleThread("appender")
       val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
       val utxPool =
-        new UtxPoolImpl(ntpTime, blockchainUpdater, hearthSettings.utxSettings, hearthSettings.maxTxErrorLogSize, hearthSettings.minerSettings.enable)
+        new UtxPoolImpl(ntpTime, blockchainUpdater, hearthSettings.utxSettings, hearthSettings.minerSettings.enable)
       val pos = PoSSelector(blockchainUpdater, hearthSettings.synchronizationSettings.maxBaseTarget)
       new MinerImpl(
         allChannels,

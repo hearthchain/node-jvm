@@ -8,7 +8,6 @@ import pureconfig.*
 case class HearthSettings(
     directory: String,
     ntpServer: String,
-    maxTxErrorLogSize: Int,
     dbSettings: DBSettings,
     extensions: Seq[String],
     extensionsShutdownTimeout: FiniteDuration,
@@ -32,7 +31,6 @@ object HearthSettings {
 
     val directory                 = hearthConfigSource.at("directory").loadOrThrow[String]
     val ntpServer                 = hearthConfigSource.at("ntp-server").loadOrThrow[String]
-    val maxTxErrorLogSize         = hearthConfigSource.at("max-tx-error-log-size").loadOrThrow[Int]
     val dbSettings                = hearthConfigSource.at("db").loadOrThrow[DBSettings]
     val extensions                = hearthConfigSource.at("extensions").loadOrThrow[Seq[String]]
     val extensionsShutdownTimeout = hearthConfigSource.at("extensions-shutdown-timeout").loadOrThrow[FiniteDuration]
@@ -52,7 +50,6 @@ object HearthSettings {
     HearthSettings(
       directory,
       ntpServer,
-      maxTxErrorLogSize,
       dbSettings,
       extensions,
       extensionsShutdownTimeout,
