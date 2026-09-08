@@ -88,33 +88,6 @@ object PeersSpec extends InetSocketAddressSeqSpec[KnownPeers] {
   override protected def wrap(addresses: Seq[InetSocketAddress]): KnownPeers = KnownPeers(addresses)
 }
 
-trait SignaturesSeqSpec[A <: AnyRef] extends MessageSpec[A] {
-
-  private val DataLength = 4
-
-  def wrap(signatures: Seq[Array[Byte]]): A
-
-  def unwrap(v: A): Seq[Array[Byte]]
-
-  override val maxLength: Int = DataLength + (200 * SignatureLength)
-
-  override def deserializeData(bytes: Array[Byte]): Try[A] = Try {
-    val lengthBytes = bytes.take(DataLength)
-    val length      = Ints.fromByteArray(lengthBytes)
-
-    assert(bytes.length == DataLength + (length * SignatureLength), "Data does not match length")
-
-    wrap((0 until length).map { i =>
-      val position = DataLength + (i * SignatureLength)
-      bytes.slice(position, position + SignatureLength)
-    })
-  }
-
-  override def serializeData(v: A): Array[Byte] = {
-    Bytes.concat((Ints.toByteArray(unwrap(v).length) +: unwrap(v))*)
-  }
-}
-
 trait BlockIdSeqSpec[A <: AnyRef] extends MessageSpec[A] {
   def wrap(blockIds: Seq[Array[Byte]]): A
 
@@ -146,19 +119,6 @@ trait BlockIdSeqSpec[A <: AnyRef] extends MessageSpec[A] {
       Bytes.concat(bs, Array(sig.length.ensuring(_.isValidByte).toByte), sig)
     }
   }
-}
-
-object GetSignaturesSpec extends SignaturesSeqSpec[GetBlockIds] {
-  def isSupported(signatures: Seq[ByteStr]): Boolean           = signatures.forall(_.arr.length == SignatureLength)
-  override def wrap(signatures: Seq[Array[Byte]]): GetBlockIds = GetBlockIds(signatures.map(ByteStr(_)))
-  override def unwrap(v: GetBlockIds): Seq[Array[MessageCode]] = v.ids.map(_.arr)
-  override val messageCode: MessageCode                        = 20: Byte
-}
-
-object SignaturesSpec extends SignaturesSeqSpec[BlockIds] {
-  override def wrap(signatures: Seq[Array[Byte]]): BlockIds = BlockIds(signatures.map(ByteStr(_)))
-  override def unwrap(v: BlockIds): Seq[Array[Byte]]        = v.ids.map(_.arr)
-  override val messageCode: MessageCode                     = 21: Byte
 }
 
 object GetBlockIdsSpec extends BlockIdSeqSpec[GetBlockIds] {
@@ -348,8 +308,6 @@ object BasicMessagesRepo {
   private val specs: Seq[Spec] = Seq(
     GetPeersSpec,
     PeersSpec,
-    GetSignaturesSpec,
-    SignaturesSpec,
     GetBlockSpec,
     ScoreSpec,
     MicroBlockInvSpec,

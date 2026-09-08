@@ -1,6 +1,5 @@
 package tech.hearth.network
 
-import tech.hearth.crypto
 import tech.hearth.utils.ScorexLogging
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.ChannelHandlerContext
@@ -32,22 +31,8 @@ class MessageCodec(peerDatabase: PeerDatabase) extends MessageToMessageCodec[Raw
       case s: BlockSnapshotResponse      => RawBytes.from(BlockSnapshotResponseSpec, s)
       case s: MicroBlockSnapshotResponse => RawBytes.from(MicroBlockSnapshotResponseSpec, s)
       case e: EndorseBlock               => RawBytes.from(EndorseBlockSpec, e)
-
-      // Version switch
-      case gs: GetBlockIds if isNewMsgsSupported(ctx) =>
-        RawBytes.from(GetBlockIdsSpec, gs)
-      case gs: GetBlockIds if GetSignaturesSpec.isSupported(gs.ids) =>
-        RawBytes.from(GetSignaturesSpec, gs)
-
-      case s: BlockIds =>
-        if (isNewMsgsSupported(ctx)) {
-          RawBytes.from(BlockIdsSpec, s)
-        } else {
-          val supported = s.ids
-            .dropWhile(_.arr.length != crypto.SignatureLength)
-            .takeWhile(_.arr.length == crypto.SignatureLength)
-          RawBytes.from(SignaturesSpec, s.copy(ids = supported))
-        }
+      case g: GetBlockIds                => RawBytes.from(GetBlockIdsSpec, g)
+      case s: BlockIds                   => RawBytes.from(BlockIdsSpec, s)
 
       case _ =>
         throw new IllegalArgumentException(s"Can't send message $msg to $ctx (unsupported)")
@@ -65,10 +50,5 @@ class MessageCodec(peerDatabase: PeerDatabase) extends MessageToMessageCodec[Raw
 
   protected def block(ctx: ChannelHandlerContext, e: Throwable): Unit = {
     peerDatabase.blacklistAndClose(ctx.channel(), s"Invalid message. ${e.getMessage}")
-  }
-
-  private def isNewMsgsSupported(ctx: ChannelHandlerContext): Boolean = {
-    val (v1, v2, _) = ctx.channel().attr(HandshakeHandler.NodeVersionAttributeKey).get()
-    v1 > 1 || (v1 == 1 && v2 >= 2) // >= 1.2.0
   }
 }

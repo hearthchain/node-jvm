@@ -24,11 +24,11 @@ case object GetPeers extends Message
 case class KnownPeers(peers: Seq[InetSocketAddress]) extends Message
 
 case class GetBlockIds(ids: Seq[ByteStr]) extends Message {
-  override def toString: String = s"GetSignatures(${formatSignatures(ids)})"
+  override def toString: String = s"GetBlockIds(${formatIds(ids)})"
 }
 
 case class BlockIds(ids: Seq[ByteStr]) extends Message {
-  override def toString: String = s"Signatures(${formatSignatures(ids)})"
+  override def toString: String = s"BlockIds(${formatIds(ids)})"
 }
 
 case class GetBlock(id: ByteStr) extends Message
