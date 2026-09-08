@@ -5,7 +5,7 @@ import tech.hearth.block.Block
 import tech.hearth.common.utils.Base64
 import tech.hearth.crypto
 import tech.hearth.network.BasicMessagesRepo.Spec
-import tech.hearth.network.LegacyFrameCodec.{Magic, MessageRawData}
+import tech.hearth.network.LegacyFrameCodec.MessageRawData
 import tech.hearth.network.message.Message.*
 import tech.hearth.transaction.Transaction
 import tech.hearth.utils.ScorexLogging
@@ -28,8 +28,6 @@ abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessag
 
   override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: util.List[AnyRef]): Unit =
     if (!ctx.isRemoved && ctx.channel().isActive) try {
-      require(in.readInt() == Magic, "invalid magic number")
-
       val code = in.readByte()
       require(specsByCodes.contains(code), s"Unexpected message code $code")
 
@@ -60,7 +58,6 @@ abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessag
   override def encode(ctx: ChannelHandlerContext, msg1: Any, out: ByteBuf): Unit = {
     val msg = messageToRawData(msg1)
 
-    out.writeInt(Magic)
     out.writeByte(msg.code)
     if (msg.data.length > 0) {
       out.writeInt(msg.data.length)
@@ -73,7 +70,6 @@ abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessag
 }
 
 object LegacyFrameCodec {
-  val Magic = 0x12345678
   case class MessageRawData(code: Byte, data: Array[Byte])
 }
 

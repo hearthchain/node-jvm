@@ -1,5 +1,7 @@
 package tech.hearth.network
 
+import com.google.common.primitives.Ints
+
 import java.net.InetSocketAddress
 
 import tech.hearth.network.message.{MessageSpec, Message as ScorexMessage}
@@ -81,11 +83,23 @@ class LegacyFrameCodecSpec extends FreeSpec {
     ch.inboundMessages().size() shouldEqual 2
   }
 
+  "should frame a message as code, length, checksum and data" in {
+    val msg   = KnownPeers(Seq(InetSocketAddress.createUnresolved("127.0.0.1", 80)))
+    val bytes = PeersSpec.serializeData(msg)
+    val ch    = new EmbeddedChannel(new LegacyFrameCodecL1(PeerDatabase.NoOp, 3.minutes))
+
+    ch.writeOutbound(RawBytes(PeersSpec.messageCode, bytes))
+    val framed = ch.readOutbound[ByteBuf]()
+
+    framed.readableBytes() shouldBe 1 + Ints.BYTES + ScorexMessage.ChecksumLength + bytes.length
+    framed.readByte() shouldBe PeersSpec.messageCode
+    framed.readInt() shouldBe bytes.length
+  }
+
   private def write[T <: AnyRef](buff: ByteBuf, msg: T, spec: MessageSpec[T]): Unit = {
     val bytes    = spec.serializeData(msg)
     val checkSum = wrappedBuffer(crypto.fastHash(bytes), 0, ScorexMessage.ChecksumLength)
 
-    buff.writeInt(LegacyFrameCodec.Magic)
     buff.writeByte(spec.messageCode)
     buff.writeInt(bytes.length)
     buff.writeBytes(checkSum)
