@@ -54,11 +54,13 @@ node-it's `Docker.scala` reads `hearth.blockchain.custom.network-id` out of its 
 `BaseSuite.configureDefaultNetwork` pins `thrth`, and `GenesisBlockGenerator` pins its config's `network-id`.
 Without one, the first address rendered throws `IllegalStateException: default HRP not configured`.
 
-`entrypoint.sh` runs `exec java $JAVA_OPTS ...` with `$JAVA_OPTS` unquoted, so any config value containing a space
-(e.g. a genesis asset `description`) is split into separate argv words by the shell; the first bareword-looking piece
-is then parsed by `java` as the main class name (`Could not find or load main class ...`), silently discarding every
-argument after it. node-it's own fixtures avoid this by keeping every config value space-free; the underlying bug
-(`Docker.renderProperties` wraps a multi-word value in quotes that only `eval` would honor) is still there.
+A container's whole config reaches it as `-D` system properties in a single `JAVA_OPTS` string, so values containing
+a space (a `wallet.mnemonic`, a genesis asset `description`) only survive because `entrypoint.sh` re-splits that string
+with `xargs`, which honors the quotes `Docker.renderProperties` puts around them. Expanding `$JAVA_OPTS` bare instead
+(as it used to) word-splits such a value and `java` reads its second word as the main class name (`Could not find or
+load main class poet`, from node10's mnemonic), silently discarding every argument after it. Any rework of how config
+reaches a container (mounting a rendered HOCON file instead of flattening to `-D`, say) has to keep that property, and
+would also fix the "no way to express an absent value" limitation described above.
 
 Minimum-fee validation is not implemented: `FeeValidation.getMinFee` computes the minimum fee for a transaction type,
 but nothing in `TransactionDiffer`/`CommonValidation` ever calls it — `FeeValidation.apply` only checks `fee > 0`. A
