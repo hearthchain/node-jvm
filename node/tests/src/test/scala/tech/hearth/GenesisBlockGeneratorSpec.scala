@@ -28,7 +28,7 @@ class GenesisBlockGeneratorSpec extends FreeSpec with EitherValues {
        |}""".stripMargin
   )
 
-  private lazy val (generatedGenesis, generatedSnapshot): (GenesisSettings, PredefinedSnapshotSettings) = {
+  private lazy val (generatedGenesis, generatedSnapshot) = {
     val confBody = GenesisBlockGenerator.createConfig(GenesisBlockGenerator.parseSettings(input))
     val parsed   = ConfigFactory.parseString(confBody)
     val genesis  = ConfigSource.fromConfig(parsed).at("genesis").loadOrThrow[GenesisSettings]

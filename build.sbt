@@ -55,7 +55,7 @@ lazy val `hearth-node` = (project in file("."))
 
 inScope(Global)(
   Seq(
-    scalaVersion         := "3.8.4",
+    scalaVersion         := "3.9.0",
     organization         := "tech.hearth",
     organizationName     := "Hearth Chain",
     organizationHomepage := Some(uri("https://hearth.tech")),
