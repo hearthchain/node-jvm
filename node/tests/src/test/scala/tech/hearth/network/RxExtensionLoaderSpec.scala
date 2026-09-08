@@ -89,7 +89,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     })
   }
 
-  "should blacklist GetSignatures timeout" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) { (_, _, _, ccsw, _) =>
+  "should blacklist GetBlockIds timeout" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) { (_, _, _, ccsw, _) =>
     val ch = new EmbeddedChannel()
     test(for {
       _ <- send(ccsw, timeout = 1000)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
@@ -98,7 +98,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     })
   }
 
-  "should request GetSignatures and then span blocks from peer" in withExtensionLoader(Seq.tabulate(100)(ref)) { (_, _, sigs, ccsw, _) =>
+  "should request GetBlockIds and then span blocks from peer" in withExtensionLoader(Seq.tabulate(100)(ref)) { (_, _, sigs, ccsw, _) =>
     val ch                   = new EmbeddedChannel()
     val totalBlocksInHistory = 100
     test(for {
@@ -111,7 +111,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     })
   }
 
-  "should blacklist if received Signatures contains banned id" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) {
+  "should blacklist if received BlockIds contains banned id" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) {
     (invBlockStorage, _, sigs, ccsw, _) =>
       invBlockStorage.add(ref(105), GenericError("Some error"))
       val ch = new EmbeddedChannel()
@@ -162,7 +162,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     }
   }
 
-  "should blacklist peer after receiving empty signature list" in {
+  "should blacklist peer after receiving empty block id list" in {
     withExtensionLoader(Seq.tabulate(100)(ref)) { (_, _, sigs, ccsw, _) =>
       val ch = new EmbeddedChannel()
 

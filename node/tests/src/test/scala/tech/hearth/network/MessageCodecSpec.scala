@@ -1,6 +1,7 @@
 package tech.hearth.network
 
 import java.nio.charset.StandardCharsets
+import tech.hearth.common.state.ByteStr
 import tech.hearth.test.FreeSpec
 import tech.hearth.transaction.transfer.TransferTransaction
 import tech.hearth.transaction.{ProvenTransaction, Transaction}
@@ -28,6 +29,14 @@ class MessageCodecSpec extends FreeSpec {
 
     decodedTx shouldBe origTx
     codec.blockCalls shouldBe 0
+  }
+
+  "encodes GetBlockIds with the block-id message" in {
+    val ch = new EmbeddedChannel(new MessageCodec(PeerDatabase.NoOp))
+
+    ch.writeOutbound(GetBlockIds(Seq(ByteStr(bytes32gen.sample.get))))
+
+    ch.readOutbound[RawBytes]().code shouldBe GetBlockIdsSpec.messageCode
   }
 
   private class SpyingMessageCodec extends MessageCodec(PeerDatabase.NoOp) {

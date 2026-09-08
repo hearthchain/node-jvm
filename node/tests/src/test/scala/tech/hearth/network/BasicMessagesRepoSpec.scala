@@ -1,7 +1,10 @@
 package tech.hearth.network
 
+import com.google.common.primitives.Ints
 import com.google.protobuf.{ByteString, CodedOutputStream, WireFormat}
 import tech.hearth.account.NetworkId
+import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto.DigestLength
 import tech.hearth.mining.MiningConstraints
 import tech.hearth.protobuf.block.*
 import tech.hearth.protobuf.transaction.*
@@ -80,5 +83,40 @@ class BasicMessagesRepoSpec extends FreeSpec {
     val size = maxSizeTransaction.serializedSize + dataPBPrefix.toByteArray.length + 1
 
     size should be <= PBTransactionSpec.maxLength
+  }
+
+  "id-carrying specs reject a 64-byte id" - {
+    "GetBlockSpec" in {
+      GetBlockSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "GetSnapsnotSpec" in {
+      GetSnapsnotSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "MicroBlockRequestSpec" in {
+      MicroBlockRequestSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "MicroSnapshotRequestSpec" in {
+      MicroSnapshotRequestSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "GetBlockIdsSpec" in {
+      GetBlockIdsSpec.deserializeData(GetBlockIdsSpec.serializeData(GetBlockIds(Seq(ByteStr(bytes64gen.sample.get))))) should be a Symbol("failure")
+    }
+  }
+
+  "GetBlockIdsSpec rejects ids of any other length that fit the message bound" in {
+    val ids = Seq(byteArrayGen(16).sample.get, byteArrayGen(48).sample.get).map(ByteStr(_))
+
+    GetBlockIdsSpec.deserializeData(GetBlockIdsSpec.serializeData(GetBlockIds(ids))) should be a Symbol("failure")
+  }
+
+  "GetBlockIdsSpec rejects more ids than a message may carry" in {
+    val bytes =
+      Ints.toByteArray(Int.MaxValue) ++ Array.fill(BlockIdSeqSpec.MaxIds + 1)(Array(DigestLength.toByte) ++ new Array[Byte](DigestLength)).flatten
+
+    GetBlockIdsSpec.deserializeData(bytes) should be a Symbol("failure")
   }
 }

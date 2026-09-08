@@ -501,7 +501,7 @@ object WithState {
 
   /** [[blockWithComputedStateHash]], but with the block retargeted onto the chain it is about to be applied to.
     *
-    * `TestBlock.create` overloads that take no explicit `ref` fill in `randomSignature()`, and `BlockDiffer` requires a
+    * `TestBlock.create` overloads that take no explicit `ref` fill in `randomReference()`, and `BlockDiffer` requires a
     * block to reference the blockchain it is applied to (`Block references X, but the blockchain it is applied to is at
     * Y`). The assert* helpers below chain blocks onto a growing state, so only they know the right reference - a caller
     * building the block cannot. Retarget it here rather than making every test thread the id through.

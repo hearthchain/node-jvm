@@ -3,7 +3,7 @@ package tech.hearth.api
 import cats.syntax.either.*
 import com.typesafe.scalalogging.Logger
 import tech.hearth.account.{Address, PublicKey}
-import tech.hearth.api.http.ApiError.{InvalidAssetId, InvalidBlockId, InvalidPublicKey, InvalidSignature, InvalidTransactionId, WrongJson}
+import tech.hearth.api.http.ApiError.{InvalidAssetId, InvalidBlockId, InvalidPublicKey, InvalidTransactionId, WrongJson}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
 import tech.hearth.transaction.*
@@ -89,29 +89,24 @@ package object http {
     }
   }
 
-  private def idOrHash(error: String => ApiError): PathMatcher1[Coeval[ByteStr]] = Segment.map { str =>
+  private def idSegment(error: String => ApiError): PathMatcher1[Coeval[ByteStr]] = Segment.map { str =>
     // Throwing exceptions during a route parsing can prevent the default fallback to 404, see BlocksApiRoute
     // Here we parse a Base16 segment only when the value is needed
     Coeval.evalOnce {
       ByteStr.decodeBase16(str) match {
         case Success(value) =>
-          if (value.arr.length == crypto.DigestLength || value.arr.length == crypto.SignatureLength) value
-          else
-            throw ApiException(
-              error(s"$str has invalid length ${value.arr.length}. Length can either be ${crypto.DigestLength} or ${crypto.SignatureLength}")
-            )
+          if (value.arr.length == crypto.DigestLength) value
+          else throw ApiException(error(s"$str has invalid length ${value.arr.length}. Length must be ${crypto.DigestLength}"))
         case Failure(exception) =>
           throw ApiException(error(exception.getMessage))
       }
     }
   }
 
-  val TransactionId: PathMatcher1[Coeval[ByteStr]] = idOrHash(InvalidTransactionId.apply)
-  val BlockId: PathMatcher1[Coeval[ByteStr]]       = idOrHash(InvalidBlockId.apply)
+  val TransactionId: PathMatcher1[Coeval[ByteStr]] = idSegment(InvalidTransactionId.apply)
+  val BlockId: PathMatcher1[Coeval[ByteStr]]       = idSegment(InvalidBlockId.apply)
 
   val AssetId: PathMatcher1[IssuedAsset] = base16Segment(Some(crypto.DigestLength), _ => InvalidAssetId).map(IssuedAsset(_))
-
-  val Signature: PathMatcher1[ByteStr] = base16Segment(Some(crypto.SignatureLength), _ => InvalidSignature)
 
   val AddrSegment: PathMatcher1[Address] = Segment.map { str =>
     (for {

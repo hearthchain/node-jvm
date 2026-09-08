@@ -25,6 +25,8 @@ object TestBlock {
 
   def randomSignature(): ByteStr = randomOfLength(SignatureLength)
 
+  def randomReference(): ByteStr = randomOfLength(Block.ReferenceLength)
+
   def sign(signer: SigningKey, b: Block): BlockWithSigner = {
     val x = Block
       .buildAndSign(
@@ -49,11 +51,11 @@ object TestBlock {
     create(time = Try(txs.map(_.timestamp).max).getOrElse(0L), txs = txs, signer = signer)
 
   def create(signer: SigningKey, txs: Seq[Transaction], features: Seq[Short]): BlockWithSigner =
-    create(time = Try(txs.map(_.timestamp).max).getOrElse(0), ref = randomSignature(), txs = txs, signer = signer, features = features)
+    create(time = Try(txs.map(_.timestamp).max).getOrElse(0), ref = randomReference(), txs = txs, signer = signer, features = features)
 
-  def create(time: Long, txs: Seq[Transaction]): BlockWithSigner = create(time, randomSignature(), txs, defaultSigner)
+  def create(time: Long, txs: Seq[Transaction]): BlockWithSigner = create(time, randomReference(), txs, defaultSigner)
 
-  def create(time: Long, txs: Seq[Transaction], signer: SigningKey): BlockWithSigner = create(time, randomSignature(), txs, signer)
+  def create(time: Long, txs: Seq[Transaction], signer: SigningKey): BlockWithSigner = create(time, randomReference(), txs, signer)
 
   def create(
       time: Long,

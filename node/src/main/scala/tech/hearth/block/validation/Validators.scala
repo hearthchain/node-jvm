@@ -38,9 +38,9 @@ object Validators {
 
   def validateMicroBlock(mb: MicroBlock): Validation[MicroBlock] =
     (for {
-      _ <- Either.raiseUnless(MicroBlock.validateReferenceLength(mb.reference.arr.length))(s"Incorrect reference length: ${mb.reference.arr.length}")
+      _ <- Either.raiseUnless(Block.validateReferenceLength(mb.reference.arr.length))(s"Incorrect reference length: ${mb.reference.arr.length}")
       _ <- Either.raiseUnless(mb.wholeBlockSignature.arr.length == crypto.SignatureLength)(
-        s"Incorrect totalResBlockSig: ${mb.wholeBlockSignature.arr.length}"
+        s"Incorrect whole block signature length: ${mb.wholeBlockSignature.arr.length}"
       )
       _ <- Either.raiseUnless(mb.sender.arr.length == KeyLength)(s"Incorrect generator.publicKey: ${mb.sender.arr.length}")
       _ <- Either.raiseUnless(mb.transactionData.nonEmpty)("cannot create empty MicroBlock")

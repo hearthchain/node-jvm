@@ -23,7 +23,7 @@ import scala.concurrent.duration.*
 import scala.jdk.DurationConverters.*
 
 case class ExtensionBlocks(remoteScore: BigInt, blocks: Seq[Block], snapshots: Map[BlockId, BlockSnapshotResponse], source: Channel) {
-  override def toString: String = s"ExtensionBlocks($remoteScore, ${formatSignatures(blocks.map(_.id()))}"
+  override def toString: String = s"ExtensionBlocks($remoteScore, ${formatIds(blocks.map(_.id()))}"
 }
 
 object RxExtensionLoader extends ScorexLogging {
@@ -88,7 +88,7 @@ object RxExtensionLoader extends ScorexLogging {
                 case Some((knownSigs, optimistic)) =>
                   val ch = best.channel
                   log.debug(
-                    s"${id(ch)} Requesting signatures${if (optimistic) " optimistically" else ""}, last ${knownSigs.length} are ${formatSignatures(knownSigs)}"
+                    s"${id(ch)} Requesting block ids${if (optimistic) " optimistically" else ""}, last ${knownSigs.length} are ${formatIds(knownSigs)}"
                   )
 
                   val blacklisting = scheduleBlacklist(ch, s"Timeout loading extension").runAsyncLogErr
@@ -166,7 +166,7 @@ object RxExtensionLoader extends ScorexLogging {
               }
           }
         case _ =>
-          log.trace(s"${id(ch)} Received unexpected signatures ${formatSignatures(sigs.ids)}, ignoring at $state")
+          log.trace(s"${id(ch)} Received unexpected block ids ${formatIds(sigs.ids)}, ignoring at $state")
           state
       }
     }

@@ -46,12 +46,12 @@ package object network {
   def id(chan: Channel, prefix: String = ""): String =
     if (chan == null) "[null]" else s"[$prefix${chan.id().asShortText()}${formatAddress(chan.remoteAddress())}]"
 
-  def formatBlocks(blocks: Seq[Block]): String = formatSignatures(blocks.view.map(_.id()))
+  def formatBlocks(blocks: Seq[Block]): String = formatIds(blocks.view.map(_.id()))
 
-  def formatSignatures(signatures: Iterable[ByteStr]): String =
-    if (signatures.isEmpty) "[Empty]"
-    else if (signatures.sizeCompare(1) <= 0) s"[${signatures.head.trim}]"
-    else s"(total=${signatures.size}) [${signatures.head.trim} -- ${signatures.last.trim}]"
+  def formatIds(ids: Iterable[ByteStr]): String =
+    if (ids.isEmpty) "[Empty]"
+    else if (ids.sizeCompare(1) <= 0) s"[${ids.head.trim}]"
+    else s"(total=${ids.size}) [${ids.head.trim} -- ${ids.last.trim}]"
 
   implicit val channelEq: Eq[Channel] = Eq.fromUniversalEquals
 

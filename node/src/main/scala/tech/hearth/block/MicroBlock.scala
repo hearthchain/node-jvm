@@ -51,6 +51,4 @@ object MicroBlock {
       finalizationVoting
     ).validate
       .map(_.sign(generator))
-
-  def validateReferenceLength(length: Int): Boolean = length == Block.ReferenceLength
 }

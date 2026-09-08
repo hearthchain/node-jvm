@@ -1,25 +1,28 @@
 package tech.hearth.network
 
 import com.google.common.cache.CacheBuilder
+import com.google.common.primitives.Longs
 import tech.hearth.block.Block
-import tech.hearth.common.utils.Base64
 import tech.hearth.crypto
 import tech.hearth.network.BasicMessagesRepo.Spec
-import tech.hearth.network.LegacyFrameCodec.{Magic, MessageRawData}
+import tech.hearth.network.LegacyFrameCodec.MessageRawData
 import tech.hearth.network.message.Message.*
 import tech.hearth.transaction.Transaction
 import tech.hearth.utils.ScorexLogging
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled.*
 import io.netty.channel.ChannelHandlerContext
-import io.netty.handler.codec.ByteToMessageCodec
+import io.netty.handler.codec.MessageToMessageCodec
 
 import java.util
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.DurationConverters.*
 import scala.util.control.NonFatal
 
-abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessageCodec[Any] with ScorexLogging {
+/** The pipeline's outer length prefix (see NetworkServer) delivers exactly one message here, so a frame carries its
+  * own boundaries: the data length is what is left after the code and the checksum.
+  */
+abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends MessageToMessageCodec[ByteBuf, Any] with ScorexLogging {
 
   protected def filterBySpecOrChecksum(spec: BasicMessagesRepo.Spec, checkSum: Array[Byte]): Boolean = true
   protected def specsByCodes: Map[Byte, BasicMessagesRepo.Spec]
@@ -28,70 +31,73 @@ abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessag
 
   override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: util.List[AnyRef]): Unit =
     if (!ctx.isRemoved && ctx.channel().isActive) try {
-      require(in.readInt() == Magic, "invalid magic number")
-
       val code = in.readByte()
       require(specsByCodes.contains(code), s"Unexpected message code $code")
 
-      val spec   = specsByCodes(code)
-      val length = in.readInt()
-      require(length <= spec.maxLength, s"${spec.messageName} message length $length exceeds ${spec.maxLength}")
+      val spec = specsByCodes(code)
 
-      val dataBytes = new Array[Byte](length)
-      val pushToPipeline = length == 0 || {
+      if (in.readableBytes() == 0) out.add(rawDataToMessage(MessageRawData(code, Array.emptyByteArray)))
+      else {
+        val length = in.readableBytes() - ChecksumLength
+        require(length > 0, s"${spec.messageName} message is not long enough to carry a checksum")
+        require(length <= spec.maxLength, s"${spec.messageName} message length $length exceeds ${spec.maxLength}")
+
         val declaredChecksum = in.readSlice(ChecksumLength)
+        val dataBytes        = new Array[Byte](length)
         in.readBytes(dataBytes)
+
         val rawChecksum    = crypto.fastHash(dataBytes)
         val actualChecksum = wrappedBuffer(rawChecksum, 0, ChecksumLength)
 
         require(declaredChecksum.equals(actualChecksum), "invalid checksum")
         actualChecksum.release()
 
-        filterBySpecOrChecksum(spec, rawChecksum)
+        if (filterBySpecOrChecksum(spec, rawChecksum)) out.add(rawDataToMessage(MessageRawData(code, dataBytes)))
       }
-
-      if (pushToPipeline) out.add(rawDataToMessage(MessageRawData(code, dataBytes)))
     } catch {
       case NonFatal(e) =>
         log.warn(s"${id(ctx)} Malformed network message", e)
         peerDatabase.blacklistAndClose(ctx.channel(), s"Malformed network message: $e")
     }
 
-  override def encode(ctx: ChannelHandlerContext, msg1: Any, out: ByteBuf): Unit = {
-    val msg = messageToRawData(msg1)
+  override def encode(ctx: ChannelHandlerContext, msg1: Any, out: util.List[AnyRef]): Unit = {
+    val msg  = messageToRawData(msg1)
+    val data = msg.data
+    val buf  = ctx.alloc().buffer(1 + (if (data.isEmpty) 0 else ChecksumLength + data.length))
 
-    out.writeInt(Magic)
-    out.writeByte(msg.code)
-    if (msg.data.length > 0) {
-      out.writeInt(msg.data.length)
-      out.writeBytes(crypto.fastHash(msg.data), 0, ChecksumLength)
-      out.writeBytes(msg.data)
-    } else {
-      out.writeInt(0)
+    buf.writeByte(msg.code)
+    if (data.nonEmpty) {
+      buf.writeBytes(crypto.fastHash(data), 0, ChecksumLength)
+      buf.writeBytes(data)
     }
+
+    out.add(buf)
   }
 }
 
 object LegacyFrameCodec {
-  val Magic = 0x12345678
   case class MessageRawData(code: Byte, data: Array[Byte])
 }
 
 class LegacyFrameCodecL1(peerDatabase: PeerDatabase, receivedTxsCacheTimeout: FiniteDuration) extends LegacyFrameCodec(peerDatabase) {
 
-  // todo: this is highly inefficient
+  // Drops a transaction this connection already carried within the timeout, keyed by the leading 8 bytes of the
+  // Blake2b256 the checksum needed anyway. Finding a collision means a second preimage on those bytes, and buys the
+  // finder one dropped transaction of their own.
   private val receivedTxsCache = CacheBuilder
     .newBuilder()
     .expireAfterWrite(receivedTxsCacheTimeout.toJava)
-    .build[String, Object]()
+    .build[java.lang.Long, java.lang.Boolean]()
 
   protected def specsByCodes: Map[MessageCode, Spec] = BasicMessagesRepo.specsByCodes
 
+  // getIfPresent is a lock-free read and a repeat is the common case, so this stays a lookup followed by a write on
+  // first sight; asMap().putIfAbsent locks the segment on every message and measures 2x slower.
   protected override def filterBySpecOrChecksum(spec: BasicMessagesRepo.Spec, checkSum: Array[Byte]): Boolean =
     spec != PBTransactionSpec || {
-      val actualChecksumStr = Base64.encode(checkSum)
-      if (receivedTxsCache.getIfPresent(actualChecksumStr) == null) {
-        receivedTxsCache.put(actualChecksumStr, LegacyFrameCodecL1.dummy)
+      val key = Long.box(Longs.fromByteArray(checkSum))
+      if (receivedTxsCache.getIfPresent(key) == null) {
+        receivedTxsCache.put(key, java.lang.Boolean.TRUE)
         true
       } else false
     }
@@ -108,8 +114,4 @@ class LegacyFrameCodecL1(peerDatabase: PeerDatabase, receivedTxsCacheTimeout: Fi
 
   protected def rawDataToMessage(rawData: MessageRawData): AnyRef =
     RawBytes(rawData.code, rawData.data)
-}
-
-object LegacyFrameCodecL1 {
-  private val dummy = new Object()
 }

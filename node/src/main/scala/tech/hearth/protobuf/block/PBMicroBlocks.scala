@@ -1,6 +1,7 @@
 package tech.hearth.protobuf.block
 
 import tech.hearth.account.PublicKey
+import tech.hearth.block.Block
 import tech.hearth.block.Block.BlockId
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
@@ -32,8 +33,11 @@ object PBMicroBlocks {
         signedMicro.signature.toByteStr,
         Option.unless(microBlock.stateHash.isEmpty)(microBlock.stateHash.toByteStr),
         finalizationVoting
-      ),
-      signedMicro.totalBlockId.toByteStr
+      ), {
+        val totalBlockId = signedMicro.totalBlockId.toByteStr
+        require(Block.validateReferenceLength(totalBlockId.arr.length), s"Invalid total block id length ${totalBlockId.arr.length}")
+        totalBlockId
+      }
     )
   }
 

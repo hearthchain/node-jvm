@@ -103,8 +103,6 @@ abstract class HandshakeHandler(
           verifiedDeclaredAddress,
           ctx
         )
-      else if (!versionIsSupported(remoteHandshake.applicationVersion))
-        suspendAndClose(s"Remote application version ${remoteHandshake.applicationVersion} is not supported", verifiedDeclaredAddress, ctx)
       else {
         verifiedDeclaredAddress.foreach { vda =>
           ctx.channel().attr(NodeDeclaredAddressAttributeKey).set(vda)
@@ -124,7 +122,6 @@ abstract class HandshakeHandler(
               establishedConnections.put(ctx.channel(), peerInfo(remoteHandshake, ctx.channel()))
 
               ctx.channel().attr(NodeNameAttributeKey).set(remoteHandshake.nodeName)
-              ctx.channel().attr(NodeVersionAttributeKey).set(remoteHandshake.applicationVersion)
 
               Option(ctx.channel().attr(ConnectionStartAttributeKey).get()).foreach { start =>
                 log.trace(s"Time taken to accept handshake = ${System.nanoTime() / 1000 - start} ms")
@@ -162,13 +159,9 @@ abstract class HandshakeHandler(
 object HandshakeHandler {
 
   val NodeNameAttributeKey: AttributeKey[String]                       = AttributeKey.newInstance[String]("name")
-  val NodeVersionAttributeKey: AttributeKey[(Int, Int, Int)]           = AttributeKey.newInstance[(Int, Int, Int)]("version")
   val NodeDeclaredAddressAttributeKey: AttributeKey[InetSocketAddress] = AttributeKey.newInstance[InetSocketAddress]("declaredAddress")
 
   private val ConnectionStartAttributeKey = AttributeKey.newInstance[Long]("connectionStart")
-
-  def versionIsSupported(remoteVersion: (Int, Int, Int)): Boolean =
-    (remoteVersion._1 == 0 && remoteVersion._2 >= 13) || (remoteVersion._1 == 1 && remoteVersion._2 >= 0)
 
   def removeHandshakeHandlers(ctx: ChannelHandlerContext, thisHandler: ChannelHandler): Unit = {
     ctx.pipeline().remove(classOf[HandshakeTimeoutHandler])

@@ -29,14 +29,15 @@ class LegacyFrameCodecSpec extends FreeSpec {
     decodedBytes.data shouldEqual origTx.bytes()
   }
 
-  "should handle multiple messages" in forAll(Gen.nonEmptyListOf(transferV1Gen)) { origTxs =>
+  "should handle a message per frame" in forAll(Gen.nonEmptyListOf(transferV1Gen)) { origTxs =>
     val codec = new LegacyFrameCodecL1(PeerDatabase.NoOp, 3.minutes)
 
-    val buff = Unpooled.buffer
-    origTxs.foreach(write(buff, _, PBTransactionSpec))
-
     val ch = new EmbeddedChannel(codec)
-    ch.writeInbound(buff)
+    origTxs.foreach { tx =>
+      val buff = Unpooled.buffer
+      write(buff, tx, PBTransactionSpec)
+      ch.writeInbound(buff)
+    }
 
     val decoded = (1 to origTxs.size).map { _ =>
       ch.readInbound[RawBytes]()
@@ -81,13 +82,24 @@ class LegacyFrameCodecSpec extends FreeSpec {
     ch.inboundMessages().size() shouldEqual 2
   }
 
+  "should frame a message as code, checksum and data" in {
+    val msg   = KnownPeers(Seq(InetSocketAddress.createUnresolved("127.0.0.1", 80)))
+    val bytes = PeersSpec.serializeData(msg)
+    val ch    = new EmbeddedChannel(new LegacyFrameCodecL1(PeerDatabase.NoOp, 3.minutes))
+
+    ch.writeOutbound(RawBytes(PeersSpec.messageCode, bytes))
+    val framed = ch.readOutbound[ByteBuf]()
+
+    framed.readableBytes() shouldBe 1 + ScorexMessage.ChecksumLength + bytes.length
+    framed.readByte() shouldBe PeersSpec.messageCode
+    framed.release()
+  }
+
   private def write[T <: AnyRef](buff: ByteBuf, msg: T, spec: MessageSpec[T]): Unit = {
     val bytes    = spec.serializeData(msg)
     val checkSum = wrappedBuffer(crypto.fastHash(bytes), 0, ScorexMessage.ChecksumLength)
 
-    buff.writeInt(LegacyFrameCodec.Magic)
     buff.writeByte(spec.messageCode)
-    buff.writeInt(bytes.length)
     buff.writeBytes(checkSum)
     buff.writeBytes(bytes)
   }

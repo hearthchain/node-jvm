@@ -33,7 +33,7 @@ class BlockV5Test extends FlatSpec with WithMiner with OptionValues with EitherV
       Block
         .buildAndSign(
           System.currentTimeMillis(),
-          TestBlock.randomSignature(),
+          TestBlock.randomReference(),
           2L,
           ByteStr(Array.fill(Block.GenerationVRFSignatureLength)(0: Byte)),
           Seq.empty,
