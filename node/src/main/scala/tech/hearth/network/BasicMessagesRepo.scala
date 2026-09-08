@@ -89,36 +89,44 @@ object PeersSpec extends InetSocketAddressSeqSpec[KnownPeers] {
 }
 
 trait BlockIdSeqSpec[A <: AnyRef] extends MessageSpec[A] {
+  import BlockIdSeqSpec.{EntryLength, MaxIds}
+
   def wrap(blockIds: Seq[Array[Byte]]): A
 
   def unwrap(v: A): Seq[Array[Byte]]
 
-  override val maxLength: Int = Ints.BYTES + (200 * DigestLength) + 200
+  override val maxLength: Int = Ints.BYTES + (MaxIds * EntryLength)
 
   override def deserializeData(bytes: Array[Byte]): Try[A] = Try {
-    val lengthBytes = bytes.take(Ints.BYTES)
-    val length      = Ints.fromByteArray(lengthBytes)
+    val count = Ints.fromByteArray(bytes.take(Ints.BYTES))
+    require(count >= 0 && count <= MaxIds, s"Invalid block id count $count")
+    require(bytes.length == Ints.BYTES + (count * EntryLength), "Data does not match length")
 
-    require(bytes.length <= Ints.BYTES + (length * DigestLength) + length, "Data does not match length")
-
-    val (_, arrays) = (0 until length).foldLeft((Ints.BYTES, Seq.empty[Array[Byte]])) { case ((pos, arrays), _) =>
-      val length = bytes(pos)
-      val result = bytes.slice(pos + 1, pos + 1 + length)
-      require(result.length == length, "Data does not match length")
-      (pos + length + 1, arrays :+ result)
-    }
-    wrap(arrays)
+    wrap(
+      Array
+        .tabulate(count) { i =>
+          val position = Ints.BYTES + (i * EntryLength)
+          require(bytes(position) == DigestLength, s"Invalid block id length ${bytes(position)}")
+          bytes.slice(position + 1, position + 1 + DigestLength)
+        }
+        .toSeq
+    )
   }
 
   override def serializeData(v: A): Array[Byte] = {
-    val signatures  = unwrap(v)
-    val length      = signatures.size
-    val lengthBytes = Ints.toByteArray(length)
+    val ids = unwrap(v)
 
-    signatures.foldLeft(lengthBytes) { case (bs, sig) =>
-      Bytes.concat(bs, Array(sig.length.ensuring(_.isValidByte).toByte), sig)
+    ids.foldLeft(Ints.toByteArray(ids.size)) { case (bs, id) =>
+      Bytes.concat(bs, Array(id.length.ensuring(_.isValidByte).toByte), id)
     }
   }
+}
+
+object BlockIdSeqSpec {
+  // The extension loader asks for, and the replier answers with, at most `synchronization.max-rollback` ids
+  val MaxIds: Int = 200
+
+  private val EntryLength = 1 + DigestLength
 }
 
 object GetBlockIdsSpec extends BlockIdSeqSpec[GetBlockIds] {
@@ -164,11 +172,13 @@ object ScoreSpec extends MessageSpec[BigInt] {
 }
 
 object MicroBlockInvSpec extends MessageSpec[MicroBlockInv] {
+  private val PayloadLength = KeyLength + (DigestLength * 2) + SignatureLength
+
   override val messageCode: MessageCode = 26: Byte
 
   override def deserializeData(bytes: Array[Byte]): Try[MicroBlockInv] =
     Try {
-      require(bytes.length == KeyLength + (DigestLength * 2) + SignatureLength, "Data does not match length")
+      require(bytes.length == PayloadLength, "Data does not match length")
 
       MicroBlockInv(
         sender = PublicKey.apply(bytes.take(KeyLength)),
@@ -181,7 +191,7 @@ object MicroBlockInvSpec extends MessageSpec[MicroBlockInv] {
   override def serializeData(inv: MicroBlockInv): Array[Byte] =
     inv.sender.arr ++ inv.totalBlockId.arr ++ inv.reference.arr ++ inv.signature.arr
 
-  override val maxLength: Int = 300
+  override val maxLength: Int = PayloadLength
 }
 
 object MicroBlockRequestSpec extends MessageSpec[MicroBlockRequest] {
@@ -289,7 +299,7 @@ object EndorseBlockSpec extends MessageSpec[EndorseBlock] {
 
   override def serializeData(data: EndorseBlock): Array[Byte] = data.toProtobuf.toByteArray
 
-  override val maxLength: Int = 238 // 4 + 32*2 (or 64*2 for old blocks) + 4 + 96 + 4 tags + 2 varint max overhead
+  override val maxLength: Int = 238 // 4 + 32*2 + 4 + 96 + 4 tags + 2 varint max overhead
 }
 
 // Virtual, only for logs
@@ -300,6 +310,7 @@ object HandshakeSpec {
 object BasicMessagesRepo {
   type Spec = MessageSpec[? <: AnyRef]
 
+  // Codes 20 and 21 are retired (the legacy signature-based GetSignatures/Signatures) and must not be reused
   private val specs: Seq[Spec] = Seq(
     GetPeersSpec,
     PeersSpec,

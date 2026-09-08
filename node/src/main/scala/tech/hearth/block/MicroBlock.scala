@@ -51,5 +51,4 @@ object MicroBlock {
       finalizationVoting
     ).validate
       .map(_.sign(generator))
-
 }

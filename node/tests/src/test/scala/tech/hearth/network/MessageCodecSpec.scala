@@ -31,9 +31,8 @@ class MessageCodecSpec extends FreeSpec {
     codec.blockCalls shouldBe 0
   }
 
-  "encodes GetBlockIds with block ids regardless of the peer's version" in {
+  "encodes GetBlockIds with the block-id message" in {
     val ch = new EmbeddedChannel(new MessageCodec(PeerDatabase.NoOp))
-    ch.attr(HandshakeHandler.NodeVersionAttributeKey).set((1, 0, 0))
 
     ch.writeOutbound(GetBlockIds(Seq(ByteStr(bytes32gen.sample.get))))
 

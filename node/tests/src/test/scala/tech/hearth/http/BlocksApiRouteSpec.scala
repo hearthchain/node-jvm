@@ -185,6 +185,11 @@ class BlocksApiRouteSpec
       response.status.isFailure() shouldBe true
       responseAs[String] should include("block does not exist")
     }
+
+    Get(routePath(s"/${ByteStr(new Array[Byte](64))}")) ~> seal(route) ~> check {
+      response.status.isFailure() shouldBe true
+      responseAs[String] should include("invalid length 64")
+    }
   }
 
   routePath("/seq/{from}/{to}") in {

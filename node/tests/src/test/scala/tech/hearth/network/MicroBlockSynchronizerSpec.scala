@@ -77,7 +77,7 @@ class MicroBlockSynchronizerSpec extends FreeSpec with RxScheduler with BlockGen
       _ <- send(lastBlockIds)(ref(0))
       _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
       _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
-      _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0))))
+      _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0), ref(1))))
       _ <- send(lastBlockIds)(ref(1))
       _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
     } yield Option(ch.readOutbound[MicroBlockRequest]) shouldBe None)
@@ -102,7 +102,7 @@ class MicroBlockSynchronizerSpec extends FreeSpec with RxScheduler with BlockGen
       _ <- send(microInvs)((ch, MicroBlockInv(signer, ref(1), ref(0))))
       _ = ch.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(1))
       _ <- send(microInvs)((ch2, MicroBlockInv(signer, ref(2), ref(1))))
-      _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0))))
+      _ <- send(microResponses)((ch, MicroBlockResponse(microBlock(1, 0), ref(1))))
       _ <- send(lastBlockIds)(ref(1))
     } yield ch2.readOutbound[MicroBlockRequest] shouldBe MicroBlockRequest(ref(2)))
   }

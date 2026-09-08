@@ -14,7 +14,8 @@ class HandshakeHandlerSpec extends FreeSpec {
   private def handshakeFrom(version: (Int, Int, Int)) =
     Handshake(applicationName = "hrth", applicationVersion = version, nodeName = "peer", nodeNonce = 2, declaredAddress = None)
 
-  private def accepts(remote: Handshake): Boolean = {
+  /** (whether the peer was accepted, whether the channel is still open) */
+  private def handshakeWith(remote: Handshake): (Boolean, Boolean) = {
     val established: ConcurrentHashMap[Channel, PeerInfo] = new ConcurrentHashMap()
     val allChannels: ChannelGroup                         = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
     val handler =
@@ -27,15 +28,17 @@ class HandshakeHandlerSpec extends FreeSpec {
       )
 
     val channel = new EmbeddedChannel(new HandshakeTimeoutHandler(30.seconds), handler)
-    channel.writeInbound(remote)
-    !established.isEmpty
+    try {
+      channel.writeInbound(remote)
+      (!established.isEmpty, channel.isOpen)
+    } finally channel.finishAndReleaseAll()
   }
 
   "accepts a peer of any version of the same application" in {
-    accepts(handshakeFrom((2, 0, 0))) shouldBe true
+    handshakeWith(handshakeFrom((2, 0, 0))) shouldBe (true, true)
   }
 
-  "refuses a peer of another application" in {
-    accepts(handshakeFrom((1, 0, 0)).copy(applicationName = "waves")) shouldBe false
+  "closes the connection to a peer of another application" in {
+    handshakeWith(handshakeFrom((1, 0, 0)).copy(applicationName = "waves")) shouldBe (false, false)
   }
 }
