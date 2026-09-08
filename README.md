@@ -40,7 +40,7 @@ The recommended way to run a node is the Docker image.
 Build it:
 
 ```bash
-sbt buildTarballsForDocker
+sbt stageForDocker
 docker build -t hearth-node docker
 ```
 

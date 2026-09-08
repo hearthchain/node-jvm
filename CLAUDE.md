@@ -26,9 +26,9 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
   `cd docker && docker buildx build --load -t hearth/node-it:latest .`. `sbt node-it/docker` itself always
   uses the default builder and cannot be told to use buildx, so it will keep failing in this environment; run the
   `docker buildx build` command by hand instead (the tarballs it needs are still produced by
-  `sbt node-it/docker`'s dependency on `buildTarballsForDocker`, which itself works fine — only the final
-  `docker build` step needs the workaround, so letting `sbt node-it/docker` fail once first to produce fresh
-  tarballs before the manual `buildx build` is a reasonable way to sequence it).
+  `sbt node-it/docker`'s dependency on `stageForDocker`, which itself works fine — only the final
+  `docker build` step needs the workaround, so letting `sbt node-it/docker` fail once first to stage fresh
+  files into `docker/target` before the manual `buildx build` is a reasonable way to sequence it).
 - node-it test suites run with `-Dhearth.it.max-parallel-suites=N` to cap Docker resource usage (each suite starts
   its own set of containers); pass this as a JVM property on the `sbt` command line, not inside the sbt shell.
   Per-suite failures are deterministic (confirmed identical across parallelism 3 and 6 on the same code), so lowering
@@ -70,6 +70,6 @@ Hard-won implementation knowledge lives in `docs/notes/`, one file per subsystem
 - Writing or fixing tests (node-it suites and fixtures, grpc-server specs, node-tests helpers like withDomain/TestBlock/TxHelpers): read `docs/notes/testing.md` first.
 - Touching StateSnapshot, predefined snapshots, BlockDiffer, genesis settings, or balance snapshots: read `docs/notes/state-and-blocks.md` first.
 - Touching the BlockchainUpdates extension or events.StateUpdate: read `docs/notes/blockchain-updates.md` first.
-- Touching build.sbt, sbt plugins or tasks, the Debian package or its systemd unit, the crypto/protobuf-schemas dependencies, or doing a package or naming migration: read `docs/notes/build-tooling.md` first.
+- Touching build.sbt, sbt plugins or tasks, the docker image (Dockerfile, entrypoint.sh, stageForDocker), the Debian package or its systemd unit, the crypto/protobuf-schemas dependencies, or doing a package or naming migration: read `docs/notes/build-tooling.md` first.
 - Touching docker/private configs or rebuilding its genesis: read `docs/notes/docker-private.md` first.
 - Touching the served OpenAPI UI, the vendored Scalar bundle, or `vendor-scalar.sh`: read `docs/notes/api-docs.md` first.

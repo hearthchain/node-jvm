@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# The node itself must not run as root, and only the ownership fix here needs privilege, so this script re-execs
+# itself unprivileged: everything below runs as hearth, the JVM included. The chown is what makes a bind-mounted
+# host directory usable (it arrives with the host's ownership; a fresh named volume inherits the image's instead),
+# and it is skipped once the directory is already ours, so a normal start costs one stat. An operator who runs the
+# image with --user is left alone.
+if [ "$(id -u)" = "0" ] ; then
+  for dir in "$HEARTH_DATA" "$HEARTH_LOG" ; do
+    [ "$(stat -c %u "$dir")" = "$(id -u hearth)" ] || chown -R hearth:hearth "$dir"
+  done
+  exec setpriv --reuid=hearth --regid=hearth --init-groups --inh-caps=-all --no-new-privs "$0" "$@"
+fi
+
 JAVA_OPTS="-XX:+ExitOnOutOfMemoryError
   -Xmx${HEARTH_HEAP_SIZE}
   --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED

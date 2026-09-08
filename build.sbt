@@ -1,3 +1,7 @@
+import java.nio.file.Files
+
+import scala.jdk.CollectionConverters.*
+
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 enablePlugins(GitVersioning)
@@ -119,25 +123,74 @@ inScope(Global)(
 )
 
 commands += Command.command("packageAll") { state =>
-  "node / assembly" :: "buildDebPackages" :: "buildTarballsForDocker" :: state
+  "node / assembly" :: "buildDebPackages" :: "stageForDocker" :: state
 }
 
-lazy val buildTarballsForDocker = taskKey[Unit]("Package node and grpc-server tarballs and copy them to docker/target")
-// Writes outside sbt2's tracked output paths (docker/target/*.tgz), so ActionCache has no way to know
-// those files are this task's real output; on a cache hit it replays success without re-running
-// IO.copyFile, silently leaving docker/target empty (see "SBT 2 action-cache: buildTarballsForDocker"
-// in CLAUDE.md). Def.uncached forces this task to actually run its body every time, like every other
+// The image runs on Linux only, so the cross-platform jars the universal package carries are ~90MB it would transfer
+// and throw away: conscrypt is the crypto provider for the platforms the image is not, and the Linux-only rocksdb and
+// Corretto builds are staged in their place (see stageForDocker below).
+lazy val dockerExcludedJars = Seq("AmazonCorrettoCryptoProvider", "conscrypt", "rocksdbjni")
+
+// Corretto ships one jar per platform and the image needs the one matching its own, so they are staged under the
+// name docker gives that platform in TARGETARCH and the Dockerfile copies just that directory.
+lazy val dockerCorrettoArchs = Map("linux-x86_64" -> "amd64", "linux-aarch_64" -> "arm64")
+
+// A configuration of its own, because a dependency reachable from node - Optional included - is packaged into the
+// release tarball and the deb, which ship the cross-platform rocksdb jar on purpose.
+lazy val DockerNative = config("docker-native")
+ivyConfigurations += DockerNative
+libraryDependencies += Dependencies.rocksdbForLinux % DockerNative
+
+lazy val stageForDocker = taskKey[Unit]("Stage node and grpc-server files into docker/target, the image build context")
+// Writes outside sbt2's tracked output paths (docker/target/**), so ActionCache has no way to know
+// those files are this task's real output; on a cache hit it replays success without writing anything,
+// silently leaving docker/target stale (see "SBT 2 action-cache" in docs/notes/build-tooling.md).
+// Def.uncached forces this task to actually run its body every time, like every other
 // filesystem-side-effecting task in this build.
-buildTarballsForDocker := Def.uncached {
+stageForDocker := Def.uncached {
   val conv = fileConverter.value
-  IO.copyFile(
-    conv.toPath((node / Universal / packageZipTarball).value).toFile,
-    baseDirectory.value / "docker" / "target" / "hearth.tgz"
-  )
-  IO.copyFile(
-    conv.toPath((`grpc-server` / Universal / packageZipTarball).value).toFile,
-    baseDirectory.value / "docker" / "target" / "hearth-grpc-server.tgz"
-  )
+  val dest = baseDirectory.value / "docker" / "target"
+
+  // Third-party jars change only when a dependency does, so they are staged apart from hearth's own jars and scripts:
+  // the image copies each directory as its own layer, and the big one stays cached across code-only builds.
+  val universal = ((node / Universal / mappings).value ++ (`grpc-server` / Universal / mappings).value)
+    .map { case (ref, path) => conv.toPath(ref).toFile -> path }
+
+  val corretto = universal.flatMap { case (file, path) =>
+    dockerCorrettoArchs.collectFirst {
+      case (classifier, arch) if path.contains("AmazonCorrettoCryptoProvider") && path.contains(s"-$classifier.") =>
+        file -> dest / "native" / arch / path.stripPrefix("lib/")
+    }
+  }
+
+  val rocksdb = update.value
+    .select(configurationFilter(DockerNative.name))
+    .map(file => file -> dest / "lib" / s"org.rocksdb.${file.getName}")
+
+  val staged = universal
+    .filterNot { case (_, path) => dockerExcludedJars.exists(path.contains) }
+    .map { case (file, path) =>
+      val target =
+        if (path.startsWith("lib/") && !path.startsWith("lib/tech.hearth.")) dest / "lib" / path.stripPrefix("lib/")
+        else dest / "app" / path
+      file -> target
+    } ++ corretto ++ rocksdb
+
+  val wanted = staged.map(_._2).toSet
+  if (dest.isDirectory) {
+    val walk = Files.walk(dest.toPath)
+    val stale =
+      try walk.iterator().asScala.map(_.toFile).filter(f => f.isFile && !wanted.contains(f)).toList
+      finally walk.close()
+    stale.foreach(IO.delete)
+  }
+
+  staged.foreach { case (source, target) =>
+    // Copying only what changed keeps BuildKit's context transfer incremental: it detects an unchanged file by
+    // size and modification time, and re-sends nothing for one it has already seen.
+    if (!target.exists() || target.length() != source.length() || target.lastModified() != source.lastModified())
+      IO.copyFile(source, target, preserveLastModified = true)
+  }
 }
 
 lazy val compilePRRaw = taskKey[Unit]("Compile the project")
@@ -160,7 +213,7 @@ checkPRRaw := Def
         ScopeFilter(inProjects(`grpc-server`, `node-tests`), inConfigurations(Test))
       ),
       assembly.all(ScopeFilter(inProjects(node))),
-      buildTarballsForDocker
+      stageForDocker
     )
   )
   .value

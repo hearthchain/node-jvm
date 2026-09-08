@@ -149,7 +149,7 @@ linuxPackageSymlinks := linuxPackageSymlinks.value.filterNot(_.link == s"/etc/${
 // A copy of DebianPlugin's own definition (whose helper is private[debian]) wrapped in Def.uncached: this task's
 // real output is the maintainer scripts written under (Universal / target)/tmp/debian, a path sbt 2 cannot track.
 // On a cache hit it returns the file list without writing anything, so jdeb packages the previous build's copies,
-// or fails outright once they have been cleaned away. Same trap as buildTarballsForDocker (docs/notes/build-tooling.md).
+// or fails outright once they have been cleaned away. Same trap as stageForDocker (docs/notes/build-tooling.md).
 debianMaintainerScripts := Def.uncached {
   val scriptDir    = (Universal / target).value / "tmp" / "debian"
   val replacements = (Debian / linuxScriptReplacements).value

@@ -61,8 +61,9 @@ two local proto messages (`node/src/main/protobuf/hearth/database.proto`): `Bloc
 Docker/deployment packaging followed the same rename: `docker/Dockerfile`/`entrypoint.sh`'s env vars
 (`WAVES_NETWORK`/`WVDATA`/`WVLOG`/etc. → `HEARTH_NETWORK`/`HEARTH_DATA`/`HEARTH_LOG`/etc.) and paths
 (`/etc/waves`, `/var/lib/waves`, `/usr/share/waves` → `/etc/hearth`, `/var/lib/hearth`, `/usr/share/hearth`), the
-`node-it` test image tag (`com.wavesplatform/node-it` → `hearth/node-it`), the tarball names `buildTarballsForDocker`
-produces (`waves.tgz`/`waves-grpc-server.tgz` → `hearth.tgz`/`hearth-grpc-server.tgz`), `grpc-server`'s artifact
+`node-it` test image tag (`com.wavesplatform/node-it` → `hearth/node-it`), the tarball names the docker packaging
+task produced at the time (`waves.tgz`/`waves-grpc-server.tgz` → `hearth.tgz`/`hearth-grpc-server.tgz`, since
+replaced by `stageForDocker`'s `docker/target/{lib,app}` directories), `grpc-server`'s artifact
 name (`waves-grpc-server` → `hearth-grpc-server`, matching `node`'s already-renamed `hearth-jvm`), and the Linux
 package name/summary in `node/build.sbt`/`ExtensionPackaging.scala` (`waves${network}` → `hearth${network}`,
 `maintainer` → `tech.hearth`).
@@ -139,7 +140,7 @@ retract one. `gitDescribedVersion`'s `excludeLintKeys` entry needs the `git.` pr
 
 sbt 2's `ActionCache` treats every task as cacheable by default and, on a cache hit, replays the cached result
 *without re-running the body*. A task whose only job is an out-of-band filesystem write sbt's output tracking can't
-see (e.g. `buildTarballsForDocker`'s `IO.copyFile` into `docker/target/*.tgz`, not a declared task output) silently
+see (e.g. `stageForDocker`'s `IO.copyFile` into `docker/target/**`, not a declared task output) silently
 no-ops on a cache hit - `setup-java`'s `cache: 'sbt'` persists that cache *across* CI runs, so a fresh checkout with
 an empty `docker/target/` can still hit stale and skip the copy, breaking `node-it/docker`'s later `docker build`.
 Same class of bug already fixed for `classpathOrdering`, `compilePRRaw`, `IntegrationTestsPlugin`'s
@@ -270,3 +271,53 @@ Notes on the packaging itself, all of them things that bit during this change:
   `unable to install new version of './usr/share/hearth-jvm': Invalid cross-device link` (overlayfs cannot rename
   directories); mount volumes over `/usr/share`, `/var` and `/etc` (`docker run -v vol:/usr/share ...`) to test an
   install.
+
+## Docker image build: staged directories, not a tarball
+
+`sbt stageForDocker` copies the node and grpc-server universal mappings straight into `docker/target`, the image
+build context, and `docker/Dockerfile` `COPY`s them in. It used to package both as `.tgz` and unpack them in a
+`RUN`, which cost ~13 seconds per iteration that the current layout does not:
+
+- Third-party jars go to `target/lib`, hearth's own jars and scripts to `target/app`, so the ~100MB layer is
+  content-identical across builds that only changed node code and stays cached; only the ~10MB app layer is rebuilt.
+- The image build downloads nothing. It used to `wget` the Linux Corretto and rocksdb jars, and the Corretto one it
+  fetched was byte-identical to a jar the build had already resolved. Now `dockerExcludedJars` keeps the
+  cross-platform `rocksdbjni`/`conscrypt`/`AmazonCorrettoCryptoProvider` jars out of the context (the release tarball
+  still carries them: it is the cross-platform artifact, and only the image knows which platform it is for), and in
+  their place the task stages the `linux64` rocksdb jar - every Linux native at a third of the size - plus both
+  Corretto Linux jars under `target/native/<arch>`, named the way docker names that platform in `TARGETARCH` so the
+  Dockerfile can `COPY target/native/$TARGETARCH`. This also removed the image's `CORRETTO_VERSION`/`ROCKSDB_VERSION`
+  args, which could drift from `Dependencies.scala`.
+- The `linux64` rocksdb jar is resolved through a `DockerNative` ivy configuration of `build.sbt`'s own. `% Optional`
+  on the node project is not enough to keep an artifact out of the release artifacts: the universal package picks up
+  Optional dependencies (that is how the Corretto jars reach it), so declaring it there put a second, 29MB rocksdb
+  jar into the tarball and the deb.
+- `stageForDocker` copies a file only when its size or mtime differs from the staged copy. That is what keeps
+  BuildKit's context transfer incremental (~10MB instead of ~196MB); a blanket re-copy would defeat it, since
+  BuildKit detects an unchanged file by size and mtime too.
+- `COPY --link` layers are built independently of the ones below them, but any later instruction that touches the
+  filesystem forces BuildKit to materialize the merged result, which costs as much as the copies themselves. Keep
+  `WORKDIR` (the only such instruction left) *above* the `COPY`s; `VOLUME`/`HEALTHCHECK`/`STOPSIGNAL`/`ENTRYPOINT`
+  are metadata-only and can stay below. `--chown` must be numeric there: a `--link` layer has no user database.
+- Replacing the `RUN tar` with `COPY` also takes the unpacking out of the emulated leg of the multi-platform
+  `linux/amd64,linux/arm64` build in `publish-docker-image.yml`; a `COPY` needs no emulation at all.
+
+## Docker image: the node runs as uid 999, dropped in the entrypoint
+
+The image creates the `hearth` user (999:999) and `entrypoint.sh` re-execs itself as that user through `setpriv`
+before starting the JVM. The user had been created and the files chowned to it since the fork, but nothing ever ran
+as it: `USER waves` was dropped upstream in 2021 (`b2351b857`) and the container has run as root ever since.
+
+- There is deliberately no `USER` instruction. The entrypoint needs root for exactly one thing - taking ownership of
+  `/var/lib/hearth` and `/var/log/hearth` - because a bind-mounted host directory keeps the host's ownership, and
+  bind mounts are how this image is normally run. `USER` alone would break every existing deployment on upgrade, with
+  a permission error at first write that looks nothing like its cause. A fresh *named* volume is the case that needs
+  no help: docker seeds it from the image directory, ownership included.
+- The chown is guarded by a `stat` of the directory, so it is recursive once (first start after mounting) and free
+  afterwards; and the whole block is guarded by `id -u` = 0, so `docker run --user ...` is left alone.
+- The drop happens at the top of the script, before anything else it does. Dropping at the end instead would leave
+  `$HEARTH_LOG/hearth.log` created by root's `tee` and unwritable by the JVM that comes after it.
+- `setpriv` rather than `gosu`: it is already in the base image (util-linux), and it can also clear inheritable
+  capabilities and set `no-new-privs`, which gosu does not. gosu is the right answer for images like postgres, which
+  ship Debian *and* Alpine variants from one entrypoint script and need the same static binary on both; this image
+  has one base and one entrypoint. That reasoning inverts if it ever moves to Alpine or distroless.

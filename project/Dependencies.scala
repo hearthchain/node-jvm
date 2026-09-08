@@ -104,6 +104,11 @@ object Dependencies {
   // Check https://github.com/facebook/rocksdb/issues/13893 before bumping
   private val rocksdb = "org.rocksdb" % "rocksdbjni" % "10.10.1.1"
 
+  // What the docker image ships in place of the cross-platform jar above: every Linux native (x86_64, aarch64,
+  // ppc64le, s390x, riscv64) at a third of the size. build.sbt resolves it in a configuration of its own, so it
+  // reaches no classpath and none of the release artifacts.
+  val rocksdbForLinux = rocksdb.classifier("linux64")
+
   val scalaLogging: ModuleID = "com.typesafe.scala-logging" %% "scala-logging" % "3.9.6"
   lazy val node = Def.setting(
     Seq(
