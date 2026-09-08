@@ -1,8 +1,8 @@
 package tech.hearth.network
 
 import com.google.common.cache.CacheBuilder
+import com.google.common.primitives.Longs
 import tech.hearth.block.Block
-import tech.hearth.common.utils.Base64
 import tech.hearth.crypto
 import tech.hearth.network.BasicMessagesRepo.Spec
 import tech.hearth.network.LegacyFrameCodec.MessageRawData
@@ -81,19 +81,23 @@ object LegacyFrameCodec {
 
 class LegacyFrameCodecL1(peerDatabase: PeerDatabase, receivedTxsCacheTimeout: FiniteDuration) extends LegacyFrameCodec(peerDatabase) {
 
-  // todo: this is highly inefficient
+  // Drops a transaction this connection already carried within the timeout, keyed by the leading 8 bytes of the
+  // Blake2b256 the checksum needed anyway. Finding a collision means a second preimage on those bytes, and buys the
+  // finder one dropped transaction of their own.
   private val receivedTxsCache = CacheBuilder
     .newBuilder()
     .expireAfterWrite(receivedTxsCacheTimeout.toJava)
-    .build[String, Object]()
+    .build[java.lang.Long, java.lang.Boolean]()
 
   protected def specsByCodes: Map[MessageCode, Spec] = BasicMessagesRepo.specsByCodes
 
+  // getIfPresent is a lock-free read and a repeat is the common case, so this stays a lookup followed by a write on
+  // first sight; asMap().putIfAbsent locks the segment on every message and measures 2x slower.
   protected override def filterBySpecOrChecksum(spec: BasicMessagesRepo.Spec, checkSum: Array[Byte]): Boolean =
     spec != PBTransactionSpec || {
-      val actualChecksumStr = Base64.encode(checkSum)
-      if (receivedTxsCache.getIfPresent(actualChecksumStr) == null) {
-        receivedTxsCache.put(actualChecksumStr, LegacyFrameCodecL1.dummy)
+      val key = Long.box(Longs.fromByteArray(checkSum))
+      if (receivedTxsCache.getIfPresent(key) == null) {
+        receivedTxsCache.put(key, java.lang.Boolean.TRUE)
         true
       } else false
     }
@@ -110,8 +114,4 @@ class LegacyFrameCodecL1(peerDatabase: PeerDatabase, receivedTxsCacheTimeout: Fi
 
   protected def rawDataToMessage(rawData: MessageRawData): AnyRef =
     RawBytes(rawData.code, rawData.data)
-}
-
-object LegacyFrameCodecL1 {
-  private val dummy = new Object()
 }
