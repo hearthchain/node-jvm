@@ -45,7 +45,7 @@ class ReserveSettleStateUpdateSpec extends FreeSpec with WithDomain {
     withDomain(
       DeterministicFinality,
       balances,
-      assets = Seq(GenesisAssetSettings(asset.id, "RESV", decimals = 8, quantity = assetQuantity, minFee = TestValues.fee))
+      assets = Seq(GenesisAssetSettings(asset.id.toString, "RESV", decimals = 8, quantity = assetQuantity, minFee = TestValues.fee))
     )(f)
 
   private def withRegisteredEnclave(blockchain: Blockchain): Blockchain =

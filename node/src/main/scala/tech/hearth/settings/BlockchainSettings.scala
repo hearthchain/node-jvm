@@ -18,9 +18,13 @@ import scala.concurrent.duration.*
   * [[GenesisSettings]]). This is what makes the curve reproducible bit-for-bit by any client implementation, not
   * only this one: nobody derives an irrational root or calls a transcendental function at runtime, every
   * implementation only ever does fixed-point integer multiply-and-shift against the same literal. `initialReward`
-  * (R0) is likewise pre-derived (`cEmit * ln(2) / halfLifeBlocks`, floored to the nearest ember) rather than
-  * computed at startup. `halfLifeBlocks` itself is not consensus-relevant - it is carried only for display
-  * (`RewardApiRoute`) and as documentation of how the two derived constants above were produced.
+  * (R0) is likewise pre-derived (`floor(cEmit * (1 - 2^(-1/halfLifeBlocks)))`, in embers) rather than computed at
+  * startup. That derivation comes from the *discrete* per-block sum `R0 / (1 - 2^(-1/halfLifeBlocks))`, not the
+  * continuous integral `cEmit * ln(2) / halfLifeBlocks`: the two agree to first order, but summing a decreasing
+  * curve block by block exceeds integrating it, and the integral form mints ~5.3 HRTH past MAINNET's cap
+  * (~62.5 HRTH at TESTNET/STAGENET's shorter half-life). See hearth-specs/emission-curve. `halfLifeBlocks` itself
+  * is not consensus-relevant - it is carried only for display (`RewardApiRoute`) and as documentation of how the
+  * two derived constants above were produced.
   */
 case class RewardsSettings(
     cEmit: Long,
@@ -45,7 +49,7 @@ object RewardsSettings {
   // 10-year half-life, 60s blocks (525,600 blocks/year): halfLifeBlocks = 5,256,000.
   val MAINNET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 1252834515L,
+    initialReward = 1252834433L,
     decayRatioFixed = BigInt("340282322045415694657836056900309514630"),
     halfLifeBlocks = 5_256_000L
   )
@@ -54,14 +58,14 @@ object RewardsSettings {
   // instead of only in unit tests. Not economically meaningful, purely for testing observability.
   val TESTNET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 12528345158L,
+    initialReward = 12528336897L,
     decayRatioFixed = BigInt("340281918165977088157076486680406733895"),
     halfLifeBlocks = 525_600L
   )
 
   val STAGENET: RewardsSettings = apply(
     cEmit = 95_000_000L * Constants.UnitsInHearth,
-    initialReward = 12528345158L,
+    initialReward = 12528336897L,
     decayRatioFixed = BigInt("340281918165977088157076486680406733895"),
     halfLifeBlocks = 525_600L
   )
@@ -81,7 +85,7 @@ case class FunctionalitySettings(
     generationPeriodLength: Int = 1000
 ) {
   lazy val daoAddressParsed: Either[String, Option[Address]] =
-    daoAddress.traverse(Address.fromString(_)).leftMap(_ => "Incorrect dao-address")
+    daoAddress.traverse(Address.fromString).leftMap(_ => "Incorrect dao-address")
 
   require(featureCheckBlocksPeriod > 0, "feature-check-blocks-period must be greater than 0")
   require(
@@ -121,8 +125,7 @@ object FunctionalitySettings {
   val TESTNET: FunctionalitySettings = apply(
     featureCheckBlocksPeriod = 3000,
     blocksForFeatureActivation = 2700,
-    // TODO temporary stub, replace with the real hearth DAO address before launch
-    daoAddress = Some("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn"),
+    daoAddress = Some("thrth1da0fundsmjpfas88ydux2w3t9exjd3d4js77xg"),
     blockRewardBoostPeriod = 2_000,
     maxValidEndorsers = 64,
     generationPeriodLength = 3000
@@ -140,13 +143,14 @@ object FunctionalitySettings {
 }
 
 /** An asset issued by a predefined snapshot. Since there is no issue transaction to derive it from, the id is
-  * specified explicitly. `minFee` is mandatory: every issued asset must carry a non-zero minimum fee floor for
-  * paying transaction fees in it (see MinAssetFee), there is no "sponsorship disabled" state any more. There is no
-  * issuer either: nothing ever checks who issued an asset any more (no Reissue/Burn/SponsorFee to gate by it), so
-  * it isn't tracked.
+  * specified explicitly, as base16 of exactly [[tech.hearth.transaction.AssetIdLength]] bytes - PredefinedSnapshot
+  * decodes and checks it, since these settings are never used for anything but building that snapshot. `minFee` is
+  * mandatory: every issued asset must carry a non-zero minimum fee floor for paying transaction fees in it (see
+  * MinAssetFee), there is no "sponsorship disabled" state any more. There is no issuer either: nothing ever checks
+  * who issued an asset any more (no Reissue/Burn/SponsorFee to gate by it), so it isn't tracked.
   */
 case class GenesisAssetSettings(
-    id: ByteStr,
+    id: String,
     name: String,
     decimals: Int,
     quantity: Long,
@@ -231,9 +235,19 @@ object PredefinedSnapshotSettings {
     PredefinedSnapshotSettings(
       height = GenesisBlockHeight.toInt,
       balances = List(
-        GenesisBalanceSettings("thrth1x0welf80ljp2psdstmfywkhqmj9s7q5hjgzpvj", 3_000_000L * Constants.UnitsInHearth), // burn-claim, 3%
-        GenesisBalanceSettings("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn", 1_000_000L * Constants.UnitsInHearth), // DAO treasury, 1%
-        GenesisBalanceSettings("thrth1wpm9trpt4fm4ucmmq556f6j6arzxg7c4n9rgsj", 1_000_000L * Constants.UnitsInHearth)  // team (vested), 1%
+        GenesisBalanceSettings("thrth1ncneratey9nasnegts86xnhpxcv628q48tpk7l", 3_000_000L * Constants.UnitsInHearth), // burn-claim, 3%
+        GenesisBalanceSettings("thrth1da0fundsmjpfas88ydux2w3t9exjd3d4js77xg", 1_000_000L * Constants.UnitsInHearth), // DAO treasury, 1%
+        GenesisBalanceSettings("thrth1teamvestjtryyczpmpvef5aldw7qgs5jzp447l", 1_000_000L * Constants.UnitsInHearth)  // team (vested), 1%
+      ),
+      assets = Seq(
+        GenesisAssetSettings("ddffc0847e4b4373163ccfdb088857479e854eb27b833137a4659ad29448f1bf", "ORCRED", 8, 0, 100000, "OpenRouter Cred")
+      ),
+      generators = Seq(
+        GenesisGeneratorSettings(
+          "4f7d08b23646f07af05d82959b77cbb9be96bfd4f466b054578535469267ebd3",
+          "ab20c8a767e96dfe1628d31cb428d816efcdb2564976577be1b1cc1a1e98217b05132a7ac4bb00ba2790ca8b64c34074",
+          "4b66ef37b51bcc715bd676863a50699aafba209c212436f94586d53bb3fbff14"
+        )
       )
     )
   )
@@ -245,7 +259,7 @@ object PredefinedSnapshotSettings {
     PredefinedSnapshotSettings(
       height = GenesisBlockHeight.toInt,
       balances = List(
-        GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", Constants.UnitsInHearth * Constants.TotalHearth)
+        GenesisBalanceSettings("3Mi63XiwniEj6mTC557pxdRDddtpj7fZMMw", 100_000_000L * Constants.UnitsInHearth) // the whole 100M cap
       )
     )
   )
@@ -261,12 +275,10 @@ object PredefinedSnapshotSettings {
   *   block carries.
   * @param blockId
   *   The id of the genesis block, which is the hash of its header, so it covers the state hash along with `timestamp`
-  *   and `initial-base-target`. It does not cover `signature`, which is not part of the header and is verified on its
-  *   own. This is the value peers compare when they decide whether they are on the same chain.
+  *   and `initial-base-target`. This is the value peers compare when they decide whether they are on the same chain.
   */
 case class GenesisSettings(
     timestamp: Long,
-    signature: Option[ByteStr],
     initialBaseTarget: Long,
     averageBlockDelay: FiniteDuration,
     stateHash: Option[ByteStr] = None,
@@ -275,15 +287,22 @@ case class GenesisSettings(
   def blockTimestamp: Long = timestamp
 }
 
-object GenesisSettings { // TODO: Move to network-defaults.conf
+object GenesisSettings {
   // This given is required for default args to work, see FunctionalitySettings.
   given ConfigReader[GenesisSettings] = deriveReader
 
   // Note: the predefined signatures of the pre-snapshot genesis blocks are gone along with the genesis transactions
-  // they were made over. The blocks below are signed by Block.GenesisGenerator instead.
-  val MAINNET: GenesisSettings  = GenesisSettings(1465742577614L, None, 153722867L, 60.seconds)
-  val TESTNET: GenesisSettings  = GenesisSettings(1478000000000L, None, 153722867L, 60.seconds)
-  val STAGENET: GenesisSettings = GenesisSettings(1561705836768L, None, 5000, 1.minute)
+  // they were made over. The block id is the hash of the header, so nothing needs a signature to identify a chain;
+  // the genesis block is signed by Block.GenesisGenerator, whose key is derived in code.
+  val MAINNET: GenesisSettings = GenesisSettings(1465742577614L, 153722867L, 60.seconds)
+  val TESTNET: GenesisSettings = GenesisSettings(
+    1788855550000L,
+    100000L,
+    60.seconds,
+    Some(ByteStr.decodeBase16("06164b622a916b3459ffc85631b166b3e45e1d655a4e131c610a675f8ba66a84").get),
+    Some(ByteStr.decodeBase16("dbe7afdde3d8323efad85b784a26349dcb7269cd6eefe0bc0d66233d0684cb2a").get)
+  )
+  val STAGENET: GenesisSettings = GenesisSettings(1561705836768L, 5000, 1.minute)
 }
 
 case class BlockchainSettings(
@@ -308,9 +327,9 @@ case class BlockchainSettings(
   lazy val initialBalance: Long = genesisSnapshot.balances.map(_.hearth).foldLeft(0L)(Math.addExact)
 
   /** This network's own supply ceiling: genesis premine plus everything the emission curve still has left to mint
-    * (`hearth-tokenomics-spec` S2.1: `Cmax = Pgen + Cemit`). Derived from this network's own settings rather than
-    * the global `Constants.TotalHearth`, so it holds for every network including STAGENET, whose premine/emission
-    * deliberately don't sum to `Constants.TotalHearth` (see `PredefinedSnapshotSettings.STAGENET`).
+    * (`hearth-tokenomics-spec` S2.1: `Cmax = Pgen + Cemit`). There is no global supply constant to read instead:
+    * every network declares its own premine, and STAGENET's deliberately doesn't follow the 5%/95% split the others
+    * do (see `PredefinedSnapshotSettings.STAGENET`).
     */
   lazy val hardCap: Long = Math.addExact(initialBalance, rewardsSettings.cEmit)
 }

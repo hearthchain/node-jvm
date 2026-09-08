@@ -37,9 +37,16 @@ object EmissionCurve {
     result
   }
 
-  /** The block reward `h` blocks after the first rewarded block, floored to the nearest ember. Flooring at every
-    * block means the running sum of rewards always stays strictly below `initialReward * Hhalf / ln2` (the curve's
-    * asymptote, `C_emit`), so the hard cap holds by construction - no separate runtime clamp is needed.
+  /** The block reward `h` blocks after the first rewarded block, floored to the nearest ember. `h` counts blocks
+    * since the *first rewarded block*, not chain height: `h = 0` is chain height 2, because genesis (height 1)
+    * earns nothing. `rewardAt(0)` is therefore `initialReward` exactly.
+    *
+    * The running sum of rewards stays strictly below `C_emit` because `initialReward` is derived from the discrete
+    * sum this method actually pays out - `sum_h R0 * 2^(-h/Hhalf) = R0 / (1 - 2^(-1/Hhalf))` - rather than from the
+    * curve's continuous integral `R0 * Hhalf / ln2`, which is larger (see the derivation note on
+    * [[tech.hearth.settings.RewardsSettings]]). Per-block flooring then only ever subtracts, so the hard cap holds
+    * by construction - no separate runtime clamp is needed. hearth-specs' `derive.py --mode simulate` verifies this
+    * block by block over the whole curve; the last ~0.88 HRTH of MAINNET's `C_emit` is simply never minted.
     */
   def rewardAt(h: Long, initialReward: Long, decayRatioFixed: BigInt): Long =
     ((BigInt(initialReward) * powFixed(decayRatioFixed, h)) >> FixedPointBits).toLong

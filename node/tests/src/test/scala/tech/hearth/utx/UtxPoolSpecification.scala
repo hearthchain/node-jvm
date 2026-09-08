@@ -131,7 +131,6 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
             forceValidateInCleanup = false,
             alwaysUnlimitedExecution = false
           ),
-          Int.MaxValue,
           isMiningEnabled = true
         )
       val amountPart = (senderBalance - extraFee) / 2 - extraFee
@@ -157,7 +156,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
           forceValidateInCleanup = false,
           alwaysUnlimitedExecution = false
         )
-      val utxPool = new UtxPoolImpl(time, bcu, settings, Int.MaxValue, isMiningEnabled = true)
+      val utxPool = new UtxPoolImpl(time, bcu, settings, isMiningEnabled = true)
       test(sender, utxPool, txs)
     }
 
@@ -182,7 +181,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
           forceValidateInCleanup = false,
           alwaysUnlimitedExecution = false
         )
-      val utxPool = new UtxPoolImpl(time, bcu, settings, Int.MaxValue, isMiningEnabled = true)
+      val utxPool = new UtxPoolImpl(time, bcu, settings, isMiningEnabled = true)
       test(sender, utxPool, txs)
     }
   }
@@ -205,7 +204,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
           forceValidateInCleanup = false,
           alwaysUnlimitedExecution = false
         )
-      val utxPool = new UtxPoolImpl(time, bcu, settings, Int.MaxValue, isMiningEnabled = true)
+      val utxPool = new UtxPoolImpl(time, bcu, settings, isMiningEnabled = true)
       test(sender, utxPool, txs)
     }
 
@@ -227,7 +226,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
           forceValidateInCleanup = false,
           alwaysUnlimitedExecution = false
         )
-      val utxPool = new UtxPoolImpl(time, bcu, settings, Int.MaxValue, isMiningEnabled = true)
+      val utxPool = new UtxPoolImpl(time, bcu, settings, isMiningEnabled = true)
       test(sender, utxPool, txs)
     }
   }
@@ -253,7 +252,6 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
           forceValidateInCleanup = false,
           alwaysUnlimitedExecution = false
         ),
-        Int.MaxValue,
         isMiningEnabled = true
       )
       test(utx, time, txs1, txs2)
@@ -293,7 +291,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
       val time = TestTime()
       val txs  = (1 to txCount).map(_ => transfer(sender))
 
-      val utx = new UtxPoolImpl(time, bcu, utxSettings, Int.MaxValue, isMiningEnabled = true)
+      val utx = new UtxPoolImpl(time, bcu, utxSettings, isMiningEnabled = true)
       f(txs, utx, time)
     }
   }
@@ -361,7 +359,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
               forceValidateInCleanup = false,
               alwaysUnlimitedExecution = false
             )
-          val utx = new UtxPoolImpl(time, bcu, utxSettings, Int.MaxValue, isMiningEnabled = true)
+          val utx = new UtxPoolImpl(time, bcu, utxSettings, isMiningEnabled = true)
 
           utx.putIfNew(headTransaction).resultE should beRight
           utx.putIfNew(vipTransaction).resultE should matchPattern {
@@ -537,7 +535,6 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
                 time,
                 d.blockchainUpdater,
                 HearthSettings.default().utxSettings,
-                HearthSettings.default().maxTxErrorLogSize,
                 isMiningEnabled = true,
                 events += _
               )

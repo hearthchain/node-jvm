@@ -9,7 +9,6 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.common.utils.{Base16, Base64}
 import tech.hearth.database.*
 import tech.hearth.database.protobuf.StaticAssetInfo
-import tech.hearth.settings.Constants
 import tech.hearth.state.{Blockchain, Height, LeaseDetails, Portfolio, StateHash, StateSnapshot, TransactionId}
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.utils.ScorexLogging
@@ -111,7 +110,7 @@ object Explorer extends ScorexLogging {
           // the carry of the last block hasn't been credited to anyone yet, so it's not part of any account balance
           val lastBlockCarry       = reader.lastBlockId.flatMap(reader.carryFee(_).toOption).fold(0L)(_.hearthAmount)
           val actualTotalBalance   = accountsBaseTotalBalance + lastBlockCarry
-          val expectedTotalBalance = Constants.UnitsInHearth * Constants.TotalHearth + actualTotalReward
+          val expectedTotalBalance = settings.blockchainSettings.initialBalance + actualTotalReward
           val byKeyTotalBalance    = reader.hearthAmount(blockchainHeight)
 
           if (actualTotalBalance != expectedTotalBalance || expectedTotalBalance != byKeyTotalBalance)

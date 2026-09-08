@@ -16,9 +16,12 @@ case class MinerSettings(
     maxTransactionsInMicroBlock: Int,
     minMicroBlockAge: FiniteDuration,
     accounts: Seq[MiningAccount],
-    supportedFeatures: Seq[Short]
+    supportedFeatures: Seq[Short],
+    desiredRewards: Option[Long]
 ) derives ConfigReader {
   require(maxTransactionsInMicroBlock <= Miner.MaxTransactionsPerMicroblock)
+  // Mining without an account is not mining: fail at config load rather than run a node that silently generates nothing.
+  require(!enable || accounts.nonEmpty, "hearth.miner.accounts must hold at least one account when mining is enabled")
 }
 
 case class MiningAccount(
@@ -26,9 +29,11 @@ case class MiningAccount(
     signingAccount: Int = 0,
     vrfAccount: Int = 0,
     blsAccount: Int = 0,
-    signingKey: Option[String],
+    signingKeySeed: Option[String],
+    signingKeyScalar: Option[String] = None,
     vrfKey: Option[String],
-    blsKey: Option[String]
+    blsKey: Option[String],
+    blsKeyScalar: Option[String] = None
 )
 
 object MiningAccount {

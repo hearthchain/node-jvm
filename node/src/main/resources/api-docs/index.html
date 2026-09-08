@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hearth Node API</title>
+  </head>
+
+  <body>
+    <div id="app"></div>
+    <!-- @scalar/api-reference 1.67.0, vendored so the docs work without network access -->
+    <script src="./standalone.js"></script>
+    <script>
+      Scalar.createApiReference('#app', {
+        url: '/api-docs/openapi.yaml',
+        // Default webfonts are fetched from fonts.scalar.com; system fonts keep the page offline.
+        withDefaultFonts: false,
+        // The agent chat calls api.scalar.com on load; a node's API docs must not phone home.
+        agent: { disabled: true },
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+        setPageTitle: ({ document }) => document.title
+      })
+    </script>
+  </body>
+</html>

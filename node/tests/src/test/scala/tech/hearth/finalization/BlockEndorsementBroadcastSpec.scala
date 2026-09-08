@@ -23,7 +23,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
   private val appenderScheduler: SchedulerService = Schedulers.singleThread("appender")
   private val testTime: TestTime                  = TestTime()
 
-  private val sender = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
+  private val sender = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 0)
 
   private val defaultSettings = DomainPresets.DeterministicFinality
     .copy(minerSettings =
@@ -37,7 +37,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
     )
 
   private val generator1 = sender
-  private val generator2 = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 1)
+  private val generator2 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 1)
 
   "should not broadcast a block endorsement" - {
     "before the feature activation" in withManager { manager =>
@@ -119,7 +119,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
     }
 
     "if endorsed block is finalized already" in withManager { manager =>
-      val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
+      val otherGenerator = Wallet.account(Domain.OtherWalletMnemonic, nonce = 0)
       withDomain(
         defaultSettings
           .copy(synchronizationSettings = defaultSettings.synchronizationSettings)
@@ -187,7 +187,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
   }
 
   "should broadcast a block endorsement if validator" in withManager { manager =>
-    val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
+    val otherGenerator = Wallet.account(Domain.OtherWalletMnemonic, nonce = 0)
     withDomain(defaultSettings, AddrWithBalance.enoughBalances(generator1, otherGenerator), generators = Seq(generator1, otherGenerator)) { d =>
       d.wallet.generateNewAccounts(1)
 
@@ -234,7 +234,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
 
   "expected endorsement fields" - {
     "voting height increased if surpass maxRollback blocks" in withManager { manager =>
-      val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
+      val otherGenerator = Wallet.account(Domain.OtherWalletMnemonic, nonce = 0)
       withDomain(
         defaultSettings.copy(synchronizationSettings = defaultSettings.synchronizationSettings.copy(maxRollback = 2)),
         AddrWithBalance.enoughBalances(generator1, otherGenerator),
@@ -293,7 +293,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
     }
 
     "no prior finalization, finalization height in endorsement is 1" in withManager { manager =>
-      val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
+      val otherGenerator = Wallet.account(Domain.OtherWalletMnemonic, nonce = 0)
       withDomain(
         defaultSettings.copy(synchronizationSettings = defaultSettings.synchronizationSettings),
         AddrWithBalance.enoughBalances(generator1, otherGenerator),
@@ -354,7 +354,7 @@ class BlockEndorsementBroadcastSpec extends BaseFinalizationSpec, EmbeddedChanne
     }
 
     "finalized before, finalization height in endorsement is 3" in withManager { manager =>
-      val otherGenerator = Wallet.generateNewAccount(Domain.DefaultWalletSeed :+ 1.toByte, nonce = 0)
+      val otherGenerator = Wallet.account(Domain.OtherWalletMnemonic, nonce = 0)
       withDomain(
         defaultSettings
           .copy(synchronizationSettings = defaultSettings.synchronizationSettings)

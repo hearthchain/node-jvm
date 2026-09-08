@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-sbt --server -Dproject.version=${RELEASE_VERSION} --batch "buildReleaseArtifacts $RELEASE_NETWORKS"
+sbt --server -Dproject.version=${RELEASE_VERSION} --batch buildReleaseArtifacts
 
 assets=$(find . \( -name '*.deb' -o -name '*all*.jar' -o -name '*.tgz' \) -print)
 
@@ -11,27 +11,7 @@ if [ -n "$GITHUB_OUTPUT" ]; then
   echo "EOF" >> $GITHUB_OUTPUT
 fi
 
-lowercase_networks=$( echo $RELEASE_NETWORKS| tr '[:upper:]' '[:lower:]')
-release_heading=""
-prerelease="true"
-if [[ "$lowercase_networks" == *"mainnet"* ]]; then
-  release_heading="Mainnet"
-  prerelease="false"
-fi
-
-if [[ "$lowercase_networks" == *"testnet"* ]]; then
-  if [[ -n $release_heading ]] ; then
-    release_heading="$release_heading + "
-  fi
-  release_heading="${release_heading}Testnet"
-fi
-
-if [[ "$lowercase_networks" == *"stagenet"* ]]; then
-  if [[ -n $release_heading ]] ; then
-    release_heading="$release_heading + "
-  fi
-  release_heading="${release_heading}Stagenet"
-fi
+prerelease="${RELEASE_PRERELEASE:-false}"
 
 release_text=$(cat << EOF
 # In this release
@@ -45,7 +25,7 @@ release_body=$(cat << EOF
 {
   "tag_name":"v${RELEASE_VERSION}",
   "target_commitish":"${RELEASE_BRANCH}",
-  "name":"Version ${RELEASE_VERSION} ($release_heading)",
+  "name":"Version ${RELEASE_VERSION}",
   "draft":true,
   "prerelease":${prerelease},
   "generate_release_notes":false

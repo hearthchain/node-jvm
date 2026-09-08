@@ -13,7 +13,7 @@ If you need to run node in private network, see [Hearth private node](#hearth-pr
 It is highly recommended to read more about [Waves Node configuration](https://docs.waves.tech/en/waves-node/node-configuration) before running the container, since Hearth Node's configuration format is derived from it.
 
 ## Building Docker image
-`./build-with-docker.sh && docker build -t hearth-node docker` (from the repository root) - builds an image with the current local repository
+`sbt stageForDocker && docker build -t hearth-node docker` (from the repository root) - builds an image with the current local repository
 
 **You can specify following arguments when building the image:**
 
@@ -26,7 +26,20 @@ It is highly recommended to read more about [Waves Node configuration](https://d
 
 ## Running Docker image
 
+### The node runs as an unprivileged user
 
+The node process runs as `hearth` (uid 999, gid 999), never as root. The container still starts as root so that
+`entrypoint.sh` can take ownership of `/var/lib/hearth` and `/var/log/hearth` - a bind-mounted host directory arrives
+with the host's ownership, unlike a named volume - and then drops to `hearth` before starting the JVM. That chown is
+recursive on the first start after mounting a directory the node does not own yet, and skipped on every start after
+it, so nothing needs to be prepared by hand.
+
+Two things follow from it:
+
+- A config directory mounted at `/etc/hearth` is left alone, so its files must be readable by uid 999. It is never
+  chowned: it belongs to whoever runs the image.
+- `docker run --user ...` is honoured as given. The entrypoint drops privileges only when it starts as root, so an
+  explicit `--user` runs the node as that user and takes responsibility for the mounted directories' ownership.
 
 ### Configuration options
 
@@ -51,7 +64,7 @@ The following environment variables can be passed to the container:
 
 | Env variable              | Description                                                                                                                                                                                                  |
 |---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `HEARTH_WALLET_SEED`      | Hex encoded seed, sets `-Dhearth.wallet.seed` system property.                                                                                                                                               |
+| `HEARTH_WALLET_MNEMONIC`  | BIP-39 phrase the wallet derives its accounts from, sets `-Dhearth.wallet.mnemonic` system property.                                                                                                                                               |
 | `HEARTH_WALLET_PASSWORD`  | Password for the wallet file, sets `-Dhearth.wallet.password` system property.                                                                                                                               |
 | `HEARTH_LOG_LEVEL`        | Node stdout logging level. Available values: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`.                                                                                                               |
 | `HEARTH_HEAP_SIZE`        | Default Java Heap Size limit in -X Command-line Options notation (`-Xmx=[your value]`). More details [here](https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html).           |

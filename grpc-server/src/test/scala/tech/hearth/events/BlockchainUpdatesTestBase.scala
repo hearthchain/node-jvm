@@ -42,8 +42,8 @@ class BlockchainUpdatesTestBase extends FreeSpec with WithBUDomain with ScalaFut
   val secondTokenQuantity: Long     = 6000000000L
 
   val genesisAssets: Seq[GenesisAssetSettings] = Seq(
-    GenesisAssetSettings(firstTokenAsset.id, "firstToken", 2, firstTokenQuantity, 100000L),
-    GenesisAssetSettings(secondTokenAsset.id, "secondToken", 6, secondTokenQuantity, 100000L)
+    GenesisAssetSettings(firstTokenAsset.id.toString, "firstToken", 2, firstTokenQuantity, 100000L),
+    GenesisAssetSettings(secondTokenAsset.id.toString, "secondToken", 6, secondTokenQuantity, 100000L)
   )
 
   val tokenBalances: Seq[AddrWithBalance] = Seq(

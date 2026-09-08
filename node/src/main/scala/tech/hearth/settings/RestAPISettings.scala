@@ -14,7 +14,6 @@ case class RestAPISettings(
     dataKeysRequestLimit: Int,
     assetDetailsLimit: Int,
     blocksRequestLimit: Int,
-    evaluateScriptComplexityLimit: Int,
     limitedPoolThreads: Int,
     heavyRequestProcessorPoolThreads: Option[Int],
     minimumPeers: Int

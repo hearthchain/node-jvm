@@ -25,8 +25,6 @@ class DbSettingsSpecification extends FlatSpec {
                                                         |  directory = "/data"
                                                         |  store-transactions-by-address = true
                                                         |  store-lease-states-by-address = true
-                                                        |  store-invoke-script-results = true
-                                                        |  store-state-hashes = false
                                                         |  max-cache-size = 100000
                                                         |  max-rollback-depth = 2000
                                                         |  cleanup-interval = 500
@@ -51,8 +49,6 @@ class DbSettingsSpecification extends FlatSpec {
       directory = "/data",
       storeTransactionsByAddress = true,
       storeLeaseStatesByAddress = true,
-      storeInvokeScriptResults = true,
-      storeStateHashes = false,
       maxCacheSize = 100000,
       maxRollbackDepth = 2000,
       cleanupInterval = Some(500),

@@ -8,6 +8,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.features.BlockchainFeature
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.settings.*
+import tech.hearth.settings.TestSettings.unpinned
 import tech.hearth.state.EmissionCurve
 import tech.hearth.transaction.Transaction
 import tech.hearth.transaction.TxHelpers
@@ -45,7 +46,7 @@ package object history {
     // The timestamp starts at 0 because the generators driving these tests produce transactions near the epoch, and
     // blocks are timestamped from their transactions (see buildBlockOfTxs) - a 2016 genesis would put every one of
     // those transactions hours "in the past" relative to it.
-    genesisSettings = GenesisSettings.TESTNET.copy(timestamp = 0L),
+    genesisSettings = GenesisSettings.TESTNET.unpinned.copy(timestamp = 0L),
     rewardsSettings = DefaultRewardsSettings
   )
 

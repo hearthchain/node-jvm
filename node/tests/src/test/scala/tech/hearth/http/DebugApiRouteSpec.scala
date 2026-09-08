@@ -37,7 +37,7 @@ class DebugApiRouteSpec
     with SharedSchedulerMixin {
 
   override def settings: HearthSettings = DomainPresets.RideV6.copy(
-    dbSettings = DomainPresets.RideV6.dbSettings.copy(storeStateHashes = true),
+    dbSettings = DomainPresets.RideV6.dbSettings,
     restAPISettings = restAPISettings
   )
 

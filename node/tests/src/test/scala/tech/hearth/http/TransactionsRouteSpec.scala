@@ -57,7 +57,7 @@ class TransactionsRouteSpec
       .copy(minerSettings = base.minerSettings.copy(accounts = Seq(TxHelpers.miningAccountSettings(500))))
       .withGenesisAssets(
         GenesisAssetSettings(
-          id = tradedAsset.id,
+          id = tradedAsset.id.toString,
           name = "test",
           decimals = 8,
           quantity = tradedAssetQuantity,

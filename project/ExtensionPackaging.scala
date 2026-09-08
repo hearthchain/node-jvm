@@ -1,4 +1,3 @@
-import CommonSettings.autoImport.network
 import com.typesafe.sbt.SbtNativePackager.Universal
 import com.typesafe.sbt.SbtNativePackager.autoImport.{maintainer, packageDescription, packageSummary}
 import com.typesafe.sbt.packager.Compat._
@@ -51,12 +50,9 @@ object ExtensionPackaging extends AutoPlugin {
       Universal / mappings ++= {
         implicit val conv: xsbti.FileConverter = fileConverter.value
         classpathOrdering.value ++ {
-          val baseConfigName = s"${name.value}-${network.value}.conf"
-          val localFile      = (Compile / baseDirectory).value / baseConfigName
-          if (localFile.exists()) {
-            val artifactPath = s"doc/${name.value}.conf.sample"
-            Seq(toFileRef(localFile) -> artifactPath)
-          } else Seq.empty
+          val localFile = (Compile / baseDirectory).value / s"${name.value}.conf"
+          if (localFile.exists()) Seq(toFileRef(localFile) -> s"doc/${name.value}.conf.sample")
+          else Seq.empty
         }
       },
       classpath := Def.uncached(makeRelativeClasspathNames(classpathOrdering.value)),
@@ -79,10 +75,10 @@ object ExtensionPackaging extends AutoPlugin {
              |chown -R ${nodePackageName.value}:${nodePackageName.value} /usr/share/${nodePackageName.value}""".stripMargin
       ),
       Linux / maintainer := "tech.hearth",
-      Linux / packageSummary := s"Hearth node ${name.value}${network.value.packageSuffix} extension",
-      Linux / packageDescription := s"Hearth node ${name.value}${network.value.packageSuffix} extension",
-      Debian / normalizedName := s"${name.value}${network.value.packageSuffix}",
-      Debian / packageName := s"${name.value}${network.value.packageSuffix}",
+      Linux / packageSummary := s"Hearth node ${name.value} extension",
+      Linux / packageDescription := s"Hearth node ${name.value} extension",
+      Debian / normalizedName := name.value,
+      Debian / packageName := name.value,
       libraryDependencies ++= Dependencies.logDeps,
       run / javaOptions ++= extensionClasses.value.zipWithIndex.map { case (extension, index) => s"-Dhearth.extensions.$index=$extension" }
     )

@@ -41,7 +41,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     withDomain(
       DomainPresets.RideV6,
       balances = Seq(AddrWithBalance(sender.toAddress, assets = Map(asset -> assetTransferAmount.toLong))),
-      assets = Seq(GenesisAssetSettings(asset.id, "asset", 0, assetTransferAmount, TestValues.fee))
+      assets = Seq(GenesisAssetSettings(asset.id.toString, "asset", 0, assetTransferAmount, TestValues.fee))
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
@@ -55,7 +55,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
         val expectedHearthBalance = hearthTransferAmount - TestValues.fee - reverseTransferAmount
         val expectedResult = List(
           BalanceResponse.of(
-            BalanceResponse.Balance.Waves(BalanceResponse.WavesBalances(expectedHearthBalance, 0, expectedHearthBalance, expectedHearthBalance))
+            BalanceResponse.Balance.Hearth(BalanceResponse.HearthBalances(expectedHearthBalance, 0, expectedHearthBalance, expectedHearthBalance))
           ),
           BalanceResponse.of(BalanceResponse.Balance.Asset(Amount(ByteString.copyFrom(asset.id.arr), assetTransferAmount)))
         )
@@ -125,7 +125,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     ): Assertion = {
       val expectedResult = List(
         BalanceResponse.of(
-          BalanceResponse.Balance.Waves(BalanceResponse.WavesBalances(expectedRegular, expectedGenerating, expectedAvailable, expectedEffective))
+          BalanceResponse.Balance.Hearth(BalanceResponse.HearthBalances(expectedRegular, expectedGenerating, expectedAvailable, expectedEffective))
         )
       )
 
@@ -151,7 +151,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
-      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth)
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator (1000 hearth)
       val initChallengingBalance = 1200.hearth
       val initChallengedBalance  = 2000.hearth
 

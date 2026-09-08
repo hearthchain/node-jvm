@@ -21,8 +21,8 @@ import org.scalatest.time.SpanSugar.convertLongToGrainOfTime
 import scala.util.Using
 
 class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps with WithResourceManager with EitherValues {
-  private val thisNodeAcc1 = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
-  private val thisNodeAcc2 = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 1)
+  private val thisNodeAcc1 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 0)
+  private val thisNodeAcc2 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 1)
   private val otherNodeAcc = TxHelpers.defaultSigner
 
   private val baseSettings       = DomainPresets.TransactionStateSnapshot
@@ -173,8 +173,8 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
   // fixed: enable it once the rule exists.
   "transfer in the last microblock of period, but it removed" ignore withManager { manager =>
     val channels     = manager(new DefaultChannelGroup(GlobalEventExecutor.INSTANCE))
-    val thisNodeAcc2 = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 1)
-    val thisNodeAcc3 = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 2)
+    val thisNodeAcc2 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 1)
+    val thisNodeAcc3 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 2)
     var miner        = Miner.StrictDisabledMiner
 
     withDomain(

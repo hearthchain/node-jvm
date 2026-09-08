@@ -2,7 +2,7 @@ package tech.hearth.finalization
 
 import tech.hearth.TestValues
 import tech.hearth.common.state.ByteStr
-import tech.hearth.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2
+import tech.hearth.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
 import tech.hearth.crypto.DigestLength
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.{Domain, defaultVrfKey}
@@ -14,7 +14,7 @@ import tech.hearth.wallet.Wallet
 import org.scalatest.time.SpanSugar.convertLongToGrainOfTime
 
 class ChallengingAfterFinalizationSuite extends BaseFinalizationSpec, TestSchedulerOps {
-  private val thisNodeAcc        = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
+  private val thisNodeAcc        = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 0)
   private val committedGenerator = TxHelpers.defaultSigner
 
   private val baseSettings = DomainPresets.DeterministicFinality
@@ -35,7 +35,7 @@ class ChallengingAfterFinalizationSuite extends BaseFinalizationSpec, TestSchedu
   // for the period it starts cannot produce that block. Both accounts get the same balance so that the challenged
   // block's deliberately-worsened timestamp below is what decides the race, not an unfair balance edge.
   private val accountBalance =
-    MinimalEffectiveBalanceForGenerator2 + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
+    MinimalEffectiveBalanceForGenerator + TestValues.commitToGenerationFee + 2 * CommitToGenerationTransaction.DepositInEmbers
 
   "Anyone can challenge" in withDomain(
     defaultSettings,

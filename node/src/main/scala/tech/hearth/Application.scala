@@ -124,7 +124,7 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
     val establishedConnections = new ConcurrentHashMap[Channel, PeerInfo]
     val allChannels            = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
     val utxStorage =
-      new UtxPoolImpl(time, blockchainUpdater, settings.utxSettings, settings.maxTxErrorLogSize, settings.minerSettings.enable, utxEvents.onNext)
+      new UtxPoolImpl(time, blockchainUpdater, settings.utxSettings, settings.minerSettings.enable, utxEvents.onNext)
     maybeUtx = Some(utxStorage)
 
     val timer                 = new HashedWheelTimer()
@@ -288,7 +288,7 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
 
     // Network server should be started only after all extensions initialized
     val networkServer =
-      NetworkServerL1(
+      NetworkServer(
         settings,
         lastBlockInfo,
         historyReplier,
@@ -420,7 +420,6 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
         UtilsApiRoute(
           time,
           settings.restAPISettings,
-          settings.maxTxErrorLogSize,
           limitedScheduler,
           blockchainUpdater
         ),

@@ -40,7 +40,7 @@ class SeveralAccountMiningSuite extends BaseFunSuite {
 
 object SeveralAccountMiningSuite {
   // MinerSettings has no raw private-keys list any more: an account is either a mnemonic (with derivation
-  // nonces) or hex-encoded signingKey/vrfKey seeds, from which MinerImpl derives the runtime SigningKey/VrfKey.
+  // nonces) or hex-encoded signing-key-seed/vrf-key seeds, from which MinerImpl derives the runtime SigningKey/VrfKey.
   private def signingSeed(idx: Int): Array[Byte] =
     tech.hearth.crypto.secureHash(Base16.decode(Default(idx).getString("account-seed")))
 
@@ -59,7 +59,7 @@ object SeveralAccountMiningSuite {
   private def accountConfig(idx: Int): String = {
     val seed            = signingSeed(idx)
     val templateAccount = templateMinerAccount(idx)
-    s"""{ signing-key = "${Hex.encode(seed)}", vrf-key = "${templateAccount.getString("vrf-key")}", bls-key = "${templateAccount
+    s"""{ signing-key-seed = "${Hex.encode(seed)}", vrf-key = "${templateAccount.getString("vrf-key")}", bls-key = "${templateAccount
         .getString("bls-key")}" }"""
   }
 

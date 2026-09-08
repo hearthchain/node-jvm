@@ -75,8 +75,15 @@ Two different types are called `MiningAccount`, which is worth keeping straight:
 
 - `mining.MiningAccount` — the runtime pair, holding a constructed `SigningKey` and `VrfKey`;
 - `settings.MiningAccount` — a `MinerSettings.accounts` entry, holding either a `mnemonic` (plus
-  `signingAccount`/`vrfAccount`/`blsAccount` derivation nonces) or `signingKey`/`vrfKey`/`blsKey` as **hex-encoded
-  seeds**, not keys — `MinerImpl` builds the runtime pair from them with `SigningKey.fromSeed(Hex.decode(…))`.
+  `signingAccount`/`vrfAccount`/`blsAccount` derivation nonces) or `signingKeySeed`/`vrfKey`/`blsKey` as **hex-encoded
+  seeds**, not keys — `GeneratorKeys.fromSettings` builds the runtime account from them with
+  `SigningKey.fromSeed(Hex.decode(…))`. The signing key has a second, mutually exclusive way in: `signingKeyScalar`
+  (`signing-key-scalar`), the raw 32-byte secret scalar, fed to `SigningKey.fromScalar`. It exists because a key that
+  came off a grinder has no seed (a vanity search walks scalars by point addition, and nothing hashes to the winner);
+  `fromScalar` derives the nonce prefix from the scalar itself (`SHA-512(SCALAR_EXPAND_DST ‖ scalar)[32..64]`), so the
+  same 32 bytes rebuild the identical key in any implementation. The config key is `signing-key-seed`, not
+  `signing-key`, precisely so the two cannot be confused: the same 32 bytes read as a seed and read as a scalar give
+  different addresses, and neither reading errors.
 
 `MinerImpl` takes its accounts *only* from the settings, so handing a test helper a runtime `MiningAccount` configures
 nothing and leaves `nextBlockGenerationOffsets` empty (the miner then reports `No delay` for every address). A seed
@@ -89,6 +96,16 @@ expanded secret key) used only by `crypto.sign`, `MinerSettings.privateKeys` and
 conversions on `Order`, `ExchangeTransaction` and `CommitToGenerationTransaction`. Prefer `SigningKey`. Note that a
 32-byte seed is not a `PrivateKey`: passing one gives `invalid private key length: 32`, while passing a 64-byte private
 key to `SigningKey.fromSeed` gives `Ed25519 seed must be 32 bytes`.
+
+`hearth util crypto create-keys` mints a mining account: it takes the BIP-39 phrase as `--mnemonic`, generating a 24-word one when that is omitted, derives the account through `KeyTree` at `--nonce`, and prints both `hearth.miner.accounts` entries that configure it - `minerAccount` (the phrase plus its derivation accounts) and `minerAccountKeys` (the key material that derivation produces, for a node that should not hold the phrase) - along with the signing, VRF and BLS public keys a CommitToGeneration registers. JSON is valid HOCON, so either entry pastes into a config as printed. Three things it has to do that are not obvious: the crypto library only reads phrases (`Bip39.validate`/`toSeed`, no generator), so `tech.hearth.crypto.Mnemonic` generates one from `randomBytes(32)` plus the leading byte of its SHA-256, indexed 11 bits at a time into the library's own `bip39/english.txt` resource; it loads the node config even though it signs nothing, because `Address.toString` throws `default HRP not configured` until something pins the network (`Application.loadApplicationConfig` does, see "Network id"), which is also why `-c <node.conf>` is what makes it print a mainnet address rather than a testnet one; and it must not read stdin, which is why `main` binds the input lazily - a phrase arriving on a stdin that is never closed (an IDE run configuration) would hang the command that is supposed to generate one. `--seed-type account` still takes a raw hex seed on stdin and reports only a signing key, with no mining account: no VRF or BLS key comes out of a bare seed.
+
+Scopt places the util's shared options (`-c`, `-is`/`--input-str`, `-i`, `--out-format`) *after* the command chain, not before it: `crypto create-keys -c node.conf` parses, `-c node.conf crypto create-keys` fails with `Unknown argument 'crypto'`. The abbreviations are single-dash (`-is`, not `--is`).
+
+The two entry forms are equivalent only because of how `KeyTree` builds its keys, which is what `Mnemonic.Keys` encodes: SLIP-10 hands out the signing and VRF private keys, and `SigningKey.fromSeed`/`VrfKey.fromSeed` take exactly those, so `signing-key-seed`/`vrf-key` reproduce them; the BLS secret is a *scalar* (`Bls.derivePath`, used with `BlsKeyPair.fromScalar`), while `bls-key` is a seed that EIP-2333 KeyGen stretches into a different scalar. That is why `settings.MiningAccount` has `bls-key-scalar` alongside `bls-key`, mirroring `signing-key-scalar`/`signing-key-seed`: feeding a derived scalar in as `bls-key` silently registers a different endorser key rather than failing.
+
+The wallet derives its accounts the same way: `hearth.wallet.mnemonic` is a BIP-39 phrase (not the old 64 hex bytes), each account is `KeyTree.signingKey(Bip39.toSeed(phrase), nonce)` (`Wallet.account`), and `wallet.dat` stores the phrase plus the derivation indices in use rather than per-account seeds - so the whole wallet is recoverable in any implementation of BIP-39 + SLIP-10, and a wallet account at index n is the same key as a mining account at that index of the same phrase. `Wallet.generateAccountSeed`/`generateNewAccount(seed, nonce)` and the legacy `secureHash(nonce ++ seed)` derivation are gone, as is `--seed-type wallet` in the util (it was that derivation). This changes every address a given wallet holds: an existing `wallet.dat` no longer loads, and any config pinning a hex `wallet.seed` has to be reissued as a phrase, which is what node-it's `nodes.conf` and `docker/private/hearth.custom.conf` (genesis rebuilt around a phrase-derived account, so its genesis block id moved to `06357ce4...`) had to do.
+
+`hearth.miner.enable` now defaults to `no` and `MinerSettings` requires at least one account whenever it is on: mining with an empty `accounts` list generated nothing, silently, and the default config has no account to mine with.
 
 In tests, get keys from `TxHelpers`: `signer(i)`/`defaultSigner`, and `vrfKeyOf(signer)`/`defaultVrfKey` for the
 matching VRF key. Wallets hand out `SigningKey` (`Wallet.signingKey(address)`).

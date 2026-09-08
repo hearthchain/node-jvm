@@ -12,7 +12,7 @@ import scala.concurrent.duration.*
 
 object TestHelpers {
   def genesisSettings(blockTimestamp: Long = System.currentTimeMillis()): GenesisSettings =
-    GenesisSettings(blockTimestamp, None, 1000, 60.seconds)
+    GenesisSettings(blockTimestamp, 1000, 60.seconds)
 
   def genesisSnapshotSettings(balances: Map[Address, Long]): PredefinedSnapshotSettings =
     PredefinedSnapshotSettings(GenesisBlockHeight.toInt, balances = genesisBalances(balances))

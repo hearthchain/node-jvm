@@ -19,8 +19,8 @@ class AccountsApiGrpcImpl(commonApi: CommonAccountsApi)(implicit sc: Scheduler) 
       .fold(
         e => throw GRPCErrors.toStatusException(CustomValidationError(e)),
         details =>
-          BalanceResponse().withWaves(
-            BalanceResponse.WavesBalances(
+          BalanceResponse().withHearth(
+            BalanceResponse.HearthBalances(
               details.regular,
               details.generating,
               details.available,

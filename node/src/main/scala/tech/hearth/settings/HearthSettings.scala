@@ -8,7 +8,6 @@ import pureconfig.*
 case class HearthSettings(
     directory: String,
     ntpServer: String,
-    maxTxErrorLogSize: Int,
     dbSettings: DBSettings,
     extensions: Seq[String],
     extensionsShutdownTimeout: FiniteDuration,
@@ -19,7 +18,6 @@ case class HearthSettings(
     restAPISettings: RestAPISettings,
     synchronizationSettings: SynchronizationSettings,
     utxSettings: UtxSettings,
-    rewardsSettings: RewardsVotingSettings,
     metrics: Metrics.Settings,
     enableLightMode: Boolean,
     autoShutdownOnUnsupportedFeature: Boolean,
@@ -33,7 +31,6 @@ object HearthSettings {
 
     val directory                 = hearthConfigSource.at("directory").loadOrThrow[String]
     val ntpServer                 = hearthConfigSource.at("ntp-server").loadOrThrow[String]
-    val maxTxErrorLogSize         = hearthConfigSource.at("max-tx-error-log-size").loadOrThrow[Int]
     val dbSettings                = hearthConfigSource.at("db").loadOrThrow[DBSettings]
     val extensions                = hearthConfigSource.at("extensions").loadOrThrow[Seq[String]]
     val extensionsShutdownTimeout = hearthConfigSource.at("extensions-shutdown-timeout").loadOrThrow[FiniteDuration]
@@ -44,7 +41,6 @@ object HearthSettings {
     val restAPISettings           = hearthConfigSource.at("rest-api").loadOrThrow[RestAPISettings]
     val synchronizationSettings   = hearthConfigSource.at("synchronization").loadOrThrow[SynchronizationSettings]
     val utxSettings               = hearthConfigSource.at("utx").loadOrThrow[UtxSettings]
-    val rewardsSettings           = hearthConfigSource.at("rewards").loadOrThrow[RewardsVotingSettings]
     val metrics                   = hearthConfigSource.at("metrics").loadOrThrow[Metrics.Settings]
     val enableLightMode           = hearthConfigSource.at("enable-light-mode").loadOrThrow[Boolean]
 
@@ -54,7 +50,6 @@ object HearthSettings {
     HearthSettings(
       directory,
       ntpServer,
-      maxTxErrorLogSize,
       dbSettings,
       extensions,
       extensionsShutdownTimeout,
@@ -65,7 +60,6 @@ object HearthSettings {
       restAPISettings,
       synchronizationSettings,
       utxSettings,
-      rewardsSettings,
       metrics,
       enableLightMode,
       autoShutdownOnUnsupportedFeature,

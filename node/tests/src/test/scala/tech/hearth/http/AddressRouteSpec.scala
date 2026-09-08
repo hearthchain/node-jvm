@@ -1,9 +1,8 @@
 package tech.hearth.http
 
-import com.google.common.primitives.Longs
 import tech.hearth.api.http.ApiError.{ApiKeyNotValid, MissingSenderPrivateKey}
 import tech.hearth.api.http.{AddressApiRoute, RouteTimeout}
-import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto.Mnemonic
 import tech.hearth.db.WithState
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.settings.{WalletSettings, HearthSettings}
@@ -29,7 +28,7 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
   }
   override def genesisBalances: Seq[WithState.AddrWithBalance] = Seq(AddrWithBalance(richAccount.toAddress, 10_000.hearth))
 
-  private val wallet = Wallet(WalletSettings(None, Some("123"), Some(ByteStr(Longs.toByteArray(System.nanoTime())))))
+  private val wallet = Wallet(WalletSettings(None, Some("123"), Some(Mnemonic.generate())))
   wallet.generateNewAccounts(10)
   private val allAccounts  = wallet.privateKeyAccounts
   private val allAddresses = allAccounts.map(_.toAddress)

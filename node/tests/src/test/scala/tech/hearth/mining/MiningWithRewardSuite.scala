@@ -148,7 +148,6 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithNewDBFo
           ntpTime,
           blockchainUpdater,
           settingsWithGenesis.utxSettings,
-          settingsWithGenesis.maxTxErrorLogSize,
           settingsWithGenesis.minerSettings.enable
         )
         scheduler   = Scheduler.singleThread("appender")

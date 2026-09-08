@@ -192,7 +192,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
         balances = Seq(AddrWithBalance(sender.toAddress, initialBalance, Map(issuedAsset -> assetAmount))),
         assets = Seq(
           GenesisAssetSettings(
-            id = issuedAsset.id,
+            id = issuedAsset.id.toString,
             name = "Rollback",
             decimals = 2,
             quantity = assetAmount,

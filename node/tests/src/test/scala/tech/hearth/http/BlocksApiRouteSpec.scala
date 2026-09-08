@@ -438,7 +438,7 @@ class BlocksApiRouteSpec
         AddrWithBalance(TxHelpers.defaultAddress, ENOUGH_AMT, Map(priceAsset -> 1000L)),
       assets = Seq(
         GenesisAssetSettings(
-          id = priceAsset.id,
+          id = priceAsset.id.toString,
           name = "Price",
           decimals = 2,
           quantity = 1000L,

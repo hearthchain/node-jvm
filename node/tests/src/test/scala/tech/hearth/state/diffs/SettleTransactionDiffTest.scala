@@ -38,7 +38,7 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
     withDomain(
       DeterministicFinality,
       AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(client, assets = Map(asset -> assetQuantity)),
-      assets = Seq(GenesisAssetSettings(asset.id, "Settled", decimals = 0, quantity = assetQuantity, minFee = TestValues.fee))
+      assets = Seq(GenesisAssetSettings(asset.id.toString, "Settled", decimals = 0, quantity = assetQuantity, minFee = TestValues.fee))
     )(f)
 
   private def withRegisteredEnclave(blockchain: Blockchain, operator: Address = miner, validator: Address = miner): Blockchain =

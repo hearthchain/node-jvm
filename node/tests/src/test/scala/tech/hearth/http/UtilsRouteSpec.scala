@@ -27,7 +27,6 @@ class UtilsRouteSpec extends RouteSpec("/utils"), RestAPISettingsHelper, Propert
   private val utilsApi: UtilsApiRoute = UtilsApiRoute(
     Time.SystemTime,
     restAPISettings,
-    Int.MaxValue,
     timeBounded,
     EmptyBlockchain
   )

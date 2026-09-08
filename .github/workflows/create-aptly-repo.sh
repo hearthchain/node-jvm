@@ -49,14 +49,20 @@ sudo wget -O /etc/apt/keyrings/wavesplatform.asc https://apt.wavesplatform.com/p
 sudo apt-get update
 </pre>
 <h3>Installing Hearth Node</h3>
-<p>Mainnet:</p>
 <pre>
-sudo apt-get install hearth
+sudo apt-get install hearth-jvm
 </pre>
-<p>Testnet:</p>
+<p>The package installs one node instance, <code>hearth-jvm@mainnet</code>, enabled and started. Each instance is
+a directory under <code>/etc/hearth-jvm</code>, with its own data in
+<code>/var/lib/hearth-jvm/&lt;instance&gt;</code> and logs in <code>/var/log/hearth-jvm/&lt;instance&gt;</code>.
+To run a second one, write its config, set <code>hearth.blockchain.type</code> in it, and start it:</p>
 <pre>
-sudo apt-get install hearth-testnet
+sudo mkdir /etc/hearth-jvm/testnet
+sudo cp /usr/share/hearth-jvm/doc/hearth.conf.sample /etc/hearth-jvm/testnet/hearth.conf
+sudo systemctl enable --now hearth-jvm@testnet
 </pre>
+<p>JVM options go in an optional <code>env</code> file next to it, e.g.
+<code>JAVA_OPTS="-Xmx8g"</code> in <code>/etc/hearth-jvm/testnet/env</code>.</p>
 <small>Last update: $current_date</small>
 </body>
 </html>

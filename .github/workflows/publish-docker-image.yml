@@ -32,7 +32,7 @@ on:
         value: ${{ jobs.publish.outputs.digest }}
 
 env:
-  IMAGE_NAME: ghcr.io/wavesplatform/waves
+  IMAGE_NAME: ghcr.io/hearthchain/node-jvm
 
 jobs:
   publish:
@@ -71,8 +71,8 @@ jobs:
           java-version: '25'
           cache: 'sbt'
       - uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
-      - name: Build tarballs for docker
-        run: sbt --server --batch -Dproject.version=${{ steps.versions.outputs.node-version }} buildTarballsForDocker
+      - name: Stage node files for the docker build context
+        run: sbt --server --batch -Dproject.version=${{ steps.versions.outputs.node-version }} stageForDocker
       - name: Extract image name and tags from workflow_call inputs
         if: inputs.raw-docker-tags != ''
         env:
@@ -82,7 +82,7 @@ jobs:
           {
             echo 'IMAGES<<EOF'
             echo ${{ env.IMAGE_NAME }}
-            echo wavesplatform/wavesnode
+            echo hearthchain/node-jvm
             echo EOF
           } >> "$GITHUB_ENV"
       - name: Extract image name and tags from workflow_dispatch inputs
@@ -185,12 +185,12 @@ jobs:
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index,manifest-descriptor,index-descriptor
         with:
-          images: ghcr.io/wavesplatform/waves-private-node
+          images: ghcr.io/hearthchain/node-jvm-private
           flavor: latest=false
           tags: ${{ env.TAGS }}
           annotations: |
             org.opencontainers.image.description=Hearth Private Node
-            org.opencontainers.image.documentation=https://github.com/wavesplatform/Waves/blob/${{ github.sha }}/docker/README.md#waves-private-node
+            org.opencontainers.image.documentation=https://github.com/hearthchain/node-jvm/blob/${{ github.sha }}/docker/README.md#waves-private-node
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.publish.outputs.node-version }}
             org.opencontainers.image.base.digest=${{ needs.publish.outputs.digest }}
@@ -202,4 +202,4 @@ jobs:
           pull: true
           tags: ${{ steps.meta-private.outputs.tags }}
           build-args: |
-            baseImage=ghcr.io/wavesplatform/waves@${{ needs.publish.outputs.digest }}
+            baseImage=ghcr.io/hearthchain/node-jvm@${{ needs.publish.outputs.digest }}

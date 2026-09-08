@@ -669,20 +669,18 @@ class RocksDBWriter(
 
       expiredKeys.foreach(rw.delete)
 
-      if (dbSettings.storeStateHashes) {
-        val prevStateHash =
-          if (height == 1) ByteStr.empty
-          else
-            rw.get(Keys.stateHash(Height(height) - 1))
-              .fold(
-                throw new IllegalStateException(
-                  s"Couldn't load state hash for ${height - 1}. Please rebuild the state or disable db.store-state-hashes"
-                )
-              )(_.totalHash)
+      val prevStateHash =
+        if (height == 1) ByteStr.empty
+        else
+          rw.get(Keys.stateHash(Height(height) - 1))
+            .fold(
+              throw new IllegalStateException(
+                s"Couldn't load state hash for ${height - 1}. Please rebuild the state or disable db.store-state-hashes"
+              )
+            )(_.totalHash)
 
-        val newStateHash = stateHash.createStateHash(prevStateHash)
-        rw.put(Keys.stateHash(Height(height)), Some(newStateHash))
-      }
+      val newStateHash = stateHash.createStateHash(prevStateHash)
+      rw.put(Keys.stateHash(Height(height)), Some(newStateHash))
     }
     log.trace(s"Finished persisting block ${blockMeta.id} at height $height")
   }

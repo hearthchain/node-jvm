@@ -109,7 +109,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     withDomain(
       DomainPresets.TransactionStateSnapshot,
       balances = AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(issuer.toAddress, assets = Map(asset -> 1L)),
-      assets = Seq(GenesisAssetSettings(asset.id, "asset", 0, 1L, 100000L))
+      assets = Seq(GenesisAssetSettings(asset.id.toString, "asset", 0, 1L, 100000L))
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
@@ -199,7 +199,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
-      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth)
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator (1000 hearth)
       d.appendBlock(
         TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.hearth - deposit)
       )
@@ -259,7 +259,7 @@ class BlocksApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatcher
     ) { d =>
       val grpcApi = getGrpcApi(d)
 
-      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2 (1000 hearth)
+      // net of the deposit, still has to clear GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator (1000 hearth)
       d.appendBlock(
         TxHelpers.transfer(sender, challengingMiner.toAddress, 1200.hearth - deposit)
       )

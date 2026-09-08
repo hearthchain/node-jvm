@@ -251,7 +251,7 @@ class MinerImpl(
       } yield expectedTS
     } else
       Left(
-        s"Balance $balance of ${signingKey.toAddress} is lower than required for generation: ${GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator2}"
+        s"Balance $balance of ${signingKey.toAddress} is lower than required for generation: ${GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator}"
       )
   }
 

@@ -1,18 +1,28 @@
 [Unit]
-Description=${{descr}}
+Description=${{descr}} (instance %i)
 Requires=${{start_facilities}}
+After=${{start_facilities}}
 
 [Service]
 Type=simple
+User=${{daemon_user}}
+Group=${{daemon_group}}
+# The one place for JVM options an operator sets, e.g. JAVA_OPTS="-Xmx8g -XX:+UseStringDeduplication".
+# conf/application.ini holds only what the node cannot run without, so nothing there outranks this.
+EnvironmentFile=-/etc/${{app_name}}/%i/env
+StateDirectory=${{app_name}}/%i
+LogsDirectory=${{app_name}}/%i
 ExecStart=/usr/share/${{app_name}}/bin/${{app_name}} \
+  -Dhearth.config.directory=/etc/${{app_name}}/%i \
+  -Dhearth.defaults.directory=/var/lib/${{app_name}}/%i \
+  -Dlogback.file.directory=/var/log/${{app_name}}/%i \
   -Dlogback.pattern="%%-5level %%logger{26} - %%msg%%n" \
-  -- /etc/${{app_name}}/waves.conf
+  -- /etc/${{app_name}}/%i/hearth.conf
 Restart=always
 RestartSec=${{retryTimeout}}
 RestartPreventExitStatus=10 38 61 74
 SuccessExitStatus=143
-User=${{daemon_user}}
-PermissionsStartOnly=true
+NoNewPrivileges=true
 TimeoutStopSec=90
 
 [Install]

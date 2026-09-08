@@ -44,28 +44,35 @@ to say `References incorrect or non-existing block`.
 
 ## Genesis commitments
 
-`GenesisSettings` carries three commitments to what the genesis block must come out as. All are optional, and all are
+`GenesisSettings` carries two commitments to what the genesis block must come out as. Both are optional, and both are
 checked in `Block.genesis` — the single place every path builds it (startup's `checkGenesis`, `WithState`, tests):
 
 - `state-hash` pins the snapshot the settings describe, sourced from the height-1 entry of `predefinedSnapshots`
   (`BlockchainSettings.genesisSnapshot`, see "Predefined snapshots" below), not from `GenesisSettings` itself;
-- `block-id` pins the header, so it covers the state hash along with `timestamp` and `initial-base-target`;
-- `signature` is verified against the header bytes by `validateGenesis`.
+- `block-id` pins the header, so it covers the state hash along with `timestamp` and `initial-base-target`.
 
-The id is the hash of the header and the signature is not part of it, so `block-id` does not pin `signature` and the
-two are independent. node-it's `Docker.genesisOverride` used to conflate them (writing the id into `signature`, and
-never pinning `state-hash`/`block-id` at all); it now computes and pins all three separately (see "node-it fixtures" in `docs/notes/testing.md`).
+There used to be a third, `signature`. A block's id here is the hash of its header, which the signature is not part of,
+so the signature identifies nothing and pinning it committed to nothing a peer ever compares - that field only existed
+because the original chain used the signature as the block id. `Block.genesis` now always signs with
+`Block.GenesisGenerator` (a key derived in code from a fixed seed), and `validateGenesis` verifies that signature
+against the header bytes as it does for any block.
+
+Both commitments are `Option` because they are *derived from* the rest of the settings: `GenesisBlockGenerator` and
+node-it's `Docker.genesisOverride` both have to load unpinned settings, build the block, and only then pin what it
+came out as. Settings built in code (`DomainPresets`, `withDomain`, `TestHelpers.genesisSettings`) leave both `None`
+and stay unpinned, which is why tests are unaffected. What makes a *real* network fail closed is not the type but
+`custom-defaults.conf`, which ships placeholder `state-hash`/`block-id` that every custom-network config inherits.
+Note that `GenesisSettings.MAINNET`/`TESTNET`/`STAGENET` pin neither, so the built-in networks are currently
+unpinned - they should get their commitments before launch.
 
 A mismatch fails `Block.genesis`, and `checkGenesis` turns that into a force-stop, so a node refuses to run on genesis
-settings that would build a different chain. `custom-defaults.conf` ships placeholder `state-hash`/`block-id` that
-every custom-network config inherits, so config-driven custom networks fail closed until the real values from
-`GenesisBlockGenerator` are pasted in. Settings built in code — `DomainPresets`, `withDomain`,
-`TestHelpers.genesisSettings` — leave all three `None` and stay unpinned, which is why tests are unaffected.
+settings that would build a different chain: config-driven custom networks fail closed on the placeholders until the
+real values from `GenesisBlockGenerator` are pasted in.
 
 ## Predefined snapshots
 
 Genesis is no longer a special code path for state. `GenesisSettings` carries only chain/header params (`timestamp`,
-`signature`, `initialBaseTarget`, `averageBlockDelay`, `stateHash`, `blockId`); the state genesis puts into an empty
+`initialBaseTarget`, `averageBlockDelay`, `stateHash`, `blockId`); the state genesis puts into an empty
 node (assets, generators, balances) comes from `PredefinedSnapshotSettings`, a height-keyed entry in
 `BlockchainSettings.predefinedSnapshots`, and genesis is simply the entry at `GenesisBlockHeight` (1). This exists
 because there is no issue transaction any more (see "Transaction JSON" in `docs/notes/keys-and-signatures.md`), so a predefined snapshot bundled in a
@@ -99,6 +106,11 @@ entry of its own in that entry, would otherwise look like it holds 0 and get wro
 
 A predefined snapshot beyond genesis also rejects an asset id that already exists on chain
 (`blockchain.assetDescription(id).isEmpty`), a check genesis itself never needs since state is empty at that point.
+
+`GenesisAssetSettings.id` is base16 *text*: it becomes a `ByteStr` only in `PredefinedSnapshot.issuedAssets`, which
+decodes it and rejects anything that is not exactly `AssetIdLength` (32) bytes, the way the generator entries' keys
+are handled. These settings feed nothing but that one builder, so a malformed id surfaces when the snapshot is built
+(startup's `checkGenesis`, or `BlockDiffer` at that height) rather than when the config is parsed.
 
 Rollback needs no special-casing for a non-genesis predefined snapshot: `RocksDBWriter`/`Caches` already undo
 whatever got persisted at a height purely from what is there, not from why. The one genesis-specific branch anywhere

@@ -10,7 +10,7 @@ purpose: Implementation notes for testing (node-it fixtures, grpc-server tests, 
 `transactions`/`initial-balance` one, though the balances/generators/assets themselves now live in the height-1 entry
 of a `predefined-snapshots` array alongside `genesis`, not inside `genesis` itself (see "Predefined snapshots" in `docs/notes/state-and-blocks.md`).
 Every miner-eligible node in `nodes.conf` (node01-node09; node10 stays a plain account) is both a funded account and a
-committed generator: its `hearth.miner.accounts` entry's `signing-key` is the same hex seed as its own account (so the
+committed generator: its `hearth.miner.accounts` entry's `signing-key-seed` is the same hex seed as its own account (so the
 address that mines is also a regular funded address), with independently generated `vrf-key`/`bls-key` alongside it.
 `predefined-snapshots`' height-1 `assets` (`NodeConfigs.GenesisAssets`) are fully distributed between the
 "firstKeyPair"/"secondKeyPair" fixture accounts (`IntegrationSuiteWithThreeAddresses`), not to any node.
@@ -39,8 +39,8 @@ endorsement can only land in the *next* block (one shot at the immediate parent,
 `finalizedHeight` baseline taken right at the period boundary itself still reflects the stuck genesis-period value;
 it has to be read one block later, not "waited out" over several.
 
-`Docker.genesisOverride` computes and pins all three genesis commitments (`signature`, `state-hash`, `block-id`) fresh
-on every run, from the `Block.genesis` this config actually produces — it cannot leave any of them unset, because the
+`Docker.genesisOverride` computes and pins both genesis commitments (`state-hash`, `block-id`) fresh
+on every run, from the `Block.genesis` this config actually produces — it cannot leave either of them unset, because the
 config that reaches a container is flattened into `-D` system properties (`Docker.asProperties`/`renderProperties`),
 which has no way to express an absent value: a `null` HOCON key becomes an empty string once flattened, and
 `GenesisSettings`'s `Option[ByteStr]` fields decode that as `Some(ByteStr.empty)`, not `None`. Left unpinned,
@@ -54,11 +54,13 @@ node-it's `Docker.scala` reads `hearth.blockchain.custom.network-id` out of its 
 `BaseSuite.configureDefaultNetwork` pins `thrth`, and `GenesisBlockGenerator` pins its config's `network-id`.
 Without one, the first address rendered throws `IllegalStateException: default HRP not configured`.
 
-`entrypoint.sh` runs `exec java $JAVA_OPTS ...` with `$JAVA_OPTS` unquoted, so any config value containing a space
-(e.g. a genesis asset `description`) is split into separate argv words by the shell; the first bareword-looking piece
-is then parsed by `java` as the main class name (`Could not find or load main class ...`), silently discarding every
-argument after it. node-it's own fixtures avoid this by keeping every config value space-free; the underlying bug
-(`Docker.renderProperties` wraps a multi-word value in quotes that only `eval` would honor) is still there.
+A container's whole config reaches it as `-D` system properties in a single `JAVA_OPTS` string, so values containing
+a space (a `wallet.mnemonic`, a genesis asset `description`) only survive because `entrypoint.sh` re-splits that string
+with `xargs`, which honors the quotes `Docker.renderProperties` puts around them. Expanding `$JAVA_OPTS` bare instead
+(as it used to) word-splits such a value and `java` reads its second word as the main class name (`Could not find or
+load main class poet`, from node10's mnemonic), silently discarding every argument after it. Any rework of how config
+reaches a container (mounting a rendered HOCON file instead of flattening to `-D`, say) has to keep that property, and
+would also fix the "no way to express an absent value" limitation described above.
 
 Minimum-fee validation is not implemented: `FeeValidation.getMinFee` computes the minimum fee for a transaction type,
 but nothing in `TransactionDiffer`/`CommonValidation` ever calls it — `FeeValidation.apply` only checks `fee > 0`. A
@@ -79,9 +81,9 @@ block v4/v5 fields, block-size-by-bytes limiting) are all unconditional now, so 
 activation" for one of them no longer has a meaningful "before" state and needs its assertions collapsed to just the
 always-on behavior (see `BlockSizeConstraintsSuite`, `BlocksApiSuite`).
 
-A generator account's `hearth.miner.accounts` entry now requires all three of `signing-key`/`vrf-key`/`bls-key` (a
-hex-encoded seed each) when not using a mnemonic; `GeneratorKeys.fromSettings` throws `bls-key is required when
-mnemonic is not provided` at node startup (another node-log-only crash) if a suite's hand-built account config only
+A generator account's `hearth.miner.accounts` entry now requires all three of `signing-key-seed` (or
+`signing-key-scalar`, see "Keys" in `docs/notes/keys-and-signatures.md`)/`vrf-key`/`bls-key` when not using a
+mnemonic; `GeneratorKeys.fromSettings` throws `bls-key is required when mnemonic is not provided` at node startup (another node-log-only crash) if a suite's hand-built account config only
 sets the first two, which several still did since bls-key postdates when they were written.
 
 Suites that pick `Miners.head`/`Default.head` (or any other low-index `NodeConfigs.Default` entry) as their sole
@@ -186,7 +188,7 @@ mining attempts spanned a different number of blocks, leaving the miner's balanc
 ### node-it: signing over the API
 
 `/transactions/sign` (and `/transactions/sign/{signerAddress}`) resolves its signer only through the node's own wallet,
-which derives its accounts from `hearth.wallet.seed` - a *different* seed from the `account-seed` behind `Node.address`.
+which derives its accounts from `hearth.wallet.mnemonic` - unrelated to the `account-seed` behind `Node.address`.
 The miner's own address is therefore never in it, and signing as `sender.address` fails with
 `no private key for sender address in wallet`. A suite that needs server-side signing has to use an address from
 `createAddressServerSide()` and fund it itself if the signed transaction is then broadcast. That address's public key
@@ -216,8 +218,9 @@ regardless of whether finalization succeeded. Not yet confirmed as the actual ca
 
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
-`WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with the full configured
-supply (`Constants.TotalHearth * Constants.UnitsInHearth`), matching `withGenerateSubscription`'s existing convention.
+`WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with
+`WithBUDomain.DefaultSignerBalance` (the whole 100M supply the predefined networks premine), matching
+`withGenerateSubscription`'s existing convention.
 A test whose miner must start at a *specific* small balance (not the full supply) needs an explicit `balances` entry
 naming that account — the auto-fund only backs off when the caller already named the address, same dedup-keep-first
 rule as `node/testkit`'s `withDomain`. A committed generator can never be funded with a literal 0 either way: genesis
@@ -246,7 +249,7 @@ sellOrder.price = Y (assetDecimals price = X)`.
 `grpc-server`'s `Repo`/`Loader.scala` (untouched by the transaction-type-removal migration, confirmed via `git log`)
 mis-numbers replayed history when a subscriber attaches (or a range/GetBlockUpdate is requested) starting from
 height 1 after real blocks already exist: `Loader.loadBatch` computes each replayed row's height arithmetically from
-the requested `fromHeight`, assuming dense storage starting exactly there, but genesis is never persisted by `Repo`,
+the requested `h`, assuming dense storage starting exactly there, but genesis is never persisted by `Repo`,
 so the first replayed row is mislabeled and duplicated against the next one. Pre-existing, not something this pass
 fixed — six `BlockchainUpdatesSpec` tests that subscribe/query from height 1 against non-empty history are `ignore`d
 for this reason (mirroring the six `ignore`d suites in `node/tests` for the empty-generator-set rule), with a shared
@@ -386,7 +389,8 @@ the total block id to compare against.
 
 Nothing issues an asset whose id a test hardcodes, so trading it fails with `Assets should be issued before they can be
 traded`. Declare it in the genesis snapshot instead — `withDomain(..., assets = Seq(GenesisAssetSettings(...)))`, and
-the same parameter on `assertDiffEi`/`assertLeft`. `PredefinedSnapshot` rejects a partially distributed asset, so the
+the same parameter on `assertDiffEi`/`assertLeft`. Its `id` is the base16 string, not a `ByteStr`, so a test holding an
+`IssuedAsset` passes `asset.id.toString`. `PredefinedSnapshot` rejects a partially distributed asset, so the
 genesis balances must hold exactly the declared quantity between them; splitting it between the two traders is usually
 what a test wants, since each side has to hold what it sells. To test a *balance* failure, issue the asset but give it
 to someone uninvolved — otherwise the trade dies on "not issued" before reaching the check under test.

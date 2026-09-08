@@ -2,7 +2,7 @@ package tech.hearth.it.api
 
 import com.google.protobuf.ByteString
 import tech.hearth.account.Address
-import tech.hearth.api.grpc.BalanceResponse.WavesBalances
+import tech.hearth.api.grpc.BalanceResponse.HearthBalances
 import tech.hearth.api.grpc.{TransactionStatus as PBTransactionStatus, *}
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
@@ -118,8 +118,8 @@ object SyncGrpcApi extends Assertions {
       assert(actual == balance, s"Asset balance mismatch, required=$balance, actual=$actual")
     }
 
-    def hearthBalance(address: ByteString): WavesBalances = {
-      accounts.getBalances(BalancesRequest.of(address, Seq(ByteString.EMPTY))).next().getWaves
+    def hearthBalance(address: ByteString): HearthBalances = {
+      accounts.getBalances(BalancesRequest.of(address, Seq(ByteString.EMPTY))).next().getHearth
     }
 
     def getTransaction(id: String, sender: ByteString = ByteString.EMPTY, recipient: Option[Recipient] = None): PBSignedTransaction = {

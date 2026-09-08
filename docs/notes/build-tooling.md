@@ -47,7 +47,7 @@ resolved earlier in the same environment.
 
 The native currency's code-level naming was renamed to match the "Hearth"/"HRTH" branding the tokenomics spec
 already used: `Waves`/`waves`/`WAVES` → `Hearth`/`hearth`/`HRTH` (`Asset.Waves` → `Asset.Hearth`,
-`Constants.TotalWaves`/`UnitsInWave` → `TotalHearth`/`UnitsInHearth`, `WavesSettings` → `HearthSettings`, the
+`Constants.TotalWaves`/`UnitsInWave` → `TotalHearth`/`UnitsInHearth` (`TotalHearth` has since been removed), `WavesSettings` → `HearthSettings`, the
 `waves {}` HOCON config root → `hearth {}` and every `-Dwaves.*` system property → `-Dhearth.*`, REST/gRPC JSON
 fields like `totalWavesAmount`/`totalFeeInWaves` → `totalHearthAmount`/`totalFeeInHearth`), and the base unit
 `wavelet` → `ember` (`CommitToGenerationTransaction.DepositInWavelets` → `DepositInEmbers`). `Constants.UnitsInHearth
@@ -61,24 +61,27 @@ two local proto messages (`node/src/main/protobuf/hearth/database.proto`): `Bloc
 Docker/deployment packaging followed the same rename: `docker/Dockerfile`/`entrypoint.sh`'s env vars
 (`WAVES_NETWORK`/`WVDATA`/`WVLOG`/etc. → `HEARTH_NETWORK`/`HEARTH_DATA`/`HEARTH_LOG`/etc.) and paths
 (`/etc/waves`, `/var/lib/waves`, `/usr/share/waves` → `/etc/hearth`, `/var/lib/hearth`, `/usr/share/hearth`), the
-`node-it` test image tag (`com.wavesplatform/node-it` → `hearth/node-it`), the tarball names `buildTarballsForDocker`
-produces (`waves.tgz`/`waves-grpc-server.tgz` → `hearth.tgz`/`hearth-grpc-server.tgz`), `grpc-server`'s artifact
+`node-it` test image tag (`com.wavesplatform/node-it` → `hearth/node-it`), the tarball names the docker packaging
+task produced at the time (`waves.tgz`/`waves-grpc-server.tgz` → `hearth.tgz`/`hearth-grpc-server.tgz`, since
+replaced by `stageForDocker`'s `docker/target/{lib,app}` directories), `grpc-server`'s artifact
 name (`waves-grpc-server` → `hearth-grpc-server`, matching `node`'s already-renamed `hearth-jvm`), and the Linux
 package name/summary in `node/build.sbt`/`ExtensionPackaging.scala` (`waves${network}` → `hearth${network}`,
 `maintainer` → `tech.hearth`).
 
-Several things were deliberately left saying "waves", each for a different reason:
+The external `tech.hearth % protobuf-schemas` dependency's own fields were the last holdouts, and are now
+renamed upstream too, so nothing local says "waves" any more. `SignedTransaction.waves_transaction` went first
+(see "Transaction schema: Transfer merge, fee restructuring, new tx types" in `docs/notes/keys-and-signatures.md`):
+`transaction.proto`'s top-level field is now `transaction`, with `.wavesTransaction`/`.getWavesTransaction`/
+`.withWavesTransaction` renamed to `.transaction`/`.getTransaction`/`.withTransaction`. `BalanceResponse`'s
+`WavesBalances`/`waves` (`accounts_api.proto`) then became `HearthBalances`/`hearth`, and `BlockAppend`'s
+`updated_waves_amount` (`events.proto`) became `updated_hearth_amount`. Both sides of the wire are renamed
+together: `AccountsApiGrpcImpl` (`withHearth`), the `node-it` gRPC helpers (`getHearth`), and `grpc-server`'s
+vanilla event mirror (`events.scala`'s `BlockAppended.updatedHearthAmount`, `events/repo/LiquidState.scala`,
+`events/protobuf/serde/package.scala`). A generated-code rename in `protobuf-schemas` surfaces here only as a
+compile error, so `sbt Test/compile` after an upstream `mvn install` is the way to find every call site.
 
-- **The external `tech.hearth % protobuf-schemas` dependency's own fields** — `BalanceResponse.WavesBalances`/`.waves`
-  (`accounts_api.proto`) and `StateUpdate`'s `updatedWavesAmount` (`events.proto`) are defined in the sibling
-  `protobuf-schemas` repo, out of scope here. The local hand-written code that talks to them keeps matching names
-  too, rather than renaming just one side of the wire: `grpc-server`'s vanilla event mirror (`events.scala`,
-  `events/repo/LiquidState.scala`, `events/protobuf/serde/package.scala`) and `events/fixtures/HearthTxChecks.scala`'s
-  pattern matches all still say `updatedWavesAmount`. A future rename of `protobuf-schemas` itself needs to update
-  all of these together. `SignedTransaction.wavesTransaction` *was* one of these (see "Transaction schema: Transfer
-  merge, fee restructuring, new tx types" in `docs/notes/keys-and-signatures.md`) — `transaction.proto`'s top-level field is now `transaction`, not
-  `waves_transaction`, and every local `.wavesTransaction`/`.getWavesTransaction`/`.withWavesTransaction` call site
-  was renamed to `.transaction`/`.getTransaction`/`.withTransaction` to match.
+Other things are deliberately still saying "waves", each for a different reason:
+
 - **CI publish destinations** — Docker Hub (`wavesplatform/wavesnode`, `wavesplatform/waves-private-node`,
   `wavesplatform/ride-runner`), `ghcr.io/wavesplatform/waves*`, `apt.wavesplatform.com`, and the `@waves/ride-lang`
   npm package (`.github/workflows/*.yml`, `create-aptly-repo.sh`) are real registries tied to existing
@@ -137,7 +140,7 @@ retract one. `gitDescribedVersion`'s `excludeLintKeys` entry needs the `git.` pr
 
 sbt 2's `ActionCache` treats every task as cacheable by default and, on a cache hit, replays the cached result
 *without re-running the body*. A task whose only job is an out-of-band filesystem write sbt's output tracking can't
-see (e.g. `buildTarballsForDocker`'s `IO.copyFile` into `docker/target/*.tgz`, not a declared task output) silently
+see (e.g. `stageForDocker`'s `IO.copyFile` into `docker/target/**`, not a declared task output) silently
 no-ops on a cache hit - `setup-java`'s `cache: 'sbt'` persists that cache *across* CI runs, so a fresh checkout with
 an empty `docker/target/` can still hit stale and skip the copy, breaking `node-it/docker`'s later `docker build`.
 Same class of bug already fixed for `classpathOrdering`, `compilePRRaw`, `IntegrationTestsPlugin`'s
@@ -182,3 +185,139 @@ flag away.
 `System.getProperty("sbt.ci") == "true" || sys.env.contains("BUILD_NUMBER") || sys.env.contains("CI")`, and GitHub
 Actions sets `CI=true` on every runner. `BUILD_NUMBER` in that list is Jenkins/Hudson; GitHub Actions does not
 define it (its equivalents are `GITHUB_RUN_NUMBER`/`GITHUB_RUN_ID`/`GITHUB_RUN_ATTEMPT`).
+
+## Linux packaging: one package, one systemd template unit
+
+Waves shipped one deb per network (`waves`, `waves-testnet`, `waves-stagenet`), built from a `network` sbt setting
+that suffixed the package name and generated three `-D` lines into `conf/application.ini`. The binaries were
+identical; only those lines differed. That is gone. There is one deb, `hearth-jvm`, and the network is runtime
+configuration, the way every other chain does it (bitcoind `-chain=`, geth `--sepolia`, cosmos `--home`,
+polkadot `--chain=`). `project/Network.scala`, the `network` setting and the `buildReleaseArtifacts <networks...>`
+parser were deleted along with it; `buildReleaseArtifacts` now takes no arguments.
+
+Everything derives from `Linux / packageName` = `hearth-jvm`: install dir `/usr/share/hearth-jvm`, config dir
+`/etc/hearth-jvm`, data `/var/lib/hearth-jvm`, logs `/var/log/hearth-jvm`, daemon user and group `hearth-jvm`.
+The Docker image is unaffected and keeps its own `/etc/hearth`, `/var/lib/hearth` paths: one container, one node.
+
+Multiple nodes on one host are instances of a systemd template unit, `hearth-jvm@.service`
+(`Debian / linuxStartScriptName := Some("hearth-jvm@.service")`), one directory per instance:
+
+- `/etc/hearth-jvm/<instance>/hearth.conf` - the node config, passed to the launcher as its argument. Sets the
+  network via `hearth.blockchain.type`; without it the package default from `application.ini` (mainnet) applies.
+- `/etc/hearth-jvm/<instance>/env` - optional, `EnvironmentFile=-`, and the only place an operator sets JVM
+  options (see below).
+- `/etc/hearth-jvm/<instance>/logback.xml` - optional, included by the packaged `logback.xml` because the unit
+  passes `-Dhearth.config.directory=/etc/hearth-jvm/%i`. This is why instances get a directory rather than a flat
+  `<instance>.conf`: that include is keyed off the config directory, so flat files would force one logback config
+  on every instance.
+- `/var/lib/hearth-jvm/<instance>` and `/var/log/hearth-jvm/<instance>` - created and chowned by systemd through
+  `StateDirectory=`/`LogsDirectory=`, passed to the node as `-Dhearth.defaults.directory` and
+  `-Dlogback.file.directory`.
+
+`hearth.defaults.*` rather than `hearth.*` for the data directory on purpose: `settings.loadConfig` promotes the
+`hearth.defaults` subtree to `hearth` as a *fallback*, so an instance config file still wins over what the unit
+passes.
+
+### JVM options live in exactly one place
+
+The launcher builds its java command line as `$JAVA_OPTS`, then the options it reads from
+`<install>/conf/application.ini`, then its own command-line arguments. Later flags win, so **`application.ini`
+silently overrides `JAVA_OPTS`**: with `-J-Xmx2g` in that file, `JAVA_OPTS="-Xmx8g"` left the heap at 2 GiB
+(measured with `-J-XX:+PrintFlagsFinal`, `MaxHeapSize = 2147483648`). Waves shipped exactly that combination, so
+an operator's heap setting was quietly ignored, `hearth-jvm -main tech.hearth.Importer` included, which is the one
+invocation that most wants a large heap.
+
+The split is therefore by ownership, and the rule is: **`Universal / javaOptions` carries only what the node
+cannot run without; anything an operator might want to change goes in `JAVA_OPTS`, never in the ini.** What
+remains in `application.ini` is `-XX:+ExitOnOutOfMemoryError`, `-Dfile.encoding=UTF-8` (consensus-relevant:
+deterministic `getBytes`), the two `--add-opens` and `--enable-native-access`. Dropped: `-Xmx2g` (the JVM's
+ergonomic 25% of RAM applies instead), `-XX:+UseG1GC` and `-XX:+ParallelRefProcEnabled` (already the JDK 25
+defaults) and `-XX:+UseStringDeduplication` (now opt-in per instance). Do not add tuning flags back there:
+`application.ini` is read by every entry point, the service and `-main` tool runs alike, and it cannot hold
+anything instance-specific.
+
+`/etc/default/hearth-jvm` is deliberately **not** shipped, though the launcher still sources it if it exists: it
+is sourced *after* systemd has applied the instance's `env` file, so a `JAVA_OPTS` set there would override every
+instance's own. The same variable works for tool runs: `JAVA_OPTS="-Xmx16g" hearth-jvm -main tech.hearth.Importer
+-c /etc/hearth-jvm/mainnet/hearth.conf -i blockchain.bin`.
+
+Notes on the packaging itself, all of them things that bit during this change:
+
+- `/etc/hearth-jvm` has to be filtered out of `linuxPackageSymlinks`. JavaServerAppPackaging makes `/etc/<pkg>` a
+  symlink to `/usr/share/<pkg>/conf`, which cannot hold per-instance config; it is now a real package-owned
+  directory (0750, `hearth-jvm:hearth-jvm`), as is `/var/lib/hearth-jvm`.
+- `application.ini` must stay at `/usr/share/hearth-jvm/conf/application.ini`: the launcher derives that path from
+  `realpath "$0"`, so it follows the *script*, not the config directory or the cwd, and there is no override hook.
+  A per-instance ini would need a per-instance copy of the generated launcher (which embeds the full classpath) or
+  a `BindPaths=` in the unit. Neither is worth it, hence the ownership split above.
+- `maintainerScripts` and `debianMaintainerScripts` are both wrapped in `Def.uncached`. The first reads
+  `src/package/debian/*` from disk, the second writes them to `(Universal / target)/tmp/debian`; sbt 2 tracks
+  neither, so a cache hit ships the *previous* build's maintainer scripts, and after a clean of that directory the
+  jdeb step fails with `Source file .../tmp/debian/preinst does not exist`. `debianMaintainerScripts` is defined at
+  project scope, not in `Debian`, and had to be reimplemented in `node/build.sbt` because the plugin's helper is
+  `private[debian]`. When editing a maintainer script, restart the sbt server too: the long-lived server can serve
+  a stale build definition across `sbt --batch` runs, which looks exactly like this cache staleness.
+- `defaultLinuxStartScriptLocation` is overridden to `/usr/lib/systemd/system`. The plugin default is
+  `/lib/systemd/system`, and shipping that aliased path makes dpkg fail on merged-usr systems.
+- A `preinst` creates the user and group. The package ships directories owned by `hearth-jvm`, so it has to exist
+  before dpkg unpacks, not in `postinst`.
+- Maintainer scripts enumerate instances with `systemctl list-units` plus `list-unit-files` (globbing
+  `hearth-jvm@*.service`), because an enabled-but-stopped instance shows up only in the second. They guard on
+  `command -v systemctl` and `/run/systemd/system` so installing in a container or chroot still works.
+- `postrm purge` deletes `/var/log/hearth-jvm` and every `/var/lib/hearth-jvm/*/data`, and deliberately keeps
+  wallets, configs and the daemon user. Blockchain state resyncs; a wallet seed does not come back.
+- Verify a change to the unit with `systemd-analyze verify /usr/lib/systemd/system/hearth-jvm@.service` on the
+  installed package. In sandboxed dev environments dpkg fails to unpack with
+  `unable to install new version of './usr/share/hearth-jvm': Invalid cross-device link` (overlayfs cannot rename
+  directories); mount volumes over `/usr/share`, `/var` and `/etc` (`docker run -v vol:/usr/share ...`) to test an
+  install.
+
+## Docker image build: staged directories, not a tarball
+
+`sbt stageForDocker` copies the node and grpc-server universal mappings straight into `docker/target`, the image
+build context, and `docker/Dockerfile` `COPY`s them in. It used to package both as `.tgz` and unpack them in a
+`RUN`, which cost ~13 seconds per iteration that the current layout does not:
+
+- Third-party jars go to `target/lib`, hearth's own jars and scripts to `target/app`, so the ~100MB layer is
+  content-identical across builds that only changed node code and stays cached; only the ~10MB app layer is rebuilt.
+- The image build downloads nothing. It used to `wget` the Linux Corretto and rocksdb jars, and the Corretto one it
+  fetched was byte-identical to a jar the build had already resolved. Now `dockerExcludedJars` keeps the
+  cross-platform `rocksdbjni`/`conscrypt`/`AmazonCorrettoCryptoProvider` jars out of the context (the release tarball
+  still carries them: it is the cross-platform artifact, and only the image knows which platform it is for), and in
+  their place the task stages the `linux64` rocksdb jar - every Linux native at a third of the size - plus both
+  Corretto Linux jars under `target/native/<arch>`, named the way docker names that platform in `TARGETARCH` so the
+  Dockerfile can `COPY target/native/$TARGETARCH`. This also removed the image's `CORRETTO_VERSION`/`ROCKSDB_VERSION`
+  args, which could drift from `Dependencies.scala`.
+- The `linux64` rocksdb jar is resolved through a `DockerNative` ivy configuration of `build.sbt`'s own. `% Optional`
+  on the node project is not enough to keep an artifact out of the release artifacts: the universal package picks up
+  Optional dependencies (that is how the Corretto jars reach it), so declaring it there put a second, 29MB rocksdb
+  jar into the tarball and the deb.
+- `stageForDocker` copies a file only when its size or mtime differs from the staged copy. That is what keeps
+  BuildKit's context transfer incremental (~10MB instead of ~196MB); a blanket re-copy would defeat it, since
+  BuildKit detects an unchanged file by size and mtime too.
+- `COPY --link` layers are built independently of the ones below them, but any later instruction that touches the
+  filesystem forces BuildKit to materialize the merged result, which costs as much as the copies themselves. Keep
+  `WORKDIR` (the only such instruction left) *above* the `COPY`s; `VOLUME`/`HEALTHCHECK`/`STOPSIGNAL`/`ENTRYPOINT`
+  are metadata-only and can stay below. `--chown` must be numeric there: a `--link` layer has no user database.
+- Replacing the `RUN tar` with `COPY` also takes the unpacking out of the emulated leg of the multi-platform
+  `linux/amd64,linux/arm64` build in `publish-docker-image.yml`; a `COPY` needs no emulation at all.
+
+## Docker image: the node runs as uid 999, dropped in the entrypoint
+
+The image creates the `hearth` user (999:999) and `entrypoint.sh` re-execs itself as that user through `setpriv`
+before starting the JVM. The user had been created and the files chowned to it since the fork, but nothing ever ran
+as it: `USER waves` was dropped upstream in 2021 (`b2351b857`) and the container has run as root ever since.
+
+- There is deliberately no `USER` instruction. The entrypoint needs root for exactly one thing - taking ownership of
+  `/var/lib/hearth` and `/var/log/hearth` - because a bind-mounted host directory keeps the host's ownership, and
+  bind mounts are how this image is normally run. `USER` alone would break every existing deployment on upgrade, with
+  a permission error at first write that looks nothing like its cause. A fresh *named* volume is the case that needs
+  no help: docker seeds it from the image directory, ownership included.
+- The chown is guarded by a `stat` of the directory, so it is recursive once (first start after mounting) and free
+  afterwards; and the whole block is guarded by `id -u` = 0, so `docker run --user ...` is left alone.
+- The drop happens at the top of the script, before anything else it does. Dropping at the end instead would leave
+  `$HEARTH_LOG/hearth.log` created by root's `tee` and unwritable by the JVM that comes after it.
+- `setpriv` rather than `gosu`: it is already in the base image (util-linux), and it can also clear inheritable
+  capabilities and set `no-new-privs`, which gosu does not. gosu is the right answer for images like postgres, which
+  ship Debian *and* Alpine variants from one entrypoint script and need the same static binary on both; this image
+  has one base and one entrypoint. That reasoning inverts if it ever moves to Alpine or distroless.

@@ -1,0 +1,18 @@
+${{header}}
+
+app_name=${{app_name}}
+
+# The package ships directories owned by the daemon user, so it has to exist before unpacking
+case "$1" in
+    install|upgrade)
+        if ! getent group "$app_name" > /dev/null; then
+            addgroup --system --quiet "$app_name"
+        fi
+        if ! getent passwd "$app_name" > /dev/null; then
+            adduser --system --quiet --home "/var/lib/$app_name" --no-create-home \
+                --shell /bin/false --ingroup "$app_name" --gecos "Hearth node" "$app_name"
+        fi
+        ;;
+esac
+
+exit 0

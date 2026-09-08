@@ -5,7 +5,7 @@ import scalapb.compiler.Version.scalapbVersion
 object Dependencies {
   private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.17.Final"
 
-  val gProtoVersion = "4.36.0"
+  val gProtoVersion = "4.36.1"
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
   val overrides = Def.setting(
     Seq(
@@ -70,7 +70,7 @@ object Dependencies {
 
   val cryptoProviders = Seq(
     // Windows x86_64, Windows x86, macOS x86_64, linux x86_64
-    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.6.3",
+    "org.conscrypt" % "conscrypt-openjdk-uber" % "2.7.0",
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java
@@ -103,6 +103,11 @@ object Dependencies {
 
   // Check https://github.com/facebook/rocksdb/issues/13893 before bumping
   private val rocksdb = "org.rocksdb" % "rocksdbjni" % "10.10.1.1"
+
+  // What the docker image ships in place of the cross-platform jar above: every Linux native (x86_64, aarch64,
+  // ppc64le, s390x, riscv64) at a third of the size. build.sbt resolves it in a configuration of its own, so it
+  // reaches no classpath and none of the release artifacts.
+  val rocksdbForLinux = rocksdb.classifier("linux64")
 
   val scalaLogging: ModuleID = "com.typesafe.scala-logging" %% "scala-logging" % "3.9.6"
   lazy val node = Def.setting(

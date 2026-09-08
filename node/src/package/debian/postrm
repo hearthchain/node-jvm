@@ -1,11 +1,18 @@
 ${{header}}
 
-if [ "$1" = purge ]; then
-    rm -rf /var/lib/${{app_name}}/data
-    rm -rf /var/log/${{app_name}}
+app_name=${{app_name}}
 
-    userdel waves >/dev/null 2>&1 || true
-    groupdel waves >/dev/null 2>&1 || true
+if [ "$1" = purge ]; then
+    rm -rf "/var/log/$app_name"
+    # Blockchain state only: wallets, configs and the daemon user survive a purge, they cannot be regenerated
+    for instance_data in "/var/lib/$app_name"/*/data; do
+        [ -d "$instance_data" ] && rm -rf "$instance_data"
+    done
+    echo "Kept /etc/$app_name and the wallets under /var/lib/$app_name; remove them by hand if they are not needed."
+fi
+
+if command -v systemctl > /dev/null; then
+    systemctl daemon-reload || true
 fi
 
 exit 0

@@ -1,4 +1,5 @@
 import com.typesafe.sbt.SbtNativePackager.Debian
+import com.typesafe.sbt.packager.archetypes.TemplateWriter
 import sbtcompat.PluginCompat.toFileRef
 
 enablePlugins(
@@ -86,8 +87,6 @@ bashScriptExtraDefines +=
 
 bashScriptExtraDefines += bashScriptEnvConfigLocation.value.fold("")(envFile => s"[[ -f $envFile ]] && . $envFile")
 
-linuxScriptReplacements += ("network" -> network.value.toString)
-
 inConfig(Universal)(
   Seq(
     maintainer  := "tech.hearth",
@@ -96,14 +95,12 @@ inConfig(Universal)(
       implicit val conv: xsbti.FileConverter = fileConverter.value
       toFileRef(baseDirectory.value / s"hearth-sample.conf") -> "doc/hearth.conf.sample"
     },
+    // Only what the node cannot run without. Heap and GC tuning belong in JAVA_OPTS, and application.ini would
+    // silently outrank it: the launcher lists $JAVA_OPTS before the options it reads from this file. Every entry
+    // point reads it, `-main tech.hearth.Importer` included, so nothing here may be instance-specific either.
     javaOptions ++= Seq(
       // -J prefix is required by the bash script
-      "-J-server",
-      "-J-Xmx2g",
       "-J-XX:+ExitOnOutOfMemoryError",
-      "-J-XX:+UseG1GC",
-      "-J-XX:+ParallelRefProcEnabled",
-      "-J-XX:+UseStringDeduplication",
       // JVM default charset for proper and deterministic getBytes behaviour
       "-J-Dfile.encoding=UTF-8",
       "-J--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
@@ -117,7 +114,7 @@ inConfig(Linux)(
   Seq(
     packageSummary     := "Hearth node",
     packageDescription := "Hearth node",
-    name               := s"hearth${network.value.packageSuffix}",
+    name               := "hearth-jvm",
     normalizedName     := name.value,
     packageName        := normalizedName.value
   )
@@ -129,22 +126,18 @@ def fixScriptName(path: String, name: String, packageName: String): String =
 linuxPackageMappings := linuxPackageMappings.value.map { lpm =>
   lpm.copy(mappings = lpm.mappings.map {
     case (file, path) if path.endsWith(s"/bin/${name.value}") => file -> fixScriptName(path, name.value, (Linux / packageName).value)
+    // The package default network; an instance config file overrides it, and the systemd unit adds the
+    // per-instance directories
     case (file, path) if path.endsWith("/conf/application.ini") =>
       val dest = (Debian / target).value / path
-      IO.write(
-        dest,
-        s"""-J-Dhearth.defaults.blockchain.type=${network.value}
-           |-J-Dhearth.defaults.directory=/var/lib/${(Linux / packageName).value}
-           |-J-Dhearth.defaults.config.directory=/etc/${(Linux / packageName).value}
-           |""".stripMargin
-      )
+      IO.write(dest, "-J-Dhearth.defaults.blockchain.type=mainnet\n")
       IO.append(dest, IO.readBytes(file))
       dest -> path
     case other => other
   })
 }
 
-linuxPackageSymlinks := linuxPackageSymlinks.value.map { lsl =>
+linuxPackageSymlinks := linuxPackageSymlinks.value.filterNot(_.link == s"/etc/${(Linux / packageName).value}").map { lsl =>
   if (lsl.link.endsWith(s"/bin/${name.value}"))
     lsl.copy(
       fixScriptName(lsl.link, name.value, (Linux / packageName).value),
@@ -153,14 +146,36 @@ linuxPackageSymlinks := linuxPackageSymlinks.value.map { lsl =>
   else lsl
 }
 
+// A copy of DebianPlugin's own definition (whose helper is private[debian]) wrapped in Def.uncached: this task's
+// real output is the maintainer scripts written under (Universal / target)/tmp/debian, a path sbt 2 cannot track.
+// On a cache hit it returns the file list without writing anything, so jdeb packages the previous build's copies,
+// or fails outright once they have been cleaned away. Same trap as stageForDocker (docs/notes/build-tooling.md).
+debianMaintainerScripts := Def.uncached {
+  val scriptDir    = (Universal / target).value / "tmp" / "debian"
+  val replacements = (Debian / linuxScriptReplacements).value
+  (Debian / maintainerScripts).value.toSeq.map { case (name, lines) =>
+    val script = scriptDir / name
+    IO.writeLines(script, TemplateWriter.generateScriptFromLines(lines, replacements))
+    script -> name
+  }
+}
+
 inConfig(Debian)(
   Seq(
     packageArchitecture      := debArchitecture.value.debString,
     maintainer               := "tech.hearth",
     packageSource            := sourceDirectory.value / "package",
     linuxStartScriptTemplate := (packageSource.value / "systemd.service").toURI.toURL,
+    // Template unit: one enabled instance per node, `systemctl start hearth-jvm@<instance>`
+    linuxStartScriptName := Some(s"${(Linux / packageName).value}@.service"),
+    // Not /lib/systemd/system: on merged-usr systems dpkg chokes on a package that ships the aliased ./lib path
+    defaultLinuxStartScriptLocation := "/usr/lib/systemd/system",
     debianPackageDependencies += "java17-runtime-headless",
-    maintainerScripts := maintainerScriptsFromDirectory(packageSource.value / "debian", Seq("postinst", "postrm", "prerm")),
+    // Def.uncached for the same reason as debianMaintainerScripts above: the scripts are read from disk, and sbt 2
+    // has no way to notice that they changed
+    maintainerScripts := Def.uncached(
+      maintainerScriptsFromDirectory(packageSource.value / "debian", Seq("preinst", "postinst", "postrm", "prerm"))
+    ),
     linuxPackageMappings := {
       val classifier = if (packageArchitecture.value == "amd64") "linux-x86_64" else "linux-aarch_64"
       val platformSpecificMappings = packageMapping(
@@ -169,11 +184,22 @@ inConfig(Debian)(
           .map(f => f -> (defaultLinuxInstallLocation.value + "/" + (Debian / packageName).value + "/lib/software.amazon.cryptools." + f.getName))*
       )
 
+      val instanceDirs = Seq("/etc", "/var/lib").map { parent =>
+        packageTemplateMapping(s"$parent/${(Debian / packageName).value}")()
+          .withUser((Linux / daemonUser).value)
+          .withGroup((Linux / daemonGroup).value)
+          .withPerms("0750")
+      }
+
+      // /etc/default/<pkg> is deliberately not shipped: the launcher sources it after systemd has applied the
+      // instance's env file, so a JAVA_OPTS set there would override every instance's own
+      val etcDefault = s"/etc/default/${(Debian / packageName).value}"
+
       linuxPackageMappings.value.map(m =>
-        m.copy(mappings = m.mappings.filterNot { case (f, _) =>
-          f.name.contains("AmazonCorretto") || f.name.contains("conscrypt")
+        m.copy(mappings = m.mappings.filterNot { case (f, path) =>
+          f.name.contains("AmazonCorretto") || f.name.contains("conscrypt") || path == etcDefault
         })
-      ) :+ platformSpecificMappings
+      ) ++ instanceDirs :+ platformSpecificMappings
     }
   )
 )

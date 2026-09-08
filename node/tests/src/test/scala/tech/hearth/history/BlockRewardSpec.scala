@@ -42,7 +42,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
   private val miner2        = TxHelpers.signer(104)
 
   private val genesisBalances: Seq[AddrWithBalance] = Seq(
-    AddrWithBalance(sourceAddress.toAddress, (Constants.TotalHearth - 60000) * Constants.UnitsInHearth),
+    AddrWithBalance(sourceAddress.toAddress, (100_000_000L - 60000) * Constants.UnitsInHearth),
     AddrWithBalance(issuer.toAddress, 40000 * Constants.UnitsInHearth),
     AddrWithBalance(miner1.toAddress, InitialMinerBalance),
     AddrWithBalance(miner2.toAddress, InitialMinerBalance)
@@ -111,7 +111,7 @@ class BlockRewardSpec extends FreeSpec with WithDomain {
 
     "when all blocks without fees" in
       withDomain(rewardSettings, genesisBalances, generators = Seq(miner1, miner2)) { d =>
-        val initialHearthAmount = BigInt(Constants.TotalHearth) * BigInt(Constants.UnitsInHearth)
+        val initialHearthAmount = BigInt(genesisBalances.map(_.balance).sum)
 
         (1 to 6).foreach { i =>
           val miner = if (i % 2 == 0) miner2 else miner1

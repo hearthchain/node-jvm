@@ -28,7 +28,7 @@ class GenesisBlockGeneratorSpec extends FreeSpec with EitherValues {
        |}""".stripMargin
   )
 
-  private lazy val (generatedGenesis, generatedSnapshot): (GenesisSettings, PredefinedSnapshotSettings) = {
+  private lazy val (generatedGenesis, generatedSnapshot) = {
     val confBody = GenesisBlockGenerator.createConfig(GenesisBlockGenerator.parseSettings(input))
     val parsed   = ConfigFactory.parseString(confBody)
     val genesis  = ConfigSource.fromConfig(parsed).at("genesis").loadOrThrow[GenesisSettings]
@@ -49,7 +49,6 @@ class GenesisBlockGeneratorSpec extends FreeSpec with EitherValues {
     "carries the commitments a node checks on start" in {
       generatedGenesis.stateHash shouldBe defined
       generatedGenesis.blockId shouldBe defined
-      generatedGenesis.signature shouldBe defined
     }
 
     // The generator used to sign a block that was not the genesis block, so the config it emitted could not be started
@@ -58,7 +57,6 @@ class GenesisBlockGeneratorSpec extends FreeSpec with EitherValues {
 
       block.header.stateHash shouldBe generatedGenesis.stateHash
       block.id() shouldBe generatedGenesis.blockId.value
-      block.signature shouldBe generatedGenesis.signature.value
       block.signatureValid() shouldBe true
     }
 

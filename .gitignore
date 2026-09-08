@@ -37,7 +37,7 @@ waves_logback.xml
 docker/temp
 
 package
-!src/package
+!**/src/package/
 !ride-runner/src/package
 native
 

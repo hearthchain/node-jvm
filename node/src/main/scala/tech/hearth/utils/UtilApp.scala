@@ -6,18 +6,16 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.explicitGet
 import tech.hearth.common.utils.{Base16, Base64}
 import tech.hearth.crypto.bls.{BlsKeyPair, BlsSignature}
-import tech.hearth.crypto.{P256Curve, Sha256}
+import tech.hearth.crypto.{Bip39, Hex, Mnemonic, P256Curve, Sha256, SigningKey, VrfKey}
 import tech.hearth.lang.ValidationError
-import tech.hearth.settings.WalletSettings
 import tech.hearth.state.Height
 import tech.hearth.transaction.TransactionFactory
 import tech.hearth.wallet.Wallet
 import tech.hearth.{Application, Version}
 import play.api.libs.json.{JsObject, Json}
 import scopt.OParser
-import tech.hearth.crypto.SigningKey
 
-import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
+import java.io.{File, FileOutputStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util
@@ -32,7 +30,7 @@ object UtilApp {
   case class VerifyOptions(publicKey: PublicKey = null.asInstanceOf[PublicKey], signature: ByteStr = ByteStr.empty, checkWeakPk: Boolean = false)
   case class HashOptions(mode: String = "fast")
   case class SignTxOptions(signerAddress: String = "", currentHeight: Height = Height(1), finalityActivationHeight: Option[Height] = None)
-  case class KeyPairOptions(seedType: String = "account", nonce: Int = 0)
+  case class KeyPairOptions(seedType: String = "mnemonic", nonce: Int = 0, mnemonic: Option[String] = None)
 
   enum Input {
     case StdIn
@@ -65,15 +63,21 @@ object UtilApp {
 
   def main(args: Array[String]): Unit = {
     OParser.parse(commandParser, args, Command()).foreach { cmd =>
-      val inBytes = IO.readInput(cmd)
+      // Read only for the commands that take data: create-keys is configured entirely by its own options, and a stdin
+      // nothing ever writes to or closes (an IDE run configuration, for one) would block here until EOF.
+      lazy val inBytes = IO.readInput(cmd)
       val result = cmd.mode match {
         case Mode.SignBytes       => maybeFindKeyPair(cmd).flatMap(Actions.doSign(_, inBytes))
         case Mode.VerifySignature => Actions.doVerify(cmd, inBytes)
-        case Mode.CreateKeyPair   => Actions.doCreateKeyPair(cmd, inBytes)
-        case Mode.Hash            => Actions.doHash(cmd, inBytes)
-        case Mode.SerializeTx     => Actions.doSerializeTx(inBytes)
-        case Mode.SignTx          => maybeFindKeyPair(cmd).flatMap(Actions.doSignTx(_, inBytes))
-        case Mode.SmokeTest       => Actions.doSmokeTest()
+        case Mode.CreateKeyPair   =>
+          // Rendering an address needs a network HRP, which loading the config pins - the same reason the signing
+          // commands load it.
+          Application.loadApplicationConfig(cmd.configFile.map(new File(_)))
+          Actions.doCreateKeyPair(cmd, inBytes)
+        case Mode.Hash        => Actions.doHash(cmd, inBytes)
+        case Mode.SerializeTx => Actions.doSerializeTx(inBytes)
+        case Mode.SignTx      => maybeFindKeyPair(cmd).flatMap(Actions.doSignTx(_, inBytes))
+        case Mode.SmokeTest   => Actions.doSmokeTest()
       }
 
       result match {
@@ -163,17 +167,24 @@ object UtilApp {
           .text("Sign bytes with provided private key")
           .action((_, c) => c.copy(mode = Mode.SignBytes)),
         cmd("create-keys")
-          .text("Generate key pair from seed")
+          .text(
+            "Generate an account and the hearth.miner.accounts entry that mines with it, from a BIP-39 mnemonic read from the input (generated when the input is empty)"
+          )
           .action((_, c) => c.copy(mode = Mode.CreateKeyPair))
           .children(
             opt[String]("seed-type")
+              .text("mnemonic (--mnemonic, or a generated one) or account (a raw seed on stdin)")
               .validate {
-                case "account" | "wallet" => success
-                case _                    => failure("Invalid seed format")
+                case "mnemonic" | "account" => success
+                case _                      => failure("Invalid seed format")
               }
               .action((t, c) => c.copy(keyPairOptions = c.keyPairOptions.copy(seedType = t))),
             opt[Int]("nonce")
-              .action((n, c) => c.copy(keyPairOptions = c.keyPairOptions.copy(nonce = n)))
+              .text("Derivation account of the mnemonic")
+              .action((n, c) => c.copy(keyPairOptions = c.keyPairOptions.copy(nonce = n))),
+            opt[String]("mnemonic")
+              .text("BIP-39 phrase to derive the account from; a fresh 24-word one is generated when this is omitted")
+              .action((m, c) => c.copy(keyPairOptions = c.keyPairOptions.copy(mnemonic = Some(m))))
           )
       ),
       cmd("transaction").children(
@@ -208,7 +219,7 @@ object UtilApp {
     )
   }
 
-  private object Actions {
+  private[utils] object Actions {
     type ActionResult = Either[String, Array[Byte]]
 
     def doSign(keyPair: SigningKey, data: Array[Byte]): ActionResult =
@@ -221,28 +232,73 @@ object UtilApp {
         "Invalid signature"
       )
 
-    def doCreateKeyPair(c: Command, data: Array[Byte]): ActionResult = {
-      import tech.hearth.utils.byteStrFormat
-      (c.keyPairOptions.seedType match {
-        case "account" =>
-          Right(SigningKey.fromSeed(data))
-        case "wallet" =>
-          Wallet(WalletSettings(None, Some("123"), Some(ByteStr(data))))
-            .generateNewAccount(c.keyPairOptions.nonce)
-            .toRight("Could not generate account")
-      }).left
-        .map(_.toString)
-        .map(kp =>
-          Json.toBytes(
-            Json.obj(
-              "publicKey"  -> kp.publicKey,
-              "address"    -> kp.toAddress.toString,
-              "walletSeed" -> ByteStr(data),
-              "nonce"      -> c.keyPairOptions.nonce
+    def doCreateKeyPair(c: Command, data: => Array[Byte]): ActionResult = c.keyPairOptions.seedType match {
+      case "mnemonic" =>
+        val phrase = c.keyPairOptions.mnemonic.map(_.trim).filter(_.nonEmpty)
+        doCreateMiningAccount(phrase.getOrElse(Mnemonic.generate()), c.keyPairOptions.nonce)
+      case "account" =>
+        val seed = data
+        Right(accountJson(SigningKey.fromSeed(seed), seed))
+      case seedType => Left(s"Invalid seed type: $seedType")
+    }
+
+    /** An account and the two interchangeable `hearth.miner.accounts` entries that mine with it: the phrase plus its
+      * derivation accounts, and the key material that derivation produces, for a node that should not hold the phrase.
+      * JSON is valid HOCON, so either entry pastes into the node config as printed. The public keys are what a
+      * CommitToGeneration transaction registers, so they are reported too.
+      */
+    private def doCreateMiningAccount(mnemonic: String, nonce: Int): ActionResult =
+      Bip39.validate(mnemonic) match {
+        case invalid: Bip39.ValidationResult.Invalid => Left(s"Invalid mnemonic: ${invalid.reason()}")
+        case _ =>
+          val signingKeySeed = Mnemonic.Keys.signingKeySeed(mnemonic, nonce)
+          val vrfKeySeed     = Mnemonic.Keys.vrfKeySeed(mnemonic, nonce)
+          val blsKeyScalar   = Mnemonic.Keys.blsKeyScalar(mnemonic, nonce)
+
+          val signingKey = SigningKey.fromSeed(signingKeySeed)
+          val vrfKey     = VrfKey.fromSeed(vrfKeySeed)
+          val blsKey     = BlsKeyPair.fromScalar(blsKeyScalar)
+
+          Right(
+            printed(
+              Json.obj(
+                "mnemonic"     -> mnemonic,
+                "address"      -> signingKey.toAddress.toString,
+                "publicKey"    -> PublicKey(signingKey.publicKey()),
+                "vrfPublicKey" -> Hex.encode(vrfKey.publicKey()),
+                "blsPublicKey" -> blsKey.publicKey.base16,
+                "minerAccount" -> Json.obj(
+                  "mnemonic"        -> mnemonic,
+                  "signing-account" -> nonce,
+                  "vrf-account"     -> nonce,
+                  "bls-account"     -> nonce
+                ),
+                "minerAccountKeys" -> Json.obj(
+                  "signing-key-seed" -> Hex.encode(signingKeySeed),
+                  "vrf-key"          -> Hex.encode(vrfKeySeed),
+                  "bls-key-scalar"   -> Hex.encode(blsKeyScalar)
+                )
+              )
             )
           )
+      }
+
+    /** A bare account built from a raw seed, which has a signing key and nothing else: no VRF or BLS key comes out of
+      * one, so there is no mining account to report for it.
+      */
+    private def accountJson(kp: SigningKey, seed: Array[Byte]): Array[Byte] = {
+      import tech.hearth.utils.byteStrFormat
+      printed(
+        Json.obj(
+          "publicKey" -> PublicKey(kp.publicKey()),
+          "address"   -> kp.toAddress.toString,
+          "seed"      -> ByteStr(seed)
         )
+      )
     }
+
+    /** Keys are read off a terminal and pasted into a config, so they are printed indented and on their own line. */
+    private def printed(json: JsObject): Array[Byte] = (Json.prettyPrint(json) + "\n").utf8Bytes
 
     def doHash(c: Command, data: Array[Byte]): ActionResult = c.hashOptions.mode match {
       case "fast"   => Right(tech.hearth.crypto.fastHash(data))
@@ -295,18 +351,18 @@ object UtilApp {
 
   private object IO {
     def readInput(c: Command): Array[Byte] = {
-      val inputStream = c.inputData match {
+      val bytes = c.inputData match {
         case Input.StdIn =>
-          System.in
+          ByteStreams.toByteArray(System.in)
 
         case Input.Str(s) =>
-          new ByteArrayInputStream(s.utf8Bytes)
+          s.utf8Bytes
 
         case Input.File(file) =>
-          new FileInputStream(file)
+          Files.readAllBytes(Paths.get(file))
       }
 
-      toPlainBytes(c.inFormat, ByteStreams.toByteArray(inputStream))
+      toPlainBytes(c.inFormat, bytes)
     }
 
     def writeOutput(c: Command, result: Array[Byte]): Unit = {
