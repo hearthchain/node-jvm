@@ -38,7 +38,7 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
     val account                     = accountGen.sample.get
     // A base target high enough that this account's turn comes within the wait below: the delay PoS gives it is
     // inversely proportional to it, and TestBlock's default of 2 puts the next attempt ten minutes out
-    val genesis = TestBlock.create(System.currentTimeMillis(), TestBlock.randomSignature(), Nil, baseTarget = 1000000L).block
+    val genesis = TestBlock.create(System.currentTimeMillis(), TestBlock.randomReference(), Nil, baseTarget = 1000000L).block
     val blockchainUpdater = new EmptyBlockchain with BlockchainUpdater with NG {
       override def height: Int = 1
 

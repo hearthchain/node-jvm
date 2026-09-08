@@ -4,14 +4,13 @@ import tech.hearth.account.PublicKey
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
-import tech.hearth.crypto.*
 import tech.hearth.db.WithState
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.transaction.{BlockchainUpdater, TxHelpers}
 import tech.hearth.crypto.Ecvrf
 
 trait HistoryTest {
-  val genesisBlock: Block = TestBlock.withReference(ByteStr(Array.fill(SignatureLength)(0: Byte))).block
+  val genesisBlock: Block = TestBlock.withReference(ByteStr(Array.fill(Block.ReferenceLength)(0: Byte))).block
 
   /** The VRF proof the next block has to carry.
     *

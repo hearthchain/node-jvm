@@ -9,9 +9,9 @@ class MicroBlockInvSpecSpec extends FreeSpec {
 
   private val microBlockInvGen: Gen[MicroBlockInv] = for {
     acc          <- accountGen
-    totalSig     <- byteArrayGen(SignatureLength)
-    prevBlockSig <- byteArrayGen(SignatureLength)
-  } yield MicroBlockInv(acc, ByteStr(totalSig), ByteStr(prevBlockSig))
+    totalBlockId <- byteArrayGen(DigestLength)
+    reference    <- byteArrayGen(DigestLength)
+  } yield MicroBlockInv(acc, ByteStr(totalBlockId), ByteStr(reference))
 
   "MicroBlockInvMessageSpec" - {
     import MicroBlockInvSpec.*

@@ -59,7 +59,7 @@ object RawBytes {
 
 case class BlockForged(block: Block) extends Message
 
-case class MicroBlockRequest(totalBlockSig: ByteStr) extends Message
+case class MicroBlockRequest(totalBlockId: ByteStr) extends Message
 
 case class MicroBlockResponse(microblock: MicroBlock, totalBlockId: BlockId) extends Message {
   override def toString: String = microblock.stringRepr(totalBlockId)

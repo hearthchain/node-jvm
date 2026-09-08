@@ -93,13 +93,13 @@ trait BlockIdSeqSpec[A <: AnyRef] extends MessageSpec[A] {
 
   def unwrap(v: A): Seq[Array[Byte]]
 
-  override val maxLength: Int = Ints.BYTES + (200 * SignatureLength) + 200
+  override val maxLength: Int = Ints.BYTES + (200 * DigestLength) + 200
 
   override def deserializeData(bytes: Array[Byte]): Try[A] = Try {
     val lengthBytes = bytes.take(Ints.BYTES)
     val length      = Ints.fromByteArray(lengthBytes)
 
-    require(bytes.length <= Ints.BYTES + (length * SignatureLength) + length, "Data does not match length")
+    require(bytes.length <= Ints.BYTES + (length * DigestLength) + length, "Data does not match length")
 
     val (_, arrays) = (0 until length).foldLeft((Ints.BYTES, Seq.empty[Array[Byte]])) { case ((pos, arrays), _) =>
       val length = bytes(pos)
@@ -136,9 +136,9 @@ object BlockIdsSpec extends BlockIdSeqSpec[BlockIds] {
 object GetBlockSpec extends MessageSpec[GetBlock] {
   override val messageCode: MessageCode = 22: Byte
 
-  override val maxLength: Int = SignatureLength
+  override val maxLength: Int = Block.ReferenceLength
 
-  override def serializeData(signature: GetBlock): Array[Byte] = signature.id.arr
+  override def serializeData(request: GetBlock): Array[Byte] = request.id.arr
 
   override def deserializeData(bytes: Array[Byte]): Try[GetBlock] = Try {
     require(Block.validateReferenceLength(bytes.length), "Data does not match length")
@@ -167,25 +167,16 @@ object MicroBlockInvSpec extends MessageSpec[MicroBlockInv] {
   override val messageCode: MessageCode = 26: Byte
 
   override def deserializeData(bytes: Array[Byte]): Try[MicroBlockInv] =
-    Try(
-      bytes.length match {
-        case l if l == (KeyLength + SignatureLength * 3) =>
-          MicroBlockInv(
-            sender = PublicKey.apply(bytes.take(KeyLength)),
-            totalBlockId = ByteStr(bytes.view.slice(KeyLength, KeyLength + SignatureLength).toArray),
-            reference = ByteStr(bytes.view.slice(KeyLength + SignatureLength, KeyLength + SignatureLength * 2).toArray),
-            signature = ByteStr(bytes.view.slice(KeyLength + SignatureLength * 2, KeyLength + SignatureLength * 3).toArray)
-          )
+    Try {
+      require(bytes.length == KeyLength + (DigestLength * 2) + SignatureLength, "Data does not match length")
 
-        case l if l == (KeyLength + (DigestLength * 2) + SignatureLength) =>
-          MicroBlockInv(
-            sender = PublicKey.apply(bytes.take(KeyLength)),
-            totalBlockId = ByteStr(bytes.view.slice(KeyLength, KeyLength + DigestLength).toArray),
-            reference = ByteStr(bytes.view.slice(KeyLength + DigestLength, KeyLength + DigestLength * 2).toArray),
-            signature = ByteStr(bytes.view.slice(KeyLength + DigestLength * 2, KeyLength + (DigestLength * 2) + SignatureLength).toArray)
-          )
-      }
-    )
+      MicroBlockInv(
+        sender = PublicKey.apply(bytes.take(KeyLength)),
+        totalBlockId = ByteStr(bytes.view.slice(KeyLength, KeyLength + DigestLength).toArray),
+        reference = ByteStr(bytes.view.slice(KeyLength + DigestLength, KeyLength + DigestLength * 2).toArray),
+        signature = ByteStr(bytes.view.slice(KeyLength + DigestLength * 2, KeyLength + (DigestLength * 2) + SignatureLength).toArray)
+      )
+    }
 
   override def serializeData(inv: MicroBlockInv): Array[Byte] =
     inv.sender.arr ++ inv.totalBlockId.arr ++ inv.reference.arr ++ inv.signature.arr
@@ -196,12 +187,14 @@ object MicroBlockInvSpec extends MessageSpec[MicroBlockInv] {
 object MicroBlockRequestSpec extends MessageSpec[MicroBlockRequest] {
   override val messageCode: MessageCode = 27: Byte
 
-  override def deserializeData(bytes: Array[Byte]): Try[MicroBlockRequest] =
-    Try(MicroBlockRequest(ByteStr(bytes)))
+  override def deserializeData(bytes: Array[Byte]): Try[MicroBlockRequest] = Try {
+    require(Block.validateReferenceLength(bytes.length), "Data does not match length")
+    MicroBlockRequest(ByteStr(bytes))
+  }
 
-  override def serializeData(req: MicroBlockRequest): Array[Byte] = req.totalBlockSig.arr
+  override def serializeData(req: MicroBlockRequest): Array[Byte] = req.totalBlockId.arr
 
-  override val maxLength: Int = 500
+  override val maxLength: Int = Block.ReferenceLength
 }
 
 object PBBlockSpec extends MessageSpec[Block] {
@@ -243,7 +236,7 @@ object PBTransactionSpec extends MessageSpec[Transaction] {
 object GetSnapsnotSpec extends MessageSpec[GetSnapshot] {
   override val messageCode: MessageCode = 34: Byte
 
-  override val maxLength: Int = SignatureLength
+  override val maxLength: Int = Block.ReferenceLength
 
   override def serializeData(msg: GetSnapshot): Array[Byte] = msg.blockId.arr
 
@@ -256,12 +249,14 @@ object GetSnapsnotSpec extends MessageSpec[GetSnapshot] {
 object MicroSnapshotRequestSpec extends MessageSpec[MicroSnapshotRequest] {
   override val messageCode: MessageCode = 35: Byte
 
-  override def deserializeData(bytes: Array[Byte]): Try[MicroSnapshotRequest] =
-    Try(MicroSnapshotRequest(ByteStr(bytes)))
+  override def deserializeData(bytes: Array[Byte]): Try[MicroSnapshotRequest] = Try {
+    require(Block.validateReferenceLength(bytes.length), "Data does not match length")
+    MicroSnapshotRequest(ByteStr(bytes))
+  }
 
   override def serializeData(req: MicroSnapshotRequest): Array[Byte] = req.totalBlockId.arr
 
-  override val maxLength: Int = SignatureLength
+  override val maxLength: Int = Block.ReferenceLength
 }
 
 object BlockSnapshotResponseSpec extends MessageSpec[BlockSnapshotResponse] {

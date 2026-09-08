@@ -118,8 +118,7 @@ object Block {
     ByteStr(crypto.fastHash(PBBlocks.protobuf(h).toByteArray))
   }
 
-  def validateReferenceLength(length: Int): Boolean =
-    length == DigestLength || length == SignatureLength
+  def validateReferenceLength(length: Int): Boolean = length == ReferenceLength
 
   def create(
       timestamp: Long,

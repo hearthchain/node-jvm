@@ -2,6 +2,7 @@ package tech.hearth.network
 
 import com.google.protobuf.{ByteString, CodedOutputStream, WireFormat}
 import tech.hearth.account.NetworkId
+import tech.hearth.common.state.ByteStr
 import tech.hearth.mining.MiningConstraints
 import tech.hearth.protobuf.block.*
 import tech.hearth.protobuf.transaction.*
@@ -80,5 +81,27 @@ class BasicMessagesRepoSpec extends FreeSpec {
     val size = maxSizeTransaction.serializedSize + dataPBPrefix.toByteArray.length + 1
 
     size should be <= PBTransactionSpec.maxLength
+  }
+
+  "id-carrying specs reject a 64-byte id" - {
+    "GetBlockSpec" in {
+      GetBlockSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "GetSnapsnotSpec" in {
+      GetSnapsnotSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "MicroBlockRequestSpec" in {
+      MicroBlockRequestSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "MicroSnapshotRequestSpec" in {
+      MicroSnapshotRequestSpec.deserializeData(bytes64gen.sample.get) should be a Symbol("failure")
+    }
+
+    "GetBlockIdsSpec" in {
+      GetBlockIdsSpec.deserializeData(GetBlockIdsSpec.serializeData(GetBlockIds(Seq(ByteStr(bytes64gen.sample.get))))) should be a Symbol("failure")
+    }
   }
 }

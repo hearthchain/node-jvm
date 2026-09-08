@@ -7,7 +7,7 @@ import tech.hearth.block.Block.BlockId
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.crypto.bls.BlsKeyPair
-import tech.hearth.crypto.{DigestLength, SignatureLength}
+import tech.hearth.crypto.DigestLength
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.diffs.FeeValidation.{FeeConstants, FeeUnit}
 import tech.hearth.state.{Height, TransactionId}
@@ -542,5 +542,5 @@ object TxHelpers {
       .explicitGet()
 
   def randomId: TransactionId = TransactionId(ByteStr(Array.fill(DigestLength)(ThreadLocalRandom.current().nextInt(Byte.MaxValue).toByte)))
-  def randomBlockId: BlockId  = ByteStr(Array.fill(SignatureLength)(ThreadLocalRandom.current().nextInt(Byte.MaxValue).toByte))
+  def randomBlockId: BlockId  = ByteStr(Array.fill(DigestLength)(ThreadLocalRandom.current().nextInt(Byte.MaxValue).toByte))
 }
