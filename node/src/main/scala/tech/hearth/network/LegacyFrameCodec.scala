@@ -12,14 +12,17 @@ import tech.hearth.utils.ScorexLogging
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled.*
 import io.netty.channel.ChannelHandlerContext
-import io.netty.handler.codec.ByteToMessageCodec
+import io.netty.handler.codec.MessageToMessageCodec
 
 import java.util
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.DurationConverters.*
 import scala.util.control.NonFatal
 
-abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessageCodec[Any] with ScorexLogging {
+/** The pipeline's outer length prefix (see NetworkServer) delivers exactly one message here, so a frame carries its
+  * own boundaries: the data length is what is left after the code and the checksum.
+  */
+abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends MessageToMessageCodec[ByteBuf, Any] with ScorexLogging {
 
   protected def filterBySpecOrChecksum(spec: BasicMessagesRepo.Spec, checkSum: Array[Byte]): Boolean = true
   protected def specsByCodes: Map[Byte, BasicMessagesRepo.Spec]
@@ -31,41 +34,44 @@ abstract class LegacyFrameCodec(peerDatabase: PeerDatabase) extends ByteToMessag
       val code = in.readByte()
       require(specsByCodes.contains(code), s"Unexpected message code $code")
 
-      val spec   = specsByCodes(code)
-      val length = in.readInt()
-      require(length <= spec.maxLength, s"${spec.messageName} message length $length exceeds ${spec.maxLength}")
+      val spec = specsByCodes(code)
 
-      val dataBytes = new Array[Byte](length)
-      val pushToPipeline = length == 0 || {
+      if (in.readableBytes() == 0) out.add(rawDataToMessage(MessageRawData(code, Array.emptyByteArray)))
+      else {
+        val length = in.readableBytes() - ChecksumLength
+        require(length > 0, s"${spec.messageName} message is not long enough to carry a checksum")
+        require(length <= spec.maxLength, s"${spec.messageName} message length $length exceeds ${spec.maxLength}")
+
         val declaredChecksum = in.readSlice(ChecksumLength)
+        val dataBytes        = new Array[Byte](length)
         in.readBytes(dataBytes)
+
         val rawChecksum    = crypto.fastHash(dataBytes)
         val actualChecksum = wrappedBuffer(rawChecksum, 0, ChecksumLength)
 
         require(declaredChecksum.equals(actualChecksum), "invalid checksum")
         actualChecksum.release()
 
-        filterBySpecOrChecksum(spec, rawChecksum)
+        if (filterBySpecOrChecksum(spec, rawChecksum)) out.add(rawDataToMessage(MessageRawData(code, dataBytes)))
       }
-
-      if (pushToPipeline) out.add(rawDataToMessage(MessageRawData(code, dataBytes)))
     } catch {
       case NonFatal(e) =>
         log.warn(s"${id(ctx)} Malformed network message", e)
         peerDatabase.blacklistAndClose(ctx.channel(), s"Malformed network message: $e")
     }
 
-  override def encode(ctx: ChannelHandlerContext, msg1: Any, out: ByteBuf): Unit = {
-    val msg = messageToRawData(msg1)
+  override def encode(ctx: ChannelHandlerContext, msg1: Any, out: util.List[AnyRef]): Unit = {
+    val msg  = messageToRawData(msg1)
+    val data = msg.data
+    val buf  = ctx.alloc().buffer(1 + (if (data.isEmpty) 0 else ChecksumLength + data.length))
 
-    out.writeByte(msg.code)
-    if (msg.data.length > 0) {
-      out.writeInt(msg.data.length)
-      out.writeBytes(crypto.fastHash(msg.data), 0, ChecksumLength)
-      out.writeBytes(msg.data)
-    } else {
-      out.writeInt(0)
+    buf.writeByte(msg.code)
+    if (data.nonEmpty) {
+      buf.writeBytes(crypto.fastHash(data), 0, ChecksumLength)
+      buf.writeBytes(data)
     }
+
+    out.add(buf)
   }
 }
 
