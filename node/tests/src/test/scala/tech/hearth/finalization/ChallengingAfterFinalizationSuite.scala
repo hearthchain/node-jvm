@@ -14,7 +14,7 @@ import tech.hearth.wallet.Wallet
 import org.scalatest.time.SpanSugar.convertLongToGrainOfTime
 
 class ChallengingAfterFinalizationSuite extends BaseFinalizationSpec, TestSchedulerOps {
-  private val thisNodeAcc        = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
+  private val thisNodeAcc        = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 0)
   private val committedGenerator = TxHelpers.defaultSigner
 
   private val baseSettings = DomainPresets.DeterministicFinality

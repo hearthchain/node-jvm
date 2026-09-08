@@ -107,6 +107,11 @@ entry of its own in that entry, would otherwise look like it holds 0 and get wro
 A predefined snapshot beyond genesis also rejects an asset id that already exists on chain
 (`blockchain.assetDescription(id).isEmpty`), a check genesis itself never needs since state is empty at that point.
 
+`GenesisAssetSettings.id` is base16 *text*: it becomes a `ByteStr` only in `PredefinedSnapshot.issuedAssets`, which
+decodes it and rejects anything that is not exactly `AssetIdLength` (32) bytes, the way the generator entries' keys
+are handled. These settings feed nothing but that one builder, so a malformed id surfaces when the snapshot is built
+(startup's `checkGenesis`, or `BlockDiffer` at that height) rather than when the config is parsed.
+
 Rollback needs no special-casing for a non-genesis predefined snapshot: `RocksDBWriter`/`Caches` already undo
 whatever got persisted at a height purely from what is there, not from why. The one genesis-specific branch anywhere
 (committed generators are effective for the *current* period at `GenesisBlockHeight`, the *next* period everywhere

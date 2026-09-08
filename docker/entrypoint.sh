@@ -18,8 +18,8 @@ if [ "$HEARTH_LOG_JAVA_OPTS" = "true" ] ; then
   echo "JAVA_OPTS=${JAVA_OPTS}" | tee -a ${HEARTH_LOG}/hearth.log
 fi
 
-if [ -n "$HEARTH_WALLET_SEED" ] ; then
-  JAVA_OPTS="-Dhearth.wallet.seed=${HEARTH_WALLET_SEED} ${JAVA_OPTS}"
+if [ -n "$HEARTH_WALLET_MNEMONIC" ] ; then
+  JAVA_OPTS="-Dhearth.wallet.mnemonic=\"${HEARTH_WALLET_MNEMONIC}\" ${JAVA_OPTS}"
 fi
 
 if [ -n "$HEARTH_WALLET_PASSWORD" ] ; then

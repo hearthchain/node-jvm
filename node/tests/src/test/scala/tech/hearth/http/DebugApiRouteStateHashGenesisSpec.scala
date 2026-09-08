@@ -31,7 +31,7 @@ class DebugApiRouteStateHashGenesisSpec
 
   override def settings: HearthSettings = DomainPresets.DeterministicFinality
     .copy(
-      dbSettings = DomainPresets.DeterministicFinality.dbSettings.copy(storeStateHashes = true),
+      dbSettings = DomainPresets.DeterministicFinality.dbSettings,
       restAPISettings = restAPISettings
     )
 

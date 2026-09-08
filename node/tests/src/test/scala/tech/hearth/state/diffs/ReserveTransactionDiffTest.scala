@@ -38,8 +38,8 @@ class ReserveTransactionDiffTest extends FreeSpec with WithDomain {
       DeterministicFinality,
       Seq(AddrWithBalance(sender.toAddress, assets = Map(asset -> quantity, otherAsset -> quantity))),
       assets = Seq(
-        GenesisAssetSettings(asset.id, "RESV", decimals = 0, quantity = quantity, minFee = TestValues.fee),
-        GenesisAssetSettings(otherAsset.id, "RESV2", decimals = 0, quantity = quantity, minFee = TestValues.fee)
+        GenesisAssetSettings(asset.id.toString, "RESV", decimals = 0, quantity = quantity, minFee = TestValues.fee),
+        GenesisAssetSettings(otherAsset.id.toString, "RESV2", decimals = 0, quantity = quantity, minFee = TestValues.fee)
       )
     )(f)
 

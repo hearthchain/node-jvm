@@ -1,7 +1,6 @@
 package tech.hearth
 
-import com.google.common.primitives.Longs
-import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto.Mnemonic
 import tech.hearth.settings.WalletSettings
 import tech.hearth.wallet.Wallet
 
@@ -10,5 +9,5 @@ trait TestWallet {
 }
 
 object TestWallet {
-  private[TestWallet] lazy val instance = Wallet(WalletSettings(None, Some("123"), Some(ByteStr(Longs.toByteArray(System.nanoTime())))))
+  private[TestWallet] lazy val instance = Wallet(WalletSettings(None, Some("123"), Some(Mnemonic.generate())))
 }

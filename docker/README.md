@@ -51,7 +51,7 @@ The following environment variables can be passed to the container:
 
 | Env variable              | Description                                                                                                                                                                                                  |
 |---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `HEARTH_WALLET_SEED`      | Hex encoded seed, sets `-Dhearth.wallet.seed` system property.                                                                                                                                               |
+| `HEARTH_WALLET_MNEMONIC`  | BIP-39 phrase the wallet derives its accounts from, sets `-Dhearth.wallet.mnemonic` system property.                                                                                                                                               |
 | `HEARTH_WALLET_PASSWORD`  | Password for the wallet file, sets `-Dhearth.wallet.password` system property.                                                                                                                               |
 | `HEARTH_LOG_LEVEL`        | Node stdout logging level. Available values: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`.                                                                                                               |
 | `HEARTH_HEAP_SIZE`        | Default Java Heap Size limit in -X Command-line Options notation (`-Xmx=[your value]`). More details [here](https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html).           |

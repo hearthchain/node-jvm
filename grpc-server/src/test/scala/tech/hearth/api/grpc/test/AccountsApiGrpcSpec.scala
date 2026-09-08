@@ -41,7 +41,7 @@ class AccountsApiGrpcSpec extends FreeSpec with BeforeAndAfterAll with DiffMatch
     withDomain(
       DomainPresets.RideV6,
       balances = Seq(AddrWithBalance(sender.toAddress, assets = Map(asset -> assetTransferAmount.toLong))),
-      assets = Seq(GenesisAssetSettings(asset.id, "asset", 0, assetTransferAmount, TestValues.fee))
+      assets = Seq(GenesisAssetSettings(asset.id.toString, "asset", 0, assetTransferAmount, TestValues.fee))
     ) { d =>
       val grpcApi = getGrpcApi(d)
 

@@ -77,13 +77,15 @@ class AssetsRouteSpec
       minFee: Long = TestValues.fee
   ): GenesisAssetSettings =
     GenesisAssetSettings(
-      id = ByteStr.fill(AssetIdLength)(index.toByte),
+      id = ByteStr.fill(AssetIdLength)(index.toByte).toString,
       name = "test",
       decimals = decimals,
       quantity = quantity,
       minFee = minFee,
       description = "description"
     )
+
+  private def issued(asset: GenesisAssetSettings): IssuedAsset = IssuedAsset(ByteStr.decodeBase16(asset.id).get)
 
   private def descriptionOf(asset: GenesisAssetSettings, sequenceInBlock: Int): AssetDescription =
     AssetDescription(
@@ -100,17 +102,17 @@ class AssetsRouteSpec
     "multiple ids" in {
       val assets = (1 to 3).map(genesisAsset(_))
       routeTest(
-        balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
+        balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, assets.map(a => issued(a) -> a.quantity).toMap)),
         assets = assets
       ) { (_, route) =>
-        route.anyParamTest(routePath(s"/balance/${assetIssuer.toAddress}"), "id")(assets.reverseIterator.map(_.id.toString).toSeq*) {
+        route.anyParamTest(routePath(s"/balance/${assetIssuer.toAddress}"), "id")(assets.reverseIterator.map(_.id).toSeq*) {
           status shouldBe StatusCodes.OK
           (responseAs[JsObject] \ "balances")
             .as[Seq[JsObject]]
             .zip(assets.reverse)
             .foreach { case (jso, asset) =>
               (jso \ "balance").as[Long] shouldEqual asset.quantity
-              (jso \ "assetId").as[ByteStr] shouldEqual asset.id
+              (jso \ "assetId").as[String] shouldEqual asset.id
             }
         }
 
@@ -138,7 +140,7 @@ class AssetsRouteSpec
           status shouldBe StatusCodes.OK
           val allBalances = (responseAs[JsValue] \ "balances")
             .as[Seq[JsObject]]
-            .map(jso => (jso \ "assetId").as[ByteStr] -> (jso \ "balance").as[Long])
+            .map(jso => (jso \ "assetId").as[String] -> (jso \ "balance").as[Long])
             .toMap
 
           allBalances shouldEqual assets.map(a => a.id -> a.quantity).toMap
@@ -153,18 +155,18 @@ class AssetsRouteSpec
     routeTest(
       RideV6,
       AddrWithBalance
-        .enoughBalances(defaultSigner) :+ AddrWithBalance(assetIssuer.toAddress, 10.hearth, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap),
+        .enoughBalances(defaultSigner) :+ AddrWithBalance(assetIssuer.toAddress, 10.hearth, assets.map(a => issued(a) -> a.quantity).toMap),
       assets
     ) { (d, route) =>
       assets.zipWithIndex.foreach { case (asset, idx) =>
-        checkDetails(route, asset.id.toString, descriptionOf(asset, sequenceInBlock = idx + 1))
+        checkDetails(route, asset.id, descriptionOf(asset, sequenceInBlock = idx + 1))
       }
 
       // Still the same once the genesis block is no longer the liquid one
       d.appendBlock()
       d.appendBlock()
       assets.zipWithIndex.foreach { case (asset, idx) =>
-        checkDetails(route, asset.id.toString, descriptionOf(asset, sequenceInBlock = idx + 1))
+        checkDetails(route, asset.id, descriptionOf(asset, sequenceInBlock = idx + 1))
       }
     }
   }
@@ -176,10 +178,10 @@ class AssetsRouteSpec
     val asset = genesisAsset(1, quantity = transfers.map(_._2).sum)
 
     routeTest(
-      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 10.hearth, Map(IssuedAsset(asset.id) -> asset.quantity))),
+      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 10.hearth, Map(issued(asset) -> asset.quantity))),
       assets = Seq(asset)
     ) { (d, route) =>
-      d.appendBlock(TxHelpers.massTransfer(assetIssuer, transfers, IssuedAsset(asset.id), 0.01.hearth))
+      d.appendBlock(TxHelpers.massTransfer(assetIssuer, transfers, issued(asset), 0.01.hearth))
       d.appendBlock()
 
       Get(routePath(s"/${asset.id}/distribution/2/limit/$MaxAddressesPerRequest")) ~> route ~> check {
@@ -204,13 +206,13 @@ class AssetsRouteSpec
   routePath(s"/details/{id}") in {
     val assets = Seq(genesisAsset(1), genesisAsset(2))
     routeTest(
-      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, assets.map(a => IssuedAsset(a.id) -> a.quantity).toMap)),
+      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, assets.map(a => issued(a) -> a.quantity).toMap)),
       assets = assets
     ) { (_, route) =>
       assets.zipWithIndex.foreach { case (asset, idx) =>
-        route.anyParamTest(routePath("/details"), "id")(asset.id.toString) {
+        route.anyParamTest(routePath("/details"), "id")(asset.id) {
           status shouldBe StatusCodes.OK
-          checkResponse(descriptionOf(asset, sequenceInBlock = idx + 1), asset.id.toString, responseAs[Seq[JsObject]].head)
+          checkResponse(descriptionOf(asset, sequenceInBlock = idx + 1), asset.id, responseAs[Seq[JsObject]].head)
         }
       }
     }
@@ -219,7 +221,7 @@ class AssetsRouteSpec
   routePath(s"/details - handles assets ids limit") in {
     val asset = genesisAsset(1)
     routeTest(
-      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, Map(IssuedAsset(asset.id) -> asset.quantity))),
+      balances = Seq(AddrWithBalance(assetIssuer.toAddress, 100.hearth, Map(issued(asset) -> asset.quantity))),
       assets = Seq(asset)
     ) { (_, route) =>
       val inputLimitErrMsg = TooBigArrayAllocation(restAPISettings.assetDetailsLimit).message
@@ -236,11 +238,11 @@ class AssetsRouteSpec
         val result = responseAs[JsArray].value
         result.size shouldBe idsCount
         // The same id repeated, so every entry describes that one asset
-        result.foreach(json => checkResponse(descriptionOf(asset, sequenceInBlock = 1), asset.id.toString, json.as[JsObject]))
+        result.foreach(json => checkResponse(descriptionOf(asset, sequenceInBlock = 1), asset.id, json.as[JsObject]))
       }
 
-      val maxLimitIds      = Seq.fill(restAPISettings.assetDetailsLimit)(asset.id.toString)
-      val moreThanLimitIds = asset.id.toString +: maxLimitIds
+      val maxLimitIds      = Seq.fill(restAPISettings.assetDetailsLimit)(asset.id)
+      val moreThanLimitIds = asset.id +: maxLimitIds
 
       Get(routePath(s"/details?${maxLimitIds.map("id=" + _).mkString("&")}")) ~> route ~> check(checkAllAreThisAsset(maxLimitIds.size))
       Get(routePath(s"/details?${moreThanLimitIds.map("id=" + _).mkString("&")}")) ~> route ~> check(checkErrorResponse(inputLimitErrMsg))

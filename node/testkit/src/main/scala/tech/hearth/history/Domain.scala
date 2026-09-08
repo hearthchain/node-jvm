@@ -39,7 +39,7 @@ import monix.execution.ExecutionModel.SynchronousExecution
 import monix.execution.schedulers.SchedulerService
 import org.rocksdb.RocksDB
 import org.scalatest.matchers.should.Matchers.*
-import tech.hearth.crypto.{Hex, SigningKey, VrfKey}
+import tech.hearth.crypto.{Hex, Mnemonic, SigningKey, VrfKey}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.*
@@ -93,7 +93,7 @@ case class Domain(
   def createBlockEndorser(allChannels: ChannelGroup, storage: EndorsementStorage = endorsementStorage): BlockEndorser =
     new BlockEndorser.InMemory(settings.synchronizationSettings.maxRollback, blockchain, generatorKeys, storage, allChannels)
 
-  lazy val wallet: Wallet = Wallet(settings.walletSettings.copy(file = None, seed = Some(ByteStr(DefaultWalletSeed))))
+  lazy val wallet: Wallet = Wallet(settings.walletSettings.copy(file = None, mnemonic = Some(DefaultWalletMnemonic)))
 
   lazy val blockAppender: Block => Task[Either[ValidationError, BlockApplyResult]] =
     BlockAppender(blockchain, testTime, utxPool, posSelector, BlockEndorser.Disabled, scheduler)(_, None)
@@ -610,17 +610,24 @@ case class Domain(
 }
 
 object Domain {
-  val DefaultWalletSeed = "wallet".getBytes
+
+  /** A fixed phrase for the domain's wallet: the BIP-39 test vector, so the accounts it derives are checkable against
+    * any other implementation of the standard.
+    */
+  val DefaultWalletMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+
+  /** A second phrase, for a generator that belongs to some other node's wallet. */
+  val OtherWalletMnemonic = "legal winner thank year wave sausage worth useful legal winner thank yellow"
 
   /** The `hearth.miner.accounts` entry for one of this domain's wallet accounts. A miner takes its accounts from the
     * settings and nowhere else, so an account the wallet holds is not one it will mine with; the VRF and BLS seeds are
     * the ones `TxHelpers` derives, because those are the keys the genesis snapshot commits for a generator.
     */
   def walletMiningAccount(nonce: Int): MiningAccountSettings = {
-    val account = Wallet.generateNewAccount(DefaultWalletSeed, nonce)
+    val account = Wallet.account(DefaultWalletMnemonic, nonce)
     MiningAccountSettings(
       mnemonic = None,
-      signingKeySeed = Some(Hex.encode(Wallet.generateAccountSeed(DefaultWalletSeed, nonce))),
+      signingKeySeed = Some(Hex.encode(Mnemonic.Keys.signingKeySeed(DefaultWalletMnemonic, nonce))),
       vrfKey = Some(Hex.encode(TxHelpers.vrfSeedOf(account))),
       blsKey = Some(Hex.encode(TxHelpers.blsSeedOf(account)))
     )

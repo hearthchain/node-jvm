@@ -186,7 +186,7 @@ mining attempts spanned a different number of blocks, leaving the miner's balanc
 ### node-it: signing over the API
 
 `/transactions/sign` (and `/transactions/sign/{signerAddress}`) resolves its signer only through the node's own wallet,
-which derives its accounts from `hearth.wallet.seed` - a *different* seed from the `account-seed` behind `Node.address`.
+which derives its accounts from `hearth.wallet.mnemonic` - unrelated to the `account-seed` behind `Node.address`.
 The miner's own address is therefore never in it, and signing as `sender.address` fails with
 `no private key for sender address in wallet`. A suite that needs server-side signing has to use an address from
 `createAddressServerSide()` and fund it itself if the signed transaction is then broadcast. That address's public key
@@ -387,7 +387,8 @@ the total block id to compare against.
 
 Nothing issues an asset whose id a test hardcodes, so trading it fails with `Assets should be issued before they can be
 traded`. Declare it in the genesis snapshot instead — `withDomain(..., assets = Seq(GenesisAssetSettings(...)))`, and
-the same parameter on `assertDiffEi`/`assertLeft`. `PredefinedSnapshot` rejects a partially distributed asset, so the
+the same parameter on `assertDiffEi`/`assertLeft`. Its `id` is the base16 string, not a `ByteStr`, so a test holding an
+`IssuedAsset` passes `asset.id.toString`. `PredefinedSnapshot` rejects a partially distributed asset, so the
 genesis balances must hold exactly the declared quantity between them; splitting it between the two traders is usually
 what a test wants, since each side has to hold what it sells. To test a *balance* failure, issue the asset but give it
 to someone uninvolved — otherwise the trade dies on "not issued" before reaching the check under test.

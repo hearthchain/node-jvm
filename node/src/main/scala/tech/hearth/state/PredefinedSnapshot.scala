@@ -11,7 +11,7 @@ import tech.hearth.settings.{GenesisGeneratorSettings, MinAssetFeeSettings, Pred
 import tech.hearth.state.diffs.BalanceDiffValidation
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.TxValidationError.GenericError
-import tech.hearth.transaction.{Asset, CommitToGenerationTransaction, TxDecimals}
+import tech.hearth.transaction.{Asset, AssetIdLength, CommitToGenerationTransaction, TxDecimals}
 
 import java.nio.charset.StandardCharsets
 import scala.collection.immutable.VectorMap
@@ -101,24 +101,31 @@ object PredefinedSnapshot {
       blockchain: Blockchain
   ): Either[ValidationError, Seq[(IssuedAsset, NewAssetInfo)]] =
     for {
-      _ <- checkNoDuplicates(settings.assets.map(_.id.toString), "asset id")
+      // Hex decoding is case-insensitive, so duplicates are checked on the lowercased form
+      _ <- checkNoDuplicates(settings.assets.map(_.id.toLowerCase), "asset id")
       assets <- settings.assets.toList.traverse { a =>
         for {
-          _ <- Either.cond(a.quantity > 0, (), GenericError(s"Predefined snapshot asset ${a.id}: quantity must be greater than 0, got ${a.quantity}"))
-          decimalsError = GenericError(s"Predefined snapshot asset ${a.id}: ${TxDecimals.errMsg}, got ${a.decimals}")
+          id <- ByteStr.decodeBase16(a.id).toEither.leftMap(e => GenericError(s"Predefined snapshot asset ${a.id}: invalid asset id: $e"))
+          _ <- Either.cond(
+            id.size == AssetIdLength,
+            (),
+            GenericError(s"Predefined snapshot asset ${a.id}: asset id must be $AssetIdLength bytes, got ${id.size}")
+          )
+          _ <- Either.cond(a.quantity >= 0, (), GenericError(s"Predefined snapshot asset $id: quantity must be >= 0, got ${a.quantity}"))
+          decimalsError = GenericError(s"Predefined snapshot asset $id: ${TxDecimals.errMsg}, got ${a.decimals}")
           _ <- Either.cond(a.decimals.isValidByte, (), decimalsError)
           _ <- TxDecimals.from(a.decimals.toByte).leftMap(_ => decimalsError)
           _ <- Either.cond(
-            blockchain.assetDescription(IssuedAsset(a.id)).isEmpty,
+            blockchain.assetDescription(IssuedAsset(id)).isEmpty,
             (),
-            GenericError(s"Predefined snapshot asset ${a.id}: an asset with this id already exists")
+            GenericError(s"Predefined snapshot asset $id: an asset with this id already exists")
           )
-          _ <- validateUtf8(a.name, "name", a.id)
-          _ <- validateUtf8(a.description, "description", a.id)
-          minFeeError = GenericError(s"Predefined snapshot asset ${a.id}: minFee must be positive, got ${a.minFee}")
+          _ <- validateUtf8(a.name, "name", id)
+          _ <- validateUtf8(a.description, "description", id)
+          minFeeError = GenericError(s"Predefined snapshot asset $id: minFee must be positive, got ${a.minFee}")
           minFee <- MinAssetFee.from(a.minFee).leftMap(_ => minFeeError)
-        } yield IssuedAsset(a.id) -> NewAssetInfo(
-          AssetStaticInfo(a.id, a.decimals, a.name, a.description),
+        } yield IssuedAsset(id) -> NewAssetInfo(
+          AssetStaticInfo(id, a.decimals, a.name, a.description),
           BigInt(a.quantity),
           minFee
         )

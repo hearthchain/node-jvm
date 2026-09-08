@@ -7,6 +7,7 @@ import tech.hearth.database.{RDB, RocksDBWriter, TestStorageFactory}
 import tech.hearth.events.BlockchainUpdateTriggers
 import tech.hearth.history.DefaultRewardsSettings
 import tech.hearth.settings.{BlockchainSettings, FunctionalitySettings, GenesisSettings, TestSettings}
+import tech.hearth.settings.TestSettings.unpinned
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.{Transaction, TransactionType}
 import tech.hearth.utils.SystemTime
@@ -41,6 +42,6 @@ package object utils {
       )._2
 
     def createTestBlockchainSettings(fs: FunctionalitySettings): BlockchainSettings =
-      BlockchainSettings(NetworkId.Testnet, fs, GenesisSettings.TESTNET, DefaultRewardsSettings)
+      BlockchainSettings(NetworkId.Testnet, fs, GenesisSettings.TESTNET.unpinned, DefaultRewardsSettings)
   }
 }

@@ -90,7 +90,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
     genesisSnapshot.assets should be(
       Seq(
         GenesisAssetSettings(
-          ByteStr.decodeBase16("aabbccddeeff00112233445566778899").get,
+          "aabbccddeeff00112233445566778899",
           "Asset",
           decimals = 4,
           quantity = 1000,
@@ -131,14 +131,14 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.rewardsSettings.initialReward should be(12528336897L)
     settings.rewardsSettings.decayRatioFixed should be(BigInt("340281918165977088157076486680406733895"))
     settings.rewardsSettings.halfLifeBlocks should be(525_600L)
-    settings.genesisSettings.timestamp should be(1478000000000L)
+    settings.genesisSettings.timestamp should be(1788855550000L)
     settings.initialBalance should be(500000000000000L) // 5% premine; the other 95% is emitted, not genesis-credited
 
     settings.predefinedSnapshots.find(_.height == 1).get.balances should be(
       Seq(
-        GenesisBalanceSettings("thrth1x0welf80ljp2psdstmfywkhqmj9s7q5hjgzpvj", 300000000000000L),
-        GenesisBalanceSettings("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn", 100000000000000L),
-        GenesisBalanceSettings("thrth1wpm9trpt4fm4ucmmq556f6j6arzxg7c4n9rgsj", 100000000000000L)
+        GenesisBalanceSettings("thrth1ncneratey9nasnegts86xnhpxcv628q48tpk7l", 300000000000000L),
+        GenesisBalanceSettings("thrth1da0fundsmjpfas88ydux2w3t9exjd3d4js77xg", 100000000000000L),
+        GenesisBalanceSettings("thrth1teamvestjtryyczpmpvef5aldw7qgs5jzp447l", 100000000000000L)
       )
     )
   }

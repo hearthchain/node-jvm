@@ -15,8 +15,8 @@ import monix.reactive.subjects.ConcurrentSubject
 import org.scalatest.time.SpanSugar.convertLongToGrainOfTime
 
 class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
-  private val acc1 = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
-  private val acc2 = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 1)
+  private val acc1 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 0)
+  private val acc2 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 1)
 
   private val otherNodeAcc1     = TxHelpers.defaultSigner
   private val otherNodeAcc2Addr = TxHelpers.secondAddress

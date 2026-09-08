@@ -299,7 +299,7 @@ class BlockChallengeTest
 
   property("NODE-888. ChallengedHeader should contain info from original block header") {
     val challengedMiner  = TxHelpers.signer(0)
-    val challengingMiner = Wallet.generateNewAccount(Domain.DefaultWalletSeed, 0)
+    val challengingMiner = Wallet.account(Domain.DefaultWalletMnemonic, 0)
 
     val testSettings = settings
       .configure(_.copy(generationPeriodLength = 700))
@@ -351,7 +351,7 @@ class BlockChallengeTest
     // entry would win the dedup and leave it short.
     val challengedMinerKey = TxHelpers.signer(940)
     val challengedMiner    = MiningAccount(challengedMinerKey, TxHelpers.vrfKeyOf(challengedMinerKey), TxHelpers.blsKeyOf(challengedMinerKey))
-    val challengingMiner   = Wallet.generateNewAccount(Domain.DefaultWalletSeed, 0)
+    val challengingMiner   = Wallet.account(Domain.DefaultWalletMnemonic, 0)
 
     val testSettings = settings
       .configure(_.copy(generationPeriodLength = 700))

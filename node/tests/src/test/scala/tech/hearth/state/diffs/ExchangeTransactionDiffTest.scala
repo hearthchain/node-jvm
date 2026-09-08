@@ -49,7 +49,7 @@ class ExchangeTransactionDiffTest extends PropSpec with Inside with WithDomain w
     * two assets of its pair, so the properties below that pin normalized prices depend on it.
     */
   private def genesisAsset(asset: IssuedAsset, quantity: Long, decimals: Int = 8): GenesisAssetSettings =
-    GenesisAssetSettings(asset.id, s"asset-${asset.id.arr.head}", decimals, quantity, TestValues.fee)
+    GenesisAssetSettings(asset.id.toString, s"asset-${asset.id.arr.head}", decimals, quantity, TestValues.fee)
 
   /** Declares `assets` in the genesis snapshot, splitting each one's quantity evenly between `holders`.
     *

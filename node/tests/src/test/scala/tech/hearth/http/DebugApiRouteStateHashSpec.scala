@@ -33,7 +33,7 @@ class DebugApiRouteStateHashSpec
 
   override def settings: HearthSettings = DomainPresets.TransactionStateSnapshot
     .copy(
-      dbSettings = DomainPresets.TransactionStateSnapshot.dbSettings.copy(storeStateHashes = true),
+      dbSettings = DomainPresets.TransactionStateSnapshot.dbSettings,
       restAPISettings = restAPISettings
     )
     .configure(_.copy(generationPeriodLength = 5))
@@ -92,14 +92,14 @@ class DebugApiRouteStateHashSpec
         val afterGeneratingBalanceUpdateHeight = domain.blockchain.height - 1
         val afterGeneratingBalanceUpdateHeader = domain.blockchain.blockHeader(afterGeneratingBalanceUpdateHeight).value
         val expectedResponseAfter = Json.obj(
-          "stateHash"                      -> "88d74439c56a50252a40af206954021451ae6999598cdbb5e4dc3a92bedac6b5",
-          "hearthBalanceHash"              -> "877c92d02612bbef786e6e69d5c213047607c083ea641f46ab99943d1d5c2d22",
+          "stateHash"                      -> "f387d2c6327e5a52fb317cdf358a9ba71b73474a291271efe49ed0068380e2d2",
+          "hearthBalanceHash"              -> "08823ea15fda7259e16eedcf5871395d6a7d275ee24256e833208902b0b73af0",
           "assetBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseStatusHash"                -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "nextCommittedGeneratorsHash"    -> "525627f76ff443e594f531dbba23e65a90cdd4ad42d2e26c471a191da0047b51", // Note: non-empty
           "committedGeneratorBalancesHash" -> "46bcf0aad5ea9fed3548ca5c582823ad540a8ebbeec2de5e889c5d042b2f19ca",
-          "snapshotHash"                   -> "f2c6c78fb25303d3d3f7aee4ea08ff989904cb8f24cc3451f555e6cde9754f80",
+          "snapshotHash"                   -> "5c894b0da10012e509db55141c73eb791eae51497ebe581e511211b5fc4a113a",
           "blockId"                        -> afterGeneratingBalanceUpdateHeader.id().toString,
           "baseTarget"                     -> afterGeneratingBalanceUpdateHeader.header.baseTarget,
           "height"                         -> afterGeneratingBalanceUpdateHeight,
@@ -124,14 +124,14 @@ class DebugApiRouteStateHashSpec
         val heightOnGenerationPeriod = domain.blockchain.height - 1
         val headerOnGenerationPeriod = domain.blockchain.blockHeader(heightOnGenerationPeriod).value
         val expectedResponseAfter2 = Json.obj(
-          "stateHash"                      -> "f0fe639be392fc4e6ed1ba411da7172d9f93775df0dc2c1cc98f073591821a22",
-          "hearthBalanceHash"              -> "571af75a738868f8a2316a48943e6fccc714a55d1e429537a307d1533fa6f796",
+          "stateHash"                      -> "00e68f7bd7bc9262d1d8126923046b7a89fe7d53250aa3a82f2dd87f5fc182f9",
+          "hearthBalanceHash"              -> "ce54b9592dec813babcdc640c5f82290096fff90b33681891cded2a407462b0f",
           "assetBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseBalanceHash"               -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "leaseStatusHash"                -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "nextCommittedGeneratorsHash"    -> "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
           "committedGeneratorBalancesHash" -> "246896d0f7e188baff9c31b80c56a55a2b58e7105b24cd12bf941fe27c8e7fb5", // Note: non-empty
-          "snapshotHash"                   -> "87277ac4a8262ba5de28d0555742778e23e146ce84a869b8a03eea27e4fc44dc",
+          "snapshotHash"                   -> "6d887a883714d3095988fd3d0e0cf30667baf28c682ea05dc36d2b5a1af7c5f1",
           "blockId"                        -> headerOnGenerationPeriod.id().toString,
           "baseTarget"                     -> headerOnGenerationPeriod.header.baseTarget,
           "height"                         -> heightOnGenerationPeriod,

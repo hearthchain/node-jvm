@@ -125,8 +125,7 @@ object FunctionalitySettings {
   val TESTNET: FunctionalitySettings = apply(
     featureCheckBlocksPeriod = 3000,
     blocksForFeatureActivation = 2700,
-    // TODO temporary stub, replace with the real hearth DAO address before launch
-    daoAddress = Some("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn"),
+    daoAddress = Some("thrth1da0fundsmjpfas88ydux2w3t9exjd3d4js77xg"),
     blockRewardBoostPeriod = 2_000,
     maxValidEndorsers = 64,
     generationPeriodLength = 3000
@@ -144,13 +143,14 @@ object FunctionalitySettings {
 }
 
 /** An asset issued by a predefined snapshot. Since there is no issue transaction to derive it from, the id is
-  * specified explicitly. `minFee` is mandatory: every issued asset must carry a non-zero minimum fee floor for
-  * paying transaction fees in it (see MinAssetFee), there is no "sponsorship disabled" state any more. There is no
-  * issuer either: nothing ever checks who issued an asset any more (no Reissue/Burn/SponsorFee to gate by it), so
-  * it isn't tracked.
+  * specified explicitly, as base16 of exactly [[tech.hearth.transaction.AssetIdLength]] bytes - PredefinedSnapshot
+  * decodes and checks it, since these settings are never used for anything but building that snapshot. `minFee` is
+  * mandatory: every issued asset must carry a non-zero minimum fee floor for paying transaction fees in it (see
+  * MinAssetFee), there is no "sponsorship disabled" state any more. There is no issuer either: nothing ever checks
+  * who issued an asset any more (no Reissue/Burn/SponsorFee to gate by it), so it isn't tracked.
   */
 case class GenesisAssetSettings(
-    id: ByteStr,
+    id: String,
     name: String,
     decimals: Int,
     quantity: Long,
@@ -235,9 +235,19 @@ object PredefinedSnapshotSettings {
     PredefinedSnapshotSettings(
       height = GenesisBlockHeight.toInt,
       balances = List(
-        GenesisBalanceSettings("thrth1x0welf80ljp2psdstmfywkhqmj9s7q5hjgzpvj", 3_000_000L * Constants.UnitsInHearth), // burn-claim, 3%
-        GenesisBalanceSettings("thrth1nw24ly6qrzatspdzy72t5lhpgcklw7ehcqpjhn", 1_000_000L * Constants.UnitsInHearth), // DAO treasury, 1%
-        GenesisBalanceSettings("thrth1wpm9trpt4fm4ucmmq556f6j6arzxg7c4n9rgsj", 1_000_000L * Constants.UnitsInHearth)  // team (vested), 1%
+        GenesisBalanceSettings("thrth1ncneratey9nasnegts86xnhpxcv628q48tpk7l", 3_000_000L * Constants.UnitsInHearth), // burn-claim, 3%
+        GenesisBalanceSettings("thrth1da0fundsmjpfas88ydux2w3t9exjd3d4js77xg", 1_000_000L * Constants.UnitsInHearth), // DAO treasury, 1%
+        GenesisBalanceSettings("thrth1teamvestjtryyczpmpvef5aldw7qgs5jzp447l", 1_000_000L * Constants.UnitsInHearth)  // team (vested), 1%
+      ),
+      assets = Seq(
+        GenesisAssetSettings("ddffc0847e4b4373163ccfdb088857479e854eb27b833137a4659ad29448f1bf", "ORCRED", 8, 0, 100000, "OpenRouter Cred")
+      ),
+      generators = Seq(
+        GenesisGeneratorSettings(
+          "4f7d08b23646f07af05d82959b77cbb9be96bfd4f466b054578535469267ebd3",
+          "ab20c8a767e96dfe1628d31cb428d816efcdb2564976577be1b1cc1a1e98217b05132a7ac4bb00ba2790ca8b64c34074",
+          "4b66ef37b51bcc715bd676863a50699aafba209c212436f94586d53bb3fbff14"
+        )
       )
     )
   )
@@ -284,8 +294,14 @@ object GenesisSettings {
   // Note: the predefined signatures of the pre-snapshot genesis blocks are gone along with the genesis transactions
   // they were made over. The block id is the hash of the header, so nothing needs a signature to identify a chain;
   // the genesis block is signed by Block.GenesisGenerator, whose key is derived in code.
-  val MAINNET: GenesisSettings  = GenesisSettings(1465742577614L, 153722867L, 60.seconds)
-  val TESTNET: GenesisSettings  = GenesisSettings(1478000000000L, 153722867L, 60.seconds)
+  val MAINNET: GenesisSettings = GenesisSettings(1465742577614L, 153722867L, 60.seconds)
+  val TESTNET: GenesisSettings = GenesisSettings(
+    1788855550000L,
+    100000L,
+    60.seconds,
+    Some(ByteStr.decodeBase16("06164b622a916b3459ffc85631b166b3e45e1d655a4e131c610a675f8ba66a84").get),
+    Some(ByteStr.decodeBase16("dbe7afdde3d8323efad85b784a26349dcb7269cd6eefe0bc0d66233d0684cb2a").get)
+  )
   val STAGENET: GenesisSettings = GenesisSettings(1561705836768L, 5000, 1.minute)
 }
 

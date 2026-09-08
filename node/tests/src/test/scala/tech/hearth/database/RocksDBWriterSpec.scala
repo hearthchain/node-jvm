@@ -105,7 +105,7 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
     val issuer      = TxHelpers.signer(900)
     val issuedAsset = IssuedAsset(ByteStr.fill(32)(7))
     val assetSettings = GenesisAssetSettings(
-      id = issuedAsset.id,
+      id = issuedAsset.id.toString,
       name = "Genesis",
       decimals = 0,
       quantity = 100,
@@ -235,7 +235,7 @@ class RocksDBWriterSpec extends FreeSpec with WithDomain {
       // snapshot instead - a plain empty block takes its place to keep the height numbering below unchanged.
       val issuedAsset = IssuedAsset(ByteStr.fill(32)(9))
       val assetSettings = GenesisAssetSettings(
-        id = issuedAsset.id,
+        id = issuedAsset.id.toString,
         name = "IA01",
         decimals = 2,
         quantity = 10000,

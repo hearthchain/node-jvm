@@ -71,8 +71,8 @@ class BlockEndorserSpec extends FreeSpec, WithDomain, WithResourceManager, Embed
 
     "don't broadcast" - {
       "if not enough generating balance" in withManager { manager =>
-        val generator1         = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
-        val generator2         = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 1)
+        val generator1         = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 0)
+        val generator2         = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 1)
         val otherNodeGenerator = TxHelpers.signer(0)
         val generators         = Seq(generator1, generator2, otherNodeGenerator)
         val generator2Index    = 1

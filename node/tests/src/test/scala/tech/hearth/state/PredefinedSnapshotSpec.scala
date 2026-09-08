@@ -1,6 +1,7 @@
 package tech.hearth.state
 
 import com.google.common.primitives.Ints
+import com.typesafe.config.ConfigFactory
 import tech.hearth.TestValues
 import tech.hearth.account.PublicKey
 import tech.hearth.block.Block
@@ -19,13 +20,14 @@ import tech.hearth.settings.{
   GenesisGeneratorSettings,
   MinAssetFeeSettings,
   PredefinedSnapshotSettings,
-  HearthSettings
+  HearthSettings,
+  loadConfig
 }
 import tech.hearth.state.diffs.BlockDiffer
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
-import tech.hearth.transaction.TxHelpers
+import tech.hearth.transaction.{AssetIdLength, TxHelpers}
 import tech.hearth.transaction.TxHelpers.*
 import tech.hearth.utils.EmptyBlockchain
 import org.scalatest.EitherValues
@@ -53,9 +55,9 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       )
     )
 
-  private def assetSettings(quantity: Long, minFee: Long = TestValues.fee): GenesisAssetSettings =
+  private def assetSettings(quantity: Long, minFee: Long = TestValues.fee, id: String = assetId.toString): GenesisAssetSettings =
     GenesisAssetSettings(
-      id = assetId,
+      id = id,
       name = "Genesis",
       decimals = 2,
       quantity = quantity,
@@ -291,6 +293,20 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       val retargeted = pinnedBlockchainSettings.copy(genesisSettings = pinned.copy(initialBaseTarget = pinned.initialBaseTarget + 1))
       Block.genesis(retargeted).left.value.toString should include("Genesis block id mismatch")
     }
+
+    // Testnet pins its genesis in one place (GenesisSettings.TESTNET) and produces it from another
+    // (PredefinedSnapshotSettings.TESTNET); nothing but starting a node notices when the two drift apart. Mainnet and
+    // stagenet are not covered: neither pins anything yet, and their placeholder addresses do not even parse under the
+    // testnet address scheme these tests run on.
+    "hold for the shipped testnet preset" in {
+      val settings = BlockchainSettings.fromRootConfig(
+        loadConfig(ConfigFactory.parseString("""hearth.directory = "/hearth"
+                                               |hearth.blockchain.type = testnet""".stripMargin))
+      )
+      settings.genesisSettings.stateHash should not be empty
+      settings.genesisSettings.blockId should not be empty
+      Block.genesis(settings) should beRight
+    }
   }
 
   "the predefined snapshot is rejected when" - {
@@ -307,6 +323,22 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
         balances = Seq(GenesisBalanceSettings(address(1).toBech32, 100.hearth, Map(assetId.toString -> 600L)))
       )
       buildFails(settings) should include("does not match the distributed amount 600")
+    }
+
+    "an asset id is not valid base16" in {
+      buildFails(settingsWith(assets = Seq(assetSettings(quantity = 1000, id = "not hex")))) should include("invalid asset id")
+    }
+
+    "an asset id is not 32 bytes" in {
+      val short = ByteStr.fill(AssetIdLength - 1)(7)
+      buildFails(settingsWith(assets = Seq(assetSettings(quantity = 1000, id = short.toString)))) should include(
+        s"asset id must be $AssetIdLength bytes, got ${AssetIdLength - 1}"
+      )
+
+      val long = ByteStr.fill(AssetIdLength + 1)(7)
+      buildFails(settingsWith(assets = Seq(assetSettings(quantity = 1000, id = long.toString)))) should include(
+        s"asset id must be $AssetIdLength bytes, got ${AssetIdLength + 1}"
+      )
     }
 
     "a balance references an unknown asset" in {

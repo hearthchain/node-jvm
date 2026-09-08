@@ -20,7 +20,7 @@ import monix.reactive.subjects.ConcurrentSubject
 import org.scalatest.time.SpanSugar.convertLongToGrainOfTime
 
 class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
-  private val thisNodeAcc  = Wallet.generateNewAccount(Domain.DefaultWalletSeed, nonce = 0)
+  private val thisNodeAcc  = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 0)
   private val otherNodeAcc = TxHelpers.defaultSigner
 
   private val baseSettings = DomainPresets.DeterministicFinality

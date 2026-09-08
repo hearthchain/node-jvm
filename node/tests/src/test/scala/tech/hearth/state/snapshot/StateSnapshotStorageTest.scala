@@ -28,7 +28,7 @@ class StateSnapshotStorageTest extends PropSpec with WithDomain {
     withDomain(
       RideV6.configure(_.copy(daoAddress = None)),
       Seq(AddrWithBalance(defaultAddress, ENOUGH_AMT, Map(asset -> 1000000000)), AddrWithBalance(secondAddress, ENOUGH_AMT)),
-      assets = Seq(GenesisAssetSettings(asset.id, "AAAA", 8, 1000000000, fee))
+      assets = Seq(GenesisAssetSettings(asset.id.toString, "AAAA", 8, 1000000000, fee))
     ) { d =>
       val sender           = secondSigner
       val senderAddress    = secondAddress

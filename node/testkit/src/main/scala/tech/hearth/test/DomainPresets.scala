@@ -8,8 +8,9 @@ import tech.hearth.settings.{
   FunctionalitySettings,
   GenesisAssetSettings,
   GenesisBalanceSettings,
-  PredefinedSnapshotSettings,
   HearthSettings,
+  PredefinedSnapshotSettings,
+  TestSettings,
   loadConfig
 }
 import tech.hearth.state.GenesisBlockHeight
@@ -98,16 +99,15 @@ object DomainPresets {
   private lazy val genesisTimestamp: Long = System.currentTimeMillis() - 1.hour.toMillis
 
   lazy val SettingsFromDefaultConfig: HearthSettings = {
-    val settings = HearthSettings.fromRootConfig(loadConfig(None))
-    // The default config is TESTNET, but genesis balances are now part of a predefined snapshot built from the
-    // settings, and tests declare their own via withDomain(balances = ...). So start with an empty genesis snapshot.
-    // Reward is pinned flat too (see DefaultRewardsSettings): TESTNET's own RewardsSettings is tuned for observing
-    // the emission curve decay on a running testnet (short half-life, large reward), not for tests that want a
-    // small, exactly predictable value to assert on - the same reasoning as history.DefaultBlockchainSettings.
+    // The default config is TESTNET, whose genesis belongs to the real network: withTestGenesis swaps in the empty,
+    // uncommitted one tests fill via withDomain(balances = ...). Reward is pinned flat too (see DefaultRewardsSettings):
+    // TESTNET's own RewardsSettings is tuned for observing the emission curve decay on a running testnet (short
+    // half-life, large reward), not for tests that want a small, exactly predictable value to assert on - the same
+    // reasoning as history.DefaultBlockchainSettings.
+    val settings = TestSettings.withTestGenesis(HearthSettings.fromRootConfig(loadConfig(None)))
     settings.copy(blockchainSettings =
       settings.blockchainSettings.copy(
         genesisSettings = settings.blockchainSettings.genesisSettings.copy(timestamp = genesisTimestamp),
-        predefinedSnapshots = Seq(PredefinedSnapshotSettings(GenesisBlockHeight.toInt)),
         rewardsSettings = DefaultRewardsSettings
       )
     )

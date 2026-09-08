@@ -51,7 +51,7 @@ object GeneratorKeys {
     ma.mnemonic match {
       case Some(mnemonic) =>
         require(
-          ma.signingKeySeed.isEmpty && ma.signingKeyScalar.isEmpty && ma.vrfKey.isEmpty && ma.blsKey.isEmpty,
+          ma.signingKeySeed.isEmpty && ma.signingKeyScalar.isEmpty && ma.vrfKey.isEmpty && ma.blsKey.isEmpty && ma.blsKeyScalar.isEmpty,
           "when mnemonic is specified, explicit private keys can not be specified"
         )
         val seed = Bip39.toSeed(mnemonic)
@@ -64,9 +64,7 @@ object GeneratorKeys {
         MiningAccount(
           signingKeyOf(ma),
           VrfKey.fromSeed(Hex.decode(ma.vrfKey.getOrElse(throw new IllegalArgumentException("vrf-key is required when mnemonic is not provided")))),
-          BlsKeyPair.fromSeed(
-            Hex.decode(ma.blsKey.getOrElse(throw new IllegalArgumentException("bls-key is required when mnemonic is not provided")))
-          )
+          blsKeyOf(ma)
         )
     }
   })
@@ -80,6 +78,18 @@ object GeneratorKeys {
     case (Some(_), Some(_))   => throw new IllegalArgumentException("signing-key-seed and signing-key-scalar are mutually exclusive")
     case (None, None) =>
       throw new IllegalArgumentException("signing-key-seed or signing-key-scalar is required when mnemonic is not provided")
+  }
+
+  /** A BLS key comes either from a seed, which EIP-2333 KeyGen stretches into the secret scalar, or as that scalar
+    * itself - which is what `KeyTree.blsSecretKey` derives from a mnemonic, and so what `hearth util crypto
+    * create-keys` prints. The two readings of the same 32 bytes give different endorser keys, hence the separate key.
+    */
+  private def blsKeyOf(ma: MiningAccountSettings): BlsKeyPair = (ma.blsKey, ma.blsKeyScalar) match {
+    case (Some(seed), None)   => BlsKeyPair.fromSeed(Hex.decode(seed))
+    case (None, Some(scalar)) => BlsKeyPair.fromScalar(Hex.decode(scalar))
+    case (Some(_), Some(_))   => throw new IllegalArgumentException("bls-key and bls-key-scalar are mutually exclusive")
+    case (None, None) =>
+      throw new IllegalArgumentException("bls-key or bls-key-scalar is required when mnemonic is not provided")
   }
 
   case class Commitment(
