@@ -89,7 +89,7 @@ object Dependencies {
   lazy val test = scalaTest +: Seq(
     logback,
     "org.scalatestplus" %% "scalacheck-1-16" % "3.2.14.0",
-    "org.scalacheck"    %% "scalacheck"      % "1.19.0",
+    "org.scalacheck"    %% "scalacheck"      % "1.20.0",
     "org.scalamock"     %% "scalamock"       % "7.5.5",
     // bcprov-jdk18on (cryptoProviders, above) only parses X.509; building signed certificate/CRL fixtures for DCAP
     // collateral tests needs the higher-level builder API.
