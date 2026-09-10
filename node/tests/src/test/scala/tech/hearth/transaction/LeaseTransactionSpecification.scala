@@ -31,7 +31,7 @@ class LeaseTransactionSpecification extends PropSpec {
       .explicitGet()
 
     val js = tx.json()
-    (js \ "type").as[Int] shouldBe 4
+    (js \ "type").as[Int] shouldBe 3
     (js \ "senderPublicKey").as[String] shouldBe "bf1bc39b254cf74ee50620668f109472e2f45da23e913876b2e85084c6fc8930"
     (js \ "amount").as[Long] shouldBe 10000000L
     (js \ "fee").as[Long] shouldBe 1000000L

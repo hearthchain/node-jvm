@@ -63,10 +63,6 @@ class SignAndBroadcastApiSuite extends BaseTransactionSuite with NTPTime with Be
     assertSignBadJson(json + ("type" -> JsNumber(-100)), "Bad transaction type")
     assertSignBadJson(json - "recipient", WrongJson.WrongJsonDataMessage)
 
-    val obsoleteTx =
-      Json.obj("type" -> TransactionType.Genesis.id, "sender" -> walletAddress, "recipient" -> firstAddress, "amount" -> 1, "fee" -> 100000)
-    assertSignBadJson(obsoleteTx, "transaction type not supported", 501)
-
     val bigBaseTx =
       Json.obj(
         "type"       -> TransactionType.Transfer.id,

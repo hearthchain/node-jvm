@@ -40,7 +40,7 @@ object FeeValidation {
       .map { baseFee =>
         tx match {
           case tx: TransferTransaction =>
-            baseFee + (tx.transfers.size + 1) / 2
+            baseFee + tx.transfers.size / 2
           case _ => baseFee
         }
       }

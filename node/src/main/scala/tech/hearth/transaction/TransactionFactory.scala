@@ -115,7 +115,7 @@ object TransactionFactory {
         case Reserve            => jsv.as[ReserveRequest].asRight
         case BindApiKey         => jsv.as[BindApiKeyRequest].asRight
         case Settle             => jsv.as[SettleRequest].asRight
-        case Withdraw =>
+        case Withdraw           =>
           // Withdraw is not yet signable through this REST flow: its semantics (validation, state diff) are not
           // implemented yet, see TransactionDiffer.
           UnsupportedTransactionType.asLeft[TxBroadcastRequest[Transaction & ProvenTransaction]]

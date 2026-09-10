@@ -5,11 +5,14 @@ import play.api.libs.json.{JsObject, Json}
 import pureconfig.ConfigSource
 import tech.hearth.common.utils.EitherExt2.explicitGet
 import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto
 import tech.hearth.crypto.{Bip39, KeyTree}
-import tech.hearth.mining.GeneratorKeys
-import tech.hearth.settings.MinerSettings
+import tech.hearth.mining.{GeneratorKeys, MiningAccount}
+import tech.hearth.settings.{MinerSettings, WalletSettings}
 import tech.hearth.test.FlatSpec
+import tech.hearth.transaction.{CommitToGenerationTransaction, TransactionFactory, TransactionType}
 import tech.hearth.utils.UtilApp.{Command, KeyPairOptions}
+import tech.hearth.wallet.Wallet
 
 class UtilAppSpec extends FlatSpec {
   private val mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -22,8 +25,8 @@ class UtilAppSpec extends FlatSpec {
 
   private def createKeysJson(mnemonic: Option[String], nonce: Int): JsObject = Json.parse(createKeys(mnemonic, nonce).explicitGet()).as[JsObject]
 
-  /** The generator keys the node builds from this entry, pasted into `hearth.miner.accounts` as create-keys printed it. */
-  private def generatorKeys(account: JsObject): GeneratorKeys = {
+  /** The generator keys the node builds from these entries, pasted into `hearth.miner.accounts` as create-keys printed them. */
+  private def generatorKeys(accounts: JsObject*): GeneratorKeys = {
     val config = ConfigFactory
       .parseString(s"""hearth.miner {
                       |  enable = yes
@@ -34,7 +37,7 @@ class UtilAppSpec extends FlatSpec {
                       |  minimal-block-generation-offset = 500ms
                       |  max-transactions-in-micro-block = 400
                       |  min-micro-block-age = 3s
-                      |  accounts = [$account]
+                      |  accounts = [${accounts.mkString(",")}]
                       |  supported-features = []
                       |}""".stripMargin)
       .resolve()
@@ -78,5 +81,72 @@ class UtilAppSpec extends FlatSpec {
 
   it should "reject a phrase that is not a mnemonic" in {
     createKeys(Some("196bd8403a3cdcf4991edb4928419c71049d0c86f3707b9f441454e0888e61ad")).left.value should include("Invalid mnemonic")
+  }
+
+  private val periodStart = 101
+
+  /** The `hearth.miner.accounts` entry create-keys prints for a fresh account, which is what a node config holds. */
+  private def minerAccount(): JsObject = (createKeysJson(None, nonce = 0) \ "minerAccountKeys").as[JsObject]
+
+  private def signCommitment(generatorKeys: GeneratorKeys, request: JsObject): Either[String, JsObject] =
+    UtilApp.Actions
+      .doSignTx(Wallet(WalletSettings(None, None, None)), generatorKeys, None, request.toString.getBytes)
+      .map(Json.parse(_).as[JsObject])
+
+  private def commitmentRequest(sender: Option[MiningAccount] = None): JsObject =
+    Json.obj("type" -> TransactionType.CommitToGeneration.id, "generationPeriodStart" -> periodStart) ++
+      sender.fold(Json.obj())(a => Json.obj("sender" -> a.address.toString))
+
+  "transaction sign" should "register the generator keys of the sole configured miner account" in {
+    val keys      = generatorKeys(minerAccount())
+    val generator = keys.accounts.head
+
+    val signed = signCommitment(keys, commitmentRequest()).explicitGet()
+
+    (signed \ "sender").as[String] shouldBe generator.address.toString
+    (signed \ "senderPublicKey").as[String] shouldBe generator.publicKey.toString
+    (signed \ "endorserPublicKey").as[String] shouldBe generator.blsKey.publicKey.base16
+    (signed \ "vrfPublicKey").as[String] shouldBe ByteStr(generator.vrfKey.publicKey()).toString
+    (signed \ "generationPeriodStart").as[Int] shouldBe periodStart
+  }
+
+  it should "prove possession of both generator keys for the period it commits to" in {
+    val keys = generatorKeys(minerAccount())
+    val tx = TransactionFactory
+      .parseRequest(signCommitment(keys, commitmentRequest()).explicitGet())
+      .explicitGet()
+      .asInstanceOf[CommitToGenerationTransaction]
+
+    tx.commitmentSignature.verifyBasic(tx.popMessage, tx.endorserPublicKey).value
+    crypto.verifyVRF(tx.vrfCommitmentSignature, tx.vrfPopMessage, tx.vrfPublicKey).value
+    crypto.verify(tx.proofs.head, tx.bodyBytes(), tx.sender) shouldBe true
+  }
+
+  it should "commit for the account the request names when several are configured" in {
+    val keys   = generatorKeys(minerAccount(), minerAccount())
+    val second = keys.accounts(1)
+
+    val signed = signCommitment(keys, commitmentRequest(Some(second))).explicitGet()
+
+    (signed \ "sender").as[String] shouldBe second.address.toString
+    (signed \ "endorserPublicKey").as[String] shouldBe second.blsKey.publicKey.base16
+  }
+
+  it should "refuse to guess which account to commit for when several are configured" in {
+    signCommitment(generatorKeys(minerAccount(), minerAccount()), commitmentRequest()).left.value should include("invalid.sender")
+  }
+
+  it should "refuse to commit for an account the config does not hold the generator keys of" in {
+    val stranger = generatorKeys(minerAccount()).accounts.head
+
+    signCommitment(generatorKeys(minerAccount()), commitmentRequest(Some(stranger))).left.value should include(
+      "is not one of this node's generators"
+    )
+  }
+
+  it should "require the request to name the period it commits to" in {
+    signCommitment(generatorKeys(minerAccount()), Json.obj("type" -> TransactionType.CommitToGeneration.id)).left.value should include(
+      "missing generation period start"
+    )
   }
 }
