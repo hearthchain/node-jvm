@@ -49,8 +49,13 @@ object UtilApp {
       signOptions: Option[String | SigningKey] = None,
       verifyOptions: VerifyOptions = VerifyOptions(),
       hashOptions: HashOptions = HashOptions(),
-      keyPairOptions: KeyPairOptions = KeyPairOptions()
-  )
+      keyPairOptions: KeyPairOptions = KeyPairOptions(),
+      // A seed and a secret scalar are both 32 bytes and produce different keys from them, so a command line that
+      // names two signers is rejected rather than signed with whichever scopt happened to read last.
+      signerOptions: Int = 0
+  ) {
+    def withSigner(signer: String | SigningKey): Command = copy(signOptions = Some(signer), signerOptions = signerOptions + 1)
+  }
 
   private def maybeFindKeyPair(cmd: Command): Either[ValidationError, SigningKey] = {
     // we need to load application config to properly set chain ID
@@ -101,7 +106,7 @@ object UtilApp {
     }
   }
 
-  private lazy val commandParser = {
+  private[utils] lazy val commandParser = {
     import scopt.OParser
 
     val builder = OParser.builder[Command]
@@ -158,7 +163,7 @@ object UtilApp {
             opt[String]('k', "private-key")
               .text("Private key for signing")
               .required()
-              .action((s, c) => c.copy(signOptions = Some(SigningKey.fromSeed(Base16.decode(s)))))
+              .action((s, c) => c.withSigner(SigningKey.fromSeed(Base16.decode(s))))
           )
           .text("Sign bytes with provided private key")
           .action((_, c) => c.copy(mode = Mode.SignBytes)),
@@ -212,24 +217,29 @@ object UtilApp {
             opt[String]("signer-address")
               .abbr("sa")
               .text("Signer address (requires corresponding key in wallet.dat)")
-              .action((a, c) => c.copy(signOptions = Some(a)))
+              .action((a, c) => c.withSigner(a))
           ),
         cmd("sign-with-sk")
-          .text("Sign JSON transaction with private key")
+          .text("Sign JSON transaction with a signing key given directly, as a seed or as a secret scalar")
           .action((_, c) => c.copy(mode = Mode.SignTx))
           .children(
             opt[String]("private-key")
               .abbr("sk")
-              .text("Private key")
-              .action((a, c) => c.copy(signOptions = Some(SigningKey.fromSeed(Base16.decode(a)))))
+              .text("Hex 32-byte seed the signing key is derived from")
+              .action((a, c) => c.withSigner(SigningKey.fromSeed(Base16.decode(a)))),
+            opt[String]("private-key-scalar")
+              .abbr("sks")
+              .text("Hex 32-byte secret scalar of the signing key, for a key that has no seed")
+              .action((a, c) => c.withSigner(SigningKey.fromScalar(Base16.decode(a))))
           )
       ),
       cmd("smoke").action((_, c) => c.copy(mode = Mode.SmokeTest, inputData = Input.Str(""))),
       help("help").hidden(),
-      checkConfig(_.mode match {
-        case null => failure("Command should be provided")
-        case _    => success
-      })
+      checkConfig {
+        case c if c.mode == null      => failure("Command should be provided")
+        case c if c.signerOptions > 1 => failure("Only one signing key can be given")
+        case _                        => success
+      }
     )
   }
 

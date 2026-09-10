@@ -6,12 +6,13 @@ import pureconfig.ConfigSource
 import tech.hearth.common.utils.EitherExt2.explicitGet
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
-import tech.hearth.crypto.{Bip39, KeyTree}
+import tech.hearth.crypto.{Bip39, KeyTree, SigningKey}
 import tech.hearth.mining.{GeneratorKeys, MiningAccount}
 import tech.hearth.settings.{MinerSettings, WalletSettings}
 import tech.hearth.test.FlatSpec
 import tech.hearth.transaction.{CommitToGenerationTransaction, TransactionFactory, TransactionType}
 import tech.hearth.utils.UtilApp.{Command, KeyPairOptions}
+import scopt.OParser
 import tech.hearth.wallet.Wallet
 
 class UtilAppSpec extends FlatSpec {
@@ -148,5 +149,58 @@ class UtilAppSpec extends FlatSpec {
     signCommitment(generatorKeys(minerAccount()), Json.obj("type" -> TransactionType.CommitToGeneration.id)).left.value should include(
       "missing generation period start"
     )
+  }
+
+  private val signingKeySeed = "196bd8403a3cdcf4991edb4928419c71049d0c86f3707b9f441454e0888e61ad"
+
+  /** The secret scalar of the key that seed derives, which is the form a vanity grinder hands out. */
+  private val signingKeyScalar = ByteStr(SigningKey.fromSeed(decoded(signingKeySeed)).toExpandedKey().take(32)).toString
+
+  private def decoded(hex: String): Array[Byte] = ByteStr.decodeBase16(hex).get.arr
+
+  private def parse(args: String*): Option[Command] = OParser.parse(UtilApp.commandParser, args, Command())
+
+  private def signerKey(cmd: Command): SigningKey = cmd.signOptions.value.asInstanceOf[SigningKey]
+
+  private def transferRequest(recipient: SigningKey): JsObject =
+    Json.obj(
+      "type"      -> TransactionType.Transfer.id,
+      "transfers" -> Json.arr(Json.obj("recipient" -> recipient.toAddress.toString, "amount" -> 1)),
+      "fee"       -> 100000
+    )
+
+  "transaction sign-with-sk" should "build the signing key from the seed it derives from" in {
+    signerKey(parse("transaction", "sign-with-sk", "--private-key", signingKeySeed).value).toAddress shouldBe
+      SigningKey.fromSeed(decoded(signingKeySeed)).toAddress
+  }
+
+  it should "build the same key from that key's secret scalar" in {
+    signerKey(parse("transaction", "sign-with-sk", "--private-key-scalar", signingKeyScalar).value).toAddress shouldBe
+      SigningKey.fromSeed(decoded(signingKeySeed)).toAddress
+  }
+
+  /** Why the scalar needs an option of its own rather than being guessed at: both readings of 32 bytes succeed, and
+    * they are different accounts, so a caller holding a grinder's scalar has no way to pass it as a seed.
+    */
+  it should "not confuse a scalar with a seed" in {
+    signerKey(parse("transaction", "sign-with-sk", "--private-key", signingKeyScalar).value).toAddress should not be
+      SigningKey.fromScalar(decoded(signingKeyScalar)).toAddress
+  }
+
+  it should "refuse a command line naming both, rather than signing with whichever came last" in {
+    parse("transaction", "sign-with-sk", "--private-key", signingKeySeed, "--private-key-scalar", signingKeyScalar) shouldBe None
+  }
+
+  it should "sign with the key it is given, needing neither a wallet nor miner accounts" in {
+    val key = SigningKey.fromScalar(decoded(signingKeyScalar))
+
+    val signed = UtilApp.Actions
+      .doSignTx(Wallet(WalletSettings(None, None, None)), GeneratorKeys.Empty, Some(key), transferRequest(key).toString.getBytes)
+      .map(Json.parse(_).as[JsObject])
+      .explicitGet()
+
+    val tx = TransactionFactory.parseRequest(signed).explicitGet()
+    (signed \ "sender").as[String] shouldBe key.toAddress.toString
+    crypto.verify(tx.proofs.head, tx.bodyBytes(), tx.sender) shouldBe true
   }
 }

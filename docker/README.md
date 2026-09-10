@@ -137,6 +137,102 @@ hearth.extensions += com.johndoe.HearthExtension
 ```
 3. Run `docker run -v "$(pwd)/plugins:/usr/share/hearth/lib/plugins" -v "$(pwd)/config:/etc/hearth" -i hearth-node`
 
+## Signing a transaction offline
+
+The image ships `hearth util` next to the node, so a machine with nothing but Docker installed can sign a transaction without running a node and without the key going anywhere near the network. The result is the signed JSON that `POST /transactions/broadcast` takes, so the machine holding the key never has to be the one that is online.
+
+The entrypoint always starts the node, so the util is reached by overriding it:
+
+```
+docker run --rm -i --entrypoint java hearth-node \
+  -Dlogback.stdout.level=OFF -Dlogback.file.level=OFF \
+  -Dhearth.blockchain.type=MAINNET \
+  --enable-native-access=ALL-UNNAMED \
+  -cp '/usr/share/hearth/lib/*' tech.hearth.utils.UtilApp transaction sign-with-sk --private-key <hex>
+```
+
+Everything in that preamble is something `entrypoint.sh` would otherwise supply, and a `docker run --entrypoint` bypasses it:
+
+| Flag | Why |
+|------|-----|
+| `-Dlogback.stdout.level=OFF -Dlogback.file.level=OFF` | The signed transaction leaves on stdout, where logging defaults to INFO. |
+| `-Dhearth.blockchain.type=MAINNET` | The network the transaction is signed for, and the bech32 prefix addresses are read and printed with. The util defaults to `TESTNET`; a mounted config passed as `-c /etc/hearth/hearth.conf` sets it just as well. |
+| `--enable-native-access=ALL-UNNAMED` | The crypto library is native. |
+| `-i` (on `docker run`) | The unsigned transaction arrives on stdin. |
+
+Options belong after the command chain, never before it: scopt reads them as children of the command, so `transaction sign-with-sk -c hearth.conf` works while `-c hearth.conf transaction sign-with-sk` fails with `Unknown argument 'transaction'`.
+
+The input is the same JSON `POST /transactions/sign` takes, minus what the signer fills in - `senderPublicKey`, `sender`, `proofs`, and `timestamp` when it is omitted:
+
+```
+TX='{"type":1,"transfers":[{"recipient":"hrth19uvmpe6ll76dav0mvk06d35att3wk7a7gm8xwm","amount":100000000}],"fee":100000}'
+```
+
+Which of the three commands below applies depends only on the form the key is held in. All three end at the same place, so the `sender` in the output is worth checking against the address you expect before broadcasting: nothing here consults a chain, and a key given in the wrong form signs perfectly well as a different account.
+
+### From a signing key scalar
+
+A key that came off a vanity grinder has no seed - the search walks scalars by point addition, and nothing hashes to the winner - so the 32-byte secret scalar is the whole key:
+
+```
+echo "$TX" | docker run --rm -i --entrypoint java hearth-node \
+  -Dlogback.stdout.level=OFF -Dlogback.file.level=OFF -Dhearth.blockchain.type=MAINNET \
+  --enable-native-access=ALL-UNNAMED -cp '/usr/share/hearth/lib/*' tech.hearth.utils.UtilApp \
+  transaction sign-with-sk --private-key-scalar 604b525b4dae161325ca191e4c06bb8da0d73aa73067fe05580bf0c2fd3af600
+```
+
+This is the same key material a node config takes as `signing-key-scalar` under `hearth.miner.accounts`.
+
+### From a seed
+
+A 32-byte Ed25519 seed, which is what a node config holds as `signing-key-seed`:
+
+```
+echo "$TX" | docker run --rm -i --entrypoint java hearth-node \
+  -Dlogback.stdout.level=OFF -Dlogback.file.level=OFF -Dhearth.blockchain.type=MAINNET \
+  --enable-native-access=ALL-UNNAMED -cp '/usr/share/hearth/lib/*' tech.hearth.utils.UtilApp \
+  transaction sign-with-sk --private-key 604b525b4dae161325ca191e4c06bb8da0d73aa73067fe05580bf0c2fd3af600
+```
+
+The two forms are not interchangeable, which is why they are separate options and naming both is refused rather than resolved: 32 bytes are a valid seed *and* a valid scalar, and the two readings give different accounts. The example above is the same hex in both commands and signs as `hrth19uvm...` here against `hrth1jcrk...` there.
+
+### From a mnemonic
+
+A BIP-39 phrase is not fed to the signer directly. `crypto create-keys` derives the account from it at a derivation index and prints the seed, which the seed command above then takes:
+
+```
+MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+
+docker run --rm --entrypoint java hearth-node \
+  -Dlogback.stdout.level=OFF -Dlogback.file.level=OFF -Dhearth.blockchain.type=MAINNET \
+  --enable-native-access=ALL-UNNAMED -cp '/usr/share/hearth/lib/*' tech.hearth.utils.UtilApp \
+  crypto create-keys --mnemonic "$MNEMONIC" --nonce 0
+```
+
+It reports the `address` the phrase derives at that index, so the account is confirmed before anything is signed, along with `minerAccountKeys.signing-key-seed`:
+
+```
+SEED=$(docker run --rm --entrypoint java hearth-node \
+  -Dlogback.stdout.level=OFF -Dlogback.file.level=OFF -Dhearth.blockchain.type=MAINNET \
+  --enable-native-access=ALL-UNNAMED -cp '/usr/share/hearth/lib/*' tech.hearth.utils.UtilApp \
+  crypto create-keys --mnemonic "$MNEMONIC" --nonce 0 | jq -r '.minerAccountKeys."signing-key-seed"')
+
+echo "$TX" | docker run --rm -i --entrypoint java hearth-node \
+  -Dlogback.stdout.level=OFF -Dlogback.file.level=OFF -Dhearth.blockchain.type=MAINNET \
+  --enable-native-access=ALL-UNNAMED -cp '/usr/share/hearth/lib/*' tech.hearth.utils.UtilApp \
+  transaction sign-with-sk --private-key "$SEED"
+```
+
+`--nonce` is the derivation index, and a wallet account at index n is the same key as a mining account at that index of the same phrase, so it is the one thing to get right: the default 0 is a different account from 1.
+
+Both the phrase and the derived seed pass through the host shell here, and every form above puts key material in the container's argv, where `ps` on the host can read it for as long as the command runs. Reading the phrase from a file (`--mnemonic "$(cat phrase.txt)"`) keeps it out of shell history but not out of argv. Signing inside a container that already has the key mounted as a config avoids both, which is what `sign-commit-to-generation.sh` does.
+
+### What this does not cover
+
+`transaction sign --signer-address <address>` signs from `wallet.dat` rather than from a key on the command line, and a container started only to sign has no wallet: `hearth.wallet.mnemonic` alone leaves it with no accounts registered, and the command fails with `MissingSenderPrivateKey`. That path belongs to a running node, over its REST API.
+
+A `CommitToGeneration` transaction is signed by neither route: it registers generator keys the signing key does not carry. See `sign-commit-to-generation.sh` in the repository root, which reads the period from a running node and signs inside that node's own container, where the config with those keys is already mounted.
+
 ## Hearth private node
 
 The image is useful for developing dApps and other smart contracts on the Hearth blockchain.

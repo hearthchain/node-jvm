@@ -56,6 +56,10 @@ docker run \
 
 See [docker/README.md](./docker/README.md) for configuration options, environment variables, and network ports.
 
+The image also signs transactions offline, on a machine that has nothing but Docker and never runs a node: see
+[Signing a transaction offline](./docker/README.md#signing-a-transaction-offline) for the three forms a signing key
+comes in (a secret scalar, a seed, or a BIP-39 mnemonic).
+
 On Debian and Ubuntu there is a single package, `hearth-jvm`:
 
 ```bash

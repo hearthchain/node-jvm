@@ -42,6 +42,26 @@ hitSource, snapshot, generatorSet)`. Not to `Domain.appendBlockE`: that resolves
 the VRF proof against the parent's hit source, and fails with `history does not contain parent` before the updater gets
 to say `References incorrect or non-existing block`.
 
+## Generation periods at a boundary
+
+Everything that gates a block at height `H` reads `generationPeriodOf(H)`, never its parent's period. The two differ
+only on the first block of a period, and that is exactly where a committee change lands, so a disagreement there stalls
+the chain outright: `findBlockAndGetGenerators` admits the generator from `period(H)`'s committed set while
+`PoSSelector` used to resolve its VRF key at `parentHeight`, i.e. `period(H - 1)`. A generator committed only for the
+period it was elected to could then be told it was `allowed` to generate by one check and `is not a committed generator
+of period [a, b]` by the other, with no block at all appendable by anyone: the outgoing committee is barred by the
+first check, the incoming one by the second. Fixed by resolving the VRF key at `parentHeight + 1`
+(`PoSSelector.validateGenerationSignature`/`validateBlockDelay`, mirrored in testkit's `Domain.processBlock`).
+
+Finalization voting follows the same rule and always has: the endorsements carried by block `H` are indexed into
+`committedGenerators(period(H))` by `BlockEndorser.vote` (which votes with the tip at `H`, endorsing `H - 1`), and
+`appender.validateFinalizationVoting`, `Caches.appendBlock`'s conflict registration and `BlockDiffer.calculatePenalties`
+all resolve those indexes in the period of the block that carries them. So the committee that endorses the last block
+of a period is the *incoming* one, which is deliberate, not an off-by-one.
+
+Only the hit source is taken from the parent (`PoSSelector.getHitSource(parentHeight)`, with its 100-block lookback):
+a block's VRF proof is over the parent's hit source, made with the key its own period commits.
+
 ## Genesis commitments
 
 `GenesisSettings` carries two commitments to what the genesis block must come out as. Both are optional, and both are

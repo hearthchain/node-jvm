@@ -18,7 +18,7 @@ import org.scalatest.Assertion
   * 2. With commitments from two generators
   * 3. First block at period #1 with one valid and one conflict endorsements
   * 4. Empty block with punishment applied for a conflict endorser
-  * 5. First block at period #2, no one committed
+  * 5. First block at period #2, committed by the valid generator only
   */
 class ConflictEndorserBlocksBasicSuite extends BaseFinalizationSpec {
   private val validGenerator = TxHelpers.signer(0)
@@ -171,8 +171,14 @@ class ConflictEndorserBlocksBasicSuite extends BaseFinalizationSpec {
       d.appender.appendBlock(block3WithVotes)
       after3WithNewPeriodAndEndorsementsCheck(data)
 
-      log.debug("Append block 4")
-      val block4 = d.createBlock(generator = validGenerator, strictTime = true)
+      // A period nobody committed to cannot be extended by anyone - a generator's VRF key is resolved in the period of
+      // the block it generates - so the next period needs its committee in place before the chain reaches it
+      log.debug("Append block 4 with a commitment for the next period")
+      val block4 = d.createBlock(
+        Seq(TxHelpers.commitToGeneration(generationPeriodStart = Height(5), validGenerator)),
+        generator = validGenerator,
+        strictTime = true
+      )
       d.appender.appendBlock(block4)
       after4WithPunishmentCheck(data)
 
