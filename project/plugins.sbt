@@ -25,10 +25,10 @@ Seq(
 val dockerJavaVersion = "3.7.1"
 
 libraryDependencies ++= Seq(
-  "com.fasterxml.jackson.module" %% "jackson-module-scala"              % "2.22.1",
+//  "com.fasterxml.jackson.module" %% "jackson-module-scala"              % "2.22.2",
   "org.hjson"                     % "hjson"                             % "3.1.0",
   ("org.vafer"                    % "jdeb"                              % "1.14").artifacts(Artifact("jdeb", "jar", "jar")),
-  "org.slf4j"                     % "jcl-over-slf4j"                    % "2.0.18",
+  "org.slf4j"                     % "jcl-over-slf4j"                    % "2.0.19",
   "com.github.docker-java"        % "docker-java-core"                  % dockerJavaVersion,
   "com.github.docker-java"        % "docker-java-transport-httpclient5" % dockerJavaVersion
 )
