@@ -234,12 +234,10 @@ def compilePR: Command = commandWithFatalWarnings("compilePR", compilePRRaw)
 def checkPR: Command   = commandWithFatalWarnings("checkPR", checkPRRaw)
 
 commands += Command.command("buildDebPackages") { state =>
-  "set node / Debian / packageArchitecture := \"arm64\"" ::
-    "node/ Debian / packageBin" ::
-    "set node / Debian / packageArchitecture := \"amd64\"" ::
-    "node / Debian / packageBin" ::
-    "grpc-server / Debian / packageBin" ::
-    state
+  val commands = DebArchitecture.all.flatMap { arch =>
+    Seq(s"set node / Debian / packageArchitecture := \"${arch.debString}\"", "node / Debian / packageBin")
+  } :+ "grpc-server / Debian / packageBin"
+  commands.foldRight(state)(_ :: _)
 }
 
 lazy val buildPlatformIndependentArtifacts = taskKey[Unit]("Build fat JARs for node and TGZ for grpc-server")

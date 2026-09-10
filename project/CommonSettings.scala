@@ -38,12 +38,19 @@ object CommonSettings extends AutoPlugin {
   )
 }
 
-sealed abstract class DebArchitecture(val debString: String, val commonName: String)
-object Amd64 extends DebArchitecture("amd64", "x86_64")
-object Arm64 extends DebArchitecture("arm64", "aarch64")
+// The architectures node debs are built for. Each value carries every derivation the build needs from it, so an arch
+// is named once and the Debian control field cannot drift away from the Corretto native jar it ships.
+sealed abstract class DebArchitecture(val debString: String, val correttoClassifier: String)
+object DebArchitecture {
+  case object Amd64 extends DebArchitecture("amd64", "linux-x86_64")
+  case object Arm64 extends DebArchitecture("arm64", "linux-aarch_64")
+
+  val all: Seq[DebArchitecture] = Seq(Amd64, Arm64)
+
+  def apply(debString: String): DebArchitecture =
+    all.find(_.debString == debString).getOrElse(sys.error(s"Unsupported deb architecture: $debString"))
+}
 
 trait CommonKeys {
-  val packageSource   = settingKey[File]("Additional files for DEB")
-  val instrumentation = settingKey[Boolean]("Include kanela java agent in start script")
-  val debArchitecture = settingKey[DebArchitecture]("DEB package architecture")
+  val packageSource = settingKey[File]("Additional files for DEB")
 }

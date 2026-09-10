@@ -18,7 +18,6 @@ object FeeValidation {
   val BlockV5Multiplier = 0.001
 
   val FeeConstants: Map[TransactionType, Long] = Map(
-    TransactionType.Genesis            -> 0,
     TransactionType.Transfer           -> 1,
     TransactionType.Lease              -> 1,
     TransactionType.LeaseCancel        -> 1,
