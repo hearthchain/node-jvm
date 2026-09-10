@@ -333,16 +333,13 @@ more block, which is why the challenged miner there must not be defaultSigner. A
 than making its block unappendable only when it is affordable as the block is built and unaffordable once the challenge
 takes the sender's balance, so the amount has to sit under the sender's balance.
 
-Two different periods gate a block, which matters at a period boundary:
-
-- the appender (`findBlockAndGetGenerators`) checks the generator against the committed set of the **new block's**
-  period, failing with `X is not allowed to generate a block, allowed: …`;
-- `PoSSelector` resolves the generator's VRF key at the **parent's** height (`validateBlockDelay`,
-  `validateGenerationSignature`), failing with `X is not a committed generator of period [a, b]`.
-
-So the generator of the first block of a period must be committed on *both* sides of the boundary — commit it in
-genesis as well as in the transaction that commits it for the period under test. (That overlap is the designed flow;
-`Blockchain.generationDeposit` charges a generator committed for both the current and the next period two deposits.)
+Two checks gate a block's generator, and both read the **new block's** own period, so a generator committed only for
+the period it mines in is enough, boundary or not: the appender (`findBlockAndGetGenerators`) checks membership in that
+period's committed set, failing with `X is not allowed to generate a block, allowed: …`, and `PoSSelector` resolves the
+generator's VRF key from that same period's commitment (`validateBlockDelay`, `validateGenerationSignature`), failing
+with `X is not a committed generator of period [a, b]`. See "Generation periods at a boundary" in
+`docs/notes/state-and-blocks.md`: the two used to disagree by one height, and test genesis blocks that commit the
+generator of the first block of the period under test on both sides of the boundary are leftovers of that.
 
 Because tests log at `OFF` by default, an append rejected inside the appender surfaces only as
 `Can't apply block …, see logs` from `Domain.appendBlock`. Re-run with `-Dlogback.test.level=TRACE` and grep for

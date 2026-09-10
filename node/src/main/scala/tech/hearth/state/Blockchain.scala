@@ -175,6 +175,8 @@ object Blockchain {
       *
       * A generator's VRF key is derived independently of its signing key, so it cannot be taken from a block header:
       * only the commitment says which VRF key that generator's blocks are verified against.
+      *
+      * `at` is the height of the block being verified, not its parent's - see [[tech.hearth.consensus.PoSSelector]].
       */
     def vrfPublicKeyOf(generator: PublicKey, at: Height): Either[String, ByteStr] = {
       val generatorAddress = generator.toAddress

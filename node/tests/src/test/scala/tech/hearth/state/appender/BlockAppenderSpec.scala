@@ -5,9 +5,10 @@ import tech.hearth.db.WithDomain
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.network.{MessageCodec, PBBlockSpec, PeerDatabase, RawBytes}
-import tech.hearth.state.BlockEndorser
+import tech.hearth.state.{BlockEndorser, Height}
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.Ignored
+import tech.hearth.test.DomainPresets.configure
 import tech.hearth.test.{FlatSpec, TestTime}
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.utils.Schedulers
@@ -75,6 +76,31 @@ class BlockAppenderSpec extends FlatSpec with WithDomain with BeforeAndAfterAll 
 
       append() shouldBe a[BlockApplyResult.Applied]
       append() shouldBe BlockApplyResult.Ignored
+    }
+  }
+
+  "BlockAppender" should "accept the first block of a period from a generator committed only for that period" in {
+    val genesisGenerator = TxHelpers.signer(0)
+    val nextGenerator    = TxHelpers.signer(1)
+    // Periods [1, 2] and [3, 4]: height 3 is the first block the next period's committee generates, and the only
+    // height at which the block's own period and its parent's differ
+    withDomain(
+      DomainPresets.DeterministicFinality.configure(_.copy(generationPeriodLength = 2)),
+      AddrWithBalance.enoughBalances(genesisGenerator, nextGenerator),
+      generators = Seq(genesisGenerator)
+    ) { d =>
+      d.appender
+        .appendBlockWithoutFallback(
+          d.createBlock(Seq(TxHelpers.commitToGeneration(Height(3), nextGenerator)), strictTime = true, generator = genesisGenerator)
+        )
+        .explicitGet() shouldBe a[BlockApplyResult.Applied]
+      d.blockchain.height shouldBe 2
+
+      d.appender
+        .appendBlockWithoutFallback(d.createBlock(strictTime = true, generator = nextGenerator))
+        .explicitGet() shouldBe a[BlockApplyResult.Applied]
+      d.blockchain.height shouldBe 3
+      d.lastBlock.header.generator.toAddress shouldBe nextGenerator.toAddress
     }
   }
 

@@ -371,9 +371,9 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
 
     def continue(d: Domain): Unit
 
-    // Genesis commits every generator for period [1, 2]: notCommittedGenerator mines block 2, and the committed ones
-    // mine block 3 — the first block of period [3, 4] — whose VRF key PoSSelector resolves at the parent's height.
-    def run(): Unit = withDomain(defaultSettings, AddrWithBalance.enoughBalances(allGenerators*), generators = allGenerators) { d =>
+    // Genesis commits only notCommittedGenerator, the miner of block 2, for period [1, 2]. The committed ones mine
+    // from block 3 - the first block of period [3, 4] - on the strength of their commitment for that period alone.
+    def run(): Unit = withDomain(defaultSettings, AddrWithBalance.enoughBalances(allGenerators*), generators = Seq(notCommittedGenerator)) { d =>
       log.debug(s"Append block 2 with commitments")
       val txs                   = committedGenerators.map(x => TxHelpers.commitToGeneration(generationPeriodStart = Height(3), x))
       val block2WithCommitments = d.createBlock(txs, generator = notCommittedGenerator, strictTime = true)

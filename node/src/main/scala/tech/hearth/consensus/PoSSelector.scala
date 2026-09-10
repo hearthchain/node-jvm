@@ -55,7 +55,7 @@ case class PoSSelector(
   def validateBlockDelay(parentHeight: Int, header: BlockHeader, parent: BlockHeader, effectiveBalance: Long): Either[ValidationError, Unit] = {
     for {
       parentHitSource <- getHitSource(parentHeight)
-      gs <- vrfPublicKeyOf(header.generator, Height(parentHeight))
+      gs <- vrfPublicKeyOf(header.generator, Height(parentHeight + 1))
         .flatMap(crypto.verifyVRF(header.generationSignature, parentHitSource.arr, _))
         .map(_.arr)
       ts = posCalculator().calculateDelay(hit(gs), parent.baseTarget, effectiveBalance) + parent.timestamp
@@ -68,16 +68,22 @@ case class PoSSelector(
   }
 
   def validateGenerationSignature(block: Block): Either[ValidationError, ByteStr] =
-    blockchain.heightOf(block.header.reference).toRight(GenericError(s"Block reference ${block.header.reference} doesn't exist")).flatMap { height =>
-      for {
-        hs        <- getHitSource(height)
-        vrfPK     <- vrfPublicKeyOf(block.header.generator, Height(height))
-        hitSource <- crypto.verifyVRF(block.header.generationSignature, hs.arr, vrfPK)
-      } yield hitSource
+    blockchain.heightOf(block.header.reference).toRight(GenericError(s"Block reference ${block.header.reference} doesn't exist")).flatMap {
+      parentHeight =>
+        for {
+          hs        <- getHitSource(parentHeight)
+          vrfPK     <- vrfPublicKeyOf(block.header.generator, Height(parentHeight + 1))
+          hitSource <- crypto.verifyVRF(block.header.generationSignature, hs.arr, vrfPK)
+        } yield hitSource
     }
 
-  private def vrfPublicKeyOf(generator: PublicKey, at: Height): Either[ValidationError, ByteStr] =
-    blockchain.vrfPublicKeyOf(generator, at).leftMap(GenericError(_))
+  /** @param blockHeight
+    *   The height of the block being verified, never its parent's: the two straddle two generation periods on the first
+    *   block of a period, and it is the block's own period that holds the commitment its generator mines under - the
+    *   same period [[tech.hearth.state.appender.findBlockAndGetGenerators]] admits it from.
+    */
+  private def vrfPublicKeyOf(generator: PublicKey, blockHeight: Height): Either[ValidationError, ByteStr] =
+    blockchain.vrfPublicKeyOf(generator, blockHeight).leftMap(GenericError(_))
 
   def checkBaseTargetLimit(baseTarget: Long, height: Int): Either[ValidationError, Unit] = {
     def stopNode(): ValidationError = {

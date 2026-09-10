@@ -646,9 +646,11 @@ object Domain {
               bcu.hitSource(parentHeight - 100).get
             else bcu.hitSource(parentHeight).get
 
-          // A generator's VRF key is whatever it registered when committing, see Blockchain.vrfPublicKeyOf
+          // A generator's VRF key is whatever it registered when committing, see Blockchain.vrfPublicKeyOf. It is
+          // resolved at the new block's own height, as PoSSelector does: on the first block of a period the parent's
+          // period is the previous committee's, which the new block's generator need not belong to.
           def vrfKeyOf(generator: tech.hearth.account.PublicKey): Either[ValidationError, ByteStr] =
-            bcu.vrfPublicKeyOf(generator, Height(parentHeight)).left.map(TxValidationError.GenericError(_))
+            bcu.vrfPublicKeyOf(generator, Height(parentHeight + 1)).left.map(TxValidationError.GenericError(_))
 
           for {
             vrfPK <- vrfKeyOf(block.header.generator)

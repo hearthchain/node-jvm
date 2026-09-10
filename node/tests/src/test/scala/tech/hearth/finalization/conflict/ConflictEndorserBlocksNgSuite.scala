@@ -19,7 +19,7 @@ import org.scalatest.Assertion
   * 3. First block at period #1
   *   1. Microblock with one valid endorsement
   * 4. Empty block with punishment applied for a conflict endorser
-  * 5. First block at period #2, no one committed
+  * 5. First block at period #2, committed by the valid generator only
   */
 class ConflictEndorserBlocksNgSuite extends BaseFinalizationSpec {
   private val validGenerator = TxHelpers.signer(0)
@@ -190,8 +190,14 @@ class ConflictEndorserBlocksNgSuite extends BaseFinalizationSpec {
       d.appendMicroBlock(microBlockWithTxn)
       after3MicroBlockWithConflictEndorsementCheck(data)
 
-      log.debug("Append block 4")
-      val block4 = d.createBlock(generator = validGenerator, strictTime = true)
+      // A period nobody committed to cannot be extended by anyone - a generator's VRF key is resolved in the period of
+      // the block it generates - so the next period needs its committee in place before the chain reaches it
+      log.debug("Append block 4 with a commitment for the next period")
+      val block4 = d.createBlock(
+        Seq(TxHelpers.commitToGeneration(generationPeriodStart = Height(5), validGenerator)),
+        generator = validGenerator,
+        strictTime = true
+      )
       d.appender.appendBlock(block4)
       after4WithPunishmentCheck(data)
 
