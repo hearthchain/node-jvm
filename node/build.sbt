@@ -1,6 +1,7 @@
 import com.typesafe.sbt.SbtNativePackager.Debian
-import com.typesafe.sbt.packager.archetypes.TemplateWriter
 import sbtcompat.PluginCompat.toFileRef
+
+import scala.annotation.nowarn
 
 enablePlugins(
   RunApplicationSettings,
@@ -13,8 +14,6 @@ enablePlugins(
 )
 
 libraryDependencies ++= Dependencies.node.value
-
-debArchitecture := Arm64
 
 homepage := Some(uri("https://waves.tech/"))
 developers := List(
@@ -146,23 +145,24 @@ linuxPackageSymlinks := linuxPackageSymlinks.value.filterNot(_.link == s"/etc/${
   else lsl
 }
 
-// A copy of DebianPlugin's own definition (whose helper is private[debian]) wrapped in Def.uncached: this task's
-// real output is the maintainer scripts written under (Universal / target)/tmp/debian, a path sbt 2 cannot track.
-// On a cache hit it returns the file list without writing anything, so jdeb packages the previous build's copies,
-// or fails outright once they have been cleaned away. Same trap as stageForDocker (docs/notes/build-tooling.md).
-debianMaintainerScripts := Def.uncached {
-  val scriptDir    = (Universal / target).value / "tmp" / "debian"
-  val replacements = (Debian / linuxScriptReplacements).value
-  (Debian / maintainerScripts).value.toSeq.map { case (name, lines) =>
-    val script = scriptDir / name
-    IO.writeLines(script, TemplateWriter.generateScriptFromLines(lines, replacements))
-    script -> name
-  }
+// The scripts go to the deb straight from the source tree: packageBin copies each into DEBIAN/ and substitutes
+// ${{app_name}}/${{header}} in the copy, so the round trip through the generic maintainerScripts (lines in, temp
+// files back out under (Universal / target)/tmp/debian) buys nothing here and only adds a path sbt 2 cannot track.
+//
+// Def.uncached is mandatory, not an optimisation: sbt 2 refuses to cache a task whose result carries java.io.File,
+// and Seq[(File, String)] is what JDebPackaging reads. The key is deprecated in favour of the generic
+// maintainerScripts, but JDebPackaging still reads this one, so there is nothing to migrate to.
+@nowarn("cat=deprecation")
+val debianMaintainerScriptsFromSource = debianMaintainerScripts := Def.uncached {
+  val scriptDir = (Debian / packageSource).value / "debian"
+  Seq("preinst", "postinst", "prerm", "postrm").map(name => (scriptDir / name) -> name)
 }
+
+debianMaintainerScriptsFromSource
 
 inConfig(Debian)(
   Seq(
-    packageArchitecture      := debArchitecture.value.debString,
+    packageArchitecture      := DebArchitecture.Arm64.debString,
     maintainer               := "tech.hearth",
     packageSource            := sourceDirectory.value / "package",
     linuxStartScriptTemplate := (packageSource.value / "systemd.service").toURI.toURL,
@@ -171,13 +171,8 @@ inConfig(Debian)(
     // Not /lib/systemd/system: on merged-usr systems dpkg chokes on a package that ships the aliased ./lib path
     defaultLinuxStartScriptLocation := "/usr/lib/systemd/system",
     debianPackageDependencies += "java17-runtime-headless",
-    // Def.uncached for the same reason as debianMaintainerScripts above: the scripts are read from disk, and sbt 2
-    // has no way to notice that they changed
-    maintainerScripts := Def.uncached(
-      maintainerScriptsFromDirectory(packageSource.value / "debian", Seq("preinst", "postinst", "postrm", "prerm"))
-    ),
     linuxPackageMappings := {
-      val classifier = if (packageArchitecture.value == "amd64") "linux-x86_64" else "linux-aarch_64"
+      val classifier = DebArchitecture(packageArchitecture.value).correttoClassifier
       val platformSpecificMappings = packageMapping(
         (Optional / update).value
           .select(artifactFilter(classifier = classifier))

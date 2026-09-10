@@ -15,7 +15,7 @@ object Dependencies {
       "org.typelevel"            %% "cats-core"    % "2.13.0",
       "org.typelevel"            %% "cats-kernel"  % "2.13.0",
       "com.google.code.gson"      % "gson"         % "2.14.0",
-      "com.squareup.okio"         % "okio-jvm"     % "3.18.1",
+      "com.squareup.okio"         % "okio-jvm"     % "3.18.2",
       "org.apache.httpcomponents" % "httpclient"   % "4.5.14",
       "org.slf4j"                 % "slf4j-api"    % "2.0.18",
       "org.msgpack"               % "msgpack-core" % "0.9.12",
@@ -86,11 +86,13 @@ object Dependencies {
     asyncHttpClient
   ).map(_ % Test)
 
+  val scalaCheckMinor = 20
+
   lazy val test = scalaTest +: Seq(
     logback,
-    "org.scalatestplus" %% "scalacheck-1-16" % "3.2.14.0",
-    "org.scalacheck"    %% "scalacheck"      % "1.19.0",
-    "org.scalamock"     %% "scalamock"       % "7.5.5",
+    "org.scalatestplus" %% s"scalacheck-1-$scalaCheckMinor" % "3.2.20.0",
+    "org.scalacheck"    %% "scalacheck"                     % s"1.$scalaCheckMinor.0",
+    "org.scalamock"     %% "scalamock"                      % "7.5.5",
     // bcprov-jdk18on (cryptoProviders, above) only parses X.509; building signed certificate/CRL fixtures for DCAP
     // collateral tests needs the higher-level builder API.
     "org.bouncycastle" % "bcpkix-jdk18on" % "1.85" // bcprov-jdk18on's 1.85.2 patch has no matching bcpkix release yet

@@ -18,7 +18,6 @@ object FeeValidation {
   val BlockV5Multiplier = 0.001
 
   val FeeConstants: Map[TransactionType, Long] = Map(
-    TransactionType.Genesis            -> 0,
     TransactionType.Transfer           -> 1,
     TransactionType.Lease              -> 1,
     TransactionType.LeaseCancel        -> 1,
@@ -41,7 +40,7 @@ object FeeValidation {
       .map { baseFee =>
         tx match {
           case tx: TransferTransaction =>
-            baseFee + (tx.transfers.size + 1) / 2
+            baseFee + tx.transfers.size / 2
           case _ => baseFee
         }
       }

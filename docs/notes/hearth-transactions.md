@@ -1,5 +1,5 @@
 ---
-purpose: Implementation notes for hearth transactions (DCAP collateral registry, StartBoost, Reserve, BindApiKey, Settle, workBoost)
+purpose: Implementation notes for hearth transactions (DCAP collateral registry, StartBoost, Reserve, BindApiKey, Settle, workBoost, offline signing with hearth util)
 ---
 
 # Hearth transaction lifecycle: DCAP, StartBoost, Reserve, BindApiKey, Settle, workBoost
@@ -180,6 +180,16 @@ every other request type keeps the small default unchanged. `BindApiKeyRequest.e
 same way pre-emptively, even though a real HPKE-sealed envelope is well under 280 hex chars - see "Reserve and
 BindApiKey" below. A future request class with its own large-blob field should reuse `largeByteStrFormat` the same
 way rather than growing the shared default limit, which stays deliberately small for the common case.
+
+### Signing a commitment offline: `hearth util transaction sign`
+
+`util transaction sign` signs from a node config instead of from a running node, and reaches the same code as `POST /transactions/sign`: `UtilApp` loads the config for the wallet anyway, so it also builds `GeneratorKeys.fromSettings(settings.minerSettings)` from it and calls the five-argument `TransactionFactory.parseRequestAndSign`, exactly as `TransactionsApiRoute.sign` does. Before that it called the lone-key overload, which cannot complete a CommitToGeneration at all: the endorser BLS key, the VRF key and the two proofs of possession come from `hearth.miner.accounts`, and a caller holding only a signing key has none of them. It also resolved the signer through the wallet *before* dispatching, so a mining account that is not also a wallet account failed there rather than being looked up among the generator keys, which is where a commitment's signer lives.
+
+Two differences from the REST endpoint remain, both inherent to having no chain to read. The height is one: the route fills `generationPeriodStart` from `blockchain.currentGenerationPeriod.next.start`, and the util has to be told it in the request (`sign-commit-to-generation.sh` reads it from `/blockchain/finality`'s `nextGenerationPeriod.start` and puts it there). The sender is the other: the route has a wallet-and-accounts default, and the util commits for the sole `hearth.miner.accounts` entry when the request names no sender, refusing to guess when several are configured.
+
+`sign-commit-to-generation.sh` (repo root) is the operator-facing wrapper: it reads the height over REST, signs inside the node's own container over `docker compose exec` (where the config with the keys is already mounted, so no key material passes through the host or a command line), and posts the result to `/transactions/broadcast`. Two things about invoking the util that way are easy to get wrong. Scopt reads the util's shared options as children of the command, so `-c` belongs *after* the command chain (`transaction sign -c node.conf`, not `-c node.conf transaction sign`, which fails with `Unknown argument 'transaction'`) - the same ordering rule as `crypto create-keys`, see "Keys" in `docs/notes/keys-and-signatures.md`. And the signed transaction leaves on stdout while logback's console appender defaults to INFO on the same stream, so anything parsing that output has to pass `-Dlogback.stdout.level=OFF`; `entrypoint.sh` sets that property for the node from `HEARTH_LOG_LEVEL`, but a `docker compose exec` bypasses the entrypoint and inherits none of it.
+
+The util now exits non-zero on failure, which is what makes any of this scriptable: it used to print the error to stderr, write nothing to stdout, and exit 0, so a caller could not tell a failed sign from a command that legitimately produced no output. A command line scopt rejects exits 2, an action that returns a `Left` exits 1.
 
 ## Reserve and BindApiKey: locking funds and binding enclave-sealed API keys
 

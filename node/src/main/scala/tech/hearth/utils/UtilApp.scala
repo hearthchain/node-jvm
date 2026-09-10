@@ -8,8 +8,9 @@ import tech.hearth.common.utils.{Base16, Base64}
 import tech.hearth.crypto.bls.{BlsKeyPair, BlsSignature}
 import tech.hearth.crypto.{Bip39, Hex, Mnemonic, P256Curve, Sha256, SigningKey, VrfKey}
 import tech.hearth.lang.ValidationError
-import tech.hearth.state.Height
-import tech.hearth.transaction.TransactionFactory
+import tech.hearth.mining.GeneratorKeys
+import tech.hearth.transaction.TxValidationError.GenericError
+import tech.hearth.transaction.{TransactionFactory, TransactionType}
 import tech.hearth.wallet.Wallet
 import tech.hearth.{Application, Version}
 import play.api.libs.json.{JsObject, Json}
@@ -29,7 +30,6 @@ object UtilApp {
   case class CompileOptions(assetScript: Boolean = false)
   case class VerifyOptions(publicKey: PublicKey = null.asInstanceOf[PublicKey], signature: ByteStr = ByteStr.empty, checkWeakPk: Boolean = false)
   case class HashOptions(mode: String = "fast")
-  case class SignTxOptions(signerAddress: String = "", currentHeight: Height = Height(1), finalityActivationHeight: Option[Height] = None)
   case class KeyPairOptions(seedType: String = "mnemonic", nonce: Int = 0, mnemonic: Option[String] = None)
 
   enum Input {
@@ -46,7 +46,7 @@ object UtilApp {
       inFormat: String = "plain",
       outFormat: String = "plain",
       compileOptions: CompileOptions = CompileOptions(),
-      signOptions: String | SigningKey = "",
+      signOptions: Option[String | SigningKey] = None,
       verifyOptions: VerifyOptions = VerifyOptions(),
       hashOptions: HashOptions = HashOptions(),
       keyPairOptions: KeyPairOptions = KeyPairOptions()
@@ -56,34 +56,48 @@ object UtilApp {
     // we need to load application config to properly set chain ID
     val walletSettings = Application.loadApplicationConfig(cmd.configFile.map(new File(_))).walletSettings
     cmd.signOptions match {
-      case signerAddress: String => Wallet(walletSettings).findPrivateKey(signerAddress)
-      case kp: SigningKey        => Right(kp)
+      case Some(signerAddress: String) => Wallet(walletSettings).findPrivateKey(signerAddress)
+      case Some(kp: SigningKey)        => Right(kp)
+      case None                        => Left(GenericError("no signing key given"))
     }
   }
 
-  def main(args: Array[String]): Unit = {
-    OParser.parse(commandParser, args, Command()).foreach { cmd =>
-      // Read only for the commands that take data: create-keys is configured entirely by its own options, and a stdin
-      // nothing ever writes to or closes (an IDE run configuration, for one) would block here until EOF.
-      lazy val inBytes = IO.readInput(cmd)
-      val result = cmd.mode match {
-        case Mode.SignBytes       => maybeFindKeyPair(cmd).flatMap(Actions.doSign(_, inBytes))
-        case Mode.VerifySignature => Actions.doVerify(cmd, inBytes)
-        case Mode.CreateKeyPair   =>
-          // Rendering an address needs a network HRP, which loading the config pins - the same reason the signing
-          // commands load it.
-          Application.loadApplicationConfig(cmd.configFile.map(new File(_)))
-          Actions.doCreateKeyPair(cmd, inBytes)
-        case Mode.Hash        => Actions.doHash(cmd, inBytes)
-        case Mode.SerializeTx => Actions.doSerializeTx(inBytes)
-        case Mode.SignTx      => maybeFindKeyPair(cmd).flatMap(Actions.doSignTx(_, inBytes))
-        case Mode.SmokeTest   => Actions.doSmokeTest()
-      }
+  def main(args: Array[String]): Unit =
+    OParser.parse(commandParser, args, Command()) match {
+      // scopt has already reported what was wrong with the command line; only the exit code is left to say so.
+      case None      => sys.exit(2)
+      case Some(cmd) => run(cmd)
+    }
 
-      result match {
-        case Left(value)     => System.err.println(s"Error executing command: $value")
-        case Right(outBytes) => IO.writeOutput(cmd, outBytes)
-      }
+  private def run(cmd: Command): Unit = {
+    // Read only for the commands that take data: create-keys is configured entirely by its own options, and a stdin
+    // nothing ever writes to or closes (an IDE run configuration, for one) would block here until EOF.
+    lazy val inBytes = IO.readInput(cmd)
+    val result = cmd.mode match {
+      case Mode.SignBytes       => maybeFindKeyPair(cmd).flatMap(Actions.doSign(_, inBytes))
+      case Mode.VerifySignature => Actions.doVerify(cmd, inBytes)
+      case Mode.CreateKeyPair   =>
+        // Rendering an address needs a network HRP, which loading the config pins - the same reason the signing
+        // commands load it.
+        Application.loadApplicationConfig(cmd.configFile.map(new File(_)))
+        Actions.doCreateKeyPair(cmd, inBytes)
+      case Mode.Hash        => Actions.doHash(cmd, inBytes)
+      case Mode.SerializeTx => Actions.doSerializeTx(inBytes)
+      case Mode.SignTx      =>
+        // A CommitToGeneration is signed by one of `hearth.miner.accounts`, not by a wallet account: it registers
+        // that account's own generator keys, and the wallet holds neither those keys nor, necessarily, the account.
+        val settings = Application.loadApplicationConfig(cmd.configFile.map(new File(_)))
+        Actions.doSignTx(Wallet(settings.walletSettings), GeneratorKeys.fromSettings(settings.minerSettings), cmd.signOptions, inBytes)
+      case Mode.SmokeTest => Actions.doSmokeTest()
+    }
+
+    result match {
+      // A non-zero exit is what lets a caller tell a failed command from one that legitimately produced no output:
+      // the error goes to stderr, and stdout stays empty either way.
+      case Left(value) =>
+        System.err.println(s"Error executing command: $value")
+        sys.exit(1)
+      case Right(outBytes) => IO.writeOutput(cmd, outBytes)
     }
   }
 
@@ -144,7 +158,7 @@ object UtilApp {
             opt[String]('k', "private-key")
               .text("Private key for signing")
               .required()
-              .action((s, c) => c.copy(signOptions = SigningKey.fromSeed(Base16.decode(s))))
+              .action((s, c) => c.copy(signOptions = Some(SigningKey.fromSeed(Base16.decode(s)))))
           )
           .text("Sign bytes with provided private key")
           .action((_, c) => c.copy(mode = Mode.SignBytes)),
@@ -198,7 +212,7 @@ object UtilApp {
             opt[String]("signer-address")
               .abbr("sa")
               .text("Signer address (requires corresponding key in wallet.dat)")
-              .action((a, c) => c.copy(signOptions = a))
+              .action((a, c) => c.copy(signOptions = Some(a)))
           ),
         cmd("sign-with-sk")
           .text("Sign JSON transaction with private key")
@@ -207,7 +221,7 @@ object UtilApp {
             opt[String]("private-key")
               .abbr("sk")
               .text("Private key")
-              .action((a, c) => c.copy(signOptions = SigningKey.fromSeed(Base16.decode(a))))
+              .action((a, c) => c.copy(signOptions = Some(SigningKey.fromSeed(Base16.decode(a)))))
           )
       ),
       cmd("smoke").action((_, c) => c.copy(mode = Mode.SmokeTest, inputData = Input.Str(""))),
@@ -313,14 +327,30 @@ object UtilApp {
         .map(_.toString)
         .map(_.bytes())
 
-    def doSignTx(signerKeyPair: SigningKey, data: Array[Byte]): ActionResult = {
+    /** Signs the way `POST /transactions/sign` does, from the node config instead of from a running node: the wallet
+      * signs an ordinary transaction, and `hearth.miner.accounts` supplies the generator keys and proofs of possession
+      * a CommitToGeneration carries, which no wallet holds. The one thing a config cannot supply is the chain height,
+      * so such a request has to name the `generationPeriodStart` it commits to.
+      */
+    def doSignTx(wallet: Wallet, generatorKeys: GeneratorKeys, signer: Option[String | SigningKey], data: Array[Byte]): ActionResult = {
       import cats.syntax.either.*
 
+      val request = Json.parse(data).as[JsObject]
       TransactionFactory
-        .parseRequestAndSign(Json.parse(data).as[JsObject], signerKeyPair)
+        .parseRequestAndSign(request, wallet, generatorKeys, signer.orElse(soleGenerator(request, generatorKeys)), None)
         .leftMap(_.toString)
         .map(_.json().toString().getBytes())
     }
+
+    /** With one account in `hearth.miner.accounts` there is nothing to choose between, so a commitment that names no
+      * sender is a commitment for that account.
+      */
+    private def soleGenerator(request: JsObject, generatorKeys: GeneratorKeys): Option[String] =
+      Option.when(
+        (request \ "type").asOpt[Int].contains(TransactionType.CommitToGeneration.id) &&
+          (request \ "sender").toOption.isEmpty &&
+          generatorKeys.accounts.sizeIs == 1
+      )(generatorKeys.accounts.head.address.toString)
 
     def doSmokeTest(): ActionResult = {
       val message = Base64.decode(

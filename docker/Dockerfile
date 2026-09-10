@@ -46,7 +46,7 @@ VOLUME $HEARTH_DATA
 VOLUME $HEARTH_LOG
 VOLUME $HEARTH_INSTALL_PATH/lib/plugins
 
-HEALTHCHECK CMD curl -f http://localhost:6869/node/status || exit 1
+HEALTHCHECK CMD curl -f http://localhost:5520/node/status || exit 1
 
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/usr/share/hearth/bin/entrypoint.sh"]

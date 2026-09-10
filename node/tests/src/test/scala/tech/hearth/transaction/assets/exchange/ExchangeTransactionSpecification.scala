@@ -295,7 +295,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
     // Ids and addresses are derived rather than pasted in: an address is bech32 now and an id is a hash over bytes
     // that have changed. An ExchangeTransaction also has no version any more, is type 3, and carries its chain id.
     val js = Json.parse(s"""{
-         "type":3,
+         "type":2,
          "id":"${tx.id()}",
          "sender":"${tx.sender.toAddress}",
          "senderPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
@@ -416,7 +416,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
     // Same as above: no transaction version, type 3, chain id, and derived ids and addresses
     val js = Json.parse(s"""{
-         "type":3,
+         "type":2,
          "id":"${tx.id()}",
          "sender":"${tx.sender.toAddress}",
          "senderPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
@@ -538,7 +538,7 @@ class ExchangeTransactionSpecification extends PropSpec with NTPTime with JsonMa
 
     // Same as above: no transaction version, type 3, chain id, and derived ids and addresses
     val js = Json.parse(s"""{
-         "type":3,
+         "type":2,
          "id":"${tx.id()}",
          "sender":"${tx.sender.toAddress}",
          "senderPublicKey":"ddc81a3015b980628f204d30c3e1400626471de92e8271022292f48b11766716",
