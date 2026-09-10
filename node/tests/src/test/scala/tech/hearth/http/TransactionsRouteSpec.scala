@@ -93,16 +93,18 @@ class TransactionsRouteSpec
   routePath("/calculateFee") - {
     "hearth" in {
       val transferTx = Json.obj(
-        "type"            -> 1,
-        "version"         -> 1,
-        "transfers" -> Json.arr(Json.obj(
-          "amount"          -> 1000000,
-          // Not TestValues.address: that is this very sender's, and a transfer to yourself is rejected before any fee
-          // is calculated
-          "recipient" -> TxHelpers.secondAddress
-        )),
+        "type"    -> 1,
+        "version" -> 1,
+        "transfers" -> Json.arr(
+          Json.obj(
+            "amount" -> 1000000,
+            // Not TestValues.address: that is this very sender's, and a transfer to yourself is rejected before any fee
+            // is calculated
+            "recipient" -> TxHelpers.secondAddress
+          )
+        ),
         "feeAssetId"      -> JsNull,
-        "senderPublicKey" -> PublicKey(TestValues.keyPair.publicKey),
+        "senderPublicKey" -> PublicKey(TestValues.keyPair.publicKey)
       )
 
       Post(routePath("/calculateFee"), transferTx) ~> route ~> check {
