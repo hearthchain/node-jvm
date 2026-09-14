@@ -75,6 +75,7 @@ object StateSnapshot {
       portfolios: Map[Address, Portfolio] = Map(),
       orderFills: Map[ByteStr, VolumeAndFee] = Map(),
       issuedAssets: Seq[(IssuedAsset, NewAssetInfo)] = Seq(),
+      updatedAssetVolumes: Map[IssuedAsset, BigInt] = Map(),
       updatedMinAssetFees: Map[IssuedAsset, MinAssetFee] = Map(),
       newLeases: Map[ByteStr, LeaseStaticInfo] = Map(),
       cancelledLeases: Map[ByteStr, LeaseDetails.Status & LeaseDetails.Status.Inactive] = Map.empty,
@@ -102,7 +103,7 @@ object StateSnapshot {
         b,
         lb,
         assetStatics(issuedAssets),
-        assetVolumes(issuedAssets),
+        assetVolumes(issuedAssets) ++ updatedAssetVolumes,
         minAssetFees(issuedAssets, updatedMinAssetFees),
         newLeases,
         cancelledLeases,
@@ -176,8 +177,8 @@ object StateSnapshot {
       asset -> (info.static, idx + 1)
     }.toMap
 
-  // an asset's volume is fixed forever at issuance - a predefined snapshot can only mint a brand-new asset id,
-  // never touch an existing one - so there is no "merge with an existing volume" case to handle here
+  // The volume an issuance starts at. A predefined snapshot can also re-issue an existing asset, which arrives
+  // through build's updatedAssetVolumes instead and carries the new total, not a delta.
   private def assetVolumes(issuedAssets: Seq[(IssuedAsset, NewAssetInfo)]): Map[IssuedAsset, BigInt] =
     issuedAssets.view.map { case (id, nai) => id -> nai.volume }.toMap
 

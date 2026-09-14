@@ -55,6 +55,10 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       )
     )
 
+  /** Appends one more entry to `base`'s predefined snapshots, leaving its height-1 genesis entry in place. */
+  private def withSnapshotAt(snapshot: PredefinedSnapshotSettings, base: HearthSettings = TransactionStateSnapshot): HearthSettings =
+    base.copy(blockchainSettings = base.blockchainSettings.copy(predefinedSnapshots = base.blockchainSettings.predefinedSnapshots :+ snapshot))
+
   private def assetSettings(quantity: Long, minFee: Long = TestValues.fee, id: String = assetId.toString): GenesisAssetSettings =
     GenesisAssetSettings(
       id = id,
@@ -378,11 +382,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
         assets = Seq(assetSettings(quantity = 1000)),
         balances = Seq(GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> 1000L)))
       )
-      val settings = TransactionStateSnapshot.copy(blockchainSettings =
-        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
-          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
-        )
-      )
+      val settings = withSnapshotAt(snapshotAtHeight3)
 
       withDomain(settings, Seq(address(1) -> 1.hearth)) { d =>
         d.blockchain.height shouldBe 1
@@ -405,6 +405,132 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       }
     }
 
+    "re-issues an asset pre-issued with zero quantity at genesis, and rolls the mint back" in {
+      val asset = IssuedAsset(assetId)
+      // No `assets` entry: the id is already on chain, so the balances crediting it re-issue it.
+      val settings = withSnapshotAt(
+        PredefinedSnapshotSettings(height = 5, balances = Seq(GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> 500L)))),
+        settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 0)))
+      )
+
+      withDomain(settings, Seq(address(1) -> 1.hearth)) { d =>
+        d.blockchain.assetDescription(asset).value.totalVolume shouldBe BigInt(0)
+
+        d.appendBlock() // height 2
+        d.appendBlock() // height 3
+        d.appendBlock() // height 4
+        d.blockchain.assetDescription(asset).value.totalVolume shouldBe BigInt(0)
+        d.blockchain.balance(address(2), asset) shouldBe 0L
+
+        d.appendBlock() // height 5
+        val description = d.blockchain.assetDescription(asset).value
+        description.totalVolume shouldBe BigInt(500)
+        // the asset is still the one genesis issued: only its supply moved
+        description.issueHeight shouldBe Height(1)
+        description.decimals shouldBe 2
+        d.blockchain.balance(address(2), asset) shouldBe 500L
+
+        // append past height 5 so the re-issue is persisted rather than still living in the liquid block, and the
+        // rollback below has to undo it out of the volume history rather than just discard a liquid snapshot
+        d.appendBlock() // height 6
+        d.rocksDBWriter.assetDescription(asset).value.totalVolume shouldBe BigInt(500)
+
+        d.rollbackTo(4)
+        d.blockchain.assetDescription(asset).value.totalVolume shouldBe BigInt(0)
+        d.blockchain.balance(address(2), asset) shouldBe 0L
+      }
+    }
+
+    "adds the re-issued amount to the asset's existing supply, across several recipients" in {
+      val asset = IssuedAsset(assetId)
+      val settings = withSnapshotAt(
+        PredefinedSnapshotSettings(
+          height = 3,
+          balances = Seq(
+            GenesisBalanceSettings(address(1).toBech32, 0, Map(assetId.toString -> 30L)),
+            GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> 70L))
+          )
+        ),
+        settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 1000)))
+      )
+
+      withDomain(settings, balances = Seq(AddrWithBalance(address(1), 1.hearth, Map(asset -> 1000L)))) { d =>
+        d.appendBlock() // height 2
+        d.appendBlock() // height 3
+
+        // Reads at the liquid height answer from the snapshot; append past it so the persisted state is checked too.
+        d.blockchain.assetDescription(asset).value.totalVolume shouldBe BigInt(1100)
+        d.appendBlock() // height 4
+        d.appendBlock() // height 5
+        d.rocksDBWriter.assetDescription(asset).value.totalVolume shouldBe BigInt(1100)
+
+        d.blockchain.balance(address(1), asset) shouldBe 1030L
+        d.blockchain.balance(address(2), asset) shouldBe 70L
+      }
+    }
+
+    "accumulates two re-issues of the same asset to the same address" in {
+      val asset                = IssuedAsset(assetId)
+      def credit(amount: Long) = GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> amount))
+      val settings = withSnapshotAt(
+        PredefinedSnapshotSettings(height = 10, balances = Seq(credit(200L))),
+        withSnapshotAt(
+          PredefinedSnapshotSettings(height = 5, balances = Seq(credit(100L))),
+          settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 0)))
+        )
+      )
+
+      withDomain(settings, Seq(address(1) -> 1.hearth)) { d =>
+        (2 to 5).foreach(_ => d.appendBlock())
+        d.blockchain.height shouldBe 5
+        d.blockchain.assetDescription(asset).value.totalVolume shouldBe BigInt(100)
+        d.blockchain.balance(address(2), asset) shouldBe 100L
+
+        // the second re-issue adds to what the first left behind, rather than replacing it
+        (6 to 10).foreach(_ => d.appendBlock())
+        d.blockchain.height shouldBe 10
+        d.blockchain.assetDescription(asset).value.totalVolume shouldBe BigInt(300)
+        d.blockchain.balance(address(2), asset) shouldBe 300L
+
+        d.appendBlock() // height 11, so height 10 is no longer the liquid block
+        d.rocksDBWriter.assetDescription(asset).value.totalVolume shouldBe BigInt(300)
+        d.rocksDBWriter.balance(address(2), asset) shouldBe 300L
+
+        // rolling back only the second re-issue leaves the first one standing
+        d.rollbackTo(9)
+        d.blockchain.assetDescription(asset).value.totalVolume shouldBe BigInt(100)
+        d.blockchain.balance(address(2), asset) shouldBe 100L
+      }
+    }
+
+    "rejects a re-issue that overflows the total supply" in {
+      val asset = IssuedAsset(assetId)
+      val settings = withSnapshotAt(
+        PredefinedSnapshotSettings(height = 3, balances = Seq(GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> 1L)))),
+        settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = Long.MaxValue)))
+      )
+
+      withDomain(settings, balances = Seq(AddrWithBalance(address(1), 1.hearth, Map(asset -> Long.MaxValue)))) { d =>
+        d.appendBlock() // height 2
+        d.appendBlockE() should produce("overflows the total supply")
+      }
+    }
+
+    "rejects a balance for an asset that neither this snapshot nor the chain has" in {
+      val settings = withSnapshotAt(
+        PredefinedSnapshotSettings(
+          height = 3,
+          balances = Seq(GenesisBalanceSettings(address(2).toBech32, 0, Map(ByteStr.fill(32)(8).toString -> 100L)))
+        ),
+        TransactionStateSnapshot
+      )
+
+      withDomain(settings, Seq(address(1) -> 1.hearth)) { d =>
+        d.appendBlock() // height 2
+        d.appendBlockE() should produce("unknown asset")
+      }
+    }
+
     "rejects an asset id that already exists on chain" in {
       val asset              = IssuedAsset(assetId)
       val withAssetAtGenesis = settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 1000)))
@@ -413,11 +539,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
         assets = Seq(assetSettings(quantity = 1000)),
         balances = Seq(GenesisBalanceSettings(address(2).toBech32, 0, Map(assetId.toString -> 1000L)))
       )
-      val settings = withAssetAtGenesis.copy(blockchainSettings =
-        withAssetAtGenesis.blockchainSettings.copy(predefinedSnapshots =
-          withAssetAtGenesis.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
-        )
-      )
+      val settings = withSnapshotAt(snapshotAtHeight3, withAssetAtGenesis)
 
       withDomain(
         settings,
@@ -434,11 +556,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       val snapshotAtHeight3 =
         PredefinedSnapshotSettings(height = 3, minAssetFees = Seq(MinAssetFeeSettings(assetId, newMinFee)))
       val withAssetAtGenesis = settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 1000)))
-      val settings = withAssetAtGenesis.copy(blockchainSettings =
-        withAssetAtGenesis.blockchainSettings.copy(predefinedSnapshots =
-          withAssetAtGenesis.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
-        )
-      )
+      val settings           = withSnapshotAt(snapshotAtHeight3, withAssetAtGenesis)
 
       withDomain(settings, balances = Seq(AddrWithBalance(address(1), 1.hearth, Map(asset -> 1000L)))) { d =>
         d.blockchain.assetDescription(asset).value.minAssetFee.value shouldBe TestValues.fee
@@ -455,11 +573,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       val snapshotAtHeight3 =
         PredefinedSnapshotSettings(height = 3, minAssetFees = Seq(MinAssetFeeSettings(assetId, 0)))
       val withAssetAtGenesis = settingsWith(base = TransactionStateSnapshot, assets = Seq(assetSettings(quantity = 1000)))
-      val settings = withAssetAtGenesis.copy(blockchainSettings =
-        withAssetAtGenesis.blockchainSettings.copy(predefinedSnapshots =
-          withAssetAtGenesis.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
-        )
-      )
+      val settings           = withSnapshotAt(snapshotAtHeight3, withAssetAtGenesis)
 
       withDomain(settings, balances = Seq(AddrWithBalance(address(1), 1.hearth, Map(IssuedAsset(assetId) -> 1000L)))) { d =>
         d.appendBlock() // height 2
@@ -470,11 +584,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
     "rejects a minFee change for an unknown asset" in {
       val unknownAssetId    = ByteStr.fill(32)(8)
       val snapshotAtHeight3 = PredefinedSnapshotSettings(height = 3, minAssetFees = Seq(MinAssetFeeSettings(unknownAssetId, TestValues.fee)))
-      val settings = TransactionStateSnapshot.copy(blockchainSettings =
-        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
-          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
-        )
-      )
+      val settings          = withSnapshotAt(snapshotAtHeight3)
 
       withDomain(settings, Seq(address(1) -> 1.hearth)) { d =>
         d.appendBlock() // height 2
@@ -484,11 +594,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
 
     "rejects crediting Hearth at a non-genesis height" in {
       val snapshotAtHeight3 = PredefinedSnapshotSettings(height = 3, balances = Seq(GenesisBalanceSettings(address(2).toBech32, 5.hearth)))
-      val settings = TransactionStateSnapshot.copy(blockchainSettings =
-        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
-          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
-        )
-      )
+      val settings          = withSnapshotAt(snapshotAtHeight3)
 
       withDomain(settings, Seq(address(1) -> 1.hearth)) { d =>
         d.appendBlock() // height 2
@@ -501,11 +607,7 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
       val blsKey            = blsKeyPair(43)
       val vrf               = vrfKey(43)
       val snapshotAtHeight3 = PredefinedSnapshotSettings(height = 3, generators = Seq(generatorSettings(generator, blsKey, vrf)))
-      val settings = TransactionStateSnapshot.copy(blockchainSettings =
-        TransactionStateSnapshot.blockchainSettings.copy(predefinedSnapshots =
-          TransactionStateSnapshot.blockchainSettings.predefinedSnapshots :+ snapshotAtHeight3
-        )
-      )
+      val settings          = withSnapshotAt(snapshotAtHeight3)
 
       // `generator` is funded once, at genesis; the height-3 snapshot only commits it, crediting nothing further -
       // the deposit check has to resolve its real cumulative balance rather than what this snapshot alone touched.

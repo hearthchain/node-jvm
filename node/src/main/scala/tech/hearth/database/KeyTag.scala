@@ -50,8 +50,10 @@ enum KeyTag {
     NftCount,
     NftPossession,
     IssuedAssets,
-    UpdatedAssets, // retired: always identical to IssuedAssets once asset info became immutable after issuance;
-    // left in place (rather than removed) to avoid shifting every later ordinal's on-disk prefix
+    // Was UpdatedAssets, retired when asset info became immutable after issuance (it was then always identical to
+    // IssuedAssets). Immutable is no longer true - a predefined snapshot can re-issue an existing asset - so the
+    // ordinal is reused rather than appending a new one. Nothing this fork ever ran wrote under it.
+    AssetsWithUpdatedVolume,
     AssetsWithMinFee,
     StateHash,
     EthereumTransactionMeta,

@@ -175,7 +175,10 @@ case class MinAssetFeeSettings(assetId: ByteStr, minFee: Long) derives ConfigRea
   */
 case class GenesisGeneratorSettings(publicKey: String, endorserPublicKey: String, vrfPublicKey: String) derives ConfigReader
 
-/** Balances credited by a predefined snapshot. Every asset referenced here must be listed in the same [[PredefinedSnapshotSettings.assets]]. */
+/** Balances credited by a predefined snapshot. Every asset referenced here must either be listed in the same
+  * [[PredefinedSnapshotSettings.assets]] or already exist on chain, in which case crediting it re-issues it: these
+  * balances only ever mint, so the credited amount is added to that asset's total supply.
+  */
 case class GenesisBalanceSettings(recipient: String, hearth: Long = 0L, assets: Map[String, Long] = Map.empty)
 
 object GenesisBalanceSettings {
@@ -185,7 +188,8 @@ object GenesisBalanceSettings {
 
 /** A chunk of state applied outside of transaction processing, before the block at [[height]] applies its own
   * transactions. Since there is no issue transaction any more, this is the only way to mint a new asset; it can also
-  * credit asset balances and commit generators. Only the height-1 (genesis) entry may credit Hearth - Hearth supply
+  * credit asset balances (which re-issues an asset that already exists, raising its supply) and commit generators.
+  * Only the height-1 (genesis) entry may credit Hearth - Hearth supply
   * growth beyond genesis is tracked as block rewards only. Height-keyed and applied unconditionally for every block
   * at that height - not tied to feature activation in code, though a network's config typically lines a snapshot's
   * height up with a feature activation height as a matter of convention. The height-1 entry is the genesis snapshot.
@@ -229,6 +233,7 @@ object PredefinedSnapshotSettings {
     )
   )
 
+  private val TestnetORCRED = "ddffc0847e4b4373163ccfdb088857479e854eb27b833137a4659ad29448f1bf"
   // Same 5%/95% split as MAINNET (see above); short half-life instead (RewardsSettings.TESTNET) so the decay curve
   // is actually observable on a running testnet.
   val TESTNET: Seq[PredefinedSnapshotSettings] = Seq(
@@ -240,7 +245,7 @@ object PredefinedSnapshotSettings {
         GenesisBalanceSettings("thrth1teamvestjtryyczpmpvef5aldw7qgs5jzp447l", 1_000_000L * Constants.UnitsInHearth)  // team (vested), 1%
       ),
       assets = Seq(
-        GenesisAssetSettings("ddffc0847e4b4373163ccfdb088857479e854eb27b833137a4659ad29448f1bf", "ORCRED", 8, 0, 100000, "OpenRouter Cred")
+        GenesisAssetSettings(TestnetORCRED, "ORCRED", 8, 0, 100000, "OpenRouter Cred")
       ),
       generators = Seq(
         GenesisGeneratorSettings(
@@ -248,6 +253,12 @@ object PredefinedSnapshotSettings {
           "ab20c8a767e96dfe1628d31cb428d816efcdb2564976577be1b1cc1a1e98217b05132a7ac4bb00ba2790ca8b64c34074",
           "4b66ef37b51bcc715bd676863a50699aafba209c212436f94586d53bb3fbff14"
         )
+      )
+    ),
+    PredefinedSnapshotSettings(
+      height = 7000,
+      balances = Seq(
+        GenesisBalanceSettings("thrth1teamvestjtryyczpmpvef5aldw7qgs5jzp447l", assets = Map(TestnetORCRED -> 1000_00000000L))
       )
     )
   )

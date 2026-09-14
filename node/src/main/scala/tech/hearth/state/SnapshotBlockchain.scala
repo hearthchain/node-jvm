@@ -312,6 +312,8 @@ object SnapshotBlockchain {
       .orElse(
         inner
           .assetDescription(asset)
+          // an asset issued earlier can still have its volume (re-issue) or min fee changed by this snapshot
+          .map(d => volume.fold(d)(v => d.copy(totalVolume = v)))
           .map(d => minFee.fold(d)(mf => d.copy(minAssetFee = mf)))
       )
   }

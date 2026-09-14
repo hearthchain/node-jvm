@@ -74,6 +74,11 @@ object Keys {
     Key(IssuedAssets, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
   def assetsWithMinFee(height: Height): Key[Seq[IssuedAsset]] =
     Key(AssetsWithMinFee, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
+  // Assets re-issued at this height by a predefined snapshot, i.e. whose volume changed without them being issued
+  // here - what issuedAssets above is for a fresh issuance, so that rollback can undo the volume bump too. Sits on
+  // the retired UpdatedAssets ordinal, see KeyTag.
+  def assetsWithUpdatedVolume(height: Height): Key[Seq[IssuedAsset]] =
+    Key(AssetsWithUpdatedVolume, h(height), d => readAssetIds(d).map(IssuedAsset(_)), ias => writeAssetIds(ias.map(_.id)))
   def leaseBalanceAt(addressId: AddressId, height: Height): Key[LeaseBalanceNode] =
     Key(LeaseBalanceHistory, hBytes(addressId.toByteArray, height), readLeaseBalanceNode, writeLeaseBalanceNode)
 
