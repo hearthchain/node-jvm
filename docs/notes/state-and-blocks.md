@@ -124,8 +124,30 @@ snapshot's own balance map alone: that map only holds entries for addresses this
 touched, so a generator funded earlier (e.g. at genesis) and merely committed at a later height, with no balance
 entry of its own in that entry, would otherwise look like it holds 0 and get wrongly rejected.
 
-A predefined snapshot beyond genesis also rejects an asset id that already exists on chain
-(`blockchain.assetDescription(id).isEmpty`), a check genesis itself never needs since state is empty at that point.
+A predefined snapshot beyond genesis rejects an `assets` entry whose id already exists on chain
+(`blockchain.assetDescription(id).isEmpty`), a check genesis itself never needs since state is empty at that point:
+an entry's `assets` list only ever declares *new* assets, since its `quantity`/`decimals`/`name` are the asset's
+identity, not a delta.
+
+Re-issuing an existing asset goes through `balances` instead. A predefined snapshot's balances only ever mint -
+nothing anywhere is debited - so an asset id credited by a `balances` entry that this same entry does not issue must
+already be on chain, and crediting it raises its total supply by exactly what is credited
+(`PredefinedSnapshot.reissuedVolumes`). That makes "pre-issue with `quantity = 0` at genesis, mint the real supply at
+a later height" work, and it is why the `unknown asset` check on a balance entry accepts either a freshly-issued or
+an on-chain id. A re-issue that would push the supply past `Long.MaxValue` is rejected: every balance is a `Long`,
+so a larger supply could never be held or moved. `checkAssetsAreFullyDistributed` still applies only to assets the
+entry issues itself, where `quantity` pins the mint exactly.
+
+Mechanically a re-issue is a second entry in the asset's `assetVolumeDetails` history, not a fresh write, and
+`StateSnapshot.assetVolumes` holds the *resulting total*, not a delta (`StateSnapshot.build`'s `updatedAssetVolumes`,
+the volume counterpart of `updatedMinAssetFees`). Two places need it beyond the builder: `SnapshotBlockchain`'s
+`assetDescription` has to apply the volume override on its `inner.assetDescription` fallback (the asset was issued
+earlier, so the snapshot has no `assetStatics` entry for it to take the fast path), and `RocksDBWriter` has to index
+the re-issued ids under `Keys.assetsWithUpdatedVolume(height)` - `Keys.issuedAssets(height)` covers only fresh
+issuances, and `rollbackAssetsInfo` drives the undo off those indexes, so without it a rollback leaves the bumped
+volume in place while the credited balances are undone. That key sits on the ordinal `UpdatedAssets` used to hold,
+retired back when asset info was immutable after issuance; re-issue is exactly what made that stop being true, and
+nothing this fork ever ran wrote under the ordinal, so it was reused rather than appending a new tag.
 
 `GenesisAssetSettings.id` is base16 *text*: it becomes a `ByteStr` only in `PredefinedSnapshot.issuedAssets`, which
 decodes it and rejects anything that is not exactly `AssetIdLength` (32) bytes, the way the generator entries' keys

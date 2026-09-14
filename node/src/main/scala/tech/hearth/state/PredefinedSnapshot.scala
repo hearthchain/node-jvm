@@ -40,8 +40,9 @@ object PredefinedSnapshot {
     val atTime = blockTimestamp.orElse(blockchain.lastBlockTimestamp).getOrElse(0L)
     for {
       assets        <- issuedAssets(settings, blockchain)
-      balances      <- this.balances(settings, assets)
+      balances      <- this.balances(settings, assets, blockchain)
       _             <- checkAssetsAreFullyDistributed(assets, balances)
+      reissued      <- reissuedVolumes(assets, balances, blockchain)
       generators    <- committedGenerators(settings.generators)
       minFeeChanges <- minAssetFeeChanges(settings.minAssetFees, blockchain, assets.map(_._1).toSet)
       // Root CA CRL is verified first and folded into an intermediate view so pckCaIssuerChain/pckCrl (which need
@@ -70,6 +71,7 @@ object PredefinedSnapshot {
         blockchain,
         portfolios = toPortfolios(balances),
         issuedAssets = assets,
+        updatedAssetVolumes = reissued,
         updatedMinAssetFees = minFeeChanges,
         nextCommittedGenerators = generators,
         dcapRootCaCrl = rootCaCrl,
@@ -163,9 +165,10 @@ object PredefinedSnapshot {
 
   private def balances(
       settings: PredefinedSnapshotSettings,
-      assets: Seq[(IssuedAsset, NewAssetInfo)]
+      assets: Seq[(IssuedAsset, NewAssetInfo)],
+      blockchain: Blockchain
   ): Either[ValidationError, VectorMap[(Address, Asset), Long]] = {
-    val knownAssets = assets.map(_._1).toSet
+    val freshlyIssued = assets.map(_._1).toSet
     for {
       // Bech32 decoding is case-insensitive, so duplicates are checked on the lowercased form
       _ <- checkNoDuplicates(settings.balances.map(_.recipient.toLowerCase), "predefined snapshot balance recipient")
@@ -196,7 +199,13 @@ object PredefinedSnapshot {
                 .toEither
                 .leftMap(e => GenericError(s"Predefined snapshot balance $address: invalid asset id $id: $e"))
               asset = IssuedAsset(assetId)
-              _ <- Either.cond(knownAssets(asset), (), GenericError(s"Predefined snapshot balance $address: unknown asset $id"))
+              // An asset this entry does not issue itself must already be on chain, in which case crediting it
+              // re-issues it (see reissuedVolumes).
+              _ <- Either.cond(
+                freshlyIssued(asset) || blockchain.assetDescription(asset).isDefined,
+                (),
+                GenericError(s"Predefined snapshot balance $address: unknown asset $id")
+              )
               _ <- Either.cond(
                 amount > 0,
                 (),
@@ -217,6 +226,39 @@ object PredefinedSnapshot {
       val assetEntries = entries.collect { case ((_, a: IssuedAsset), amount) => a -> amount }
       address -> Portfolio(hearth, assets = VectorMap.from(assetEntries))
     }
+
+  /** A predefined snapshot's balances only ever mint - nothing is debited anywhere - so crediting an asset this
+    * entry does not issue itself re-issues an already-existing one, raising its supply by exactly what is credited.
+    * Returns the resulting total volume rather than the delta, since that is what `StateSnapshot.assetVolumes` holds.
+    */
+  private def reissuedVolumes(
+      assets: Seq[(IssuedAsset, NewAssetInfo)],
+      balances: VectorMap[(Address, Asset), Long],
+      blockchain: Blockchain
+  ): Either[ValidationError, Map[IssuedAsset, BigInt]] = {
+    val freshlyIssued = assets.map(_._1).toSet
+    val credited = balances.foldLeft(Map.empty[IssuedAsset, BigInt]) {
+      case (r, ((_, asset: IssuedAsset), amount)) if !freshlyIssued(asset) =>
+        r.updated(asset, r.getOrElse(asset, BigInt(0)) + amount)
+      case (r, _) => r
+    }
+    credited.toList
+      .traverse { case (asset, amount) =>
+        for {
+          description <- blockchain
+            .assetDescription(asset)
+            .toRight(GenericError(s"Predefined snapshot asset ${asset.id}: unknown asset"))
+          volume = description.totalVolume + amount
+          // every balance is a Long, so a supply past Long.MaxValue could never be held or moved
+          _ <- Either.cond(
+            volume <= BigInt(Long.MaxValue),
+            (),
+            GenericError(s"Predefined snapshot asset ${asset.id}: re-issuing $amount overflows the total supply")
+          )
+        } yield asset -> volume
+      }
+      .map(_.toMap)
+  }
 
   private def checkAssetsAreFullyDistributed(
       assets: Seq[(IssuedAsset, NewAssetInfo)],

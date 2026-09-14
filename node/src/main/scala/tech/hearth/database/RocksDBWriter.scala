@@ -474,12 +474,14 @@ class RocksDBWriter(
         rw.put(Keys.assetStaticInfo(asset), Some(pbAssetStatic))
       }
 
-      // an asset's volume is fixed forever at issuance (see StateSnapshot.assetVolumes), so this is always a
-      // fresh write for a newly-issued asset, never a merge with an existing one
+      // The volume is a fresh write for an asset issued at this height; for one re-issued by a predefined
+      // snapshot it is a new entry in the same history, so it is indexed separately for rollback to undo.
       for ((asset, volume) <- snapshot.assetVolumes) {
         rw.put(Keys.assetVolumeDetails(asset)(Height(height)), volume)
         expiredKeys ++= updateHistory(rw, Keys.assetVolumeDetailsHistory(asset), threshold, Keys.assetVolumeDetails(asset))
       }
+      val reissuedAssets = snapshot.assetVolumes.keySet -- snapshot.assetStatics.keySet
+      if (reissuedAssets.nonEmpty) rw.put(Keys.assetsWithUpdatedVolume(Height(height)), reissuedAssets.toSeq)
 
       for ((asset, minFee) <- snapshot.minAssetFees) {
         rw.put(Keys.assetMinFee(asset)(Height(height)), minFee)
@@ -999,16 +1001,25 @@ class RocksDBWriter(
   }
 
   private def rollbackAssetsInfo(rw: RW, currentHeight: Height): Unit = {
-    val issuedKey    = Keys.issuedAssets(currentHeight)
-    val minFeeKey    = Keys.assetsWithMinFee(currentHeight)
-    val issued       = rw.get(issuedKey)
-    val minFeeAssets = rw.get(minFeeKey)
+    val issuedKey      = Keys.issuedAssets(currentHeight)
+    val minFeeKey      = Keys.assetsWithMinFee(currentHeight)
+    val reissuedKey    = Keys.assetsWithUpdatedVolume(currentHeight)
+    val issued         = rw.get(issuedKey)
+    val minFeeAssets   = rw.get(minFeeKey)
+    val reissuedAssets = rw.get(reissuedKey)
 
     rw.delete(issuedKey)
     rw.delete(minFeeKey)
+    rw.delete(reissuedKey)
 
     issued.foreach { asset =>
       rw.delete(Keys.assetStaticInfo(asset))
+      rw.delete(Keys.assetVolumeDetails(asset)(currentHeight))
+      rw.filterHistory(Keys.assetVolumeDetailsHistory(asset), currentHeight)
+    }
+
+    // the asset itself was issued earlier and stays; only the volume this height added is undone
+    reissuedAssets.foreach { asset =>
       rw.delete(Keys.assetVolumeDetails(asset)(currentHeight))
       rw.filterHistory(Keys.assetVolumeDetailsHistory(asset), currentHeight)
     }
@@ -1018,7 +1029,7 @@ class RocksDBWriter(
       rw.filterHistory(Keys.assetMinFeeHistory(asset), currentHeight)
     }
 
-    (issued ++ minFeeAssets).distinct.foreach(discardAssetDescription)
+    (issued ++ minFeeAssets ++ reissuedAssets).distinct.foreach(discardAssetDescription)
   }
 
   private def rollbackDcapCollateral(rw: RW, currentHeight: Height): Unit = {
