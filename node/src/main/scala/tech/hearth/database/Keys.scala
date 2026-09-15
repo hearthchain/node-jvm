@@ -351,4 +351,26 @@ object Keys {
   // without an unbounded scan - the same role reservedAmountKeysAt plays for reservedAmountHistory.
   def workDoneKeysAt(height: Height): Key[Seq[ByteStr]] =
     Key(WorkDoneKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // StakeTransaction's per-address (active, pending) pair - see StakeRecord. Keyed by address alone rather than by
+  // (address, period): the record carries its own notion of which period each half belongs to, so it is a single
+  // current value and reuses the reservedAmount/workDone history mechanism above rather than a period-keyed one.
+  def stakeSuffix(address: Address): ByteStr = ByteStr(address.toBytes)
+
+  def stakeHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(StakeHistory, suffix.arr)
+  def stake(suffix: ByteStr)(height: Height): Key[StakeRecord] =
+    Key(Stake, hBytes(suffix.arr, height), readStakeRecord, writeStakeRecord)
+
+  // Which addresses' stakes changed at this height, so rollback knows which histories to unwind without an
+  // unbounded scan - the same role reservedAmountKeysAt plays for reservedAmountHistory.
+  def stakeKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(StakeKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // Every address currently holding a non-empty StakeRecord. The per-address keys above are not enumerable (a
+  // ...KeysAtHeight index only names what changed at one height), and the period-boundary payout in BlockDiffer
+  // has to walk the whole staker set, so the set itself is stored - as one value, rewritten only when an address
+  // joins or leaves, which is far rarer than a stake changing amount.
+  def stakersHistory: Key[Seq[Height]] = historyKey(StakersHistory, Array.emptyByteArray)
+  def stakers(height: Height): Key[Seq[Address]] =
+    Key(Stakers, h(height), readAddressSeq, writeAddressSeq)
 }

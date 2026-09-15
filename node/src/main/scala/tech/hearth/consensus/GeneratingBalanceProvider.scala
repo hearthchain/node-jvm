@@ -47,6 +47,19 @@ object GeneratingBalanceProvider {
     balanceAt(blockchain, account, height, blockId, context)
   }
 
+  /** Effective balance with the address's locked stake taken out: staking HRTH costs forging weight, not just
+    * liquidity (see StakeTransactionDiff).
+    *
+    * `effectiveBalance` is a minimum over a lookback window, but the stake subtracted from it is the *current*
+    * locked amount rather than a maximum over that same window, and deliberately so. A stake only ever drops at a
+    * generation-period boundary, which is the same moment the HRTH it locked genuinely becomes spendable again
+    * (see StakeRecord.locked), so there is no interval in which this reports a higher balance than the account was
+    * really entitled to. Raising a stake, conversely, takes effect on the spot. That makes the whole stake ledger a
+    * single current value per address rather than a windowed history the way the balance itself needs to be.
+    */
+  private def unstakedEffectiveBalance(blockchain: Blockchain, account: Address, depth: Int, blockId: Option[BlockId]): Long =
+    math.max(0L, blockchain.effectiveBalance(account, depth, blockId) - blockchain.lockedStake(account))
+
   private def balanceAt(
       blockchain: Blockchain,
       account: Address,
@@ -58,7 +71,8 @@ object GeneratingBalanceProvider {
 
     val maybeChallengedMiner = blockchain.blockHeader(height + 1).flatMap(_.header.challengedHeader).map(_.generator.toAddress)
     val rawBalance =
-      blockchain.effectiveBalance(account, depth, blockId) + maybeChallengedMiner.map(blockchain.effectiveBalance(_, depth, blockId)).getOrElse(0L)
+      unstakedEffectiveBalance(blockchain, account, depth, blockId) +
+        maybeChallengedMiner.map(unstakedEffectiveBalance(blockchain, _, depth, blockId)).getOrElse(0L)
 
     context match {
       case None                          => rawBalance

@@ -557,6 +557,16 @@ class RocksDBWriter(
         Keys.workDoneHistory,
         Keys.workDoneKeysAt
       )
+      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.stakes)(
+        Keys.stakeSuffix,
+        Keys.stake,
+        Keys.stakeHistory,
+        Keys.stakeKeysAt
+      )
+      snapshot.stakers.foreach { stakers =>
+        rw.put(Keys.stakers(Height(height)), stakers)
+        expiredKeys ++= updateHistory(rw, Keys.stakersHistory, threshold, Keys.stakers)
+      }
 
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
@@ -908,6 +918,9 @@ class RocksDBWriter(
           rollbackKeyed(rw, currentHeight, Keys.apiKeyBindingKeysAt, Keys.apiKeyBinding, Keys.apiKeyBindingHistory)
           rollbackKeyed(rw, currentHeight, Keys.settledAmountKeysAt, Keys.settledAmount, Keys.settledAmountHistory)
           rollbackKeyed(rw, currentHeight, Keys.workDoneKeysAt, Keys.workDone, Keys.workDoneHistory)
+          rollbackKeyed(rw, currentHeight, Keys.stakeKeysAt, Keys.stake, Keys.stakeHistory)
+          rw.delete(Keys.stakers(currentHeight))
+          rw.filterHistory(Keys.stakersHistory, currentHeight)
 
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
@@ -1191,6 +1204,14 @@ class RocksDBWriter(
     val suffix = Keys.workDoneSuffix(validator, period)
     readOnly(_.fromHistory(Keys.workDoneHistory(suffix), Keys.workDone(suffix))).getOrElse(0L)
   }
+
+  override def stake(address: Address): StakeRecord = {
+    val suffix = Keys.stakeSuffix(address)
+    readOnly(_.fromHistory(Keys.stakeHistory(suffix), Keys.stake(suffix))).getOrElse(StakeRecord.empty)
+  }
+
+  override def stakers: Seq[Address] =
+    readOnly(_.fromHistory(Keys.stakersHistory, Keys.stakers)).getOrElse(Seq.empty)
 
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't
   // as many miners, so snapshots will rarely be evicted due to overflows.

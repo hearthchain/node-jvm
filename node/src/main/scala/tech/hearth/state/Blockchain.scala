@@ -107,6 +107,14 @@ trait Blockchain {
   // see "workBoost" in CLAUDE.md. Same history mechanism as reservedAmount/settledAmount above.
   def workDone(validator: Address, period: GenerationPeriod): Long
 
+  // StakeTransaction's (active, pending) HRTH stake for one address - see StakeRecord. Same history mechanism as
+  // reservedAmount/workDone above; StakeRecord.empty when the address has never staked or has released everything.
+  def stake(address: Address): StakeRecord
+
+  // Every address currently holding a non-empty stake. The per-address records above are not enumerable, and the
+  // period-boundary payout (BlockDiffer.mkInitialSnapshot) has to walk the whole set, so it is stored explicitly.
+  def stakers: Seq[Address]
+
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
 
@@ -168,8 +176,12 @@ object Blockchain {
     def hearthPortfolio(address: Address): Portfolio = Portfolio(
       blockchain.balance(address),
       blockchain.leaseBalance(address),
-      generationDeposit = blockchain.generationDeposit(address)
+      generationDeposit = blockchain.generationDeposit(address),
+      staked = blockchain.lockedStake(address)
     )
+
+    /** The HRTH [[stake]] currently locks for an address: neither spendable nor counted toward forging weight. */
+    def lockedStake(address: Address): Long = blockchain.stake(address).locked
 
     /** The VRF key a generator registered when it committed to generating for `at`'s period.
       *

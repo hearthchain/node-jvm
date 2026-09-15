@@ -47,7 +47,15 @@ case class StateSnapshot(
     // Work attributed to a validator within the current generation period (epoch), fed by SettleTransaction's
     // burned share - see Keys.workDoneSuffix. Same "Diff reads current value, writes the final accumulated total"
     // convention as reservedAmounts/settledAmounts above, not a delta.
-    workDone: Map[(Address, GenerationPeriod), Long] = Map.empty
+    workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
+    // StakeTransaction's (active, pending) pair per address, and the period-boundary payout's normalisation of it -
+    // see StakeRecord. Like reservedAmounts/workDone above the Diff reads the current record and writes the final
+    // one, not a delta; an emptied stake is carried as StakeRecord.empty rather than an absent entry, so that
+    // clearing one is a write the state hash and the storage layer both see.
+    stakes: Map[Address, StakeRecord] = Map.empty,
+    // The whole staker set, when this snapshot changes it - Option rather than Seq so that "left unchanged" is
+    // distinguishable from "changed to empty", which a plain Seq could not express and the monoid could not merge.
+    stakers: Option[Seq[Address]] = None
 ) {
 
   // ignores lease balances from portfolios
@@ -91,7 +99,9 @@ object StateSnapshot {
       reservedAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
       apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
       settledAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
-      workDone: Map[(Address, GenerationPeriod), Long] = Map.empty
+      workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
+      stakes: Map[Address, StakeRecord] = Map.empty,
+      stakers: Option[Seq[Address]] = None
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -119,15 +129,18 @@ object StateSnapshot {
         reservedAmounts,
         apiKeyBindings,
         settledAmounts,
-        workDone
+        workDone,
+        stakes,
+        stakers
       )
     r.leftMap(GenericError(_))
   }
 
   // ignores lease balances from portfolios
   private def balances(portfolios: Map[Address, Portfolio], blockchain: Blockchain): Either[String, VectorMap[(Address, Asset), Long]] =
-    flatTraverse(portfolios) { case (address, Portfolio(hearthAmount, _, assets, _)) =>
-      val assetBalancesE = flatTraverse(assets) {
+    flatTraverse(portfolios) { case (address, portfolio) =>
+      val hearthAmount = portfolio.balance
+      val assetBalancesE = flatTraverse(portfolio.assets) {
         case (_, 0) =>
           Right(VectorMap[(Address, Asset), Long]())
         case (assetId, balance) =>
@@ -161,7 +174,8 @@ object StateSnapshot {
   private def leaseBalances(portfolios: Map[Address, Portfolio], blockchain: Blockchain): Either[String, Map[Address, LeaseBalance]] =
     portfolios.toSeq
       .flatTraverse {
-        case (address, Portfolio(_, lease, _, _)) if lease.out != 0 || lease.in != 0 =>
+        case (address, portfolio) if portfolio.lease.out != 0 || portfolio.lease.in != 0 =>
+          val lease  = portfolio.lease
           val bLease = blockchain.leaseBalance(address)
           for {
             newIn  <- safeSum(bLease.in, lease.in, s"$address -> Lease")
@@ -221,7 +235,9 @@ object StateSnapshot {
         s1.reservedAmounts ++ s2.reservedAmounts,
         s1.apiKeyBindings ++ s2.apiKeyBindings,
         s1.settledAmounts ++ s2.settledAmounts,
-        s1.workDone ++ s2.workDone
+        s1.workDone ++ s2.workDone,
+        s1.stakes ++ s2.stakes,
+        s2.stakers.orElse(s1.stakers)
       )
 
   }

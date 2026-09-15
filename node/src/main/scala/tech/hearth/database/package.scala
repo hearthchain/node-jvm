@@ -380,6 +380,19 @@ package object database {
   def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
     data.view.flatMap(re => re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes).toArray
 
+  def readStakeRecord(data: Array[Byte]): StakeRecord =
+    if (data != null && data.length == 16) StakeRecord(Longs.fromByteArray(data.take(8)), Longs.fromByteArray(data.drop(8)))
+    else StakeRecord.empty
+
+  def writeStakeRecord(record: StakeRecord): Array[Byte] =
+    Longs.toByteArray(record.active) ++ Longs.toByteArray(record.pending)
+
+  def readAddressSeq(data: Array[Byte]): Seq[Address] =
+    Option(data).fold(Seq.empty[Address])(_.grouped(Address.HASH_LEN).map(Address.fromBytes(_).get()).toSeq)
+
+  def writeAddressSeq(addresses: Seq[Address]): Array[Byte] =
+    addresses.view.flatMap(_.toBytes).toArray
+
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)
     .map { bytes => GeneratorIndex(Ints.fromByteArray(bytes)) }

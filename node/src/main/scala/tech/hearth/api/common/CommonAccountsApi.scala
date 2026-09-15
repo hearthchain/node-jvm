@@ -29,7 +29,15 @@ trait CommonAccountsApi {
 }
 
 object CommonAccountsApi {
-  final case class BalanceDetails(regular: Long, generating: Long, available: Long, effective: Long, leaseIn: Long, leaseOut: Long)
+  final case class BalanceDetails(
+      regular: Long,
+      generating: Long,
+      available: Long,
+      effective: Long,
+      leaseIn: Long,
+      leaseOut: Long,
+      staked: Long
+  )
 
   def apply(
       compositeBlockchain: () => SnapshotBlockchain,
@@ -53,10 +61,13 @@ object CommonAccountsApi {
           BalanceDetails(
             portfolio.balance,
             blockchain.generatingBalance(address),
-            portfolio.balance - portfolio.generationDeposit - portfolio.lease.out,
+            // spendableBalance rather than the subtraction spelled out again: it is the one definition of what is
+            // left after every lock, and it grew a third term (staked) alongside generationDeposit and lease.out.
+            portfolio.spendableBalance,
             effectiveBalance,
             portfolio.lease.in,
-            portfolio.lease.out
+            portfolio.lease.out,
+            portfolio.staked
           )
         )
     }

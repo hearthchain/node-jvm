@@ -286,4 +286,29 @@ class TxStateSnapshotHashSpec extends PropSpec {
     List(reserved, settled, bound, enclaveReg, work).foreach(_ should not equal base)
     List(reserved, settled, bound, enclaveReg, work).distinct.length shouldBe 5
   }
+
+  property("stake entries are hashed, and the two halves of a record are distinguishable") {
+    def hashOf(s: StateSnapshot): ByteStr =
+      TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
+
+    val staker = signer101.toAddress
+    val other  = signer102.toAddress
+    val base   = hashOf(StateSnapshot())
+
+    val raising  = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 0L, pending = 5L))))
+    val lowering = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 5L, pending = 0L))))
+    val settledS = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 5L, pending = 5L))))
+    val set      = hashOf(StateSnapshot(stakers = Some(Seq(staker))))
+    val emptySet = hashOf(StateSnapshot(stakers = Some(Seq.empty)))
+
+    // Both halves are hashed: these three lock the same 5 embers but pay out differently a period later
+    List(raising, lowering, settledS, set, emptySet).foreach(_ should not equal base)
+    List(raising, lowering, settledS, set, emptySet).distinct.length shouldBe 5
+
+    // Clearing a record is a write, not an absence: it must not hash like an untouched snapshot
+    hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord.empty))) should not equal base
+
+    // The set is order-sensitive, since it is stored and walked in the order transactions built it
+    hashOf(StateSnapshot(stakers = Some(Seq(staker, other)))) should not equal hashOf(StateSnapshot(stakers = Some(Seq(other, staker))))
+  }
 }

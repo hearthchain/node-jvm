@@ -102,6 +102,11 @@ case class SnapshotBlockchain(
   override def workDone(validator: Address, period: GenerationPeriod): Long =
     snapshot.workDone.getOrElse((validator, period), inner.workDone(validator, period))
 
+  override def stake(address: Address): StakeRecord =
+    snapshot.stakes.getOrElse(address, inner.stake(address))
+
+  override def stakers: Seq[Address] = snapshot.stakers.getOrElse(inner.stakers)
+
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions
       .get(id)

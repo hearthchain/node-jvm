@@ -3103,6 +3103,7 @@ components:
         - effective
         - generating
         - regular
+        - staked
       type: object
       properties:
         address:
@@ -3118,11 +3119,15 @@ components:
         available:
           type: integer
           format: int64
-          description: '`regular` minus what is leased out'
+          description: '`regular` minus what is leased out, the generation deposit and what is staked'
         effective:
           type: integer
           format: int64
           description: '`available` plus what is leased in'
+        staked:
+          type: integer
+          format: int64
+          description: HRTH locked by a Stake transaction, neither spendable nor counted toward forging weight
     BalanceDetailsLSF:
       required:
         - address
@@ -3130,6 +3135,7 @@ components:
         - effective
         - generating
         - regular
+        - staked
       type: object
       properties:
         address:
@@ -3141,6 +3147,8 @@ components:
         available:
           $ref: '#/components/schemas/AmountString'
         effective:
+          $ref: '#/components/schemas/AmountString'
+        staked:
           $ref: '#/components/schemas/AmountString'
     AssetDistribution:
       required:
@@ -4026,6 +4034,39 @@ components:
           description: >-
             PEM issuer chain for pckCrl, PCK Platform or Processor CA to Intel
             Root CA
+    StakeTransaction:
+      title: StakeTransaction
+      description: >-
+        Stakes HRTH from the sender, starting with the generation period that
+        begins at `periodStart`, which must be the period after the one the
+        transaction is applied in. The HRTH is locked as soon as the transaction
+        is applied when `amount` raises the stake, but earns nothing until
+        `periodStart`; a reduction only frees funds once that period starts.
+        Several of these in one period are allowed and the last one wins.
+        Type 12.
+      type: object
+      required:
+        - periodStart
+        - amount
+      properties:
+        periodStart:
+          type: integer
+          format: int32
+          description: Start height of the next generation period
+        amount:
+          allOf:
+            - $ref: '#/components/schemas/Amount'
+          description: >-
+            The new total staked, not a delta; 0 releases the whole stake at
+            `periodStart`
+    StakeTransactionLSF:
+      title: StakeTransactionLSF
+      allOf:
+        - $ref: '#/components/schemas/StakeTransaction'
+        - type: object
+          properties:
+            amount:
+              $ref: '#/components/schemas/AmountString'
     Transaction:
       description: >-
         A transaction, as signed and broadcast. `type` selects which of the
@@ -4044,6 +4085,7 @@ components:
             - $ref: '#/components/schemas/SettleTransaction'
             - $ref: '#/components/schemas/WithdrawTransaction'
             - $ref: '#/components/schemas/UpdateCollateralTransaction'
+            - $ref: '#/components/schemas/StakeTransaction'
     TransactionLSF:
       allOf:
         - $ref: '#/components/schemas/TransactionBaseLSF'
@@ -4059,6 +4101,7 @@ components:
             - $ref: '#/components/schemas/SettleTransaction'
             - $ref: '#/components/schemas/WithdrawTransactionLSF'
             - $ref: '#/components/schemas/UpdateCollateralTransaction'
+            - $ref: '#/components/schemas/StakeTransactionLSF'
     TransactionInBlock:
       description: A transaction as it appears inside a block
       allOf:

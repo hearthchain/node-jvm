@@ -12,11 +12,18 @@ case class Portfolio(
     balance: Long = 0L,
     lease: LeaseBalance = LeaseBalance.empty,
     assets: VectorMap[IssuedAsset, Long] = VectorMap.empty,
-    generationDeposit: Long = 0L
+    generationDeposit: Long = 0L,
+    // HRTH locked by StakeTransaction - shaped exactly like generationDeposit above, and subtracted from both
+    // balances for the same reason: staked HRTH is still owned (it stays in `balance`) but is neither spendable nor
+    // countable toward forging weight. Like generationDeposit this is a view field, filled in by
+    // Blockchain.hearthPortfolio from the stake ledger; it is never a delta a diff accumulates, and
+    // StateSnapshot.balances ignores it.
+    staked: Long = 0L
 ) {
   import Portfolio.*
-  private lazy val effectiveBalance: Either[String, Long] = safeSum(balance, lease.in, "Effective balance").map(_ - lease.out - generationDeposit)
-  lazy val spendableBalance: Long                         = balance - lease.out - generationDeposit
+  private lazy val effectiveBalance: Either[String, Long] =
+    safeSum(balance, lease.in, "Effective balance").map(_ - lease.out - generationDeposit - staked)
+  lazy val spendableBalance: Long = balance - lease.out - generationDeposit - staked
 
   lazy val isEmpty: Boolean = this == Portfolio.empty
 
@@ -33,9 +40,13 @@ case class Portfolio(
       leaseIn           <- safeSum(this.lease.in, that.lease.in, "Lease in")
       leaseOut          <- safeSum(this.lease.out, that.lease.out, "Lease out")
       generationDeposit <- safeSum(this.generationDeposit, that.generationDeposit, "Generation deposit")
-    } yield Portfolio(balance, LeaseBalance(leaseIn, leaseOut), assets, generationDeposit)
+      staked            <- safeSum(this.staked, that.staked, "Staked")
+    } yield Portfolio(balance, LeaseBalance(leaseIn, leaseOut), assets, generationDeposit, staked)
 
-  override def toString: String = s"PF($balance,${assets.mkString("[", ",", "]")}${if (generationDeposit > 0) s",g=$generationDeposit" else ""})"
+  override def toString: String = {
+    val locked = (if (generationDeposit > 0) s",g=$generationDeposit" else "") + (if (staked > 0) s",s=$staked" else "")
+    s"PF($balance,${assets.mkString("[", ",", "]")}$locked)"
+  }
 }
 
 object Portfolio {
@@ -87,7 +98,8 @@ object Portfolio {
         out = Math.max(self.lease.out, 0)
       ),
       assets = self.assets.filter { case (_, v) => v < 0 },
-      generationDeposit = Math.max(self.generationDeposit, 0)
+      generationDeposit = Math.max(self.generationDeposit, 0),
+      staked = Math.max(self.staked, 0)
     )
 
     // Used in fee calculations

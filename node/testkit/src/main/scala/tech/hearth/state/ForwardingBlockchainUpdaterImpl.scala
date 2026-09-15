@@ -36,6 +36,8 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
     apiKeyBinding,
     settledAmount,
     workDone,
+    stake,
+    stakers,
     filledVolumeAndFee,
     balanceAtHeight,
     balanceSnapshots,

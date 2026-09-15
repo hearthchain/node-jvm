@@ -114,6 +114,21 @@ object TxStateSnapshotHashBuilder {
       changedKeys += tag("workDone") ++ validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
     }
 
+    // Both halves are hashed, not just `locked`: `active` and `pending` diverge for a whole period after a stake is
+    // raised or lowered, they drive different things (the payout reads `active`, the balance lock reads `locked`),
+    // and a node that disagreed about which half a value sits in would pay out differently a period later while
+    // hashing identically today.
+    snapshot.stakes.foreach { case (address, stake) =>
+      changedKeys += tag("stake") ++ address.toBytes ++ Longs.toByteArray(stake.active) ++ Longs.toByteArray(stake.pending)
+    }
+
+    // The staker set is one value, so it is hashed as one preimage with a count prefix - without it, sets differing
+    // only by where one address ends and the next begins could not collide (addresses are fixed-width), but the
+    // count makes the encoding's injectivity independent of that, the way the length prefix does for apiKeyBinding.
+    snapshot.stakers.foreach { stakers =>
+      changedKeys += tag("stakers") ++ Longs.toByteArray(stakers.size.toLong) ++ stakers.flatMap(_.toBytes).toArray
+    }
+
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {
         case Status.Failed    => changedKeys += txInfo.id.arr ++ Array(1: Byte)
