@@ -110,6 +110,9 @@ case class FunctionalitySettings(
     s"blocks-for-feature-activation must be in range 1 to $featureCheckBlocksPeriod"
   )
   require(generationPeriodLength > 0, "generation-period-length must be greater than 0")
+  // Forced here rather than left to the first period boundary that tries to mint: a typo would otherwise start the
+  // node happily and then fail every boundary block, i.e. stop following the chain a period later.
+  require(credAssetParsed.isRight, credAssetParsed.left.getOrElse(""))
 
   def activationWindowSize(height: Int): Int = featureCheckBlocksPeriod
 

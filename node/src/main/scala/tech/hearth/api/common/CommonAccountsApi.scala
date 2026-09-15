@@ -4,6 +4,7 @@ import tech.hearth.account.Address
 import tech.hearth.api.common.AddressPortfolio.assetBalanceIterator
 import tech.hearth.api.common.lease.AddressLeaseInfo
 import tech.hearth.common.state.ByteStr
+import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.database.{DBExt, RDB}
 import tech.hearth.state.{Blockchain, SnapshotBlockchain}
 import tech.hearth.transaction.Asset.IssuedAsset
@@ -49,7 +50,9 @@ object CommonAccountsApi {
       blockchain.regularBalance(address, blockchain.height, confirmations)
 
     override def effectiveBalance(address: Address, confirmations: Int = 0): Long = {
-      blockchain.effectiveBalance(address, confirmations)
+      // Through GeneratingBalanceProvider, so that this agrees with balanceDetails' `effective`/`generating` and
+      // with what the node will actually let the address forge on
+      GeneratingBalanceProvider.unstakedEffectiveBalance(blockchain, address, confirmations)
     }
 
     override def balanceDetails(address: Address): Either[String, BalanceDetails] = {

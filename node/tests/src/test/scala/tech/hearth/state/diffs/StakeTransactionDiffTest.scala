@@ -27,6 +27,10 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
   private val sender  = TxHelpers.signer(11)
   private val address = sender.toAddress
 
+  // Starts poor and is credited during the test, so its windowed effective balance lags far behind what it holds
+  private val newcomer        = TxHelpers.signer(12)
+  private val newcomerAddress = newcomer.toAddress
+
   // Long enough that the block after a boundary block is still inside the same period: a transaction is validated
   // against the period of the block carrying it, so both the stake transactions here and the commitment below have
   // to land before the next boundary, not on it. Periods are [1, 4], [5, 8], [9, 12], ...
@@ -37,7 +41,7 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
   private def withStakeDomain[A](f: Domain => A): A =
     withDomain(
       DeterministicFinality.configure(_.copy(generationPeriodLength = PeriodLength)),
-      AddrWithBalance.enoughBalances(miner) :+ AddrWithBalance(address, StakerBalance)
+      AddrWithBalance.enoughBalances(miner) :+ AddrWithBalance(address, StakerBalance) :+ AddrWithBalance(newcomerAddress, 1.hearth)
     )(f)
 
   /** Advances to the first block of the next period, committing the sender as its generator first so that it can
@@ -125,15 +129,41 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
       d.appendBlockE(TxHelpers.transfer(sender, amount = spendable)) should produce("trying to spend a stake")
     }
 
-    "takes the stake out of the sender's generating balance" in withStakeDomain { d =>
+    // Forging weight follows StakeRecord.active, so it moves only where the committee itself does. Were it to
+    // follow `locked`, any committed generator could zero its own generating balance mid-period with one cheap
+    // transaction, which is a lever over EndorsementFilter's quorum denominator.
+    "leaves the sender's generating balance alone until the stake is active" in withStakeDomain { d =>
       val next = d.blockchain.currentGenerationPeriod.get.next.start
-      d.blockchain.generatingBalance(address) shouldBe d.blockchain.effectiveBalance(address, 1000, None)
-
       d.appendBlock(TxHelpers.stake(sender, periodStart = next, amount = 10.hearth))
+
+      d.blockchain.hearthPortfolio(address).staked shouldBe 10.hearth
+      d.blockchain.generatingBalance(address) shouldBe d.blockchain.effectiveBalance(address, 1000, None)
+    }
+
+    "takes the stake out of the sender's generating balance from the period it is active in" in withStakeDomain { d =>
+      val next = d.blockchain.currentGenerationPeriod.get.next.start
+      d.appendBlock(TxHelpers.stake(sender, periodStart = next, amount = 10.hearth))
+
+      crossPeriodBoundary(d)
 
       // Compared against the windowed effective balance the provider itself starts from, so that the assertion pins
       // the subtraction rather than a particular balance the fee and the window happen to produce
       d.blockchain.generatingBalance(address) shouldBe (d.blockchain.effectiveBalance(address, 1000, None) - 10.hearth)
+    }
+
+    // effectiveBalance is a minimum over a 1000-block window while the stake subtracted from it is the current
+    // `active` value, so an address credited inside that window and staking most of it drives the difference
+    // negative. Without the clamp that negative would reach consensus as a generating balance.
+    "floors the generating balance at zero rather than going negative" in withStakeDomain { d =>
+      val next = d.blockchain.currentGenerationPeriod.get.next.start
+      d.appendBlock(TxHelpers.transfer(miner, to = newcomerAddress, amount = 500.hearth))
+      d.appendBlock(TxHelpers.stake(newcomer, periodStart = next, amount = 400.hearth))
+
+      crossPeriodBoundary(d)
+
+      // The window still remembers the 1 HRTH it started with, so the active stake dwarfs the windowed balance
+      d.blockchain.stake(newcomerAddress).active should be > d.blockchain.effectiveBalance(newcomerAddress, 1000, None)
+      d.blockchain.generatingBalance(newcomerAddress) shouldBe 0L
     }
 
     "activates the stake at the start of the next period" in withStakeDomain { d =>

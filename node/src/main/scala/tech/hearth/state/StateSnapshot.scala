@@ -53,9 +53,13 @@ case class StateSnapshot(
     // one, not a delta; an emptied stake is carried as StakeRecord.empty rather than an absent entry, so that
     // clearing one is a write the state hash and the storage layer both see.
     stakes: Map[Address, StakeRecord] = Map.empty,
-    // The whole staker set, when this snapshot changes it - Option rather than Seq so that "left unchanged" is
-    // distinguishable from "changed to empty", which a plain Seq could not express and the monoid could not merge.
-    stakers: Option[Seq[Address]] = None
+    // Membership changes to the staker set, as a delta rather than the whole set. A delta is what every other
+    // field here already carries (balances hold the changed balances, not the whole map), it merges associatively
+    // under ++ instead of one snapshot silently discarding another's change, and - the reason it is not optional -
+    // it keeps a StakeTransaction's cost independent of how many stakers exist: the whole set would otherwise be
+    // copied into this snapshot and hashed for every such transaction, which an attacker sets the size of.
+    stakersJoined: Seq[Address] = Seq.empty,
+    stakersLeft: Seq[Address] = Seq.empty
 ) {
 
   // ignores lease balances from portfolios
@@ -101,7 +105,8 @@ object StateSnapshot {
       settledAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
       workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
       stakes: Map[Address, StakeRecord] = Map.empty,
-      stakers: Option[Seq[Address]] = None
+      stakersJoined: Seq[Address] = Seq.empty,
+      stakersLeft: Seq[Address] = Seq.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -131,7 +136,8 @@ object StateSnapshot {
         settledAmounts,
         workDone,
         stakes,
-        stakers
+        stakersJoined,
+        stakersLeft
       )
     r.leftMap(GenericError(_))
   }
@@ -237,7 +243,8 @@ object StateSnapshot {
         s1.settledAmounts ++ s2.settledAmounts,
         s1.workDone ++ s2.workDone,
         s1.stakes ++ s2.stakes,
-        s2.stakers.orElse(s1.stakers)
+        s1.stakersJoined ++ s2.stakersJoined,
+        s1.stakersLeft ++ s2.stakersLeft
       )
 
   }

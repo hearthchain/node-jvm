@@ -3,7 +3,7 @@ package tech.hearth.state.diffs
 import cats.syntax.either.*
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
-import tech.hearth.state.{Blockchain, LeaseBalance, StateSnapshot}
+import tech.hearth.state.{Blockchain, LeaseBalance, StateSnapshot, safeSum}
 import tech.hearth.transaction.Asset
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
@@ -64,9 +64,11 @@ object BalanceDiffValidation {
       val stakedBefore = b.lockedStake(acc)
       val lockedBefore = depositBefore + stakedBefore
       val depositAfter = depositBefore + additionalDeposit
-      val lockedAfter  = depositAfter + stakedAfter
-
-      val hearthWithoutLockedAfter = hearthAfter - lockedAfter
+      // safeSum, not +: stakedAfter comes straight off a transaction and is bounded only by TxNonNegativeAmount, so
+      // a raw sum could wrap negative and turn every check below into a pass, recording a stake with no funds
+      // behind it. Everything else in this neighbourhood (Portfolio.combine, StateSnapshot.balances) already
+      // safeSums for the same reason.
+      val lockedAfterE = safeSum(depositAfter, stakedAfter, "Locked")
 
       val leaseOutDiff = leaseAfter.out - leaseBefore.out
 
@@ -75,11 +77,13 @@ object BalanceDiffValidation {
         s"spendable=${hearth - lease.out - deposit - staked}" + ifNotZero("hearth", hearth) + ifNotZero("lease", lease.out) +
           ifNotZero("deposit", deposit) + ifNotZero("staked", staked)
 
-      lazy val stateChanges =
-        s"before: ${balancesStr(hearthBefore, leaseBefore, depositBefore, stakedBefore)}, " +
-          s"after: ${balancesStr(hearthAfter, leaseAfter, depositAfter, stakedAfter)}"
+      val errorMessage = lockedAfterE.flatMap { lockedAfter =>
+        val hearthWithoutLockedAfter = hearthAfter - lockedAfter
 
-      val errorMessage =
+        lazy val stateChanges =
+          s"before: ${balancesStr(hearthBefore, leaseBefore, depositBefore, stakedBefore)}, " +
+            s"after: ${balancesStr(hearthAfter, leaseAfter, depositAfter, stakedAfter)}"
+
         if (hearthAfter < 0) s"negative hearth balance: before=$hearthBefore, after=$hearthAfter".asLeft
         else if (hearthWithoutLockedAfter < 0) {
           // Which of the two locks the sender fell short of: the one this transaction raised, if either did.
@@ -94,6 +98,7 @@ object BalanceDiffValidation {
         } else if (hearthWithoutLockedAfter - leaseAfter.out < 0 && lockedBefore > 0)
           s"trying to spend either a deposit or leased money, $stateChanges".asLeft
         else Either.unit
+      }
 
       errorMessage.leftMap(err => acc -> s"$err")
     }

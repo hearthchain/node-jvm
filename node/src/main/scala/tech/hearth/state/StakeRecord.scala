@@ -1,5 +1,7 @@
 package tech.hearth.state
 
+import tech.hearth.account.Address
+
 /** One address's HRTH stake, as two amounts rather than one.
   *
   * `active` is what the address has staked for the generation period the chain is currently in - the amount its
@@ -29,4 +31,21 @@ case class StakeRecord(active: Long, pending: Long) {
 
 object StakeRecord {
   val empty: StakeRecord = StakeRecord(0L, 0L)
+
+  /** Which addresses a batch of record changes moves into and out of the staker set.
+    *
+    * The one definition of "an address is in the set exactly while its record is non-empty", shared by
+    * StakeTransactionDiff (which adds a staker) and StakingPayout (which drops one whose record has just emptied),
+    * so that a change to what `isEmpty` means cannot be applied to one and missed in the other.
+    *
+    * @param changes
+    *   each changed address with its record before and after.
+    * @return
+    *   (joined, left), both empty when no membership moved.
+    */
+  def membership(changes: Iterable[(Address, (StakeRecord, StakeRecord))]): (Seq[Address], Seq[Address]) = {
+    val moved              = changes.filter { case (_, (before, after)) => before.isEmpty != after.isEmpty }
+    val (joining, leaving) = moved.partition { case (_, (_, after)) => !after.isEmpty }
+    (joining.map(_._1).toSeq, leaving.map(_._1).toSeq)
+  }
 }

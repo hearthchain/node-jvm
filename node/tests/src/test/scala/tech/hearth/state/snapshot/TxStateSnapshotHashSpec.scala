@@ -298,17 +298,18 @@ class TxStateSnapshotHashSpec extends PropSpec {
     val raising  = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 0L, pending = 5L))))
     val lowering = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 5L, pending = 0L))))
     val settledS = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 5L, pending = 5L))))
-    val set      = hashOf(StateSnapshot(stakers = Some(Seq(staker))))
-    val emptySet = hashOf(StateSnapshot(stakers = Some(Seq.empty)))
+    val joined   = hashOf(StateSnapshot(stakersJoined = Seq(staker)))
+    val departed = hashOf(StateSnapshot(stakersLeft = Seq(staker)))
 
     // Both halves are hashed: these three lock the same 5 embers but pay out differently a period later
-    List(raising, lowering, settledS, set, emptySet).foreach(_ should not equal base)
-    List(raising, lowering, settledS, set, emptySet).distinct.length shouldBe 5
+    List(raising, lowering, settledS, joined, departed).foreach(_ should not equal base)
+    // joined and departed name the same address: only the tag keeps the two preimages apart
+    List(raising, lowering, settledS, joined, departed).distinct.length shouldBe 5
 
     // Clearing a record is a write, not an absence: it must not hash like an untouched snapshot
     hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord.empty))) should not equal base
 
-    // The set is order-sensitive, since it is stored and walked in the order transactions built it
-    hashOf(StateSnapshot(stakers = Some(Seq(staker, other)))) should not equal hashOf(StateSnapshot(stakers = Some(Seq(other, staker))))
+    // A membership delta costs one preimage per address, so a block of joins is O(joins) to hash, not O(stakers)
+    hashOf(StateSnapshot(stakersJoined = Seq(staker, other))) should not equal joined
   }
 }

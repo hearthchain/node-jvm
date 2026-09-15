@@ -49,8 +49,8 @@ object StakingPayout {
   }
 
   private def build(blockchain: Blockchain, finished: GenerationPeriod): Either[ValidationError, StateSnapshot] = {
-    val stakers = blockchain.stakers
-    val records = stakers.map(address => address -> blockchain.stake(address))
+    val records        = blockchain.stakers.map(address => address -> blockchain.stake(address))
+    val (joined, left) = StakeRecord.membership(records.map { case (a, r) => a -> (r, r.activated) })
 
     for {
       configured <- blockchain.settings.functionalitySettings.credAssetParsed.leftMap(GenericError(_))
@@ -58,8 +58,8 @@ object StakingPayout {
       // configured cred asset that no predefined snapshot ever issued has no volume to raise. Either way the
       // boundary still normalises stakes below - only the payout is skipped, never the activation.
       credAsset = configured.flatMap(asset => blockchain.assetDescription(asset).map(asset -> _))
-      payouts   = credAsset.fold(Map.empty[Address, Long])(_ => distribute(blockchain, finished, records))
-      credited  = payouts.values.sum
+      payouts <- if (credAsset.isEmpty) Right(Map.empty[Address, Long]) else distribute(blockchain, finished, records)
+      credited = payouts.values.sum
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = credAsset.fold(Map.empty[Address, Portfolio]) { case (asset, _) =>
@@ -69,31 +69,41 @@ object StakingPayout {
           Map(asset -> (description.totalVolume + BigInt(credited)))
         },
         stakes = activated(records),
-        stakers = remainingStakers(stakers, records)
+        stakersJoined = joined,
+        stakersLeft = left
       )
     } yield snapshot
   }
 
   /** Each staker's share of the finished period's issuance, by `active` stake. Entries that floor to zero are left
     * out entirely rather than written as a no-op balance, and the truncation dust they leave behind is never
-    * minted - `credited` below is the sum of what was actually handed out, not the issuance it was computed from.
+    * minted - `credited` above is the sum of what was actually handed out, not the issuance it was computed from.
+    *
+    * Rejects rather than wraps when a period's work does not fit a Long. A single staker's share is the whole of
+    * `issued`, so `BigInt.toLong` below would silently truncate it to arbitrary low bits, minting a wrong supply
+    * instead of failing - the same trap WorkBoost guards with `require(isValidLong)` on the other consumer of this
+    * sum. Guarding `issued` covers every share and their total too, since the shares sum to at most `issued`.
     */
   private def distribute(
       blockchain: Blockchain,
       finished: GenerationPeriod,
       records: Seq[(Address, StakeRecord)]
-  ): Map[Address, Long] = {
-    val issued      = blockchain.committedGenerators(finished).view.map(g => BigInt(blockchain.workDone(g.address, finished))).sum
+  ): Either[ValidationError, Map[Address, Long]] = {
+    val issued      = blockchain.totalWork(finished)
     val totalStaked = records.view.map { case (_, r) => BigInt(r.active) }.sum
 
-    // With nobody staked there is no one the issuance could be owed to, so it is not emitted at all rather than
-    // carried forward - accumulating it would hand a windfall to whoever stakes first.
-    if (issued <= 0 || totalStaked <= 0) Map.empty
-    else
-      records.view
-        .map { case (address, record) => address -> (issued * BigInt(record.active) / totalStaked).toLong }
-        .filter { case (_, owed) => owed > 0 }
-        .toMap
+    Either
+      .raiseUnless(issued.isValidLong)(GenericError(s"Staking issuance for $finished overflowed a Long: $issued"))
+      .map { _ =>
+        // With nobody staked there is no one the issuance could be owed to, so it is not emitted at all rather than
+        // carried forward - accumulating it would hand a windfall to whoever stakes first.
+        if (issued <= 0 || totalStaked <= 0) Map.empty
+        else
+          records.view
+            .map { case (address, record) => address -> (issued * BigInt(record.active) / totalStaked).toLong }
+            .filter { case (_, owed) => owed > 0 }
+            .toMap
+      }
   }
 
   /** Only the records that actually change: a stake nobody touched last period is already `(x, x)` and activating
@@ -102,12 +112,4 @@ object StakingPayout {
   private def activated(records: Seq[(Address, StakeRecord)]): Map[Address, StakeRecord] =
     records.view.collect { case (address, record) if record.activated != record => address -> record.activated }.toMap
 
-  /** The staker set with everyone whose record has just emptied dropped - which is where a stake set to 0 finally
-    * leaves, a period after the transaction that zeroed it. `None` when nobody left, so an unchanged set is not
-    * rewritten every boundary.
-    */
-  private def remainingStakers(stakers: Seq[Address], records: Seq[(Address, StakeRecord)]): Option[Seq[Address]] = {
-    val leaving = records.collect { case (address, record) if record.activated.isEmpty => address }.toSet
-    Option.when(leaving.nonEmpty)(stakers.filterNot(leaving.contains))
-  }
 }

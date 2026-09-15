@@ -122,12 +122,11 @@ object TxStateSnapshotHashBuilder {
       changedKeys += tag("stake") ++ address.toBytes ++ Longs.toByteArray(stake.active) ++ Longs.toByteArray(stake.pending)
     }
 
-    // The staker set is one value, so it is hashed as one preimage with a count prefix - without it, sets differing
-    // only by where one address ends and the next begins could not collide (addresses are fixed-width), but the
-    // count makes the encoding's injectivity independent of that, the way the length prefix does for apiKeyBinding.
-    snapshot.stakers.foreach { stakers =>
-      changedKeys += tag("stakers") ++ Longs.toByteArray(stakers.size.toLong) ++ stakers.flatMap(_.toBytes).toArray
-    }
+    // One preimage per membership change, not one for the whole set: hashing the set would make a block of k joins
+    // cost O(k * stakers) to hash, on a set whose size anyone can grow. Joined and left carry different tags so a
+    // join and a leave of the same address can never produce the same preimage.
+    snapshot.stakersJoined.foreach(address => changedKeys += tag("stakerJoined") ++ address.toBytes)
+    snapshot.stakersLeft.foreach(address => changedKeys += tag("stakerLeft") ++ address.toBytes)
 
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {

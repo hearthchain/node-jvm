@@ -180,8 +180,26 @@ object Blockchain {
       staked = blockchain.lockedStake(address)
     )
 
-    /** The HRTH [[stake]] currently locks for an address: neither spendable nor counted toward forging weight. */
+    /** The HRTH [[stake]] currently locks for an address: not spendable. Changes as soon as a StakeTransaction
+      * raises the stake, and again at the period boundary that lets a lowered one go.
+      */
     def lockedStake(address: Address): Long = blockchain.stake(address).locked
+
+    /** The HRTH [[stake]] currently costs an address in forging weight, which is the half it is also *earning* on -
+      * see StakeRecord and GeneratingBalanceProvider.unstakedEffectiveBalance.
+      */
+    def stakedForPeriod(address: Address): Long = blockchain.stake(address).active
+
+    /** A generation period's total tracked work: what its committee's settlements burned, summed over the whole
+      * committed set rather than only over members that happen to have any.
+      *
+      * Two consensus paths read it and must never disagree - GeneratingBalanceProvider turns it into forging weight
+      * (WorkBoost), StakingPayout turns it into minted Cred - so it lives here rather than being summed twice.
+      * BigInt, not Long: each addend is safeSum'd at write time, but a sum over an unbounded committee is not
+      * itself Long-safe, and both callers must reject rather than wrap when it overflows.
+      */
+    def totalWork(period: GenerationPeriod): BigInt =
+      blockchain.committedGenerators(period).view.map(g => BigInt(blockchain.workDone(g.address, period))).sum
 
     /** The VRF key a generator registered when it committed to generating for `at`'s period.
       *

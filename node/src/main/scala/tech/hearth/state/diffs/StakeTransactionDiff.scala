@@ -1,7 +1,6 @@
 package tech.hearth.state.diffs
 
 import cats.syntax.either.*
-import tech.hearth.account.Address
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.transaction.StakeTransaction
@@ -39,28 +38,17 @@ object StakeTransactionDiff {
       _ <- Either.raiseUnless(tx.periodStart == next.start) {
         GenericError(s"Expected the next period start height ${next.start}, got ${tx.periodStart}")
       }
-      updated = blockchain.stake(sender).copy(pending = tx.amount.value)
+      before         = blockchain.stake(sender)
+      updated        = before.copy(pending = tx.amount.value)
+      (joined, left) = StakeRecord.membership(Seq(sender -> (before, updated)))
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = Map(sender -> Portfolio(balance = -tx.fee.value)),
         stakes = Map(sender -> updated),
-        stakers = updatedStakers(blockchain, sender, updated)
+        stakersJoined = joined,
+        stakersLeft = left
       )
     } yield snapshot
   }
 
-  /** The staker set, but only when this transaction changes its membership - `None` leaves it alone.
-    *
-    * An address joins on its first non-empty record and leaves only once both halves are zero, which a
-    * stake-to-zero does not do on its own: it zeroes `pending` while `active` still has a period left to pay out
-    * on. Such an address is dropped by the boundary hook instead, once `activated` empties the record.
-    *
-    * Appending keeps the set in a deterministic order without sorting it, since every node applies the same
-    * transactions in the same order - the set is consensus state and is hashed as one preimage.
-    */
-  private def updatedStakers(blockchain: Blockchain, sender: Address, updated: StakeRecord): Option[Seq[Address]] = {
-    val stakers = blockchain.stakers
-    if (updated.isEmpty) Option.when(stakers.contains(sender))(stakers.filterNot(_ == sender))
-    else Option.when(!stakers.contains(sender))(stakers :+ sender)
-  }
 }

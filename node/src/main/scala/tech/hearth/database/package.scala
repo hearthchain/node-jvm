@@ -380,9 +380,14 @@ package object database {
   def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
     data.view.flatMap(re => re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes).toArray
 
+  // A null value is the legitimate "never written" case; a wrong-length one is corruption, and reading it as
+  // StakeRecord.empty would silently unlock someone's staked HRTH instead of failing.
   def readStakeRecord(data: Array[Byte]): StakeRecord =
-    if (data != null && data.length == 16) StakeRecord(Longs.fromByteArray(data.take(8)), Longs.fromByteArray(data.drop(8)))
-    else StakeRecord.empty
+    if (data == null) StakeRecord.empty
+    else {
+      require(data.length == 16, s"Malformed stake record: expected 16 bytes, got ${data.length}")
+      StakeRecord(Longs.fromByteArray(data.take(8)), Longs.fromByteArray(data.drop(8)))
+    }
 
   def writeStakeRecord(record: StakeRecord): Array[Byte] =
     Longs.toByteArray(record.active) ++ Longs.toByteArray(record.pending)

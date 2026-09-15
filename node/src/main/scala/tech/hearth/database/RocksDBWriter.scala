@@ -563,8 +563,12 @@ class RocksDBWriter(
         Keys.stakeHistory,
         Keys.stakeKeysAt
       )
-      snapshot.stakers.foreach { stakers =>
-        rw.put(Keys.stakers(Height(height)), stakers)
+      // The snapshot carries only the membership that moved, so the stored set is read once per block that moves
+      // any - not once per transaction, and never copied into a transaction's own snapshot.
+      if (snapshot.stakersJoined.nonEmpty || snapshot.stakersLeft.nonEmpty) {
+        val left    = snapshot.stakersLeft.toSet
+        val updated = stakers.filterNot(left) ++ snapshot.stakersJoined
+        rw.put(Keys.stakers(Height(height)), updated)
         expiredKeys ++= updateHistory(rw, Keys.stakersHistory, threshold, Keys.stakers)
       }
 

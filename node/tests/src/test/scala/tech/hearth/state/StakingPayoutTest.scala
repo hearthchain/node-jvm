@@ -49,15 +49,10 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
 
   /** A Blockchain carrying a chosen staker set and a chosen amount of work for `finished`. */
   private def staking(blockchain: Blockchain, stakes: Seq[(Address, StakeRecord)], work: Long): Blockchain =
-    new Blockchain {
-      export blockchain.{committedGenerators as _, workDone as _, stake as _, stakers as _, *}
-      override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] =
-        if (at == finished) IndexedSeq(committedGenerator(validator)) else blockchain.committedGenerators(at)
-      override def workDone(v: Address, p: GenerationPeriod): Long =
-        if (p == finished && v == validator) work else blockchain.workDone(v, p)
-      override def stake(address: Address): StakeRecord = stakes.toMap.getOrElse(address, StakeRecord.empty)
-      override def stakers: Seq[Address]                = stakes.map(_._1)
-    }
+    blockchainWithStakes(
+      blockchainWithCommitteeWork(blockchain, finished, Seq(committedGenerator(validator)), Map(validator -> work)),
+      stakes
+    )
 
   private def payout(d: Domain, stakes: Seq[(Address, StakeRecord)], work: Long): StateSnapshot =
     StakingPayout.atPeriodBoundary(staking(d.blockchain, stakes, work), newBlockHeight).explicitGet()
@@ -153,7 +148,20 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
       val snapshot = payout(d, Seq(alice -> StakeRecord(100L, 100L)), work = 400L)
 
       snapshot.stakes shouldBe empty
-      snapshot.stakers shouldBe None
+      snapshot.stakersJoined shouldBe empty
+      snapshot.stakersLeft shouldBe empty
+    }
+
+    // A single staker's share is the whole of `issued`, so BigInt.toLong would truncate it into an arbitrary
+    // amount of minted supply rather than failing - the guard has to reject, not wrap.
+    "rejects a period whose total work does not fit a Long instead of minting a wrapped amount" in withPayoutDomain() { d =>
+      val overflowing = Seq(TxHelpers.signer(15).toAddress, TxHelpers.signer(16).toAddress).map(committedGenerator)
+      val blockchain = blockchainWithStakes(
+        blockchainWithCommitteeWork(d.blockchain, finished, overflowing, overflowing.map(_.address -> Long.MaxValue).toMap),
+        Seq(alice -> StakeRecord(100L, 100L))
+      )
+
+      StakingPayout.atPeriodBoundary(blockchain, newBlockHeight) should produce("overflowed a Long")
     }
 
     "drops a staker whose record empties, leaving the rest in place" in withPayoutDomain() { d =>
@@ -164,7 +172,8 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
       credBalance(snapshot, alice) shouldBe Some(200L)
       credBalance(snapshot, bob) shouldBe Some(100L)
       snapshot.stakes shouldBe Map(alice -> StakeRecord.empty)
-      snapshot.stakers shouldBe Some(Seq(bob))
+      snapshot.stakersLeft shouldBe Seq(alice)
+      snapshot.stakersJoined shouldBe empty
     }
   }
 }

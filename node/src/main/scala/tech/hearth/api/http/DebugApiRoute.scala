@@ -5,6 +5,7 @@ import tech.hearth.Version
 import tech.hearth.account.Address
 import tech.hearth.api.common.{CommonAccountsApi, CommonAssetsApi, CommonTransactionsApi, TransactionMeta}
 import tech.hearth.common.state.ByteStr
+import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.database.RocksDBWriter
 import tech.hearth.lang.ValidationError
 import tech.hearth.mining.MinerDebugInfo
@@ -142,7 +143,8 @@ case class DebugApiRoute(
       miner.nextBlockGenerationOffsets.collect { case (address, Right(offset)) =>
         AccountMiningInfo(
           address.toString,
-          blockchain.effectiveBalance(
+          GeneratingBalanceProvider.unstakedEffectiveBalance(
+            blockchain,
             address,
             ws.blockchainSettings.functionalitySettings.generatingBalanceDepth(blockchain.height),
             blockchain.microblockIds.lastOption
