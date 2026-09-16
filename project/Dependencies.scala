@@ -17,7 +17,7 @@ object Dependencies {
       "com.google.code.gson"      % "gson"         % "2.14.0",
       "com.squareup.okio"         % "okio-jvm"     % "3.18.2",
       "org.apache.httpcomponents" % "httpclient"   % "4.5.14",
-      "org.slf4j"                 % "slf4j-api"    % "2.0.18",
+      "org.slf4j"                 % "slf4j-api"    % "2.0.19",
       "org.msgpack"               % "msgpack-core" % "0.9.12",
       nettyModule("codec-http2"),
       nettyModule("codec-http"),
