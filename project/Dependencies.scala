@@ -74,7 +74,7 @@ object Dependencies {
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java
-    "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
+    "org.bouncycastle" % "bcprov-jdk18on" % "1.86",
     "tech.hearth"      % "crypto"         % "0.1.0-SNAPSHOT"
   )
 
