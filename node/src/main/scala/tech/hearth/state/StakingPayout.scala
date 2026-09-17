@@ -8,13 +8,12 @@ import tech.hearth.transaction.TxValidationError.GenericError
 
 /** What happens to stakes and to Cred at the first block of every generation period.
   *
-  * Two things, in this order, both driven off the period that has just *ended*:
-  *
-  *   1. every staker is credited its pro-rata share of that period's Cred issuance, and the cred asset's total
-  *      volume rises by exactly what was credited - this is new supply, minted here and nowhere else;
-  *   2. every stake that survived the finished period is carried into the one now starting ([[carriedForward]]),
-  *      since a period holds only what was staked *for* it - which is also what finally releases the HRTH of a
-  *      stake that was lowered or zeroed, by declining to carry it.
+  * One thing, driven off the period that has just *ended*: every staker is credited its pro-rata share of that
+  * period's Cred issuance, and the cred asset's total volume rises by exactly what was credited - this is new
+  * supply, minted here and nowhere else.
+  * Nothing else: a stake is a balance, and a balance needs no carrying from one period to the next. What a period
+  * pays out on is simply the amount each address had set before that period began (see `Blockchain.stakeAt`), so
+  * this hook writes no stake state at all - only the credited Cred, and the asset volume it minted.
   *
   * Issuance is the finished period's total tracked work: the sum of `workDone` over the generators committed for
   * it, which SettleTransactionDiff accumulates from the burned share of every settlement. So the Cred paid to
@@ -45,50 +44,31 @@ object StakingPayout {
       // The genesis period has no predecessor to pay out for, and nothing has staked before genesis either, so the
       // very first block is excluded by `prev` rather than by a height check of its own.
       finished <- starting.prev if newBlockHeight == starting.start
-    } yield (finished, starting)
+    } yield finished
 
-    boundary.fold(Right(StateSnapshot.empty))(build(blockchain, _, _))
+    boundary.fold(Right(StateSnapshot.empty))(build(blockchain, _))
   }
 
-  private def build(blockchain: Blockchain, finished: GenerationPeriod, starting: GenerationPeriod): Either[ValidationError, StateSnapshot] = {
-    val staked = blockchain.stakes(finished)
-
+  private def build(blockchain: Blockchain, finished: GenerationPeriod): Either[ValidationError, StateSnapshot] =
     for {
       configured <- blockchain.settings.functionalitySettings.credAssetParsed.leftMap(GenericError(_))
       // Both halves have to hold for anything to be paid: a network can run without a Cred economy at all, and a
-      // configured cred asset that no predefined snapshot ever issued has no volume to raise. Either way the
-      // carry-forward below still happens - only the payout is skipped, or a stake could never be released.
-      credAsset = configured.flatMap(asset => blockchain.assetDescription(asset).map(asset -> _))
-      payouts <- if (credAsset.isEmpty) Right(Map.empty[Address, Long]) else distribute(blockchain, finished, staked)
-      credited = payouts.values.sum
-      snapshot <- StateSnapshot.build(
-        blockchain,
-        portfolios = credAsset.fold(Map.empty[Address, Portfolio]) { case (asset, _) =>
-          payouts.view.mapValues(Portfolio.build(asset, _)).toMap
-        },
-        updatedAssetVolumes = credAsset.filter(_ => credited > 0).fold(Map.empty[IssuedAsset, BigInt]) { case (asset, description) =>
-          Map(asset -> (description.totalVolume + BigInt(credited)))
-        },
-        nextStakes = carriedForward(blockchain, staked, starting)
-      )
+      // configured cred asset that no predefined snapshot ever issued has no volume to raise.
+      credAsset <- Right(configured.flatMap(asset => blockchain.assetDescription(asset).map(asset -> _)))
+      snapshot <- credAsset match {
+        case None => Right(StateSnapshot.empty)
+        case Some((asset, description)) =>
+          for {
+            payouts <- distribute(blockchain.totalWork(finished), blockchain.stakes(finished))
+            credited = payouts.values.sum
+            s <- StateSnapshot.build(
+              blockchain,
+              portfolios = payouts.view.mapValues(Portfolio.build(asset, _)).toMap,
+              updatedAssetVolumes = if (credited > 0) Map(asset -> (description.totalVolume + BigInt(credited))) else Map.empty[IssuedAsset, BigInt]
+            )
+          } yield s
+      }
     } yield snapshot
-  }
-
-  /** A stake stays in force until a transaction changes it, but a period only holds what was staked *for* it - so
-    * every stake that survived the finished period is restated for the one now starting.
-    *
-    * An address that already has an entry for the starting period is left alone: it sent a StakeTransaction during
-    * the finished period, and that is precisely the stake that supersedes this one - including when it staked 0,
-    * which is how a release finally takes effect here. A stake of 0 is never carried forward either, so a released
-    * stake stops costing reads and disappears from the set the next payout walks.
-    */
-  private def carriedForward(blockchain: Blockchain, staked: IndexedSeq[Stake], starting: GenerationPeriod): Seq[StakeCommitment] = {
-    val alreadyStated = blockchain.stakes(starting).view.map(_.address).toSet
-    staked.view
-      .filter(stake => stake.amount > 0 && !alreadyStated(stake.address))
-      .map(stake => StakeCommitment(stake.address, starting.start, stake.amount))
-      .toSeq
-  }
 
   /** Each staker's share of the finished period's issuance, by what it staked for that period. Entries that floor to zero are left
     * out entirely rather than written as a no-op balance, and the truncation dust they leave behind is never
@@ -99,16 +79,11 @@ object StakingPayout {
     * instead of failing - the same trap WorkBoost guards with `require(isValidLong)` on the other consumer of this
     * sum. Guarding `issued` covers every share and their total too, since the shares sum to at most `issued`.
     */
-  private def distribute(
-      blockchain: Blockchain,
-      finished: GenerationPeriod,
-      staked: IndexedSeq[Stake]
-  ): Either[ValidationError, Map[Address, Long]] = {
-    val issued      = blockchain.totalWork(finished)
+  private def distribute(issued: BigInt, staked: Seq[Stake]): Either[ValidationError, Map[Address, Long]] = {
     val totalStaked = staked.view.map(s => BigInt(s.amount)).sum
 
     Either
-      .raiseUnless(issued.isValidLong)(GenericError(s"Staking issuance for $finished overflowed a Long: $issued"))
+      .raiseUnless(issued.isValidLong)(GenericError(s"Staking issuance overflowed a Long: $issued"))
       .map { _ =>
         // With nobody staked there is no one the issuance could be owed to, so it is not emitted at all rather than
         // carried forward - accumulating it would hand a windfall to whoever stakes first.
@@ -120,5 +95,4 @@ object StakingPayout {
             .toMap
       }
   }
-
 }

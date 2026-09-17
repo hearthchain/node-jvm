@@ -13,8 +13,7 @@ import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxHelpers
 
-/** The boundary half of staking: turning a finished period's tracked work into Cred, and carrying stakes into the
-  * period now starting.
+/** The boundary half of staking: turning a finished period's tracked work into Cred.
   *
   * `workDone` is written only by SettleTransactionDiff, and (see StartBoostTransactionDiffTest's own doc comment)
   * no fixture in this repo can drive a StartBoost to its accept path, so no real Settle can be appended either. The
@@ -66,9 +65,6 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
 
   private def credBalance(snapshot: StateSnapshot, address: Address): Option[Long] =
     snapshot.balances.get((address, credAsset))
-
-  private def carriedForward(snapshot: StateSnapshot): Seq[(Address, Long)] =
-    snapshot.nextStakes.map(s => s.address -> s.amount)
 
   "StakingPayout" - {
     "does nothing away from a period boundary" in withPayoutDomain() { d =>
@@ -134,12 +130,19 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
       snapshot.assetVolumes shouldBe empty
     }
 
-    "emits nothing on a network with no cred asset, but still carries stakes forward" in withPayoutDomain(credAssetId = None) { d =>
+    "emits nothing on a network with no cred asset" in withPayoutDomain(credAssetId = None) { d =>
       val snapshot = payout(d, Seq(Stake(alice, 100L)), work = 400L)
 
-      snapshot.balances shouldBe empty
-      snapshot.assetVolumes shouldBe empty
-      carriedForward(snapshot) shouldBe Seq(alice -> 100L)
+      snapshot shouldBe StateSnapshot.empty
+    }
+
+    // The whole point of storing a stake as a balance: it stays in force because it was never filed under a period,
+    // so the boundary has nothing to carry and writes no stake state at all - only the Cred it minted.
+    "writes no stake state, only the credited Cred" in withPayoutDomain() { d =>
+      val snapshot = payout(d, Seq(Stake(alice, 100L)), work = 400L)
+
+      snapshot.nextStakes shouldBe empty
+      credBalance(snapshot, alice) shouldBe Some(400L)
     }
 
     "adds to the cred asset's existing volume rather than replacing it" in withPayoutDomain() { d =>
@@ -152,34 +155,13 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
       snapshot.assetVolumes shouldBe Map(credAsset -> BigInt(quantity + 400L))
     }
 
-    // A stake stays in force until a transaction changes it, but a period holds only what was staked for it
-    "carries an untouched stake forward into the period now starting" in withPayoutDomain() { d =>
-      val snapshot = payout(d, Seq(Stake(alice, 100L), Stake(bob, 50L)), work = 300L)
-
-      carriedForward(snapshot) should contain theSameElementsAs Seq(alice -> 100L, bob -> 50L)
-      snapshot.nextStakes.map(_.periodStart).distinct shouldBe Seq(starting.start)
-    }
-
-    "leaves a stake already restated for the starting period alone" in withPayoutDomain() { d =>
-      val snapshot = payout(d, Seq(Stake(alice, 100L), Stake(bob, 50L)), work = 300L, restated = Seq(Stake(alice, 20L)))
-
-      // Alice sent a Stake during the finished period; that is exactly the stake that supersedes the old one
-      carriedForward(snapshot) shouldBe Seq(bob -> 50L)
-    }
-
-    "does not resurrect a stake that was released" in withPayoutDomain() { d =>
-      // Alice staked 0 during the finished period, which is filed under the starting one as a release
+    "still pays a stake that was released during the finished period" in withPayoutDomain() { d =>
+      // Alice staked 0 during the finished period, so the release is in force from the starting period on
       val snapshot = payout(d, Seq(Stake(alice, 100L)), work = 300L, restated = Seq(Stake(alice, 0L)))
 
       // She still earns for the period she was staked in, and only then stops
       credBalance(snapshot, alice) shouldBe Some(300L)
-      carriedForward(snapshot) shouldBe empty
-    }
-
-    "does not carry a zero stake forward" in withPayoutDomain() { d =>
-      val snapshot = payout(d, Seq(Stake(alice, 0L), Stake(bob, 50L)), work = 300L)
-
-      carriedForward(snapshot) shouldBe Seq(bob -> 50L)
+      snapshot.nextStakes shouldBe empty
     }
 
     // A single staker's share is the whole of `issued`, so BigInt.toLong would truncate it into an arbitrary

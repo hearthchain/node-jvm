@@ -110,12 +110,14 @@ trait Blockchain {
   // Every HRTH stake in force for one generation period - the set StakingPayout walks at that period's end, and
   // the source of both the spending lock and the forging-weight charge. Period-keyed like committedGenerators
   // rather than a per-address current value, because a stake is always a stake *for a period*.
-  def stakes(at: GenerationPeriod): IndexedSeq[Stake]
-
-  // One address's stake for one period. Separate from `stakes` because it is on a far hotter path: every HRTH
-  // balance check resolves it (twice, through lockedStake), for every address of every transaction, so it must not
-  // scan or rebuild the period's whole set the way reading `stakes` does.
+  // One address's HRTH stake in force for one period: the most recent amount it set at a height *below* that
+  // period's start. A StakeTransaction always names the period after the one it lands in, so the change height is
+  // what decides which periods an amount applies to, and a stake needs nothing to keep it alive across periods.
   def stakeAt(address: Address, at: GenerationPeriod): Long
+
+  // Every address with a non-zero stake in force for `at` - the set StakingPayout walks at that period's end.
+  // Unlike stakeAt this enumerates, so it is only for the boundary, never for a per-transaction check.
+  def stakes(at: GenerationPeriod): Seq[Stake]
 
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
@@ -184,10 +186,10 @@ object Blockchain {
 
     /** The HRTH a stake currently stops `address` spending.
       *
-      * The larger of what it has staked for this period and for the next, which is the same "this period and the
-      * next" window [[generationDeposit]] counts a generator's deposits over. Raising a stake locks the new, larger
-      * amount as soon as the transaction is applied, since it already counts for the next period; lowering one
-      * keeps the current period's larger amount locked until that period ends.
+      * The larger of what is in force for this period and what the address last set, which is what will be in
+      * force for the next one. Raising a stake locks the new, larger amount as soon as the transaction is applied,
+      * since it already counts for the next period; lowering one keeps this period's larger amount locked until
+      * this period ends, at which point the two converge on their own.
       */
     def lockedStake(address: Address): Long =
       blockchain.currentGenerationPeriod.fold(0L) { period =>
@@ -195,7 +197,9 @@ object Blockchain {
       }
 
     /** The HRTH a stake currently costs `address` in forging weight, which is the amount it is also *earning* on -
-      * this period's stake alone, never the next one's. See GeneratingBalanceProvider.unstakedEffectiveBalance.
+      * what is in force for this period, never what it has set for the next. Constant for a whole period, which is
+      * what makes it safe to subtract from a windowed effective balance - see
+      * GeneratingBalanceProvider.unstakedEffectiveBalance.
       */
     def stakedForPeriod(address: Address): Long =
       blockchain.currentGenerationPeriod.fold(0L)(blockchain.stakeAt(address, _))

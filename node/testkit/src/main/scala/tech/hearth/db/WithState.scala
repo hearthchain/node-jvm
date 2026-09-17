@@ -435,9 +435,10 @@ trait WithDomain extends WithState {
     */
   def blockchainWithStakes(blockchain: Blockchain, staked: Map[GenerationPeriod, Seq[Stake]]): Blockchain =
     new Blockchain {
-      export blockchain.{stakes as _, *}
-      override def stakes(at: GenerationPeriod): IndexedSeq[Stake] =
-        staked.get(at).fold(blockchain.stakes(at))(_.toIndexedSeq)
+      export blockchain.{stakes as _, stakeAt as _, *}
+      override def stakes(at: GenerationPeriod): Seq[Stake] = staked.getOrElse(at, blockchain.stakes(at))
+      override def stakeAt(address: Address, at: GenerationPeriod): Long =
+        staked.get(at).fold(blockchain.stakeAt(address, at))(_.find(_.address == address).fold(0L)(_.amount))
     }
 
   def withDomain[A](

@@ -21,6 +21,16 @@ object BalanceNode {
   val SizeInBytes: Int   = 12
 }
 
+case class CurrentStake(amount: Long, height: Height, prevHeight: Height)
+object CurrentStake {
+  val Unavailable: CurrentStake = CurrentStake(0L, Height(0), Height(0))
+}
+
+case class StakeNode(amount: Long, prevHeight: Height)
+object StakeNode {
+  val Empty: StakeNode = StakeNode(0L, Height(0))
+}
+
 case class CurrentVolumeAndFee(volume: Long, fee: Long, height: Height, prevHeight: Height)
 object CurrentVolumeAndFee {
   val Unavailable: CurrentVolumeAndFee = CurrentVolumeAndFee(0, 0, Height(0), Height(0))
@@ -352,19 +362,13 @@ object Keys {
   def workDoneKeysAt(height: Height): Key[Seq[ByteStr]] =
     Key(WorkDoneKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
 
-  /** Key: Int(stakePeriod.start) ++ Int(stakeHeight), the same shape as committedGenerators above - a Stake
-    * transaction stakes for a period exactly like a CommitToGeneration commits a generator for one, so the period's
-    * whole set is one prefix scan and a rollback is one delete.
-    *
-    * Unlike a commitment, a stake may be restated within its period ("the last one wins") and may be carried
-    * forward into the next one by StakingPayout, so a period can hold several entries for one address across
-    * different heights. Reading folds them in height order, last write winning - see RocksDBWriter.loadStakes.
+  /** A stake is stored exactly like a HRTH balance: the current amount plus the height it was set at, and a
+    * prevHeight-linked node per change so a rollback can restore the previous one. The height is what makes the
+    * period derivable - see Blockchain.stakeAt - so nothing here is keyed by period.
     */
-  def stakes(stakePeriod: GenerationPeriod, stakeHeight: Height): Key[Option[Seq[(AddressId, Long)]]] =
-    Key.opt(
-      Stakes,
-      h(stakePeriod.start) ++ h(stakeHeight),
-      readStakes,
-      writeStakes
-    )
+  def stakeBalanceAt(addressId: AddressId, height: Height): Key[StakeNode] =
+    Key(StakeBalanceHistory, hBytes(addressId.toByteArray, height), readStakeNode, writeStakeNode)
+
+  def stakeBalance(addressId: AddressId): Key[CurrentStake] =
+    Key(StakeBalance, addressId.toByteArray, readCurrentStake, writeCurrentStake)
 }

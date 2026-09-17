@@ -36,7 +36,6 @@ import java.time.Duration
 import java.util
 import java.util.concurrent.*
 import scala.annotation.tailrec
-import scala.collection.immutable.VectorMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
@@ -402,7 +401,7 @@ class RocksDBWriter(
       committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
       registeredEnclaves: Seq[RegisteredEnclave],
-      stakes: Map[GenerationPeriod, Seq[(AddressId, Long)]],
+      stakes: Map[AddressId, (CurrentStake, StakeNode)],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
   ): Unit = {
@@ -457,6 +456,11 @@ class RocksDBWriter(
       for ((addressId, (currentLeaseBalance, leaseBalanceNode)) <- leaseBalances) {
         rw.put(Keys.leaseBalance(addressId), currentLeaseBalance)
         rw.put(Keys.leaseBalanceAt(addressId, currentLeaseBalance.height), leaseBalanceNode)
+      }
+
+      for ((addressId, (currentStake, stakeNode)) <- stakes) {
+        rw.put(Keys.stakeBalance(addressId), currentStake)
+        rw.put(Keys.stakeBalanceAt(addressId, currentStake.height), stakeNode)
       }
 
       for ((orderId, (currentVolumeAndFee, volumeAndFeeNode)) <- filledQuantity) {
@@ -657,12 +661,6 @@ class RocksDBWriter(
         }
 
         if (registeredEnclaves.nonEmpty) rw.put(Keys.registeredEnclaves(committedPeriod, h), Some(registeredEnclaves))
-      }
-
-      // Keyed by the period each group names, not by committedPeriod: a boundary block writes the period it starts
-      // (StakingPayout's carry-forward) as well as the one after it (any Stake transactions it carries).
-      stakes.foreach { case (stakePeriod, entries) =>
-        if (entries.nonEmpty) rw.put(Keys.stakes(stakePeriod, h), Some(entries))
       }
 
       this.generationPeriodOf(h).foreach { currPeriod => // None checked in Caches
@@ -875,6 +873,8 @@ class RocksDBWriter(
             rollbackBalanceHistory(rw, Keys.hearthBalance(addressId), Keys.hearthBalanceAt(addressId, _), currentHeight)
 
             rollbackLeaseBalance(rw, addressId, currentHeight)
+            rollbackStake(rw, addressId, currentHeight)
+            discardStake(address)
 
             balanceAtHeightCache.invalidate((currentHeight, addressId))
             leaseBalanceAtHeightCache.invalidate((currentHeight, addressId))
@@ -948,10 +948,6 @@ class RocksDBWriter(
             rw.delete(Keys.commitmentTransactions(committedPeriod, currentHeight))
             rw.delete(Keys.registeredEnclaves(committedPeriod, currentHeight))
 
-            // A block writes stakes for the period it is in (a carry-forward, only at a boundary block) and for the
-            // next one (its transactions), so both have to be unwound - see doAppend.
-            rw.delete(Keys.stakes(currentPeriod, currentHeight))
-            rw.delete(Keys.stakes(currentPeriod.next, currentHeight))
           }
 
           discardedMeta.header.flatMap(_.challengedHeader.map(_.generator.toPublicKey.toAddress)) match {
@@ -1114,6 +1110,16 @@ class RocksDBWriter(
       rw.put(curVfKey, CurrentVolumeAndFee(prevVfNode.volume, prevVfNode.fee, vf.prevHeight, prevVfNode.prevHeight))
     }
     orderId
+  }
+
+  private def rollbackStake(rw: RW, addressId: AddressId, height: Height): Unit = {
+    val curStakeKey = Keys.stakeBalance(addressId)
+    val stake       = rw.get(curStakeKey)
+    if (stake.height == height) {
+      val prevNode = rw.get(Keys.stakeBalanceAt(addressId, stake.prevHeight))
+      rw.delete(Keys.stakeBalanceAt(addressId, height))
+      rw.put(curStakeKey, CurrentStake(prevNode.amount, stake.prevHeight, prevNode.prevHeight))
+    }
   }
 
   private def rollbackLeaseBalance(rw: RW, addressId: AddressId, height: Height): Unit = {
@@ -1427,38 +1433,62 @@ class RocksDBWriter(
   override def effectiveBalanceBanHeights(address: Address): Seq[Int] =
     readOnly(_.get(Keys.maliciousMinerBanHeights(address.toBytes))).map(_.toInt)
 
-  /** Every stake in force for `at`, folded in height order so a later entry for an address replaces an earlier one -
-    * which is what makes "the last Stake transaction of a period wins" and StakingPayout's carry-forward compose
-    * without either needing to read the other back. `Stake.applied` is the same fold for the not-yet-persisted
-    * paths, and goes through `updated` for exactly this reason.
-    *
-    * An amount of 0 is kept rather than dropped: it is a release, and it has to survive as the winning entry so a
-    * carry-forward cannot resurrect the stake it replaced.
+  override def loadStakeBalance(address: Address): CurrentStake =
+    addressId(address).fold(CurrentStake.Unavailable)(id => readOnly(_.get(Keys.stakeBalance(id))))
+
+  /** Walks an address's stake history back to the most recent change made *before* `at` began. Only restatements
+    * inside `at` itself are skipped, so the walk is as long as the number of times that address restaked during
+    * that period - bounded by its own fee spend, and paid only by its own lookups.
     */
-  override def loadStakes(at: GenerationPeriod): Stake.Set = {
-    val key       = Keys.stakes(at, at.start)
-    val byAddress = mutable.LinkedHashMap.empty[AddressId, Long]
+  override def resolveStake(address: Address, from: Height, at: GenerationPeriod): Long =
+    addressId(address).fold(0L) { id =>
+      readOnly { db =>
+        @tailrec def walk(height: Height): Long =
+          if (height <= Height(0)) 0L
+          else {
+            val node = db.get(Keys.stakeBalanceAt(id, height))
+            if (height < at.start) node.amount else walk(node.prevHeight)
+          }
+        walk(from)
+      }
+    }
 
-    // Both reads in one snapshot, as loadCommittedGenerators does: taking them separately would let the address
-    // mapping shift between the two and turn a consistent DB into the "missing address" failure below.
+  /** Every non-zero stake in force for `at`, by prefix scan over the current-stake keys.
+    *
+    * This enumerates every address that has *ever* staked, including those now at zero: a stake is a balance, and
+    * a balance key is not removed when it reaches zero. Only StakingPayout calls this, once per period boundary.
+    */
+  override def loadStakes(at: GenerationPeriod): Seq[Stake] = {
+    val staked = ArrayBuffer.empty[(AddressId, Long)]
+
     rdb.db.readOnly { ro =>
-      ro.iterateOver(key.keyBytes.dropRight(Ints.BYTES)) { dbEntry => // Drop height: iterate the whole period
-        key.parse(dbEntry.getValue).getOrElse(Seq.empty).foreach { case (addressId, amount) => byAddress.put(addressId, amount) }
+      val key = Keys.stakeBalance(AddressId(0L))
+      ro.iterateOver(key.keyBytes.dropRight(java.lang.Long.BYTES)) { dbEntry => // Drop the address id: scan them all
+        val id      = AddressId.fromByteArray(dbEntry.getKey.takeRight(java.lang.Long.BYTES))
+        val current = key.parse(dbEntry.getValue)
+        val amount =
+          if (current.height < at.start) current.amount
+          else {
+            @tailrec def walk(height: Height): Long =
+              if (height <= Height(0)) 0L
+              else {
+                val node = ro.get(Keys.stakeBalanceAt(id, height))
+                if (height < at.start) node.amount else walk(node.prevHeight)
+              }
+            walk(current.prevHeight)
+          }
+        if (amount > 0) staked += (id -> amount)
       }
 
-      if (byAddress.isEmpty) Stake.empty
-      else {
-        val addressIds = byAddress.keys.toVector
-        // An address is stored as the bytes of its hash, see Keys.idToAddress
-        val addresses = ro.multiGet(addressIds.map(Keys.idToAddress), tech.hearth.crypto.Address.HASH_LEN)
-        VectorMap.from(addressIds.view.zipWithIndex.map { case (addressId, i) =>
-          // Throwing rather than skipping, exactly as loadCommittedGenerators does: this is consensus state, and a
-          // silently dropped staker changes a spend lock, a forging weight and a payout share while the node keeps
-          // following a chain it is now computing differently from its peers.
-          val address = addresses(i).getOrElse(throw new IllegalStateException(s"Can't find address for address id $addressId"))
-          address -> byAddress(addressId)
-        })
-      }
+      // An address is stored as the bytes of its hash, see Keys.idToAddress
+      val addresses = ro.multiGet(staked.view.map { case (id, _) => Keys.idToAddress(id) }.toVector, tech.hearth.crypto.Address.HASH_LEN)
+      staked.view.zipWithIndex.map { case ((id, amount), i) =>
+        // Throwing rather than skipping, as loadCommittedGenerators does: a silently dropped staker changes a
+        // spend lock, a forging weight and a payout share while the node keeps following a chain it now computes
+        // differently from its peers.
+        val address = addresses(i).getOrElse(throw new IllegalStateException(s"Can't find address for address id $id"))
+        Stake(address, amount)
+      }.toSeq
     }
   }
 

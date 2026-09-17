@@ -2,51 +2,22 @@ package tech.hearth.state
 
 import tech.hearth.account.Address
 
-import scala.collection.immutable.VectorMap
-
-/** One address's HRTH stake for one generation period, as read back.
+/** One address's HRTH stake, as it stands for some generation period.
   *
-  * The period is the key this is filed under, not a field: `Blockchain.stakes(period)` is the whole set staked for
-  * that period, which is also the set [[StakingPayout]] walks to pay out. An amount of 0 is a real record - it is
-  * how a release is expressed, and it is what stops an earlier period's stake being carried forward over it.
+  * A stake is a balance: a per-address amount that changes at a height and stays put until it changes again. The
+  * period it applies to is not stored, it is *derived* from the height the change landed at - a StakeTransaction
+  * always names the period after the one it is applied in, so an amount written at height `h` is in force for
+  * every period starting above `h`. See `Blockchain.stakeAt`.
+  *
+  * That is why nothing carries a stake forward: it was never filed under a period to begin with.
   */
 case class Stake(address: Address, amount: Long)
-
-object Stake {
-
-  /** A period's stakes, in the order they were first staked for it. `VectorMap` and not a plain `Seq` because both
-    * shapes are needed on different paths: [[StakingPayout]] walks the whole thing once per period boundary, while
-    * every HRTH balance check looks up one address and must not pay for the rest.
-    */
-  type Set = VectorMap[Address, Long]
-
-  val empty: Set = VectorMap.empty
-
-  def of(stakes: (Address, Long)*): Set = VectorMap.from(stakes)
-
-  /** A period's stakes with `restated` applied over them, a later entry for an address replacing an earlier one.
-    *
-    * This is "the last Stake transaction of a period wins", and it has to hold identically in the three places that
-    * resolve a period independently: RocksDBWriter.loadStakes folding what is on disk, SnapshotBlockchain layering
-    * a not-yet-persisted snapshot over it, and Caches keeping a warm period up to date. Several transactions in one
-    * block all land in the same snapshot, so deduping only on the way to disk is not enough.
-    *
-    * All three go through `updated`, so a restated address keeps its original position rather than moving to the
-    * end - the orders cannot drift apart, because there is only one rule. StakeSetTest pins that.
-    */
-  def applied(base: Set, restated: Iterable[StakeCommitment]): Set =
-    restated.foldLeft(base)((acc, stake) => acc.updated(stake.address, stake.amount))
-
-  def toSeq(stakes: Set): IndexedSeq[Stake] = stakes.view.map(Stake(_, _)).toIndexedSeq
-}
 
 /** A stake as a transaction declares it: [[tech.hearth.transaction.StakeTransaction]]'s own two fields, plus who
   * sent it. This is what a [[StateSnapshot]] carries and what the state hash commits to, in the same way
   * [[GenerationCommitment]] carries a CommitToGeneration's fields rather than the deposit they imply.
   *
-  * `periodStart` is kept rather than derived because it is what the sender signed: it says which period this stake
-  * is for, independently of where in the chain the transaction happens to land, and it is the key the storage
-  * layer files the record under. [[StakingPayout]]'s carry-forward emits these too, naming the period it is
-  * carrying a stake into.
+  * `periodStart` is redundant with the height this lands at - the storage layer records only the amount and the
+  * height - but it is what the sender signed, so it is kept in the preimage and validated rather than inferred.
   */
 case class StakeCommitment(address: Address, periodStart: Height, amount: Long)

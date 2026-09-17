@@ -380,18 +380,19 @@ package object database {
   def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
     data.view.flatMap(re => re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes).toArray
 
-  def readStakes(data: Array[Byte]): Seq[(AddressId, Long)] =
-    Option(data).fold(Seq.empty[(AddressId, Long)]) {
-      _.grouped(java.lang.Long.BYTES * 2)
-        .map { record =>
-          val (addressId, amount) = record.splitAt(java.lang.Long.BYTES)
-          AddressId(Longs.fromByteArray(addressId)) -> Longs.fromByteArray(amount)
-        }
-        .toSeq
-    }
+  def readCurrentStake(data: Array[Byte]): CurrentStake =
+    if (data != null && data.length == 16)
+      CurrentStake(Longs.fromByteArray(data.take(8)), Height(Ints.fromByteArray(data.slice(8, 12))), Height(Ints.fromByteArray(data.takeRight(4))))
+    else CurrentStake.Unavailable
 
-  def writeStakes(stakes: Seq[(AddressId, Long)]): Array[Byte] =
-    stakes.view.flatMap { case (addressId, amount) => addressId.toByteArray ++ Longs.toByteArray(amount) }.toArray
+  def writeCurrentStake(cs: CurrentStake): Array[Byte] =
+    Longs.toByteArray(cs.amount) ++ cs.height.toByteArray ++ cs.prevHeight.toByteArray
+
+  def readStakeNode(data: Array[Byte]): StakeNode =
+    if (data != null && data.length == 12) StakeNode(Longs.fromByteArray(data.take(8)), Height(Ints.fromByteArray(data.takeRight(4))))
+    else StakeNode.Empty
+
+  def writeStakeNode(sn: StakeNode): Array[Byte] = Longs.toByteArray(sn.amount) ++ sn.prevHeight.toByteArray
 
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)

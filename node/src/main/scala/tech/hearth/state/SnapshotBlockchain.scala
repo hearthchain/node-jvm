@@ -102,16 +102,25 @@ case class SnapshotBlockchain(
   override def workDone(validator: Address, period: GenerationPeriod): Long =
     snapshot.workDone.getOrElse((validator, period), inner.workDone(validator, period))
 
-  override def stakes(at: GenerationPeriod): IndexedSeq[Stake] =
-    Stake.toSeq(Stake.applied(Stake.of(inner.stakes(at).map(s => s.address -> s.amount)*), restatedFor(at)))
+  // A commitment in this snapshot is in force for `at` when `at` starts at or after the period it named. Since a
+  // StakeTransaction can only ever name the next period, that is "this snapshot wins for the next period onward".
+  private def restatedFor(address: Address, at: GenerationPeriod): Option[Long] =
+    snapshot.nextStakes.findLast(s => s.address == address && at.start >= s.periodStart).map(_.amount)
 
-  // Deliberately not `stakes(at).find(...)`: that would rebuild and copy the whole period's set for a single
-  // address, on a path BalanceDiffValidation walks for every address of every transaction in a block.
   override def stakeAt(address: Address, at: GenerationPeriod): Long =
-    restatedFor(at).findLast(_.address == address).fold(inner.stakeAt(address, at))(_.amount)
+    restatedFor(address, at).getOrElse(inner.stakeAt(address, at))
 
-  private def restatedFor(at: GenerationPeriod): Seq[StakeCommitment] =
-    snapshot.nextStakes.filter(s => GenerationPeriod.from(s.periodStart, settings.functionalitySettings) == at)
+  override def stakes(at: GenerationPeriod): Seq[Stake] = {
+    val restated = snapshot.nextStakes.filter(at.start >= _.periodStart)
+    if (restated.isEmpty) inner.stakes(at)
+    else {
+      val overridden = restated.view.map(_.address).toSet
+      inner.stakes(at).filterNot(s => overridden(s.address)) ++
+        restated.view.map(_.address).distinct.flatMap { address =>
+          restatedFor(address, at).filter(_ > 0).map(Stake(address, _))
+        }
+    }
+  }
 
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions

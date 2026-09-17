@@ -67,7 +67,7 @@ Hard-won implementation knowledge lives in `docs/notes/`, one file per subsystem
 - Touching StartBoost, Reserve, BindApiKey, Settle, workBoost, the DCAP collateral registry (UpdateCollateral), or transaction signing outside a running node (`hearth util transaction sign`, `sign-commit-to-generation.sh`): read `docs/notes/hearth-transactions.md` first.
 - Touching keys or addresses (SigningKey, VrfKey, BLS, bech32), transaction JSON, the protobuf transaction schema, or proof verification: read `docs/notes/keys-and-signatures.md` first.
 - Touching fees, the carry, BlockRewardCalculator, EmissionCurve, RewardsSettings, or RewardApiRoute: read `docs/notes/economics.md` first.
-- Touching StakeTransaction, StakingPayout, the per-period stake ledger, or `FunctionalitySettings.credAsset`: read `docs/notes/cred-economy.md` first.
+- Touching StakeTransaction, StakingPayout, the stake ledger (stored as a balance), or `FunctionalitySettings.credAsset`: read `docs/notes/cred-economy.md` first.
 - Writing or fixing tests (node-it suites and fixtures, grpc-server specs, node-tests helpers like withDomain/TestBlock/TxHelpers): read `docs/notes/testing.md` first.
 - Touching StateSnapshot, predefined snapshots, BlockDiffer, genesis settings, or balance snapshots: read `docs/notes/state-and-blocks.md` first.
 - Touching the BlockchainUpdates extension or events.StateUpdate: read `docs/notes/blockchain-updates.md` first.
