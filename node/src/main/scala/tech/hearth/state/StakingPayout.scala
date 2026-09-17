@@ -12,9 +12,9 @@ import tech.hearth.transaction.TxValidationError.GenericError
   *
   *   1. every staker is credited its pro-rata share of that period's Cred issuance, and the cred asset's total
   *      volume rises by exactly what was credited - this is new supply, minted here and nowhere else;
-  *   2. every stake record is normalised, `active := pending` ([[StakeRecord.activated]]), which is what makes a
-  *      stake set during the finished period start earning in this one, and what finally releases the HRTH of a
-  *      stake that was lowered or zeroed.
+  *   2. every stake that survived the finished period is carried into the one now starting ([[carriedForward]]),
+  *      since a period holds only what was staked *for* it - which is also what finally releases the HRTH of a
+  *      stake that was lowered or zeroed, by declining to carry it.
   *
   * Issuance is the finished period's total tracked work: the sum of `workDone` over the generators committed for
   * it, which SettleTransactionDiff accumulates from the burned share of every settlement. So the Cred paid to
@@ -88,7 +88,7 @@ object StakingPayout {
       .toSeq
   }
 
-  /** Each staker's share of the finished period's issuance, by `active` stake. Entries that floor to zero are left
+  /** Each staker's share of the finished period's issuance, by what it staked for that period. Entries that floor to zero are left
     * out entirely rather than written as a no-op balance, and the truncation dust they leave behind is never
     * minted - `credited` above is the sum of what was actually handed out, not the issuance it was computed from.
     *

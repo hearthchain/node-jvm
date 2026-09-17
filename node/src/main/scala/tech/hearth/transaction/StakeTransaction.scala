@@ -22,8 +22,8 @@ import play.api.libs.json.JsObject
   * @param amount
   *   The new total staked, not a delta, in embers. TxNonNegativeAmount rather than TxPositiveAmount because 0 is
   *   meaningful: it releases everything currently staked, at the start of `periodStart`. The HRTH is locked as soon
-  *   as this transaction is applied when `amount` raises the stake; a reduction only frees funds at `periodStart`
-  *   (see StakeRecord.locked).
+  *   as this transaction is applied when `amount` raises the stake, since it already counts for the next period; a
+  *   reduction only frees funds at `periodStart` (see Blockchain.lockedStake).
   */
 final case class StakeTransaction(
     sender: PublicKey,

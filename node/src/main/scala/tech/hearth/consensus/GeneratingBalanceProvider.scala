@@ -45,10 +45,10 @@ object GeneratingBalanceProvider {
 
   /** Effective balance with the address's stake taken out: staking HRTH costs forging weight, not just liquidity.
     *
-    * The term subtracted is `StakeRecord.active`, not `locked` - the stake the address is *earning* Cred on this
-    * period, so the same embers buy the yield and pay for it. That is also what keeps this safe to read as a
-    * current value against a windowed `effectiveBalance`: `active` only ever moves in `StakeRecord.activated`, at
-    * a period boundary, so forging weight changes only where the committee itself does. Subtracting `locked`
+    * The term subtracted is `stakedForPeriod`, this period's own stake, not `lockedStake` - it is the stake the
+    * address is *earning* Cred on, so the same embers buy the yield and pay for it. That is also what keeps this
+    * safe to read as a current value against a windowed `effectiveBalance`: a period's stake cannot change once
+    * that period has started, so forging weight changes only where the committee itself does. Subtracting the lock
     * instead would let any committed generator zero its own generating balance mid-period with one cheap
     * transaction and no fund movement, which hands it a lever over `EndorsementFilter`'s 2/3 quorum denominator
     * and over the `validGenerators.nonEmpty` case in `appender.findBlockAndGetGenerators`. The HRTH a raised stake
