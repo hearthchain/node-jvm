@@ -719,12 +719,8 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.workDone(validator, period)
   }
 
-  override def stake(address: Address): StakeRecord = readLock {
-    snapshotBlockchain.stake(address)
-  }
-
-  override def stakers: Seq[Address] = readLock {
-    snapshotBlockchain.stakers
+  override def stakes(at: GenerationPeriod): IndexedSeq[Stake] = readLock {
+    snapshotBlockchain.stakes(at)
   }
 
   override def filledVolumeAndFee(orderId: ByteStr): VolumeAndFee = readLock {

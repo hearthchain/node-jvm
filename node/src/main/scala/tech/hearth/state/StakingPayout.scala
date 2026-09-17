@@ -38,27 +38,26 @@ object StakingPayout {
     *   the height of the block being built.
     */
   def atPeriodBoundary(blockchain: Blockchain, newBlockHeight: Height): Either[ValidationError, StateSnapshot] = {
-    val period = GenerationPeriod.from(newBlockHeight, blockchain.settings.functionalitySettings)
+    val starting = GenerationPeriod.from(newBlockHeight, blockchain.settings.functionalitySettings)
 
     // The genesis period has no predecessor to pay out for, and nothing has staked before genesis either, so the
     // very first block is excluded by `prev` rather than by a height check of its own.
-    period.prev.filter(_ => newBlockHeight == period.start) match {
+    starting.prev.filter(_ => newBlockHeight == starting.start) match {
       case None           => Right(StateSnapshot.empty)
-      case Some(finished) => build(blockchain, finished)
+      case Some(finished) => build(blockchain, finished, starting)
     }
   }
 
-  private def build(blockchain: Blockchain, finished: GenerationPeriod): Either[ValidationError, StateSnapshot] = {
-    val records        = blockchain.stakers.map(address => address -> blockchain.stake(address))
-    val (joined, left) = StakeRecord.membership(records.map { case (a, r) => a -> (r, r.activated) })
+  private def build(blockchain: Blockchain, finished: GenerationPeriod, starting: GenerationPeriod): Either[ValidationError, StateSnapshot] = {
+    val staked = blockchain.stakes(finished)
 
     for {
       configured <- blockchain.settings.functionalitySettings.credAssetParsed.leftMap(GenericError(_))
       // Both halves have to hold for anything to be paid: a network can run without a Cred economy at all, and a
       // configured cred asset that no predefined snapshot ever issued has no volume to raise. Either way the
-      // boundary still normalises stakes below - only the payout is skipped, never the activation.
+      // carry-forward below still happens - only the payout is skipped, or a stake could never be released.
       credAsset = configured.flatMap(asset => blockchain.assetDescription(asset).map(asset -> _))
-      payouts <- if (credAsset.isEmpty) Right(Map.empty[Address, Long]) else distribute(blockchain, finished, records)
+      payouts <- if (credAsset.isEmpty) Right(Map.empty[Address, Long]) else distribute(blockchain, finished, staked)
       credited = payouts.values.sum
       snapshot <- StateSnapshot.build(
         blockchain,
@@ -68,11 +67,25 @@ object StakingPayout {
         updatedAssetVolumes = credAsset.filter(_ => credited > 0).fold(Map.empty[IssuedAsset, BigInt]) { case (asset, description) =>
           Map(asset -> (description.totalVolume + BigInt(credited)))
         },
-        stakes = activated(records),
-        stakersJoined = joined,
-        stakersLeft = left
+        nextStakes = carriedForward(blockchain, staked, starting)
       )
     } yield snapshot
+  }
+
+  /** A stake stays in force until a transaction changes it, but a period only holds what was staked *for* it - so
+    * every stake that survived the finished period is restated for the one now starting.
+    *
+    * An address that already has an entry for the starting period is left alone: it sent a StakeTransaction during
+    * the finished period, and that is precisely the stake that supersedes this one - including when it staked 0,
+    * which is how a release finally takes effect here. A stake of 0 is never carried forward either, so a released
+    * stake stops costing reads and disappears from the set the next payout walks.
+    */
+  private def carriedForward(blockchain: Blockchain, staked: IndexedSeq[Stake], starting: GenerationPeriod): Seq[StakeCommitment] = {
+    val alreadyStated = blockchain.stakes(starting).view.map(_.address).toSet
+    staked.view
+      .filter(stake => stake.amount > 0 && !alreadyStated(stake.address))
+      .map(stake => StakeCommitment(stake.address, starting.start, stake.amount))
+      .toSeq
   }
 
   /** Each staker's share of the finished period's issuance, by `active` stake. Entries that floor to zero are left
@@ -87,10 +100,10 @@ object StakingPayout {
   private def distribute(
       blockchain: Blockchain,
       finished: GenerationPeriod,
-      records: Seq[(Address, StakeRecord)]
+      staked: IndexedSeq[Stake]
   ): Either[ValidationError, Map[Address, Long]] = {
     val issued      = blockchain.totalWork(finished)
-    val totalStaked = records.view.map { case (_, r) => BigInt(r.active) }.sum
+    val totalStaked = staked.view.map(s => BigInt(s.amount)).sum
 
     Either
       .raiseUnless(issued.isValidLong)(GenericError(s"Staking issuance for $finished overflowed a Long: $issued"))
@@ -99,17 +112,11 @@ object StakingPayout {
         // carried forward - accumulating it would hand a windfall to whoever stakes first.
         if (issued <= 0 || totalStaked <= 0) Map.empty
         else
-          records.view
-            .map { case (address, record) => address -> (issued * BigInt(record.active) / totalStaked).toLong }
+          staked.view
+            .map(stake => stake.address -> (issued * BigInt(stake.amount) / totalStaked).toLong)
             .filter { case (_, owed) => owed > 0 }
             .toMap
       }
   }
-
-  /** Only the records that actually change: a stake nobody touched last period is already `(x, x)` and activating
-    * it is a no-op, so a steady staker set costs no writes at all here.
-    */
-  private def activated(records: Seq[(Address, StakeRecord)]): Map[Address, StakeRecord] =
-    records.view.collect { case (address, record) if record.activated != record => address -> record.activated }.toMap
 
 }

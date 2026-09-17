@@ -430,14 +430,14 @@ trait WithDomain extends WithState {
         if (at == period) work.getOrElse(validator, 0L) else blockchain.workDone(validator, at)
     }
 
-  /** The staker set and its records, injected, so a case can start from a chosen active/pending split without
-    * spending a period getting there - StakeTransactionDiffTest covers that a real StakeTransaction produces them.
+  /** A period's stakes, injected, so a case can start from a chosen set without spending periods getting there -
+    * StakeTransactionDiffTest covers that a real StakeTransaction produces them.
     */
-  def blockchainWithStakes(blockchain: Blockchain, stakes: Seq[(Address, StakeRecord)]): Blockchain =
+  def blockchainWithStakes(blockchain: Blockchain, staked: Map[GenerationPeriod, Seq[Stake]]): Blockchain =
     new Blockchain {
-      export blockchain.{stake as _, stakers as _, *}
-      override def stake(address: Address): StakeRecord = stakes.toMap.getOrElse(address, StakeRecord.empty)
-      override def stakers: Seq[Address]                = stakes.map(_._1)
+      export blockchain.{stakes as _, *}
+      override def stakes(at: GenerationPeriod): IndexedSeq[Stake] =
+        staked.get(at).fold(blockchain.stakes(at))(_.toIndexedSeq)
     }
 
   def withDomain[A](

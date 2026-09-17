@@ -380,23 +380,18 @@ package object database {
   def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
     data.view.flatMap(re => re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes).toArray
 
-  // A null value is the legitimate "never written" case; a wrong-length one is corruption, and reading it as
-  // StakeRecord.empty would silently unlock someone's staked HRTH instead of failing.
-  def readStakeRecord(data: Array[Byte]): StakeRecord =
-    if (data == null) StakeRecord.empty
-    else {
-      require(data.length == 16, s"Malformed stake record: expected 16 bytes, got ${data.length}")
-      StakeRecord(Longs.fromByteArray(data.take(8)), Longs.fromByteArray(data.drop(8)))
+  def readStakes(data: Array[Byte]): Seq[(AddressId, Long)] =
+    Option(data).fold(Seq.empty[(AddressId, Long)]) {
+      _.grouped(java.lang.Long.BYTES * 2)
+        .map { record =>
+          val (addressId, amount) = record.splitAt(java.lang.Long.BYTES)
+          AddressId(Longs.fromByteArray(addressId)) -> Longs.fromByteArray(amount)
+        }
+        .toSeq
     }
 
-  def writeStakeRecord(record: StakeRecord): Array[Byte] =
-    Longs.toByteArray(record.active) ++ Longs.toByteArray(record.pending)
-
-  def readAddressSeq(data: Array[Byte]): Seq[Address] =
-    Option(data).fold(Seq.empty[Address])(_.grouped(Address.HASH_LEN).map(Address.fromBytes(_).get()).toSeq)
-
-  def writeAddressSeq(addresses: Seq[Address]): Array[Byte] =
-    addresses.view.flatMap(_.toBytes).toArray
+  def writeStakes(stakes: Seq[(AddressId, Long)]): Array[Byte] =
+    stakes.view.flatMap { case (addressId, amount) => addressId.toByteArray ++ Longs.toByteArray(amount) }.toArray
 
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)

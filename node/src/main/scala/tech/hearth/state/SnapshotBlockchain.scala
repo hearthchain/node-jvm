@@ -102,12 +102,8 @@ case class SnapshotBlockchain(
   override def workDone(validator: Address, period: GenerationPeriod): Long =
     snapshot.workDone.getOrElse((validator, period), inner.workDone(validator, period))
 
-  override def stake(address: Address): StakeRecord =
-    snapshot.stakes.getOrElse(address, inner.stake(address))
-
-  override def stakers: Seq[Address] =
-    if (snapshot.stakersJoined.isEmpty && snapshot.stakersLeft.isEmpty) inner.stakers
-    else inner.stakers.filterNot(snapshot.stakersLeft.toSet) ++ snapshot.stakersJoined
+  override def stakes(at: GenerationPeriod): IndexedSeq[Stake] =
+    Stake.applied(inner.stakes(at), snapshot.nextStakes.filter(s => GenerationPeriod.from(s.periodStart, settings.functionalitySettings) == at))
 
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions

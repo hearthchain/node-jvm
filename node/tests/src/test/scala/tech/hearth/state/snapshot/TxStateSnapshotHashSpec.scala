@@ -287,7 +287,7 @@ class TxStateSnapshotHashSpec extends PropSpec {
     List(reserved, settled, bound, enclaveReg, work).distinct.length shouldBe 5
   }
 
-  property("stake entries are hashed, and the two halves of a record are distinguishable") {
+  property("stake entries are hashed, and a stake is distinguished by every field it declares") {
     def hashOf(s: StateSnapshot): ByteStr =
       TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
 
@@ -295,21 +295,21 @@ class TxStateSnapshotHashSpec extends PropSpec {
     val other  = signer102.toAddress
     val base   = hashOf(StateSnapshot())
 
-    val raising  = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 0L, pending = 5L))))
-    val lowering = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 5L, pending = 0L))))
-    val settledS = hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord(active = 5L, pending = 5L))))
-    val joined   = hashOf(StateSnapshot(stakersJoined = Seq(staker)))
-    val departed = hashOf(StateSnapshot(stakersLeft = Seq(staker)))
+    def staked(address: tech.hearth.account.Address, periodStart: Int, amount: Long): ByteStr =
+      hashOf(StateSnapshot(nextStakes = Seq(StakeCommitment(address, Height(periodStart), amount))))
 
-    // Both halves are hashed: these three lock the same 5 embers but pay out differently a period later
-    List(raising, lowering, settledS, joined, departed).foreach(_ should not equal base)
-    // joined and departed name the same address: only the tag keeps the two preimages apart
-    List(raising, lowering, settledS, joined, departed).distinct.length shouldBe 5
+    val staking     = staked(staker, 1001, 5L)
+    val otherStaker = staked(other, 1001, 5L)
+    val otherPeriod = staked(staker, 2001, 5L)
+    val otherAmount = staked(staker, 1001, 6L)
+    // 0 is a release, not an absent entry: it has to hash differently from staking nothing at all
+    val releasing = staked(staker, 1001, 0L)
 
-    // Clearing a record is a write, not an absence: it must not hash like an untouched snapshot
-    hashOf(StateSnapshot(stakes = Map(staker -> StakeRecord.empty))) should not equal base
+    List(staking, otherStaker, otherPeriod, otherAmount, releasing).foreach(_ should not equal base)
+    List(staking, otherStaker, otherPeriod, otherAmount, releasing).distinct.length shouldBe 5
 
-    // A membership delta costs one preimage per address, so a block of joins is O(joins) to hash, not O(stakers)
-    hashOf(StateSnapshot(stakersJoined = Seq(staker, other))) should not equal joined
+    // One preimage per entry, so a block of k stakes costs O(k) to hash rather than O(stakers)
+    hashOf(StateSnapshot(nextStakes = Seq(StakeCommitment(staker, Height(1001), 5L), StakeCommitment(other, Height(1001), 5L)))) should
+      not equal staking
   }
 }

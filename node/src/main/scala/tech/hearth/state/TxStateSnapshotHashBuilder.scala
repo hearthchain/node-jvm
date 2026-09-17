@@ -114,19 +114,14 @@ object TxStateSnapshotHashBuilder {
       changedKeys += tag("workDone") ++ validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
     }
 
-    // Both halves are hashed, not just `locked`: `active` and `pending` diverge for a whole period after a stake is
-    // raised or lowered, they drive different things (the payout reads `active`, the balance lock reads `locked`),
-    // and a node that disagreed about which half a value sits in would pay out differently a period later while
-    // hashing identically today.
-    snapshot.stakes.foreach { case (address, stake) =>
-      changedKeys += tag("stake") ++ address.toBytes ++ Longs.toByteArray(stake.active) ++ Longs.toByteArray(stake.pending)
+    // A stake's own declared fields, the way nextCommittedGenerators hashes a commitment's rather than the deposit
+    // it implies. periodStart is in the preimage because the same address and amount mean different things for
+    // different periods, and because it is what the sender actually signed. Nothing about membership needs hashing
+    // separately: an amount of 0 is a release and anything else is a stake, so the set for a period is a function
+    // of these entries.
+    snapshot.nextStakes.foreach { stake =>
+      changedKeys += tag("stake") ++ stake.address.toBytes ++ stake.periodStart.toByteArray ++ Longs.toByteArray(stake.amount)
     }
-
-    // One preimage per membership change, not one for the whole set: hashing the set would make a block of k joins
-    // cost O(k * stakers) to hash, on a set whose size anyone can grow. Joined and left carry different tags so a
-    // join and a leave of the same address can never produce the same preimage.
-    snapshot.stakersJoined.foreach(address => changedKeys += tag("stakerJoined") ++ address.toBytes)
-    snapshot.stakersLeft.foreach(address => changedKeys += tag("stakerLeft") ++ address.toBytes)
 
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {

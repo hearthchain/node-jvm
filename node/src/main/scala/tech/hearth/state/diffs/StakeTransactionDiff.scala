@@ -6,27 +6,26 @@ import tech.hearth.state.*
 import tech.hearth.transaction.StakeTransaction
 import tech.hearth.transaction.TxValidationError.{ActivationError, GenericError}
 
-/** StakeTransaction semantics: set the sender's HRTH stake, effective from the next generation period.
+/** StakeTransaction semantics: stake `amount` of HRTH for the generation period starting at `periodStart`.
   *
-  * The transaction writes `tx.amount` into the sender's [[StakeRecord.pending]] half, leaving [[StakeRecord.active]]
-  * - what the current period pays out on - untouched. Three of the four required behaviours fall straight out of
-  * that one write:
+  * The transaction records exactly its own two fields, against the sender, for the period it names - nothing is
+  * derived and nothing already on chain is read to write it. Every behaviour falls out of the period keying:
   *
-  *   - *the last one wins.* Several StakeTransactions in one period each overwrite `pending`, so the last one
-  *     applied is what the boundary activates. Nothing needs to detect or reject the earlier ones.
-  *   - *HRTH is reserved immediately.* [[StakeRecord.locked]] is `max(active, pending)`, so raising the stake locks
-  *     the larger amount as soon as this snapshot applies - BalanceDiffValidation reads it through
-  *     `Blockchain.lockedStake` and rejects the transaction outright if the sender cannot cover it.
-  *   - *`amount == 0` releases at the start of the next period, not now.* Lowering the stake leaves `active` the
-  *     larger of the two, so `locked` does not move until BlockDiffer's period-boundary hook runs
-  *     [[StakeRecord.activated]] and the two converge.
+  *   - *the last one wins.* Several StakeTransactions in one period all name the same next period, and a period's
+  *     entries are folded in height order with the last winning (see RocksDBWriter.loadStakes), so the final one
+  *     applied is simply the one in force.
+  *   - *HRTH is reserved immediately.* `Blockchain.lockedStake` is the larger of this period's stake and the next
+  *     one's, the same "this period and the next" window `generationDeposit` counts deposits over, so raising a
+  *     stake locks the new amount as soon as this snapshot applies. BalanceDiffValidation rejects the transaction
+  *     if the sender cannot cover it.
+  *   - *`amount == 0` releases at the start of the next period, not now.* A zero entry for the next period leaves
+  *     this period's larger stake as the `max`, so nothing is freed until this period ends.
+  *   - *a stake earns only from the next period on.* The payout and the forging-weight charge both read the period
+  *     they are in, and this transaction only ever writes the next one.
   *
-  * The fourth - that a stake earns only from the next period on - is the payout's side of the same split: it reads
-  * `active`, which this transaction never touches, so a stake set during period E cannot earn for E.
-  *
-  * `periodStart` has to name the next period exactly, the same rule and the same message shape as
-  * CommitToGenerationTransactionDiff's. Accepting an arbitrary future period would mean storing more than one
-  * pending amount per address, and accepting the current one would contradict "starting with the next epoch".
+  * `periodStart` has to name the next period exactly, the same rule and the same message as
+  * CommitToGenerationTransactionDiff's. A stake for an arbitrary later period would sit unreachable behind
+  * StakingPayout's carry-forward, and one for the current period would contradict "starting with the next epoch".
   */
 object StakeTransactionDiff {
   def apply(blockchain: Blockchain)(tx: StakeTransaction): Either[ValidationError, StateSnapshot] = {
@@ -38,17 +37,11 @@ object StakeTransactionDiff {
       _ <- Either.raiseUnless(tx.periodStart == next.start) {
         GenericError(s"Expected the next period start height ${next.start}, got ${tx.periodStart}")
       }
-      before         = blockchain.stake(sender)
-      updated        = before.copy(pending = tx.amount.value)
-      (joined, left) = StakeRecord.membership(Seq(sender -> (before, updated)))
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = Map(sender -> Portfolio(balance = -tx.fee.value)),
-        stakes = Map(sender -> updated),
-        stakersJoined = joined,
-        stakersLeft = left
+        nextStakes = Seq(StakeCommitment(sender, tx.periodStart, tx.amount.value))
       )
     } yield snapshot
   }
-
 }

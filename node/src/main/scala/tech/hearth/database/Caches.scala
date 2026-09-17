@@ -189,6 +189,22 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
   protected def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
   @volatile
+  private var stakesCache = Map.empty[GenerationPeriod, IndexedSeq[Stake]] // Only this and next periods
+  override def stakes(at: GenerationPeriod): IndexedSeq[Stake] =
+    this.currentGenerationPeriod.fold(Vector.empty) { curr =>
+      if (at == curr || at == curr.next) {
+        stakesCache.getOrElse(
+          at, {
+            val r = loadStakes(at)
+            stakesCache = stakesCache.updated(at, r)
+            r
+          }
+        )
+      } else loadStakes(at)
+    }
+  protected def loadStakes(at: GenerationPeriod): IndexedSeq[Stake]
+
+  @volatile
   private var registeredEnclavesCache = Map.empty[GenerationPeriod, IndexedSeq[RegisteredEnclave]] // Only this and next periods
   override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
     this.currentGenerationPeriod.fold(Vector.empty) { curr =>
@@ -235,6 +251,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
       registeredEnclaves: Seq[RegisteredEnclave],
+      stakes: Map[GenerationPeriod, Seq[(AddressId, Long)]],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
   ): Unit
@@ -291,6 +308,10 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     for (gc <- snapshot.nextCommittedGenerators; address = gc.sender.toAddress if addressIdCache.get(address).isEmpty)
       newAddresses += address
 
+    // Nor does a staker, whose only balance change may be the fee it paid from an address seen for the first time
+    for (st <- snapshot.nextStakes if addressIdCache.get(st.address).isEmpty)
+      newAddresses += st.address
+
     val newAddressIds = (for {
       (address, offset) <- newAddresses.zipWithIndex
     } yield address -> AddressId(lastAddressId + offset + 1)).toMap
@@ -339,6 +360,20 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     } yield e.endorserIndex
 
     val registeredEnclaves = snapshot.nextRegisteredEnclaves
+
+    // Grouped by the period each entry names rather than by the block's own period: the first block of a period
+    // carries both StakingPayout's carry-forward (for the period just starting) and any Stake transactions in it
+    // (for the one after), so one block can write two periods' worth.
+    val stakesByPeriod = snapshot.nextStakes.groupBy(st => GenerationPeriod.from(st.periodStart, settings.functionalitySettings))
+    val stakesToStore = stakesByPeriod.view.map { case (period, entries) =>
+      period -> entries.map(st => (addressIdWithFallback(st.address, newAddressIds), st.amount))
+    }.toMap
+
+    stakesByPeriod.foreach { case (period, entries) =>
+      // Only a period already cached is updated: loadStakes will read a fresh one from disk on demand, and seeding
+      // a partial entry here would hide whatever is already stored for it.
+      stakesCache = stakesCache.updatedWith(period)(_.map(Stake.applied(_, entries)))
+    }
 
     val committedPeriod = this.generationPeriodOf(current.height) match {
       case None =>
@@ -415,6 +450,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       committedPeriod,
       commitmentTransactionIds,
       registeredEnclaves,
+      stakesToStore,
       conflictGenerators,
       stateHash.result()
     )
@@ -433,6 +469,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     this.generationPeriodOf(current.height).foreach { currPeriod =>
       committedGeneratorsCache = committedGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
       registeredEnclavesCache = registeredEnclavesCache.view.filterKeys(_ >= currPeriod).toMap
+      stakesCache = stakesCache.view.filterKeys(_ >= currPeriod).toMap
       conflictGeneratorsCache = conflictGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
     }
   }
@@ -456,6 +493,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       approvedFeaturesCache = loadApprovedFeatures()
 
       committedGeneratorsCache = Map.empty
+      stakesCache = Map.empty
       registeredEnclavesCache = Map.empty
       conflictGeneratorsCache = Map.empty
 

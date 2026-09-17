@@ -17,6 +17,7 @@ object BalanceDiffValidation {
     def leaseBalance(address: Address): LeaseBalance
     def generationDeposit(address: Address): Long
     def lockedStake(address: Address): Long
+    def stakedForPeriod(address: Address): Long
   }
 
   object BalanceProvider {
@@ -25,6 +26,7 @@ object BalanceDiffValidation {
       override def leaseBalance(address: Address): LeaseBalance         = blockchain.leaseBalance(address)
       override def generationDeposit(address: Address): Long            = blockchain.generationDeposit(address)
       override def lockedStake(address: Address): Long                  = blockchain.lockedStake(address)
+      override def stakedForPeriod(address: Address): Long              = blockchain.stakedForPeriod(address)
     }
 
     val Empty: BalanceProvider = new BalanceProvider {
@@ -32,6 +34,7 @@ object BalanceDiffValidation {
       override def leaseBalance(address: Address): LeaseBalance         = LeaseBalance.empty
       override def generationDeposit(address: Address): Long            = 0
       override def lockedStake(address: Address): Long                  = 0
+      override def stakedForPeriod(address: Address): Long              = 0
     }
   }
 
@@ -110,7 +113,12 @@ object BalanceDiffValidation {
             val currentLeaseBalance = snapshot.leaseBalances.getOrElse(address, b.leaseBalance(address))
             val depositedOnNext = DepositInEmbers *
               snapshot.nextCommittedGenerators.find(_.sender.toAddress == address).size
-            val stakedAfter = snapshot.stakes.get(address).fold(b.lockedStake(address))(_.locked)
+            // lockedStake is the larger of this period's stake and the next one's, so a snapshot restating the
+            // next period's has to be maxed against what this period already locks - it cannot free anything now.
+            val stakedAfter = snapshot.nextStakes.filter(_.address == address) match {
+              case Seq()  => b.lockedStake(address)
+              case staked => math.max(b.stakedForPeriod(address), staked.last.amount)
+            }
             checkHearth(address, balance, currentLeaseBalance, depositedOnNext, stakedAfter).fold(error => List(error), _ => Nil)
           case _ =>
             Nil

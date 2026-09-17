@@ -8,16 +8,18 @@ The consumption half of the Cred lifecycle already existed before this: `Reserve
 
 `StakeTransaction` is the sixth of the stub transaction types from "Transaction schema" in `docs/notes/keys-and-signatures.md` to grow real semantics, and the first new one added since - it has no stub predecessor, so `TransactionType.Stake` (id 12) and `StakeTransactionData` (oneof case 112, in the sibling `protobuf-schemas` repo) were both added here.
 
-## Two amounts, not one
+## A stake is a stake *for a period*
 
-`StakeRecord(active, pending)` is the whole design, and every behaviour the feature has falls out of it:
+There is no per-address stake record and no "current stake". `Blockchain.stakes(period)` is the whole set staked for one generation period, and that is the only shape the ledger has. `StakeTransaction` records exactly its own two fields, against the sender, under the period it names - nothing is derived, and nothing already on chain is read to write it. Every required behaviour falls out of the keying:
 
-- `active` is what the period the chain is currently in pays out on; `pending` is what the next period will.
-- `StakeTransactionDiff` writes `tx.amount` into `pending` and never touches `active`. Several StakeTransactions in one period therefore each overwrite `pending`, and the last one applied wins with no bookkeeping to detect the earlier ones.
-- `locked = max(active, pending)` is the HRTH that cannot be spent. Raising a stake locks the larger amount at once; lowering one keeps the larger `active` locked until the boundary. Forging weight is charged on `active` instead, not on `locked` - see "Staking costs forging weight" below for why the two differ.
-- `activated = StakeRecord(pending, pending)` runs at the first block of every period. That is what makes a stake set during period E start earning in E+1, what finally frees the HRTH of a stake that was lowered, and what keeps an untouched stake earning forever without a renewing transaction.
+- **the last one wins.** Several StakeTransactions in one period all name the same next period, and a period's entries are folded with later ones replacing earlier (`Stake.applied`), so the last one applied is simply the one in force. Nothing detects or rejects the earlier ones.
+- **HRTH is reserved immediately.** `Blockchain.lockedStake` is the larger of this period's stake and the next one's - the same "this period and the next" window `generationDeposit` counts a generator's deposits over. Raising a stake locks the new amount as soon as the transaction applies, because it already counts for the next period.
+- **`amount == 0` releases at the start of the next period, not now.** A zero entry for the next period leaves this period's larger stake as the `max`, so nothing is freed until this period ends.
+- **a stake earns only from the next period on.** The payout and the forging-weight charge both read the period they are in, and a transaction only ever writes the next one.
 
-A stake set during E therefore earns for E+1 and every later period until it is changed, which is what "the staking reward is accrued only in the next and the following epoch" means. `periodStart` has to name the next period exactly, checked the same way and with the same message as `CommitToGenerationTransactionDiff`'s: accepting an arbitrary future period would mean storing more than one pending amount per address, and accepting the current one would contradict the rule above.
+**A stake stays in force until a transaction changes it, which period keying alone does not give you**, since a period holds only what was staked *for* it. `StakingPayout.carriedForward` closes that: at each boundary every surviving stake is restated for the period now starting, skipping any address that already has an entry there (it sent a StakeTransaction, and that is precisely the stake that supersedes the old one, including when it staked 0) and skipping zero amounts (a released stake is not resurrected). This is the one place the `committedGenerators` analogy breaks: a generator re-commits every period, a stake does not have to.
+
+`periodStart` has to name the next period exactly, checked the same way and with the same message as `CommitToGenerationTransactionDiff`'s. A stake for an arbitrary later period would sit unreachable behind the carry-forward, and one for the current period would contradict "starting with the next epoch".
 
 `amount` is a `TxNonNegativeAmount`, not the `TxPositiveAmount` every other transaction's amount is, because 0 is the *unstake*. Same on the wire: `StakeTransactionData.amount` is a bare `int64` rather than an `Amount` message, since a stake is always HRTH. `ProtoVersionTransactionsSpec` pins that a zero amount survives the round trip rather than reading back as an absent field.
 
@@ -29,22 +31,22 @@ ignores it. Unlike `generationDeposit` it is subtracted from *both* `spendableBa
 project decision is that staked HRTH stops counting toward forging weight, so staking and mining compete for the
 same embers. This is the one part of the feature that changes a consensus rule rather than extending state.
 
-**Spendability and forging weight are driven by different halves of the record, and that split is load-bearing.**
-Spendability follows `locked = max(active, pending)`, so a raised stake is unspendable at once. Forging weight
-(`GeneratingBalanceProvider.unstakedEffectiveBalance`) follows `active` - the half the address is also *earning* on,
-so the same embers buy the yield and pay for it.
+**Spendability and forging weight read different periods, and that split is load-bearing.** Spendability follows
+`lockedStake` = the larger of this period's stake and the next one's, so a raised stake is unspendable at once.
+Forging weight (`GeneratingBalanceProvider.unstakedEffectiveBalance`) follows `stakedForPeriod` = *this* period's
+stake alone, which is the amount the address is also earning on, so the same embers buy the yield and pay for it.
 
-Subtracting `locked` from forging weight instead was the first implementation and is wrong, caught in review
-(security audit, Pass 2). `active` only ever moves in `StakeRecord.activated`, at a period boundary, so forging
-weight changes only where the committee itself does. `locked` moves the instant a transaction lands, which would
+Charging forging weight on the lock instead was the first implementation and is wrong, caught in review (security
+audit, Pass 2). This period's stake cannot change once the period has started, so forging weight changes only where
+the committee itself does. The lock moves the instant a transaction lands, which would
 let any committed generator zero its own generating balance mid-period for the price of one Stake transaction and
 no fund movement at all - a lever over `EndorsementFilter`'s 2/3 quorum denominator, and a way to reach the
 `validGenerators.nonEmpty` case in `appender.findBlockAndGetGenerators` (its own TODO) without moving funds or
 waiting out the 1000-block window. The HRTH a raised stake locks is still unspendable in the meantime; it just
 keeps counting as skin in the game until the period it was staked for actually starts.
 
-That is also what makes it safe to subtract a *current* value from a *windowed* `effectiveBalance`: `active` is
-constant for a whole period, so there is no window for it to disagree with. `math.max(0L, ...)` clamps the result,
+That is also what makes it safe to subtract a *current* value from a *windowed* `effectiveBalance`: a period's own
+stake is constant for that whole period, so there is no window for it to disagree with. `math.max(0L, ...)` clamps the result,
 which is genuinely reachable - an address credited inside the 1000-block window and staking most of it has a
 windowed minimum far below its stake.
 
@@ -54,16 +56,12 @@ with `blockchainUpdater.referencedBlockchain(block.header.reference)`). That is 
 `workContext`'s own `workDone` read already depends on it - but it is not enforced by a type, so a future caller
 passing a `blockId` older than the tip would need the stake resolved at that height instead.
 
-Keeping the stake ledger a single current value per address, rather than the `prevHeight`-linked node chain
-(`CurrentBalance`/`BalanceNode`, `Keys.hearthBalanceAt`) that `balanceSnapshots` walks, is what that buys. Going the
-other way would also need the `writeKeyed` history to survive `maxRollbackDepth` trimming, which it does not:
-`updateHistory` keeps only the heights at or above the safe rollback threshold plus the single most recent one below
-it, so a `maxRollbackDepth` under the 1000-block generating-balance depth (`RocksDBWriterSpec` runs at 4) would
-silently lose change heights inside the window.
+Keeping the stake out of `BalanceSnapshot` and the `prevHeight`-linked node chain (`CurrentBalance`/`BalanceNode`,
+`Keys.hearthBalanceAt`) that `balanceSnapshots` walks is what that buys.
 
 Enforcement of spendability is `BalanceDiffValidation`, which folds the stake into the same "locked" term the
-generation deposit already used, reading the new value off `snapshot.stakes` and falling back to
-`Blockchain.lockedStake`. The two locks are summed with `safeSum`, not `+`: `stakedAfter` comes straight off a
+generation deposit already used, maxing any stake this snapshot restates for the next period against what the
+current period already locks - a transaction can raise the lock but never lower it. The two locks are summed with `safeSum`, not `+`: `stakedAfter` comes straight off a
 transaction and is bounded only by `TxNonNegativeAmount`, so a raw sum could wrap negative and turn every check
 below it into a pass. Two new messages distinguish the two locks - `not enough funds to stake` and `trying to spend
 a stake` - and the existing deposit messages are unchanged byte-for-byte, because several suites assert on them.
@@ -95,55 +93,32 @@ TESTNET points at the existing genesis ORCRED asset (`PredefinedSnapshotSettings
 
 ## Storage
 
-Two ledgers, both on the `reservedAmount`/`workDone` history mechanism (`KeyTag` pairs appended at the end of the
-enum since the ordinal is the on-disk prefix, `Keys` history plus value keys, `RocksDBWriter.writeKeyed`/
-`rollbackKeyed`):
+One ledger, one `KeyTag`, shaped exactly like `committedGenerators`:
 
-- `stake(address) -> StakeRecord`, 16 bytes, keyed by address, with a `StakeKeysAtHeight` index for rollback;
-- `stakers -> Seq[Address]`, one value under one key. The per-address keys are not enumerable (a `...KeysAtHeight`
-  index only names what changed at one height) and the boundary payout has to walk the whole set, so the set is
-  stored explicitly.
+```
+Keys.stakes(stakePeriod, stakeHeight) -> Option[Seq[(AddressId, Long)]]
+key = Stakes ++ Int(period.start) ++ Int(height)
+```
 
-**The set is stored whole but travels as a delta**, which is not a detail. `StateSnapshot` carries
-`stakersJoined`/`stakersLeft`, not the set, and `TxStateSnapshotHashBuilder` hashes one preimage per membership
-change under separate `stakerJoined`/`stakerLeft` tags. Carrying the whole set was the first implementation and was
-a Critical finding in review (security audit, Pass 2): the state hash is computed *per transaction*, so a block of
-`k` joins would hash `O(k * stakers)` bytes, on a set anyone can grow for the price of a minimum fee and one ember.
-Roughly 5,000 joining transactions in a block would have produced hundreds of megabytes of hash preimage that every
-validating node has to redo. As a delta it is `O(1)` per transaction, it merges associatively under `++` (whole-set
-replacement relied on each producer having read its predecessor's set through a `SnapshotBlockchain`, which the
-monoid does not guarantee), and it matches how every other field here already works - `balances` carries the changed
-balances, not the whole map. `StakeRecord.membership` is the single definition of "in the set exactly while the
-record is non-empty", shared by `StakeTransactionDiff` and `StakingPayout` so a change to `isEmpty` cannot be
-applied to one and missed in the other.
+An append-only log filed under the period a stake is *for*. Reading a period is one prefix scan with the height suffix dropped (`RocksDBWriter.loadStakes`), folding entries in height order so later ones replace earlier; rolling a height back is one `delete` per period key; writing costs only what changed at that height. **The period's entries are also the enumerable set** `StakingPayout` walks, so there is no second ledger recording who the stakers are.
 
-What remains `O(stakers)`: the stored set is re-read and rewritten once per block that moves membership (not per
-transaction), and the boundary payout walks every staker. **Both are bounded only by how many addresses have
-staked, and there is no minimum stake and no cap** - a deliberate project decision, but it means the boundary block
-is the most expensive block of each period and its cost is set by users. Nothing pages it. Closing this properly
-means per-address membership keys plus a `Caches`-maintained enumerable set, the way `registeredEnclavesCache`
-works; a minimum stake or a real fee for `TransactionType.Stake` (still `1 // TODO: decide` in `FeeConstants`)
-would price it instead.
+That is the whole point of the keying, and it replaced a first implementation that stored a per-address `StakeRecord(active, pending)` plus a separate whole-set `stakers` blob. Three reviewers independently found the blob: it made every membership change an O(stakers) read and rewrite, and - because the state hash is computed *per transaction* - it made a block of `k` joins cost O(k · stakers) to hash, on a set anyone can grow for one fee and one ember. None of that survives period keying.
 
-An emptied stake is written as `StakeRecord.empty`, not as an absent entry, so that clearing one is a write both the
-storage layer and the state hash see. `readStakeRecord` treats a null value as "never written" but throws on a
-wrong-length one: reading corruption as `StakeRecord.empty` would silently unlock someone's staked HRTH.
-`TxStateSnapshotHashBuilder` hashes both halves of every record rather than just `locked`, since `active` and
-`pending` diverge for a whole period after a change, they drive different things, and a node that disagreed about
-which half a value sat in would pay out differently a period later while hashing identically today.
+A block can write **two** periods at once, which the `committedGenerators` template does not do: the first block of a period carries both the carry-forward (for the period just starting) and any Stake transactions in it (for the one after). So `Caches` groups the snapshot's entries by the period each names, and rollback deletes both `stakes(currentPeriod, h)` and `stakes(currentPeriod.next, h)`.
 
-**Not mirrored onto the BlockchainUpdates stream**, and **not carried in the light-node snapshot wire format**.
-Neither ledger appears in `events.StateUpdate` or in `PBSnapshots`, which is the same gap `workDone`,
-`reservedAmounts`, `apiKeyBindings` and `registeredEnclaves` all already have - `PBSnapshots` carries none of this
-fork's own ledgers, while `TxStateSnapshotHashBuilder` hashes all of them. A light node rebuilding a per-transaction
-snapshot from network-supplied `txSnapshots` therefore computes a state hash missing those entries. That is
-pre-existing and systemic rather than introduced here, but `Stake` is the first *permissionless* transaction type to
-reach it: any user can now broadcast a transaction that trips it, where before it took a `Reserve` or `Settle`.
-Worth closing before light-node sync is relied on, and it needs a `protobuf-schemas` change of its own.
+`Stake.applied` is the single definition of "a later entry replaces an earlier one", shared by the three places that resolve a period independently: `loadStakes` folding what is on disk, `SnapshotBlockchain` layering a not-yet-persisted snapshot over it, and `Caches` keeping a warm period current. Deduping only on the way to disk is not enough, and missing one of the three is a real bug - three stakes in one block read back as three entries from the liquid snapshot until this was shared.
+
+The cache mirrors `committedGeneratorsCache` exactly, including the "only this and next period" restriction, which the payout stays inside: at the boundary block the chain is still positioned at the last block of the finished period, so the period being paid out is "current" and the one being carried into is "next".
+
+`TxStateSnapshotHashBuilder` hashes `tag("stake") ++ address ++ periodStart ++ amount` - a transaction's own declared fields, the way `nextCommittedGenerators` hashes a commitment's rather than the deposit it implies. `periodStart` is in the preimage because the same address and amount mean different things for different periods, and because it is what the sender signed. Nothing about membership is hashed separately: an amount of 0 is a release and anything else is a stake, so a period's set is a function of these entries.
+
+**What is still O(stakers):** the boundary block pays out and carries forward every stake, so it is the most expensive block of each period, and its cost is set by how many addresses have staked. There is no minimum stake and no cap, a deliberate project decision. Nothing pages it; a minimum stake or a real fee for `TransactionType.Stake` (still `1 // TODO: decide` in `FeeConstants`) would price it.
+
+**Not mirrored onto the BlockchainUpdates stream**, and **not carried in the light-node snapshot wire format**. `stakes` appears in neither `events.StateUpdate` nor `PBSnapshots`, which is the same gap `workDone`, `reservedAmounts`, `apiKeyBindings` and `registeredEnclaves` all already have - `PBSnapshots` carries none of this fork's own ledgers, while `TxStateSnapshotHashBuilder` hashes all of them. A light node rebuilding a per-transaction snapshot from network-supplied `txSnapshots` therefore computes a state hash missing those entries. Pre-existing and systemic rather than introduced here, but `Stake` is the first *permissionless* transaction type to reach it: any user can now broadcast a transaction that trips it, where before it took a `Reserve` or `Settle`. Closing it needs a `protobuf-schemas` change of its own.
 
 ## Testing
 
-Split in two along the line of what a fixture can produce. `StakeTransactionDiffTest` drives everything through a real domain, since nothing about the transaction or the locking needs state a transaction cannot write. `StakingPayoutTest` cannot: `workDone` is written only by `SettleTransactionDiff`, and no fixture in this repo can drive a `StartBoost` to its accept path (see "Testing" under "DCAP collateral registry" in `docs/notes/hearth-transactions.md`), so the work, the committee and the stake records are injected through a `Blockchain` wrapper and `StakingPayout` is called directly - the same technique `GeneratingBalanceProviderTest` and `SettleTransactionDiffTest` use.
+Split in two along the line of what a fixture can produce. `StakeTransactionDiffTest` drives everything through a real domain, since nothing about the transaction or the locking needs state a transaction cannot write. `StakingPayoutTest` cannot: `workDone` is written only by `SettleTransactionDiff`, and no fixture in this repo can drive a `StartBoost` to its accept path (see "Testing" under "DCAP collateral registry" in `docs/notes/hearth-transactions.md`), so the work, the committee and both periods' stakes are injected through `WithState.blockchainWithCommitteeWork`/`blockchainWithStakes` and `StakingPayout` is called directly - the same technique `GeneratingBalanceProviderTest` and `SettleTransactionDiffTest` use. Injecting *two* periods is what lets a case express "staked for the finished period" and "already restated for the starting one" independently, which is the whole of the carry-forward's behaviour.
 
 Two fixture traps cost real time getting `StakeTransactionDiffTest` green, both worth knowing before writing another period-crossing test:
 

@@ -401,6 +401,7 @@ class RocksDBWriter(
       committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
       registeredEnclaves: Seq[RegisteredEnclave],
+      stakes: Map[GenerationPeriod, Seq[(AddressId, Long)]],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
   ): Unit = {
@@ -557,20 +558,6 @@ class RocksDBWriter(
         Keys.workDoneHistory,
         Keys.workDoneKeysAt
       )
-      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.stakes)(
-        Keys.stakeSuffix,
-        Keys.stake,
-        Keys.stakeHistory,
-        Keys.stakeKeysAt
-      )
-      // The snapshot carries only the membership that moved, so the stored set is read once per block that moves
-      // any - not once per transaction, and never copied into a transaction's own snapshot.
-      if (snapshot.stakersJoined.nonEmpty || snapshot.stakersLeft.nonEmpty) {
-        val left    = snapshot.stakersLeft.toSet
-        val updated = stakers.filterNot(left) ++ snapshot.stakersJoined
-        rw.put(Keys.stakers(Height(height)), updated)
-        expiredKeys ++= updateHistory(rw, Keys.stakersHistory, threshold, Keys.stakers)
-      }
 
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
@@ -669,6 +656,12 @@ class RocksDBWriter(
         }
 
         if (registeredEnclaves.nonEmpty) rw.put(Keys.registeredEnclaves(committedPeriod, h), Some(registeredEnclaves))
+      }
+
+      // Keyed by the period each group names, not by committedPeriod: a boundary block writes the period it starts
+      // (StakingPayout's carry-forward) as well as the one after it (any Stake transactions it carries).
+      stakes.foreach { case (stakePeriod, entries) =>
+        if (entries.nonEmpty) rw.put(Keys.stakes(stakePeriod, h), Some(entries))
       }
 
       this.generationPeriodOf(h).foreach { currPeriod => // None checked in Caches
@@ -922,9 +915,6 @@ class RocksDBWriter(
           rollbackKeyed(rw, currentHeight, Keys.apiKeyBindingKeysAt, Keys.apiKeyBinding, Keys.apiKeyBindingHistory)
           rollbackKeyed(rw, currentHeight, Keys.settledAmountKeysAt, Keys.settledAmount, Keys.settledAmountHistory)
           rollbackKeyed(rw, currentHeight, Keys.workDoneKeysAt, Keys.workDone, Keys.workDoneHistory)
-          rollbackKeyed(rw, currentHeight, Keys.stakeKeysAt, Keys.stake, Keys.stakeHistory)
-          rw.delete(Keys.stakers(currentHeight))
-          rw.filterHistory(Keys.stakersHistory, currentHeight)
 
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
@@ -956,6 +946,11 @@ class RocksDBWriter(
             rw.delete(Keys.committedGenerators(committedPeriod, currentHeight))
             rw.delete(Keys.commitmentTransactions(committedPeriod, currentHeight))
             rw.delete(Keys.registeredEnclaves(committedPeriod, currentHeight))
+
+            // A block writes stakes for the period it is in (a carry-forward, only at a boundary block) and for the
+            // next one (its transactions), so both have to be unwound - see doAppend.
+            rw.delete(Keys.stakes(currentPeriod, currentHeight))
+            rw.delete(Keys.stakes(currentPeriod.next, currentHeight))
           }
 
           discardedMeta.header.flatMap(_.challengedHeader.map(_.generator.toPublicKey.toAddress)) match {
@@ -1209,14 +1204,6 @@ class RocksDBWriter(
     readOnly(_.fromHistory(Keys.workDoneHistory(suffix), Keys.workDone(suffix))).getOrElse(0L)
   }
 
-  override def stake(address: Address): StakeRecord = {
-    val suffix = Keys.stakeSuffix(address)
-    readOnly(_.fromHistory(Keys.stakeHistory(suffix), Keys.stake(suffix))).getOrElse(StakeRecord.empty)
-  }
-
-  override def stakers: Seq[Address] =
-    readOnly(_.fromHistory(Keys.stakersHistory, Keys.stakers)).getOrElse(Seq.empty)
-
   // These two caches are used exclusively for balance snapshots. They are not used for portfolios, because there aren't
   // as many miners, so snapshots will rarely be evicted due to overflows.
 
@@ -1438,6 +1425,33 @@ class RocksDBWriter(
 
   override def effectiveBalanceBanHeights(address: Address): Seq[Int] =
     readOnly(_.get(Keys.maliciousMinerBanHeights(address.toBytes))).map(_.toInt)
+
+  /** Every stake in force for `at`, folded in height order so a later entry for an address replaces an earlier one -
+    * which is what makes "the last Stake transaction of a period wins" and StakingPayout's carry-forward compose
+    * without either needing to read the other back.
+    *
+    * An amount of 0 is kept rather than dropped: it is a release, and it has to survive as the winning entry so a
+    * carry-forward cannot resurrect the stake it replaced.
+    */
+  override def loadStakes(at: GenerationPeriod): IndexedSeq[Stake] = {
+    val key       = Keys.stakes(at, at.start)
+    val byAddress = mutable.LinkedHashMap.empty[AddressId, Long]
+
+    val addressIds = rdb.db.readOnly { ro =>
+      ro.iterateOver(key.keyBytes.dropRight(Ints.BYTES)) { dbEntry => // Drop height: iterate the whole period
+        key.parse(dbEntry.getValue).getOrElse(Seq.empty).foreach { case (addressId, amount) => byAddress.put(addressId, amount) }
+      }
+      byAddress.keys.toVector
+    }
+
+    if (addressIds.isEmpty) IndexedSeq.empty
+    else {
+      val addresses = rdb.db.readOnly(_.multiGet(addressIds.map(Keys.idToAddress), tech.hearth.crypto.Address.HASH_LEN))
+      addressIds.view.zipWithIndex.flatMap { case (addressId, i) =>
+        addresses(i).map(address => Stake(address, byAddress(addressId)))
+      }.toIndexedSeq
+    }
+  }
 
   override def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = {
     val approxGenerators = settings.functionalitySettings.maxValidEndorsers // Rough buffer size

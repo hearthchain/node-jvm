@@ -48,18 +48,10 @@ case class StateSnapshot(
     // burned share - see Keys.workDoneSuffix. Same "Diff reads current value, writes the final accumulated total"
     // convention as reservedAmounts/settledAmounts above, not a delta.
     workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
-    // StakeTransaction's (active, pending) pair per address, and the period-boundary payout's normalisation of it -
-    // see StakeRecord. Like reservedAmounts/workDone above the Diff reads the current record and writes the final
-    // one, not a delta; an emptied stake is carried as StakeRecord.empty rather than an absent entry, so that
-    // clearing one is a write the state hash and the storage layer both see.
-    stakes: Map[Address, StakeRecord] = Map.empty,
-    // Membership changes to the staker set, as a delta rather than the whole set. A delta is what every other
-    // field here already carries (balances hold the changed balances, not the whole map), it merges associatively
-    // under ++ instead of one snapshot silently discarding another's change, and - the reason it is not optional -
-    // it keeps a StakeTransaction's cost independent of how many stakers exist: the whole set would otherwise be
-    // copied into this snapshot and hashed for every such transaction, which an attacker sets the size of.
-    stakersJoined: Seq[Address] = Seq.empty,
-    stakersLeft: Seq[Address] = Seq.empty
+    // StakeTransaction's own fields, and StakingPayout's carry-forward of them into the next period. Appended
+    // rather than keyed, exactly like nextCommittedGenerators above: the period each one names is what the storage
+    // layer files it under, and a later entry for the same address in the same period wins.
+    nextStakes: Seq[StakeCommitment] = Seq.empty
 ) {
 
   // ignores lease balances from portfolios
@@ -104,9 +96,7 @@ object StateSnapshot {
       apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
       settledAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
       workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
-      stakes: Map[Address, StakeRecord] = Map.empty,
-      stakersJoined: Seq[Address] = Seq.empty,
-      stakersLeft: Seq[Address] = Seq.empty
+      nextStakes: Seq[StakeCommitment] = Seq.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -135,9 +125,7 @@ object StateSnapshot {
         apiKeyBindings,
         settledAmounts,
         workDone,
-        stakes,
-        stakersJoined,
-        stakersLeft
+        nextStakes
       )
     r.leftMap(GenericError(_))
   }
@@ -242,9 +230,7 @@ object StateSnapshot {
         s1.apiKeyBindings ++ s2.apiKeyBindings,
         s1.settledAmounts ++ s2.settledAmounts,
         s1.workDone ++ s2.workDone,
-        s1.stakes ++ s2.stakes,
-        s1.stakersJoined ++ s2.stakersJoined,
-        s1.stakersLeft ++ s2.stakersLeft
+        s1.nextStakes ++ s2.nextStakes
       )
 
   }
