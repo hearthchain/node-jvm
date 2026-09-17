@@ -3,7 +3,7 @@ package tech.hearth.state.diffs
 import cats.syntax.either.*
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
-import tech.hearth.state.{Blockchain, LeaseBalance, StateSnapshot, safeSum}
+import tech.hearth.state.{Blockchain, GenerationPeriod, LeaseBalance, StateSnapshot, safeSum}
 import tech.hearth.transaction.Asset
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
@@ -18,6 +18,11 @@ object BalanceDiffValidation {
     def generationDeposit(address: Address): Long
     def lockedStake(address: Address): Long
     def stakedForPeriod(address: Address): Long
+
+    /** What `snapshot` restates for `address` for the *next* period, if anything - the only period a
+      * StakeTransaction can name, and so the only one that can change this address's lock.
+      */
+    def nextPeriodStakes(snapshot: StateSnapshot, address: Address): Option[Long]
   }
 
   object BalanceProvider {
@@ -27,14 +32,23 @@ object BalanceDiffValidation {
       override def generationDeposit(address: Address): Long            = blockchain.generationDeposit(address)
       override def lockedStake(address: Address): Long                  = blockchain.lockedStake(address)
       override def stakedForPeriod(address: Address): Long              = blockchain.stakedForPeriod(address)
+
+      override def nextPeriodStakes(snapshot: StateSnapshot, address: Address): Option[Long] =
+        blockchain.currentGenerationPeriod.flatMap { period =>
+          val fs = blockchain.settings.functionalitySettings
+          snapshot.nextStakes
+            .findLast(s => s.address == address && GenerationPeriod.from(s.periodStart, fs) == period.next)
+            .map(_.amount)
+        }
     }
 
     val Empty: BalanceProvider = new BalanceProvider {
-      override def balance(address: Address, mayBeAssetId: Asset): Long = 0
-      override def leaseBalance(address: Address): LeaseBalance         = LeaseBalance.empty
-      override def generationDeposit(address: Address): Long            = 0
-      override def lockedStake(address: Address): Long                  = 0
-      override def stakedForPeriod(address: Address): Long              = 0
+      override def balance(address: Address, mayBeAssetId: Asset): Long                      = 0
+      override def leaseBalance(address: Address): LeaseBalance                              = LeaseBalance.empty
+      override def generationDeposit(address: Address): Long                                 = 0
+      override def lockedStake(address: Address): Long                                       = 0
+      override def stakedForPeriod(address: Address): Long                                   = 0
+      override def nextPeriodStakes(snapshot: StateSnapshot, address: Address): Option[Long] = None
     }
   }
 
@@ -115,10 +129,11 @@ object BalanceDiffValidation {
               snapshot.nextCommittedGenerators.find(_.sender.toAddress == address).size
             // lockedStake is the larger of this period's stake and the next one's, so a snapshot restating the
             // next period's has to be maxed against what this period already locks - it cannot free anything now.
-            val stakedAfter = snapshot.nextStakes.filter(_.address == address) match {
-              case Seq()  => b.lockedStake(address)
-              case staked => math.max(b.stakedForPeriod(address), staked.last.amount)
-            }
+            // Filtered by period as well as address: a boundary block's snapshot carries StakingPayout's
+            // carry-forward for the period just starting alongside any Stake transaction for the one after, and
+            // taking the last entry blind would compare the wrong period's amount.
+            val restated    = b.nextPeriodStakes(snapshot, address)
+            val stakedAfter = restated.fold(b.lockedStake(address))(amount => math.max(b.stakedForPeriod(address), amount))
             checkHearth(address, balance, currentLeaseBalance, depositedOnNext, stakedAfter).fold(error => List(error), _ => Nil)
           case _ =>
             Nil

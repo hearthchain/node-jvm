@@ -112,6 +112,11 @@ trait Blockchain {
   // rather than a per-address current value, because a stake is always a stake *for a period*.
   def stakes(at: GenerationPeriod): IndexedSeq[Stake]
 
+  // One address's stake for one period. Separate from `stakes` because it is on a far hotter path: every HRTH
+  // balance check resolves it (twice, through lockedStake), for every address of every transaction, so it must not
+  // scan or rebuild the period's whole set the way reading `stakes` does.
+  def stakeAt(address: Address, at: GenerationPeriod): Long
+
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
 
@@ -177,10 +182,6 @@ object Blockchain {
       staked = blockchain.lockedStake(address)
     )
 
-    /** What `address` has staked for `period`, 0 when it has staked nothing for it. */
-    def stakeAt(address: Address, period: GenerationPeriod): Long =
-      blockchain.stakes(period).find(_.address == address).fold(0L)(_.amount)
-
     /** The HRTH a stake currently stops `address` spending.
       *
       * The larger of what it has staked for this period and for the next, which is the same "this period and the
@@ -188,16 +189,16 @@ object Blockchain {
       * amount as soon as the transaction is applied, since it already counts for the next period; lowering one
       * keeps the current period's larger amount locked until that period ends.
       */
-    def lockedStake(address: Address, at: Height = Height(blockchain.height)): Long =
-      blockchain.generationPeriodOf(at).fold(0L) { period =>
-        math.max(stakeAt(address, period), stakeAt(address, period.next))
+    def lockedStake(address: Address): Long =
+      blockchain.currentGenerationPeriod.fold(0L) { period =>
+        math.max(blockchain.stakeAt(address, period), blockchain.stakeAt(address, period.next))
       }
 
     /** The HRTH a stake currently costs `address` in forging weight, which is the amount it is also *earning* on -
       * this period's stake alone, never the next one's. See GeneratingBalanceProvider.unstakedEffectiveBalance.
       */
-    def stakedForPeriod(address: Address, at: Height = Height(blockchain.height)): Long =
-      blockchain.generationPeriodOf(at).fold(0L)(stakeAt(address, _))
+    def stakedForPeriod(address: Address): Long =
+      blockchain.currentGenerationPeriod.fold(0L)(blockchain.stakeAt(address, _))
 
     /** A generation period's total tracked work: what its committee's settlements burned, summed over the whole
       * committed set rather than only over members that happen to have any.

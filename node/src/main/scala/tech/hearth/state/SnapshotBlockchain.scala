@@ -103,7 +103,15 @@ case class SnapshotBlockchain(
     snapshot.workDone.getOrElse((validator, period), inner.workDone(validator, period))
 
   override def stakes(at: GenerationPeriod): IndexedSeq[Stake] =
-    Stake.applied(inner.stakes(at), snapshot.nextStakes.filter(s => GenerationPeriod.from(s.periodStart, settings.functionalitySettings) == at))
+    Stake.toSeq(Stake.applied(Stake.of(inner.stakes(at).map(s => s.address -> s.amount)*), restatedFor(at)))
+
+  // Deliberately not `stakes(at).find(...)`: that would rebuild and copy the whole period's set for a single
+  // address, on a path BalanceDiffValidation walks for every address of every transaction in a block.
+  override def stakeAt(address: Address, at: GenerationPeriod): Long =
+    restatedFor(at).findLast(_.address == address).fold(inner.stakeAt(address, at))(_.amount)
+
+  private def restatedFor(at: GenerationPeriod): Seq[StakeCommitment] =
+    snapshot.nextStakes.filter(s => GenerationPeriod.from(s.periodStart, settings.functionalitySettings) == at)
 
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions

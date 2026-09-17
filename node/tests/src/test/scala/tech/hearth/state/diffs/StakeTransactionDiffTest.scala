@@ -220,6 +220,40 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
       stakedFor(d, period(d)) shouldBe empty
     }
 
+    "rejects a release from an address with nothing staked" in withStakeDomain { d =>
+      d.appendBlockE(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 0)) should produce("nothing staked to release")
+    }
+
+    // A boundary block is the only one that writes two periods at once - StakingPayout's carry-forward for the
+    // period it starts, and its own transactions for the one after - so it is the only block whose rollback has to
+    // unwind both. The carry-forward only fires for an address with no entry yet for the starting period, which is
+    // why the stake has to be a period old before the boundary under test.
+    "restores both periods on rollback of a boundary block that also carries a stake" in withStakeDomain { d =>
+      d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
+      crossPeriodBoundary(d)
+
+      // Now staked for the period the chain is in, with nothing yet filed for the next one: the boundary below is
+      // the first at which the carry-forward has anything to do
+      val starting = period(d).next
+      stakedFor(d, period(d)) shouldBe Seq(address -> 10.hearth)
+      stakedFor(d, starting) shouldBe empty
+
+      d.appendBlock(TxHelpers.commitToGeneration(starting.start, miner))
+      while (d.blockchain.height < starting.start.toInt - 1) d.appendBlock()
+      val beforeBoundary = d.blockchain.lastBlockId.get
+
+      // The boundary block: the carry-forward files 10 for `starting`, the transaction files 30 for the one after
+      d.appendBlock(TxHelpers.stake(sender, periodStart = starting.next.start, amount = 30.hearth))
+      d.blockchain.height shouldBe starting.start.toInt
+      stakedFor(d, starting) shouldBe Seq(address -> 10.hearth)
+      stakedFor(d, starting.next) shouldBe Seq(address -> 30.hearth)
+
+      d.rollbackTo(beforeBoundary)
+      stakedFor(d, starting) shouldBe empty
+      stakedFor(d, starting.next) shouldBe empty
+      staked(d) shouldBe 10.hearth
+    }
+
     "restores the stake and the lock on rollback" in withStakeDomain { d =>
       val next = period(d).next.start
       d.appendBlock()

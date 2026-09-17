@@ -37,6 +37,12 @@ object StakeTransactionDiff {
       _ <- Either.raiseUnless(tx.periodStart == next.start) {
         GenericError(s"Expected the next period start height ${next.start}, got ${tx.periodStart}")
       }
+      // A release from an address with nothing staked is a no-op whose only effect is to add an entry to a period's
+      // set - ledger padding for the price of a fee, with no HRTH locked behind it. There is deliberately no
+      // minimum stake, so this is the one shape that would otherwise cost an attacker nothing at all.
+      _ <- Either.raiseWhen(tx.amount.value == 0 && blockchain.lockedStake(sender) == 0) {
+        GenericError(s"$sender has nothing staked to release")
+      }
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = Map(sender -> Portfolio(balance = -tx.fee.value)),

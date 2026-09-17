@@ -189,10 +189,18 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
   protected def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
   @volatile
-  private var stakesCache = Map.empty[GenerationPeriod, IndexedSeq[Stake]] // Only this and next periods
-  override def stakes(at: GenerationPeriod): IndexedSeq[Stake] =
-    this.currentGenerationPeriod.fold(Vector.empty) { curr =>
-      if (at == curr || at == curr.next) {
+  private var stakesCache                                            = Map.empty[GenerationPeriod, Stake.Set]
+  override def stakes(at: GenerationPeriod): IndexedSeq[Stake]       = Stake.toSeq(stakeSet(at))
+  override def stakeAt(address: Address, at: GenerationPeriod): Long = stakeSet(at).getOrElse(address, 0L)
+
+  /** The window is one period wider than committedGenerators' because the two are asked about differently: this
+    * cache decides against the *persisted* height, while lockedStake asks about the *liquid* height's period and
+    * the one after it. Once the liquid tip crosses a boundary and persistence lags, the narrower window would miss
+    * on every single balance check and fall through to a full loadStakes prefix scan.
+    */
+  private def stakeSet(at: GenerationPeriod): Stake.Set =
+    this.currentGenerationPeriod.fold(Stake.empty) { curr =>
+      if (at >= curr && at <= curr.next.next) {
         stakesCache.getOrElse(
           at, {
             val r = loadStakes(at)
@@ -202,7 +210,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
         )
       } else loadStakes(at)
     }
-  protected def loadStakes(at: GenerationPeriod): IndexedSeq[Stake]
+  protected def loadStakes(at: GenerationPeriod): Stake.Set
 
   @volatile
   private var registeredEnclavesCache = Map.empty[GenerationPeriod, IndexedSeq[RegisteredEnclave]] // Only this and next periods

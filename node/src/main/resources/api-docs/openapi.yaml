@@ -3123,11 +3123,18 @@ components:
         effective:
           type: integer
           format: int64
-          description: '`available` plus what is leased in'
+          description: >-
+            `available` plus what is leased in. Not the same quantity as
+            `/addresses/effectiveBalance`, which is a minimum over the
+            generating-balance window and nets off only the stake in force for
+            the current generation period.
         staked:
           type: integer
           format: int64
-          description: HRTH locked by a Stake transaction, neither spendable nor counted toward forging weight
+          description: >-
+            HRTH locked by a Stake transaction: not spendable, and no longer
+            counted toward forging weight once the period it was staked for
+            begins.
     BalanceDetailsLSF:
       required:
         - address

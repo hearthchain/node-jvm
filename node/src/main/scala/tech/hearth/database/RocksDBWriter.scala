@@ -36,6 +36,7 @@ import java.time.Duration
 import java.util
 import java.util.concurrent.*
 import scala.annotation.tailrec
+import scala.collection.immutable.VectorMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
@@ -1428,28 +1429,36 @@ class RocksDBWriter(
 
   /** Every stake in force for `at`, folded in height order so a later entry for an address replaces an earlier one -
     * which is what makes "the last Stake transaction of a period wins" and StakingPayout's carry-forward compose
-    * without either needing to read the other back.
+    * without either needing to read the other back. `Stake.applied` is the same fold for the not-yet-persisted
+    * paths, and goes through `updated` for exactly this reason.
     *
     * An amount of 0 is kept rather than dropped: it is a release, and it has to survive as the winning entry so a
     * carry-forward cannot resurrect the stake it replaced.
     */
-  override def loadStakes(at: GenerationPeriod): IndexedSeq[Stake] = {
+  override def loadStakes(at: GenerationPeriod): Stake.Set = {
     val key       = Keys.stakes(at, at.start)
     val byAddress = mutable.LinkedHashMap.empty[AddressId, Long]
 
-    val addressIds = rdb.db.readOnly { ro =>
+    // Both reads in one snapshot, as loadCommittedGenerators does: taking them separately would let the address
+    // mapping shift between the two and turn a consistent DB into the "missing address" failure below.
+    rdb.db.readOnly { ro =>
       ro.iterateOver(key.keyBytes.dropRight(Ints.BYTES)) { dbEntry => // Drop height: iterate the whole period
         key.parse(dbEntry.getValue).getOrElse(Seq.empty).foreach { case (addressId, amount) => byAddress.put(addressId, amount) }
       }
-      byAddress.keys.toVector
-    }
 
-    if (addressIds.isEmpty) IndexedSeq.empty
-    else {
-      val addresses = rdb.db.readOnly(_.multiGet(addressIds.map(Keys.idToAddress), tech.hearth.crypto.Address.HASH_LEN))
-      addressIds.view.zipWithIndex.flatMap { case (addressId, i) =>
-        addresses(i).map(address => Stake(address, byAddress(addressId)))
-      }.toIndexedSeq
+      if (byAddress.isEmpty) Stake.empty
+      else {
+        val addressIds = byAddress.keys.toVector
+        // An address is stored as the bytes of its hash, see Keys.idToAddress
+        val addresses = ro.multiGet(addressIds.map(Keys.idToAddress), tech.hearth.crypto.Address.HASH_LEN)
+        VectorMap.from(addressIds.view.zipWithIndex.map { case (addressId, i) =>
+          // Throwing rather than skipping, exactly as loadCommittedGenerators does: this is consensus state, and a
+          // silently dropped staker changes a spend lock, a forging weight and a payout share while the node keeps
+          // following a chain it is now computing differently from its peers.
+          val address = addresses(i).getOrElse(throw new IllegalStateException(s"Can't find address for address id $addressId"))
+          address -> byAddress(addressId)
+        })
+      }
     }
   }
 

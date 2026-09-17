@@ -25,46 +25,19 @@ There is no per-address stake record and no "current stake". `Blockchain.stakes(
 
 ## Staking costs forging weight, not just liquidity
 
-`Portfolio.staked` is shaped like the existing `generationDeposit`: a view field, filled in by
-`Blockchain.hearthPortfolio` from the stake ledger rather than accumulated by any diff, and `StateSnapshot.balances`
-ignores it. Unlike `generationDeposit` it is subtracted from *both* `spendableBalance` and `effectiveBalance` - the
-project decision is that staked HRTH stops counting toward forging weight, so staking and mining compete for the
-same embers. This is the one part of the feature that changes a consensus rule rather than extending state.
+`Portfolio.staked` is shaped like the existing `generationDeposit`: a view field, filled in by `Blockchain.hearthPortfolio` from the stake ledger rather than accumulated by any diff, and `StateSnapshot.balances` ignores it. Unlike `generationDeposit` it is subtracted from *both* `spendableBalance` and `effectiveBalance` - the project decision is that staked HRTH stops counting toward forging weight, so staking and mining compete for the same embers. This is the one part of the feature that changes a consensus rule rather than extending state.
 
-**Spendability and forging weight read different periods, and that split is load-bearing.** Spendability follows
-`lockedStake` = the larger of this period's stake and the next one's, so a raised stake is unspendable at once.
-Forging weight (`GeneratingBalanceProvider.unstakedEffectiveBalance`) follows `stakedForPeriod` = *this* period's
-stake alone, which is the amount the address is also earning on, so the same embers buy the yield and pay for it.
+**Spendability and forging weight read different periods, and that split is load-bearing.** Spendability follows `lockedStake` = the larger of this period's stake and the next one's, so a raised stake is unspendable at once. Forging weight (`GeneratingBalanceProvider.unstakedEffectiveBalance`) follows `stakedForPeriod` = *this* period's stake alone, which is the amount the address is also earning on, so the same embers buy the yield and pay for it.
 
-Charging forging weight on the lock instead was the first implementation and is wrong, caught in review (security
-audit, Pass 2). This period's stake cannot change once the period has started, so forging weight changes only where
-the committee itself does. The lock moves the instant a transaction lands, which would
-let any committed generator zero its own generating balance mid-period for the price of one Stake transaction and
-no fund movement at all - a lever over `EndorsementFilter`'s 2/3 quorum denominator, and a way to reach the
-`validGenerators.nonEmpty` case in `appender.findBlockAndGetGenerators` (its own TODO) without moving funds or
-waiting out the 1000-block window. The HRTH a raised stake locks is still unspendable in the meantime; it just
-keeps counting as skin in the game until the period it was staked for actually starts.
+Charging forging weight on the lock instead was the first implementation and is wrong, caught in review (security audit, Pass 2). This period's stake cannot change once the period has started, so forging weight changes only where the committee itself does. The lock moves the instant a transaction lands, which would let any committed generator zero its own generating balance mid-period for the price of one Stake transaction and no fund movement at all - a lever over `EndorsementFilter`'s 2/3 quorum denominator, and a way to reach the `validGenerators.nonEmpty` case in `appender.findBlockAndGetGenerators` (its own TODO) without moving funds or waiting out the 1000-block window. The HRTH a raised stake locks is still unspendable in the meantime; it just keeps counting as skin in the game until the period it was staked for actually starts.
 
-That is also what makes it safe to subtract a *current* value from a *windowed* `effectiveBalance`: a period's own
-stake is constant for that whole period, so there is no window for it to disagree with. `math.max(0L, ...)` clamps the result,
-which is genuinely reachable - an address credited inside the 1000-block window and staking most of it has a
-windowed minimum far below its stake.
+That is also what makes it safe to subtract a *current* value from a *windowed* `effectiveBalance`: a period's own stake is constant for that whole period, so there is no window for it to disagree with. `math.max(0L, ...)` clamps the result, which is genuinely reachable - an address credited inside the 1000-block window and staking most of it has a windowed minimum far below its stake.
 
-Reading the stake off `blockchain` rather than as of `blockId` resolves to the same state because every consensus
-caller hands in a blockchain positioned at the block it is asking about (`appender.appendBlock` does it explicitly,
-with `blockchainUpdater.referencedBlockchain(block.header.reference)`). That is an invariant, not a coincidence, and
-`workContext`'s own `workDone` read already depends on it - but it is not enforced by a type, so a future caller
-passing a `blockId` older than the tip would need the stake resolved at that height instead.
+Reading the stake off `blockchain` rather than as of `blockId` resolves to the same state because every consensus caller hands in a blockchain positioned at the block it is asking about (`appender.appendBlock` does it explicitly, with `blockchainUpdater.referencedBlockchain(block.header.reference)`). That is an invariant, not a coincidence, and `workContext`'s own `workDone` read already depends on it - but it is not enforced by a type, so a future caller passing a `blockId` older than the tip would need the stake resolved at that height instead.
 
-Keeping the stake out of `BalanceSnapshot` and the `prevHeight`-linked node chain (`CurrentBalance`/`BalanceNode`,
-`Keys.hearthBalanceAt`) that `balanceSnapshots` walks is what that buys.
+Keeping the stake out of `BalanceSnapshot` and the `prevHeight`-linked node chain (`CurrentBalance`/`BalanceNode`, `Keys.hearthBalanceAt`) that `balanceSnapshots` walks is what that buys.
 
-Enforcement of spendability is `BalanceDiffValidation`, which folds the stake into the same "locked" term the
-generation deposit already used, maxing any stake this snapshot restates for the next period against what the
-current period already locks - a transaction can raise the lock but never lower it. The two locks are summed with `safeSum`, not `+`: `stakedAfter` comes straight off a
-transaction and is bounded only by `TxNonNegativeAmount`, so a raw sum could wrap negative and turn every check
-below it into a pass. Two new messages distinguish the two locks - `not enough funds to stake` and `trying to spend
-a stake` - and the existing deposit messages are unchanged byte-for-byte, because several suites assert on them.
+Enforcement of spendability is `BalanceDiffValidation`, which folds the stake into the same "locked" term the generation deposit already used, maxing any stake this snapshot restates for the next period against what the current period already locks - a transaction can raise the lock but never lower it. The two locks are summed with `safeSum`, not `+`: `stakedAfter` comes straight off a transaction and is bounded only by `TxNonNegativeAmount`, so a raw sum could wrap negative and turn every check below it into a pass. Two new messages distinguish the two locks - `not enough funds to stake` and `trying to spend a stake` - and the existing deposit messages are unchanged byte-for-byte, because several suites assert on them.
 
 ## The payout
 
@@ -82,8 +55,6 @@ Four behaviours at the edges, all pinned by `StakingPayoutTest`:
 - a stake that is only `pending` earns nothing, which is the payout's half of "a stake never earns in the epoch it was set in".
 
 The hook runs **after** the reward part and any predefined snapshot at the same height, over a `SnapshotBlockchain` carrying both. That ordering is load-bearing: `StateSnapshot.assetVolumes` holds a resulting total rather than a delta, so a predefined snapshot re-issuing the cred asset at the very same height (which TESTNET's height-7000 entry does for ORCRED) would otherwise have its mint silently overwritten by the payout's, or vice versa, depending only on which side of the monoid it landed on.
-
-The boundary block is O(stakers), and it is the most expensive block of each period. Nothing pages it yet. A staker whose record does not change writes nothing, so a steady staker set costs only the reads.
 
 ## The cred asset
 
@@ -112,7 +83,13 @@ The cache mirrors `committedGeneratorsCache` exactly, including the "only this a
 
 `TxStateSnapshotHashBuilder` hashes `tag("stake") ++ address ++ periodStart ++ amount` - a transaction's own declared fields, the way `nextCommittedGenerators` hashes a commitment's rather than the deposit it implies. `periodStart` is in the preimage because the same address and amount mean different things for different periods, and because it is what the sender signed. Nothing about membership is hashed separately: an amount of 0 is a release and anything else is a stake, so a period's set is a function of these entries.
 
-**What is still O(stakers):** the boundary block pays out and carries forward every stake, so it is the most expensive block of each period, and its cost is set by how many addresses have staked. There is no minimum stake and no cap, a deliberate project decision. Nothing pages it; a minimum stake or a real fee for `TransactionType.Stake` (still `1 // TODO: decide` in `FeeConstants`) would price it.
+**Lookups are keyed, not scanned.** `Blockchain.stakeAt(address, period)` is a separate trait method from `stakes(period)` precisely because the two are on different paths: the payout walks a period once per boundary, while every HRTH balance check resolves one address, twice, for every address of every transaction. A period's set is therefore held as a `VectorMap[Address, Long]` (`Stake.Set`) - insertion-ordered for the walk, O(1) for the lookup - and `SnapshotBlockchain` answers a point lookup straight off `nextStakes` rather than materialising the merged set. The first implementation scanned, and `SnapshotBlockchain.stakes` re-allocated the whole set on every call once any stake was in the block's accumulated snapshot, which made a boundary block O(transactions x stakers) for every validating node: a Critical finding in review (security audit, Pass 2), and the same quadratic that period keying was supposed to have removed - it had only moved from the hash path to the lookup path.
+
+`Stake.applied` is the one ordering rule, shared by all three paths that resolve a period independently (`loadStakes` off disk, `SnapshotBlockchain` over a liquid snapshot, `Caches` warm). All three fold through `VectorMap.updated`, so a restated address keeps its position and the orders cannot drift; `StakeSetTest` pins that. The first implementation had `applied` append a restated address while `loadStakes` kept its position - benign today, since the hash sorts and the payout keys by address, but the carry-forward propagates that order into the stored layout, so it was one order-sensitive consumer away from a fork between a long-running node and a freshly restarted one.
+
+The cache window is one period wider than `committedGenerators`' (`curr .. curr.next.next`), because the two are asked about differently: the cache decides against the persisted height while `lockedStake` asks about the liquid height's period and the one after. The narrower window missed on every balance check while persistence lagged a boundary, falling through to a full prefix scan each time.
+
+**What is still O(stakers):** the boundary block pays out and carries forward every stake, so it is the most expensive block of each period, and its cost is set by how many addresses have staked. There is no minimum stake and no cap, a deliberate project decision. Nothing pages it. A release from an address with nothing staked is rejected outright (`nothing staked to release`) - with no minimum stake, that is the one shape that would otherwise add an entry to a period's set for the price of a fee and no locked HRTH at all. A minimum stake or a real fee for `TransactionType.Stake` (still `1 // TODO: decide` in `FeeConstants`) would price it.
 
 **Not mirrored onto the BlockchainUpdates stream**, and **not carried in the light-node snapshot wire format**. `stakes` appears in neither `events.StateUpdate` nor `PBSnapshots`, which is the same gap `workDone`, `reservedAmounts`, `apiKeyBindings` and `registeredEnclaves` all already have - `PBSnapshots` carries none of this fork's own ledgers, while `TxStateSnapshotHashBuilder` hashes all of them. A light node rebuilding a per-transaction snapshot from network-supplied `txSnapshots` therefore computes a state hash missing those entries. Pre-existing and systemic rather than introduced here, but `Stake` is the first *permissionless* transaction type to reach it: any user can now broadcast a transaction that trips it, where before it took a `Reserve` or `Settle`. Closing it needs a `protobuf-schemas` change of its own.
 

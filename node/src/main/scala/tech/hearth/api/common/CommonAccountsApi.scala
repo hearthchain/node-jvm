@@ -49,11 +49,13 @@ object CommonAccountsApi {
     override def balance(address: Address, confirmations: Int = 0): Long =
       blockchain.regularBalance(address, blockchain.height, confirmations)
 
-    override def effectiveBalance(address: Address, confirmations: Int = 0): Long = {
-      // Through GeneratingBalanceProvider, so that this agrees with balanceDetails' `effective`/`generating` and
-      // with what the node will actually let the address forge on
-      GeneratingBalanceProvider.unstakedEffectiveBalance(blockchain, address, confirmations)
-    }
+    // Deliberately not the same quantity as balanceDetails' `effective` below, and the two differ in two ways: this
+    // one is the minimum over the generating-balance window and nets off only *this period's* stake, i.e. what the
+    // node will actually let the address forge on, while `effective` is the unwindowed portfolio view and nets off
+    // the whole lock. They coincide for an address that has never staked. blockId is passed explicitly because
+    // unstakedEffectiveBalance defaults it to None, where this endpoint has always used the last block.
+    override def effectiveBalance(address: Address, confirmations: Int = 0): Long =
+      GeneratingBalanceProvider.unstakedEffectiveBalance(blockchain, address, confirmations, blockchain.lastBlockId)
 
     override def balanceDetails(address: Address): Either[String, BalanceDetails] = {
       val portfolio = blockchain.hearthPortfolio(address)

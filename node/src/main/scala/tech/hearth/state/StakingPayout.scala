@@ -38,14 +38,16 @@ object StakingPayout {
     *   the height of the block being built.
     */
   def atPeriodBoundary(blockchain: Blockchain, newBlockHeight: Height): Either[ValidationError, StateSnapshot] = {
-    val starting = GenerationPeriod.from(newBlockHeight, blockchain.settings.functionalitySettings)
+    // Through generationPeriodOf rather than GenerationPeriod.from, so that this hook stays behind the same gate
+    // every other period-aware path is behind if that gate is ever reintroduced.
+    val boundary = for {
+      starting <- blockchain.generationPeriodOf(newBlockHeight)
+      // The genesis period has no predecessor to pay out for, and nothing has staked before genesis either, so the
+      // very first block is excluded by `prev` rather than by a height check of its own.
+      finished <- starting.prev if newBlockHeight == starting.start
+    } yield (finished, starting)
 
-    // The genesis period has no predecessor to pay out for, and nothing has staked before genesis either, so the
-    // very first block is excluded by `prev` rather than by a height check of its own.
-    starting.prev.filter(_ => newBlockHeight == starting.start) match {
-      case None           => Right(StateSnapshot.empty)
-      case Some(finished) => build(blockchain, finished, starting)
-    }
+    boundary.fold(Right(StateSnapshot.empty))(build(blockchain, _, _))
   }
 
   private def build(blockchain: Blockchain, finished: GenerationPeriod, starting: GenerationPeriod): Either[ValidationError, StateSnapshot] = {
