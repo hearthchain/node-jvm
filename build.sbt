@@ -86,9 +86,9 @@ inScope(Global)(
     testOptions += Tests.Setup(() => sys.props("sbt-testing") = "true"),
     resolvers ++= Resolver.mavenLocal +: Seq(Resolver.sonatypeCentralSnapshots),
     Compile / packageDoc / publishArtifact := false,
-    // Both limits have to be set here, in one assignment: `concurrentRestrictions` is a Global key, and a second
-    // `inScope(Global)` assignment anywhere else (IntegrationTestsPlugin used to carry the ForkedTestGroup one)
-    // replaces this Seq rather than adding to it, silently dropping whichever loses the ordering.
+    // One assignment for both limits, and it replaces sbt's own defaults rather than adding to them: a Global key is
+    // last-writer-wins (see "A second assignment of a Global key" in docs/notes/build-tooling.md). checkTestLimits
+    // guards that, so a third assignment fails the build instead of silently winning.
     concurrentRestrictions := Seq(
       Tags.limit(Tags.Test, math.min(EvaluateTask.SystemProcessors, 8)),
       Tags.limit(Tags.ForkedTestGroup, maxParallelSuites.value)
@@ -198,13 +198,27 @@ stageForDocker := Def.uncached {
   }
 }
 
+// The ForkedTestGroup limit is what makes -Dhearth.it.max-parallel-suites mean anything, and it went missing for
+// months because a second Global assignment of concurrentRestrictions shadowed it. Assert it rather than trust a comment.
+lazy val checkTestLimits = taskKey[Unit]("Fails if Global/concurrentRestrictions no longer caps forked test groups")
+checkTestLimits := Def.uncached {
+  val limit     = (Global / maxParallelSuites).value
+  val overLimit = Map[ConcurrentRestrictions.Tag, Int](Tags.ForkedTestGroup -> (limit + 1))
+  if ((Global / concurrentRestrictions).value.forall(_(overLimit)))
+    sys.error(
+      s"Global/concurrentRestrictions no longer caps ${Tags.ForkedTestGroup} at $limit - another assignment of that " +
+        "Global key has shadowed it; see \"A second assignment of a Global key\" in docs/notes/build-tooling.md"
+    )
+}
+
 lazy val compilePRRaw = taskKey[Unit]("Compile the project")
 compilePRRaw := Def.uncached(
   Def
     .sequential(
       clean.all(ScopeFilter(inAnyProject)),
       scalafmtCheck.all(ScopeFilter(inAnyProject, inConfigurations(Compile))),
-      compile.all(ScopeFilter(inAnyProject, inConfigurations(Test)))
+      compile.all(ScopeFilter(inAnyProject, inConfigurations(Test))),
+      checkTestLimits
     )
     .value
 )

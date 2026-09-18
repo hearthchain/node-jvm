@@ -149,6 +149,8 @@ $ sbt --client -Dhearth.it.max-parallel-suites=4 "print Global/concurrentRestric
 
 `-Dhearth.it.max-parallel-suites` was therefore a no-op on every CI run and in every invocation documented in `CLAUDE.md`. node-it's observed 4-way suite concurrency on a GitHub runner came from `Tags.limit(Tags.Test, min(SystemProcessors, 8))` with `SystemProcessors = 4`, which coincidentally matched the flag CI passed. Both limits now live in one `Seq` in `build.sbt`; the plugin keeps only the `maxParallelSuites` setting itself.
 
+`checkTestLimits` (`build.sbt`, sequenced into `compilePR`) now asserts the ForkedTestGroup cap is actually in force, so a third assignment of the key fails the build instead of quietly winning. Note that the `:=` deliberately replaces sbt's own default rule set rather than extending it; if you need one of those defaults back, add it to this `Seq` explicitly.
+
 Two things to know when checking this by hand. `print Global/concurrentRestrictions` is the authoritative check - `inspect` will happily show a defining assignment that lost. And `sbt --client -D...` sets the property on the *thin client*, not on the long-lived server that evaluates the setting, so the flag appears to be ignored even after the fix; use `sbt --server -D... --batch` (what CI runs) to verify a `-D`-driven setting.
 
 ## SBT 2 action-cache: side-effecting tasks need `Def.uncached`

@@ -14,6 +14,24 @@ object IntegrationTestsPlugin extends AutoPlugin {
   object autoImport extends ItKeys
   import autoImport.*
 
+  private val LoadTestTag = "tech.hearth.it.LoadTest"
+
+  /** Runs exactly the named suites through `testOnly`, failing loudly rather than reporting a green empty run. */
+  private def runSuites(select: ((Seq[String], Seq[String])) => Seq[String], emptyWhy: String, tagged: Boolean) =
+    Def.taskDyn {
+      // testOnly still inherits the `-l` built from SCALATEST_EXCLUDE_TAGS, so excluding the very tag loadTests
+      // selects on would filter every test out of the suites it forked and still exit 0 - the failure this split
+      // exists to stop. Harmless for integrationTests, whose suites do not carry the tag in the first place.
+      val selfDefeating =
+        tagged && sys.env.get("SCALATEST_EXCLUDE_TAGS").exists(_.split("\\s+").contains(LoadTestTag))
+      select(loadTestNames.value) match {
+        case Nil => Def.task[Unit](sys.error(s"Nothing to run: $emptyWhy"))
+        case _ if selfDefeating =>
+          Def.task[Unit](sys.error(s"SCALATEST_EXCLUDE_TAGS excludes $LoadTestTag, so every selected test would be filtered out"))
+        case selected => (Test / testOnly).toTask(selected.mkString(" ", " ", "")).map(_ => ())
+      }
+    }
+
   override def projectSettings: Seq[Def.Setting[?]] =
     inConfig(Test)(
       Seq(
@@ -37,22 +55,19 @@ object IntegrationTestsPlugin extends AutoPlugin {
           val args = Seq("-fFW", (logDirectory.value / "summary.log").toString) ++ excludeTags
           Tests.Argument(TestFrameworks.ScalaTest, args*)
         },
-        // There is no include-by-tag counterpart to SCALATEST_EXCLUDE_TAGS's `-l`: ScalaTest's sbt Framework parses
-        // `-n` and then ignores it (verified with a tag no suite carries - nothing was filtered), so the load-test
-        // half of the split selects its suites by name instead, read off the annotation so the list cannot drift.
+        // Both halves of the load-test split derive from this one name, so neither can drift: see "Load tests" in
+        // docs/notes/testing.md for why the tag is not passed to ScalaTest as `-n`/`-l` from the workflow instead.
+        // Def.uncached because the result is derived from testLoader, which the action cache cannot key on.
         loadTestNames := Def.uncached {
           val loader = testLoader.value
-          val loadTest = Class
-            .forName("tech.hearth.it.LoadTest", false, loader)
+          val loadTest = scala.util.Try
+            .apply(Class.forName(LoadTestTag, false, loader))
+            .getOrElse(sys.error(s"$LoadTestTag not found - has the annotation been moved or renamed?"))
             .asSubclass(classOf[java.lang.annotation.Annotation])
-          definedTests.value.map(_.name).filter(Class.forName(_, false, loader).isAnnotationPresent(loadTest)).sorted
+          definedTests.value.map(_.name).partition(Class.forName(_, false, loader).isAnnotationPresent(loadTest))
         },
-        loadTests := Def.taskDyn {
-          loadTestNames.value match {
-            case Nil   => Def.task(sys.error("No @LoadTest suites found - has the annotation moved?"))
-            case names => testOnly.toTask(names.mkString(" ", " ", "")).map(_ => ())
-          }
-        }.value,
+        loadTests        := runSuites(_._1, s"no suite carries @$LoadTestTag", tagged = true).value,
+        integrationTests := runSuites(_._2, "no untagged suites found", tagged = false).value,
         parallelExecution := true,
         testGrouping := Def.uncached {
           // ffs, sbt!
@@ -88,8 +103,7 @@ object IntegrationTestsPlugin extends AutoPlugin {
       )
     ) ++ inScope(Global)(
       Seq(
-        // Only the setting lives here; `concurrentRestrictions` that reads it is assigned in build.sbt, because a
-        // second assignment of that Global key would replace the first instead of adding to it.
+        // concurrentRestrictions lives in build.sbt: a second Global assignment replaces, not adds.
         maxParallelSuites := Option(Integer.getInteger("hearth.it.max-parallel-suites"))
           .getOrElse[Integer] {
             try {
@@ -119,6 +133,7 @@ object IntegrationTestsPlugin extends AutoPlugin {
 trait ItKeys {
   val logDirectory      = taskKey[File]("The directory where logs of integration tests are written")
   val maxParallelSuites = settingKey[Int]("Number of test suites to run in parallel")
-  val loadTestNames     = taskKey[Seq[String]]("Names of the @LoadTest-annotated suites")
+  val loadTestNames     = taskKey[(Seq[String], Seq[String])]("Suite names, split into @LoadTest-annotated and the rest")
   val loadTests         = taskKey[Unit]("Runs only the @LoadTest-annotated suites")
+  val integrationTests  = taskKey[Unit]("Runs every suite except the @LoadTest-annotated ones")
 }
