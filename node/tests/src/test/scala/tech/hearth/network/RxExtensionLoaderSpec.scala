@@ -33,7 +33,8 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
       lastBlockIds: Seq[ByteStr] = Seq.empty,
       timeOut: FiniteDuration = 1.day,
       cacheTimeout: FiniteDuration = 3.minute,
-      applier: Applier = simpleApplier
+      applier: Applier = simpleApplier,
+      maxRollback: Int = MaxRollback
   )(
       f: (
           InMemoryInvalidBlockStorage,
@@ -56,7 +57,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         cacheTimeout,
         isLightMode = false,
         blacklistOnScoreMismatch = false,
-        Coeval(lastBlockIds.reverse.take(MaxRollback)),
+        Coeval(lastBlockIds.reverse.take(maxRollback)),
         op,
         invBlockStorage,
         blocks,
@@ -164,9 +165,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     }
   }
 
-  // An optimistic request is issued while the previous extension is still being applied, and the only ids it used to
-  // carry were that extension's - liquid block ids, which stop resolving on the peer as soon as it appends the next
-  // microblock. Under load the request goes out tens of seconds later, so those ids are reliably stale by then.
+  // The extension's own ids are liquid and expire; only persisted history guarantees a resolvable anchor.
   "should anchor an optimistic block id request in local history" in {
     val allBlocks = Seq.tabulate(102)(block)
     withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = neverApplier) { (_, blocks, sigs, ccsw, _) =>
@@ -187,22 +186,30 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     }
   }
 
-  "should not blacklist a peer that returns no ids for an optimistic request" in {
-    val allBlocks = Seq.tabulate(102)(block)
-    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = neverApplier) { (_, blocks, sigs, ccsw, _) =>
-      val ch = new EmbeddedChannel()
+  // GetBlockIds is capped at BlockIdSeqSpec.MaxIds on the wire, and LegacyFrameCodec makes the *receiver* blacklist
+  // the sender of an oversize frame. lastBlockIds can be max-rollback + 1 long and an extension up to max-rollback,
+  // so concatenating them unguarded overruns the cap exactly when a lagging node is catching up.
+  "should keep an optimistic block id request within the wire limit" in {
+    val allBlocks = Seq.tabulate(BlockIdSeqSpec.MaxIds + 2)(block)
+    val history   = allBlocks.view.take(BlockIdSeqSpec.MaxIds).map(_.id()).toSeq
+    withExtensionLoader(history, applier = neverApplier, maxRollback = BlockIdSeqSpec.MaxIds - 1) { (_, blocks, sigs, ccsw, _) =>
+      val ch   = new EmbeddedChannel()
+      val last = allBlocks.takeRight(2)
       test(for {
         _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
-        _ = ch.readOutbound[GetBlockIds]
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe BlockIdSeqSpec.MaxIds - 1
         _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
         _ = ch.readOutbound[GetBlock]
         _ = ch.readOutbound[GetBlock]
-        _ <- send(blocks)((ch, allBlocks(100)))
-        _ <- send(blocks)((ch, allBlocks(101)))
-        _ = ch.readOutbound[GetBlockIds] // the optimistic request
-        _ <- send(sigs)((ch, BlockIds(Seq.empty)))
+        _ <- send(blocks)((ch, last.head))
+        _ <- send(blocks)((ch, last.last))
       } yield {
-        ch.isOpen shouldBe true
+        val anchors    = history.reverse.take(BlockIdSeqSpec.MaxIds - 1)
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.size shouldBe BlockIdSeqSpec.MaxIds
+        // the persisted anchors guarantee a non-empty reply, so the extension ids are the ones that give way
+        optimistic.takeRight(anchors.size) shouldBe anchors
+        optimistic.head shouldBe last.last.id()
       })
     }
   }
