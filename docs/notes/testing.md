@@ -216,6 +216,18 @@ liquid (not-yet-solidified) key block on every microblock, so it only becomes du
 block supersedes it; a restart while the quorate block is still the liquid tip would lose that in-memory state
 regardless of whether finalization succeeded. Not yet confirmed as the actual cause vs. some other timing mismatch.
 
+## Load tests
+
+The four `@LoadTest` suites (`WideStateGenerationSuite`, `MicroblocksGenerationSuite`, `BlockSizeConstraintsSuite`, `RollbackSuite`) run in their own CI job (`run-load-tests` in `check-pr.yaml`), through `node-it/loadTests` and pinned to `-Dhearth.it.max-parallel-suites=1`; the main `run-integration-tests` job excludes them with `SCALATEST_EXCLUDE_TAGS`. Do not fold them back into the main job.
+
+These suites measure whether a node keeps up with thousands of transactions, so anything else on the same machine turns them into a measurement of the runner. Sharing a GitHub runner (4 vCPU, 16 GB) with three other node-it suites made `WideStateGenerationSuite` fail 10 of 10 consecutive runs, always at the same line, and the other three `@LoadTest` suites accounted for nearly every other node-it failure in those runs. A representative failing run: the 10000-transaction upload took 6m13s with individual `POST /transactions/broadcast` calls taking 9+ seconds, and once it finished the miner's UTX pool sat at 125 while its three peers held 2305/2775/2931 and drained at tens of transactions per minute, so the 7-minute "UTX is empty" wait could never converge.
+
+The mechanism behind that last part is worth knowing, because it looks like a propagation bug and is not one: `TransactionSynchronizer` feeds network transactions through `.whileBusyBuffer(OverflowStrategy.DropNew(maxQueueSize))`. A node whose validation pipeline falls behind **silently drops** incoming transactions, logs nothing, and has no way to re-request them - the sender only re-offers on its own rebroadcast cycle. A CPU-starved miner therefore starves itself of work while its peers hold the pool. Expect this shape (miner UTX near zero, peers' pools stuck and occasionally *growing*) whenever a node-it suite is resource-starved rather than functionally broken.
+
+The two halves of that split are selected by different mechanisms, and not for stylistic reasons. Excluding works as documented: `SCALATEST_EXCLUDE_TAGS` becomes ScalaTest's `-l`, a suite whose tests are all excluded still gets a forked JVM but runs nothing in it and starts no containers (`BeforeAndAfterAll` does not fire for a fully-filtered suite). *Including* does not: ScalaTest's sbt `Framework` parses `-n` (the bytecode calls `ArgsParser.parseCompoundArgIntoSet(args, "-n")`) and then never applies it. `testOnly SomeUntaggedSuite -- -n a.Tag.NothingCarries` runs that suite's tests in full. Do not add a `SCALATEST_INCLUDE_TAGS` knob back; it looks like it works and silently runs everything.
+
+`node-it/loadTests` therefore selects by name, but reads the names off the annotation rather than hardcoding them: `loadTestNames` (`IntegrationTestsPlugin`) filters `definedTests` by `isAnnotationPresent` through the test classloader, so tagging a new suite `@LoadTest` is enough to move it. `testOnly` forks only the groups it names, so the other 45 suites cost nothing, and unlike `test` it reports failures reliably.
+
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
 `WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with

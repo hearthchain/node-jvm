@@ -86,14 +86,19 @@ inScope(Global)(
     testOptions += Tests.Setup(() => sys.props("sbt-testing") = "true"),
     resolvers ++= Resolver.mavenLocal +: Seq(Resolver.sonatypeCentralSnapshots),
     Compile / packageDoc / publishArtifact := false,
-    concurrentRestrictions                 := Seq(Tags.limit(Tags.Test, math.min(EvaluateTask.SystemProcessors, 8))),
+    // Both limits have to be set here, in one assignment: `concurrentRestrictions` is a Global key, and a second
+    // `inScope(Global)` assignment anywhere else (IntegrationTestsPlugin used to carry the ForkedTestGroup one)
+    // replaces this Seq rather than adding to it, silently dropping whichever loses the ordering.
+    concurrentRestrictions := Seq(
+      Tags.limit(Tags.Test, math.min(EvaluateTask.SystemProcessors, 8)),
+      Tags.limit(Tags.ForkedTestGroup, maxParallelSuites.value)
+    ),
     // Dead settings sbt 2's project-load lint now catches that sbt 1 missed (same keys, same plugin
     // wiring, unused under sbt 1 too - see "SBT 2 unused-settings lint" in CLAUDE.md for the investigation).
     excludeLintKeys ++= Set(
       node / Universal / configuration,
       node / Linux / configuration,
       node / Debian / configuration,
-      Global / maxParallelSuites,
       node / Rpm / daemonGroupGid,
       node / Rpm / daemonUserUid,
       node / Rpm / executableScriptName,
