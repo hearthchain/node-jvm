@@ -461,6 +461,7 @@ class RocksDBWriter(
       for ((addressId, (currentStake, stakeNode)) <- stakes) {
         rw.put(Keys.stakeBalance(addressId), currentStake)
         rw.put(Keys.stakeBalanceAt(addressId, currentStake.height), stakeNode)
+        rw.put(Keys.activeStake(addressId), Some(currentStake.height))
       }
 
       for ((orderId, (currentVolumeAndFee, volumeAndFeeNode)) <- filledQuantity) {
@@ -662,6 +663,11 @@ class RocksDBWriter(
 
         if (registeredEnclaves.nonEmpty) rw.put(Keys.registeredEnclaves(committedPeriod, h), Some(registeredEnclaves))
       }
+
+      // At a period boundary, drop candidates that are neither staking nor recently changed. Doing it here rather
+      // than on the release itself is what keeps a mid-period release in the set long enough to be paid for the
+      // period it was still staked in - see Keys.activeStake.
+      this.generationPeriodOf(h).filter(_.start == h).foreach(pruneActiveStakes(rw, _))
 
       this.generationPeriodOf(h).foreach { currPeriod => // None checked in Caches
         if (conflictGenerators.nonEmpty) rw.put(Keys.conflictGenerators(currPeriod, h), conflictGenerators)
@@ -1119,7 +1125,26 @@ class RocksDBWriter(
       val prevNode = rw.get(Keys.stakeBalanceAt(addressId, stake.prevHeight))
       rw.delete(Keys.stakeBalanceAt(addressId, height))
       rw.put(curStakeKey, CurrentStake(prevNode.amount, stake.prevHeight, prevNode.prevHeight))
+      // An over-included candidate would be harmless (it resolves to 0 and filters out), but restoring it exactly
+      // is two lines and keeps a rolled-back node's candidate set identical to one that never saw the block.
+      if (stake.prevHeight <= Height(0)) rw.delete(Keys.activeStake(addressId))
+      else rw.put(Keys.activeStake(addressId), Some(stake.prevHeight))
     }
+  }
+
+  /** Deletes candidates that neither hold a stake nor changed one during `period`. Reads the stake only for the
+    * entries whose height already rules out the second half, so a steady staker set costs one key read each.
+    */
+  private def pruneActiveStakes(rw: RW, period: GenerationPeriod): Unit = {
+    val stale = ArrayBuffer.empty[AddressId]
+    val key   = Keys.activeStake(AddressId(0L))
+    rw.iterateOver(key.keyBytes.dropRight(java.lang.Long.BYTES)) { dbEntry =>
+      val id = AddressId.fromByteArray(dbEntry.getKey.takeRight(java.lang.Long.BYTES))
+      key.parse(dbEntry.getValue).foreach { lastChange =>
+        if (lastChange < period.start && rw.get(Keys.stakeBalance(id)).amount == 0) stale += id
+      }
+    }
+    stale.foreach(id => rw.delete(Keys.activeStake(id)))
   }
 
   private def rollbackLeaseBalance(rw: RW, addressId: AddressId, height: Height): Unit = {
@@ -1453,19 +1478,18 @@ class RocksDBWriter(
       }
     }
 
-  /** Every non-zero stake in force for `at`, by prefix scan over the current-stake keys.
-    *
-    * This enumerates every address that has *ever* staked, including those now at zero: a stake is a balance, and
-    * a balance key is not removed when it reaches zero. Only StakingPayout calls this, once per period boundary.
+  /** Every non-zero stake in force for `at`, by prefix scan over the candidate set (see Keys.activeStake) rather
+    * than over every address that has ever staked. The candidates are a superset - a released stake lingers until
+    * the next boundary prunes it - so each one is still resolved through its own stake history and filtered.
     */
   override def loadStakes(at: GenerationPeriod): Seq[Stake] = {
     val staked = ArrayBuffer.empty[(AddressId, Long)]
 
     rdb.db.readOnly { ro =>
-      val key = Keys.stakeBalance(AddressId(0L))
-      ro.iterateOver(key.keyBytes.dropRight(java.lang.Long.BYTES)) { dbEntry => // Drop the address id: scan them all
+      val candidates = Keys.activeStake(AddressId(0L))
+      ro.iterateOver(candidates.keyBytes.dropRight(java.lang.Long.BYTES)) { dbEntry => // Drop the address id: scan them all
         val id      = AddressId.fromByteArray(dbEntry.getKey.takeRight(java.lang.Long.BYTES))
-        val current = key.parse(dbEntry.getValue)
+        val current = ro.get(Keys.stakeBalance(id))
         val amount =
           if (current.height < at.start) current.amount
           else {

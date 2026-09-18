@@ -87,7 +87,13 @@ Reads come in two shapes, deliberately separated because their costs differ by o
 
 The cache is a per-address `LoadingCache[Address, CurrentStake]`, sized and invalidated like `leaseBalanceCache`. Note what is *not* here: no period is ever materialised in memory, which is the memory cost the period-keyed design carried.
 
-**The enumeration covers every address that has ever staked**, including those now at zero, because a balance key is not deleted when it reaches zero. That is the one thing the balance model does worse than period keying, where a released stake fell out of later periods. It costs one key read per dead staker at each boundary, and a release from an address with nothing staked is rejected outright (`nothing staked to release`), so a zero entry always cost someone a real stake first. With no minimum stake, that remains the cheapest way to grow the set.
+**Enumeration goes through a candidate index, not the stake keys themselves.** A balance key is never deleted when it reaches zero, so scanning `StakeBalance` would walk every address that has ever staked. `Keys.activeStake(addressId) -> lastChangeHeight` is scanned instead, and an entry is kept while the address either still holds a stake or changed one during the current period.
+
+That second half is the subtle part, and getting it wrong underpays people. "Currently staking" is the wrong predicate: an address that releases mid-period is owed a payout for the period it was still staked in, and deleting its entry on the release would drop it from the very boundary that settles it. Keeping it one period longer is what the stored height decides, with no need to read the stake to make the call.
+
+The index is a hint, not consensus state. The payout resolves every candidate through the stake history anyway, so an extra entry costs one read and filters to nothing - only under-inclusion could change a result. That means pruning need not be rollback-exact. `rollbackStake` restores the entry precisely anyway, since it already has the value to restore it from and two lines is cheaper than reasoning about drift between a node that rolled back and one that never saw the block.
+
+Pruning runs in `doAppend` at a period boundary, which is after the payout has read the set for that same block - the order matters, and it is the order `BlockDiffer.mkInitialSnapshot` (payout) then `Caches.append` (prune) already gives.
 
 `TxStateSnapshotHashBuilder` hashes `tag("stake") ++ address ++ periodStart ++ amount` - the transaction's own declared fields, the way `nextCommittedGenerators` hashes a commitment's rather than the deposit it implies. `periodStart` is in the preimage because it is what the sender signed, even though storage derives the same thing from the height.
 

@@ -371,4 +371,16 @@ object Keys {
 
   def stakeBalance(addressId: AddressId): Key[CurrentStake] =
     Key(StakeBalance, addressId.toByteArray, readCurrentStake, writeCurrentStake)
+
+  /** The candidate set the period-boundary payout enumerates, holding each address's last stake-change height.
+    *
+    * An entry is kept while the address either still has a stake or changed one during the current period - the
+    * second half matters because an address that released mid-period is still owed a payout for that period, and
+    * the height in the value is what lets the prune decide that without reading the stake itself.
+    *
+    * This is a hint, not consensus state: the payout resolves every candidate through the stake ledger anyway, so
+    * an extra entry costs one read and filters to nothing. Only under-inclusion could change a result.
+    */
+  def activeStake(addressId: AddressId): Key[Option[Height]] =
+    Key.opt(ActiveStake, addressId.toByteArray, bs => tech.hearth.state.Height(Ints.fromByteArray(bs)), _.toByteArray)
 }

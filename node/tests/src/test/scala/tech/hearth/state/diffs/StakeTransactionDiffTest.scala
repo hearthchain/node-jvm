@@ -220,6 +220,30 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
       stakedFor(d, period(d)) shouldBe empty
     }
 
+    // The reason the candidate index keeps a released address for one more period: the payout at the next boundary
+    // is for the period it was still staked in, so dropping it the moment it released would silently underpay it.
+    "still enumerates a stake released mid-period for the period it was staked in" in withStakeDomain { d =>
+      d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
+      crossPeriodBoundary(d)
+      val staking = period(d)
+
+      d.appendBlock(TxHelpers.stake(sender, periodStart = staking.next.start, amount = 0))
+
+      // Zero from the next period on, but still staked for the one the payout is about to settle
+      stakedFor(d, staking) shouldBe Seq(address -> 10.hearth)
+      stakedFor(d, staking.next) shouldBe empty
+    }
+
+    "stops enumerating it once that period has passed" in withStakeDomain { d =>
+      d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
+      crossPeriodBoundary(d)
+      d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 0))
+      crossPeriodBoundary(d)
+
+      stakedFor(d, period(d)) shouldBe empty
+      staked(d) shouldBe 0L
+    }
+
     "rejects a release from an address with nothing staked" in withStakeDomain { d =>
       d.appendBlockE(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 0)) should produce("nothing staked to release")
     }
