@@ -80,8 +80,12 @@ object RxExtensionLoader extends ScorexLogging {
               state
             case LoaderState.Idle =>
               val maybeKnownSigs = state.applierState match {
-                case ApplierState.Idle                => Some((lastBlockIds(), false))
-                case ApplierState.Applying(None, ext) => Some((ext.blocks.map(_.id()).reverse, true))
+                case ApplierState.Idle => Some((lastBlockIds(), false))
+                // The extension's own ids go first so a peer that still has them answers with the shortest extension,
+                // but local history has to follow them: those ids are liquid, and a peer stops resolving one as soon
+                // as it appends the next microblock. This request is issued when the applier drains, which under load
+                // is tens of seconds after the ids arrived, so on their own they are reliably stale by then.
+                case ApplierState.Applying(None, ext) => Some(((ext.blocks.map(_.id()).reverse ++ lastBlockIds()).distinct, true))
                 case _                                => None
               }
               maybeKnownSigs match {
@@ -96,7 +100,7 @@ object RxExtensionLoader extends ScorexLogging {
                     if (!f.isSuccess) log.trace(s"Error requesting signatures: $ch", f.cause())
                   }
 
-                  state.withLoaderState(LoaderState.ExpectingSignatures(best, knownSigs, blacklisting))
+                  state.withLoaderState(LoaderState.ExpectingSignatures(best, knownSigs, optimistic, blacklisting))
                 case None =>
                   log.trace(s"Holding on requesting next sigs, $state")
                   state
@@ -126,10 +130,16 @@ object RxExtensionLoader extends ScorexLogging {
 
     def onNewSignatures(state: State, ch: Channel, sigs: BlockIds): State = {
       state.loaderState match {
-        case LoaderState.ExpectingSignatures(c, _, _) if c.channel == ch && sigs.ids.isEmpty =>
+        // Only a request anchored in local history proves anything: an optimistic one can be answered with nothing
+        // simply because its ids expired, and the peer is then right to say it knows none of them. Go idle and let
+        // the next score update ask again, by which time the applier has usually drained and the request is anchored.
+        case LoaderState.ExpectingSignatures(c, _, true, _) if c.channel == ch && sigs.ids.isEmpty =>
+          log.trace(s"${id(ch)} No block ids for an optimistic request, waiting for the applier before asking again")
+          state.withIdleLoader
+        case LoaderState.ExpectingSignatures(c, _, _, _) if c.channel == ch && sigs.ids.isEmpty =>
           peerDatabase.blacklistAndClose(ch, s"Peer did not return any signatures and is likely on a fork")
           syncNext(state.withIdleLoader)
-        case LoaderState.ExpectingSignatures(c, known, _) if c.channel == ch =>
+        case LoaderState.ExpectingSignatures(c, known, _, _) if c.channel == ch =>
           val (_, unknown) = sigs.ids.span(id => known.contains(id))
 
           val firstInvalid = sigs.ids.view.flatMap { sig =>
@@ -384,7 +394,7 @@ object RxExtensionLoader extends ScorexLogging {
 
     case object Idle extends LoaderState
 
-    case class ExpectingSignatures(channel: BestChannel, known: Seq[BlockId], timeout: CancelableFuture[Unit]) extends WithPeer {
+    case class ExpectingSignatures(channel: BestChannel, known: Seq[BlockId], optimistic: Boolean, timeout: CancelableFuture[Unit]) extends WithPeer {
       override def toString: String = s"ExpectingSignatures($channel)"
     }
 

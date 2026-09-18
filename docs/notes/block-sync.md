@@ -1,0 +1,23 @@
+---
+purpose: Implementation notes for block synchronisation (RxExtensionLoader, ExtensionAppender, GetBlockIds negotiation)
+---
+
+# Block sync: extension loading and the block id negotiation
+
+## A block id from the network is not necessarily a durable block id
+
+`GetBlockIds`/`BlockIds` carry whatever the peer currently calls its tip, and for a node that is mining microblocks that is a *liquid* block id: the key block plus the microblocks applied so far. Every further microblock changes it, and none of the intermediate values is the id the block is finally persisted under. A node therefore stops resolving an id it advertised seconds earlier, without having rolled anything back and without being on a fork. `History.blockIdsAfter` resolves candidates through `heightOf`, which knows persisted ids and the current liquid id only, and returns `Seq.empty` when it recognises none of them.
+
+This is why the requester must never send a *single* recently-received id as its only anchor. A normal request (`ApplierState.Idle`) sends `lastBlockIds()`, tens of persisted ids ending at genesis, so something in it always resolves. The optimistic request (`ApplierState.Applying(None, ext)`, issued while the previous extension is still being applied) used to send only `ext.blocks.map(_.id()).reverse`, frequently one id, always the newest and therefore the most perishable. It now sends those ids *followed by* `lastBlockIds()`: the extension's own ids first so a peer that still holds them answers with the shortest useful extension, local history after them so the request cannot come back empty.
+
+The failure this caused was not subtle, and it is worth knowing the shape because it looks like a consensus bug. In `WideStateGenerationSuite` on CI, all three non-mining nodes repeatedly blacklisted the miner with `Peer did not return any signatures and is likely on a fork` and `GenericError("Fork contains no common parent")`, 60 events in one run, every single one following an optimistic request and none following a normal one. There was no fork: the peers' chains were a strict prefix of the miner's, identical block ids at every shared height. Each blacklist closed the connection, which dropped the miner below its configured mining quorum (`Quorum not available (0/3)`), so block production stalled, the peers fell further behind, transactions stopped reaching the miner, and its UTX pool sat empty at 0 while the peers held thousands.
+
+The timing is the part that makes it deterministic under load rather than a rare race. The optimistic request is not sent when the extension arrives; `syncNext` holds while the applier state is `Applying(Some(buffer), _)` (`Holding on requesting next sigs`, logged 231 times on one node in one run) and only fires when the buffer drains. Measured gap between an extension being buffered and the request that reuses its ids: median 8 to 15 seconds, maximum 136. Against a liquid id that stays resolvable for one microblock interval, 1 second in that suite. The anchor is stale by one to two orders of magnitude whenever the node is actually behind, which is exactly when it needs to sync.
+
+## An empty `BlockIds` only proves something when the request was anchored
+
+`onNewSignatures` treats an empty reply as evidence the peer is on a fork and blacklists it. That inference holds for a request built from `lastBlockIds()`, since a peer sharing any history at all must recognise one of those ids. It does not hold for an optimistic request, whose ids can simply have expired, so an empty answer there is correct behaviour by the peer and is now met with `withIdleLoader` and a trace, no blacklist. `LoaderState.ExpectingSignatures` carries an `optimistic` flag so the two cases can be told apart at all.
+
+Going idle without re-requesting is deliberate: the applier is still busy, so an immediate retry would rebuild the same optimistic request and spin. The next score update re-syncs, by which time the applier has usually drained and the request is anchored in history. This mirrors what `onExtensionApplied` already does on its `buf == None` path, which also returns to `Idle` without calling `syncNext`.
+
+With both changes `WideStateGenerationSuite` goes from a 15m40s timeout to passing in 2m57s with all four nodes converged, and the empty-reply blacklist disappears entirely (the tolerant branch is never reached, because anchored requests stop coming back empty). `Fork contains no common parent` drops from 54 to 6 and still happens occasionally: an optimistic request is still asking about blocks the requester has not applied yet, so the extension it gets back can still reference a parent it does not hold. That path is inherent to optimistic loading and is a separate question from the blacklisting.

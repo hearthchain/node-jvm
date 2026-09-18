@@ -24,6 +24,8 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
   val MaxRollback = 10
   type Applier = (Channel, ExtensionBlocks) => Task[Either[ValidationError, Option[BigInt]]]
   val simpleApplier: Applier = (_, _) => Task(Right(Some(0)))
+  // Keeps the applier busy so the loader stays in ApplierState.Applying, which is what makes a request optimistic.
+  val neverApplier: Applier = (_, _) => Task.never
 
   override def testSchedulerName: String = "test-rx-extension-loader"
 
@@ -158,6 +160,49 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         _ <- send(blocks)((ch, allBlocks(101)))
       } yield {
         applied shouldBe true
+      })
+    }
+  }
+
+  // An optimistic request is issued while the previous extension is still being applied, and the only ids it used to
+  // carry were that extension's - liquid block ids, which stop resolving on the peer as soon as it appends the next
+  // microblock. Under load the request goes out tens of seconds later, so those ids are reliably stale by then.
+  "should anchor an optimistic block id request in local history" in {
+    val allBlocks = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = neverApplier) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+      } yield {
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.take(2) shouldBe Seq(allBlocks(101).id(), allBlocks(100).id())
+        optimistic should contain(allBlocks(99).id())
+      })
+    }
+  }
+
+  "should not blacklist a peer that returns no ids for an optimistic request" in {
+    val allBlocks = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = neverApplier) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds]
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock]
+        _ = ch.readOutbound[GetBlock]
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+        _ = ch.readOutbound[GetBlockIds] // the optimistic request
+        _ <- send(sigs)((ch, BlockIds(Seq.empty)))
+      } yield {
+        ch.isOpen shouldBe true
       })
     }
   }
