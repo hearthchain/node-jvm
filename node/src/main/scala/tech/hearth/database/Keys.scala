@@ -21,6 +21,16 @@ object BalanceNode {
   val SizeInBytes: Int   = 12
 }
 
+case class CurrentStake(amount: Long, height: Height, prevHeight: Height)
+object CurrentStake {
+  val Unavailable: CurrentStake = CurrentStake(0L, Height(0), Height(0))
+}
+
+case class StakeNode(amount: Long, prevHeight: Height)
+object StakeNode {
+  val Empty: StakeNode = StakeNode(0L, Height(0))
+}
+
 case class CurrentVolumeAndFee(volume: Long, fee: Long, height: Height, prevHeight: Height)
 object CurrentVolumeAndFee {
   val Unavailable: CurrentVolumeAndFee = CurrentVolumeAndFee(0, 0, Height(0), Height(0))
@@ -351,4 +361,26 @@ object Keys {
   // without an unbounded scan - the same role reservedAmountKeysAt plays for reservedAmountHistory.
   def workDoneKeysAt(height: Height): Key[Seq[ByteStr]] =
     Key(WorkDoneKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  /** A stake is stored exactly like a HRTH balance: the current amount plus the height it was set at, and a
+    * prevHeight-linked node per change so a rollback can restore the previous one. The height is what makes the
+    * period derivable - see Blockchain.stakeAt - so nothing here is keyed by period.
+    */
+  def stakeBalanceAt(addressId: AddressId, height: Height): Key[StakeNode] =
+    Key(StakeBalanceHistory, hBytes(addressId.toByteArray, height), readStakeNode, writeStakeNode)
+
+  def stakeBalance(addressId: AddressId): Key[CurrentStake] =
+    Key(StakeBalance, addressId.toByteArray, readCurrentStake, writeCurrentStake)
+
+  /** The candidate set the period-boundary payout enumerates, holding each address's last stake-change height.
+    *
+    * An entry is kept while the address either still has a stake or changed one during the current period - the
+    * second half matters because an address that released mid-period is still owed a payout for that period, and
+    * the height in the value is what lets the prune decide that without reading the stake itself.
+    *
+    * This is a hint, not consensus state: the payout resolves every candidate through the stake ledger anyway, so
+    * an extra entry costs one read and filters to nothing. Only under-inclusion could change a result.
+    */
+  def activeStake(addressId: AddressId): Key[Option[Height]] =
+    Key.opt(ActiveStake, addressId.toByteArray, bs => tech.hearth.state.Height(Ints.fromByteArray(bs)), _.toByteArray)
 }

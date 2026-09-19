@@ -3,6 +3,7 @@ package tech.hearth.network
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
+import tech.hearth.network.RxExtensionLoader.ExtensionOutcome
 import tech.hearth.network.RxScoreObserver.ChannelClosedAndSyncWith
 import tech.hearth.test.FreeSpec
 import tech.hearth.transaction.TxValidationError.GenericError
@@ -14,6 +15,8 @@ import monix.eval.{Coeval, Task}
 import monix.reactive.Observable
 import monix.reactive.subjects.PublishSubject as PS
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.concurrent.duration.*
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
@@ -22,8 +25,10 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
   import RxExtensionLoaderSpec.*
 
   val MaxRollback = 10
-  type Applier = (Channel, ExtensionBlocks) => Task[Either[ValidationError, Option[BigInt]]]
-  val simpleApplier: Applier = (_, _) => Task(Right(Some(0)))
+  type Applier = (Channel, ExtensionBlocks) => Task[Either[ValidationError, ExtensionOutcome]]
+  val simpleApplier: Applier = (_, _) => Task(Right(ExtensionOutcome.Appended(Some(0))))
+  // Keeps the applier busy so the loader stays in ApplierState.Applying, which is what makes a request optimistic.
+  val neverApplier: Applier = (_, _) => Task.never
 
   override def testSchedulerName: String = "test-rx-extension-loader"
 
@@ -31,7 +36,8 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
       lastBlockIds: Seq[ByteStr] = Seq.empty,
       timeOut: FiniteDuration = 1.day,
       cacheTimeout: FiniteDuration = 3.minute,
-      applier: Applier = simpleApplier
+      applier: Applier = simpleApplier,
+      maxRollback: Int = MaxRollback
   )(
       f: (
           InMemoryInvalidBlockStorage,
@@ -54,7 +60,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         cacheTimeout,
         isLightMode = false,
         blacklistOnScoreMismatch = false,
-        Coeval(lastBlockIds.reverse.take(MaxRollback)),
+        Coeval(lastBlockIds.reverse.take(maxRollback)),
         op,
         invBlockStorage,
         blocks,
@@ -143,7 +149,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     val successfulApplier: Applier = (_, _) =>
       Task {
         applied = true
-        Right(None)
+        Right(ExtensionOutcome.Appended(None))
       }
     val allBlocks = Seq.tabulate(102)(block)
     withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = successfulApplier) { (_, blocks, sigs, ccsw, _) =>
@@ -160,6 +166,101 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         applied shouldBe true
       })
     }
+  }
+
+  // The extension's own ids are liquid and expire; only persisted history guarantees a resolvable anchor.
+  "should anchor an optimistic block id request in local history" in {
+    val allBlocks = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = neverApplier) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+      } yield {
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.take(2) shouldBe Seq(allBlocks(101).id(), allBlocks(100).id())
+        optimistic should contain(allBlocks(99).id())
+      })
+    }
+  }
+
+  // GetBlockIds is capped at BlockIdSeqSpec.MaxIds on the wire, and LegacyFrameCodec makes the *receiver* blacklist
+  // the sender of an oversize frame. lastBlockIds can be max-rollback + 1 long and an extension up to max-rollback,
+  // so concatenating them unguarded overruns the cap exactly when a lagging node is catching up.
+  "should keep an optimistic block id request within the wire limit" in {
+    val allBlocks = Seq.tabulate(BlockIdSeqSpec.MaxIds + 2)(block)
+    val history   = allBlocks.view.take(BlockIdSeqSpec.MaxIds).map(_.id()).toSeq
+    withExtensionLoader(history, applier = neverApplier, maxRollback = BlockIdSeqSpec.MaxIds - 1) { (_, blocks, sigs, ccsw, _) =>
+      val ch   = new EmbeddedChannel()
+      val last = allBlocks.takeRight(2)
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe BlockIdSeqSpec.MaxIds - 1
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock]
+        _ = ch.readOutbound[GetBlock]
+        _ <- send(blocks)((ch, last.head))
+        _ <- send(blocks)((ch, last.last))
+      } yield {
+        val anchors    = history.reverse.take(BlockIdSeqSpec.MaxIds - 1)
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.size shouldBe BlockIdSeqSpec.MaxIds
+        // the persisted anchors guarantee a non-empty reply, so the extension ids are the ones that give way
+        optimistic.takeRight(anchors.size) shouldBe anchors
+        optimistic.head shouldBe last.last.id()
+      })
+    }
+  }
+
+  // An optimistically loaded extension is anchored on the ids of the one still being applied. A dropped extension
+  // leaves the chain untouched without reporting an error, so those ids resolve to nothing and applying the buffered
+  // extension reports a fork that does not exist.
+  "should discard an optimistically loaded extension when the previous one was dropped" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Dropped) shouldBe 1
+  }
+
+  "should apply an optimistically loaded extension when the previous one was appended" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Appended(Some(0))) shouldBe 2
+  }
+
+  /** Drives the loader to the state where one extension is being applied and a second has been optimistically loaded
+    * and buffered, finishes the first one with `first`, and answers how many extensions reached the applier.
+    */
+  private def appliersRunAfterFirstExtension(first: ExtensionOutcome): Int = {
+    val gate     = Promise[Unit]()
+    val appliers = new AtomicInteger(0)
+    val applier: Applier = (_, _) =>
+      Task(appliers.incrementAndGet()).flatMap { n =>
+        if (n == 1) Task.fromFuture(gate.future).map(_ => Right(first))
+        else Task.now(Right(ExtensionOutcome.Appended(Some(0))))
+      }
+
+    val allBlocks = Seq.tabulate(103)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = applier) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.slice(97, 102).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+        // the first extension is now being applied, so this request is the optimistic one
+        _ = ch.readOutbound[GetBlockIds].ids.head shouldBe allBlocks(101).id()
+        _ <- send(sigs)((ch, BlockIds(Seq(allBlocks(101).id(), allBlocks(102).id()))))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(102).id()
+        _ <- send(blocks)((ch, allBlocks(102)))
+        _ = gate.success(())
+        _ <- Future(Thread.sleep(500))
+      } yield ())
+    }
+    appliers.get()
   }
 
   "should blacklist peer after receiving empty block id list" in {

@@ -93,7 +93,10 @@ enum KeyTag {
     SettledAmountKeysAtHeight,
     WorkDoneHistory,
     WorkDone,
-    WorkDoneKeysAtHeight
+    WorkDoneKeysAtHeight,
+    StakeBalanceHistory,
+    StakeBalance,
+    ActiveStake
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }

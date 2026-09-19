@@ -136,6 +136,23 @@ repo never runs an Rpm task regardless (Debian + Universal tarballs only). None 
 retract one. `gitDescribedVersion`'s `excludeLintKeys` entry needs the `git.` prefix (`git.gitDescribedVersion`,
 `SbtGit.GitKeys`), unlike the others.
 
+One of the 24 was *not* dead weight, and silencing it hid a real bug for months: `Global / maxParallelSuites`. The lint was right that nothing read it, but the reason was a shadowed assignment, not an idle plugin - see the next section. A lint entry for a key this repo's own code defines and reads deserves more suspicion than one for a packaging plugin's scope bridge; the `excludeLintKeys` list is the right fix only for the latter.
+
+## A second assignment of a Global key replaces the first, it does not add to it
+
+`concurrentRestrictions` is Global-scoped, and `IntegrationTestsPlugin` used to set it (limiting `Tags.ForkedTestGroup` to `maxParallelSuites`) alongside `build.sbt`'s own `inScope(Global)` assignment (limiting `Tags.Test`). Two assignments of one key in one scope is last-writer-wins, and `.sbt` files load after an AutoPlugin's `projectSettings`, so `build.sbt` won and the plugin's limit never existed:
+
+```
+$ sbt --client -Dhearth.it.max-parallel-suites=4 "print Global/concurrentRestrictions"
+* Limit test to 8
+```
+
+`-Dhearth.it.max-parallel-suites` was therefore a no-op on every CI run and in every invocation documented in `CLAUDE.md`. node-it's observed 4-way suite concurrency on a GitHub runner came from `Tags.limit(Tags.Test, min(SystemProcessors, 8))` with `SystemProcessors = 4`, which coincidentally matched the flag CI passed. Both limits now live in one `Seq` in `build.sbt`; the plugin keeps only the `maxParallelSuites` setting itself.
+
+`checkTestLimits` (`build.sbt`, sequenced into `compilePR`) now asserts the ForkedTestGroup cap is actually in force, so a third assignment of the key fails the build instead of quietly winning. Note that the `:=` deliberately replaces sbt's own default rule set rather than extending it; if you need one of those defaults back, add it to this `Seq` explicitly.
+
+Two things to know when checking this by hand. `print Global/concurrentRestrictions` is the authoritative check - `inspect` will happily show a defining assignment that lost. And `sbt --client -D...` sets the property on the *thin client*, not on the long-lived server that evaluates the setting, so the flag appears to be ignored even after the fix; use `sbt --server -D... --batch` (what CI runs) to verify a `-D`-driven setting.
+
 ## SBT 2 action-cache: side-effecting tasks need `Def.uncached`
 
 sbt 2's `ActionCache` treats every task as cacheable by default and, on a cache hit, replays the cached result

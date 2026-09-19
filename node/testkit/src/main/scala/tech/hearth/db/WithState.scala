@@ -411,6 +411,36 @@ trait WithDomain extends WithState {
         blockchain.registeredEnclaves(at) :+ enclave
     }
 
+  /** A period's committee and its tracked work, injected. `workDone` is written only by SettleTransactionDiff,
+    * which cannot be driven to its accept path for the same reason blockchainWithRegisteredEnclave exists - so
+    * anything reading a period's work (GeneratingBalanceProvider's workBoost, StakingPayout's issuance) has to be
+    * handed it directly.
+    */
+  def blockchainWithCommitteeWork(
+      blockchain: Blockchain,
+      period: GenerationPeriod,
+      committee: Seq[CommittedGenerator],
+      work: Map[Address, Long]
+  ): Blockchain =
+    new Blockchain {
+      export blockchain.{committedGenerators as _, workDone as _, *}
+      override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] =
+        if (at == period) committee.toIndexedSeq else blockchain.committedGenerators(at)
+      override def workDone(validator: Address, at: GenerationPeriod): Long =
+        if (at == period) work.getOrElse(validator, 0L) else blockchain.workDone(validator, at)
+    }
+
+  /** A period's stakes, injected, so a case can start from a chosen set without spending periods getting there -
+    * StakeTransactionDiffTest covers that a real StakeTransaction produces them.
+    */
+  def blockchainWithStakes(blockchain: Blockchain, staked: Map[GenerationPeriod, Seq[Stake]]): Blockchain =
+    new Blockchain {
+      export blockchain.{stakes as _, stakeAt as _, *}
+      override def stakes(at: GenerationPeriod): Seq[Stake] = staked.getOrElse(at, blockchain.stakes(at))
+      override def stakeAt(address: Address, at: GenerationPeriod): Long =
+        staked.get(at).fold(blockchain.stakeAt(address, at))(_.find(_.address == address).fold(0L)(_.amount))
+    }
+
   def withDomain[A](
       settings: HearthSettings = DomainPresets.SettingsFromDefaultConfig,
       balances: Seq[AddrWithBalance] = Seq.empty,
