@@ -28,7 +28,16 @@ case class ExtensionBlocks(remoteScore: BigInt, blocks: Seq[Block], snapshots: M
 
 object RxExtensionLoader extends ScorexLogging {
 
-  type ApplyExtensionResult = Either[ValidationError, Option[BigInt]]
+  /** What appending an extension did to the chain. An extension is dropped without an error when its declared score
+    * is no longer ahead of ours, and its blocks are then not in the chain at all - so anything anchored on their ids
+    * has no parent left to attach to.
+    */
+  enum ExtensionOutcome {
+    case Appended(newLocalScore: Option[BigInt])
+    case Dropped
+  }
+
+  type ApplyExtensionResult = Either[ValidationError, ExtensionOutcome]
   private val dummy = new Object()
 
   type BlockWithSnapshot = (Channel, Block, Option[BlockSnapshotResponse])
@@ -306,7 +315,7 @@ object RxExtensionLoader extends ScorexLogging {
           maybeBuffer match {
             case None =>
               applicationResult match {
-                case Right(Some(newLocalScore)) if newLocalScore != applying.remoteScore && state.loaderState == Idle =>
+                case Right(ExtensionOutcome.Appended(Some(newLocalScore))) if newLocalScore != applying.remoteScore && state.loaderState == Idle =>
                   val reason = s"New local score $newLocalScore does not match declared remote score ${applying.remoteScore}"
                   log.warn(reason)
                   if (blacklistOnScoreMismatch) {
@@ -318,13 +327,15 @@ object RxExtensionLoader extends ScorexLogging {
               state.copy(applierState = ApplierState.Idle)
             case Some(Buffer(nextChannel, nextExtension)) =>
               applicationResult match {
-                case Left(_) =>
-                  log.debug(s"Failed to apply $extension, discarding cached as well")
-                  syncNext(state.copy(applierState = ApplierState.Idle))
-                case Right(_) =>
+                case Right(ExtensionOutcome.Appended(_)) =>
                   log.trace(s"Successfully applied $extension, starting to apply an optimistically loaded one: $nextExtension")
                   extensions.onNext(nextChannel -> nextExtension)
                   syncNext(state.copy(applierState = ApplierState.Applying(None, nextExtension)))
+                // A drop is not an error, but it leaves the chain exactly as it was, and the buffered extension is
+                // anchored on ids from this one - applying it would report a fork rather than find its parent.
+                case _ =>
+                  log.debug(s"Did not apply $extension, discarding cached as well")
+                  syncNext(state.copy(applierState = ApplierState.Idle))
               }
           }
       }
