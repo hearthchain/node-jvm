@@ -3,7 +3,7 @@ package tech.hearth.state.diffs
 import cats.syntax.either.*
 import tech.hearth.account.Address
 import tech.hearth.common.state.ByteStr
-import tech.hearth.state.{Blockchain, LeaseBalance, StateSnapshot}
+import tech.hearth.state.{Blockchain, GenerationPeriod, LeaseBalance, StateSnapshot, safeSum}
 import tech.hearth.transaction.Asset
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
@@ -16,6 +16,13 @@ object BalanceDiffValidation {
     def balance(address: Address, mayBeAssetId: Asset = Hearth): Long
     def leaseBalance(address: Address): LeaseBalance
     def generationDeposit(address: Address): Long
+    def lockedStake(address: Address): Long
+    def stakedForPeriod(address: Address): Long
+
+    /** What `snapshot` restates for `address` for the *next* period, if anything - the only period a
+      * StakeTransaction can name, and so the only one that can change this address's lock.
+      */
+    def nextPeriodStakes(snapshot: StateSnapshot, address: Address): Option[Long]
   }
 
   object BalanceProvider {
@@ -23,12 +30,25 @@ object BalanceDiffValidation {
       override def balance(address: Address, mayBeAssetId: Asset): Long = blockchain.balance(address, mayBeAssetId)
       override def leaseBalance(address: Address): LeaseBalance         = blockchain.leaseBalance(address)
       override def generationDeposit(address: Address): Long            = blockchain.generationDeposit(address)
+      override def lockedStake(address: Address): Long                  = blockchain.lockedStake(address)
+      override def stakedForPeriod(address: Address): Long              = blockchain.stakedForPeriod(address)
+
+      override def nextPeriodStakes(snapshot: StateSnapshot, address: Address): Option[Long] =
+        blockchain.currentGenerationPeriod.flatMap { period =>
+          val fs = blockchain.settings.functionalitySettings
+          snapshot.nextStakes
+            .findLast(s => s.address == address && GenerationPeriod.from(s.periodStart, fs) == period.next)
+            .map(_.amount)
+        }
     }
 
     val Empty: BalanceProvider = new BalanceProvider {
-      override def balance(address: Address, mayBeAssetId: Asset): Long = 0
-      override def leaseBalance(address: Address): LeaseBalance         = LeaseBalance.empty
-      override def generationDeposit(address: Address): Long            = 0
+      override def balance(address: Address, mayBeAssetId: Asset): Long                      = 0
+      override def leaseBalance(address: Address): LeaseBalance                              = LeaseBalance.empty
+      override def generationDeposit(address: Address): Long                                 = 0
+      override def lockedStake(address: Address): Long                                       = 0
+      override def stakedForPeriod(address: Address): Long                                   = 0
+      override def nextPeriodStakes(snapshot: StateSnapshot, address: Address): Option[Long] = None
     }
   }
 
@@ -48,36 +68,54 @@ object BalanceDiffValidation {
         acc: Address,
         hearthAfter: Long,
         leaseAfter: LeaseBalance,
-        additionalDeposit: Long
+        additionalDeposit: Long,
+        stakedAfter: Long
     ): Either[(Address, String), Unit] = {
       val hearthBefore  = b.balance(acc)
       val depositBefore = b.generationDeposit(acc)
       val leaseBefore   = b.leaseBalance(acc)
 
-      val depositAfter              = depositBefore + additionalDeposit
-      val hearthWithoutDepositAfter = hearthAfter - depositAfter
+      // Staked HRTH is locked the same way a generation deposit is, so both are folded into one "locked" term the
+      // checks below are written against. They are still reported and attributed separately, so that an error
+      // message names whichever of the two the sender actually ran into.
+      val stakedBefore = b.lockedStake(acc)
+      val lockedBefore = depositBefore + stakedBefore
+      val depositAfter = depositBefore + additionalDeposit
+      // safeSum, not +: stakedAfter comes straight off a transaction and is bounded only by TxNonNegativeAmount, so
+      // a raw sum could wrap negative and turn every check below into a pass, recording a stake with no funds
+      // behind it. Everything else in this neighbourhood (Portfolio.combine, StateSnapshot.balances) already
+      // safeSums for the same reason.
+      val lockedAfterE = safeSum(depositAfter, stakedAfter, "Locked")
 
       val leaseOutDiff = leaseAfter.out - leaseBefore.out
 
       @inline def ifNotZero(label: String, value: Long): String = if (value == 0) "" else s", $label=$value"
-      @inline def balancesStr(hearth: Long, lease: LeaseBalance, deposit: Long): String =
-        s"spendable=${hearth - lease.out - deposit}" + ifNotZero("hearth", hearth) + ifNotZero("lease", lease.out) + ifNotZero("deposit", deposit)
+      @inline def balancesStr(hearth: Long, lease: LeaseBalance, deposit: Long, staked: Long): String =
+        s"spendable=${hearth - lease.out - deposit - staked}" + ifNotZero("hearth", hearth) + ifNotZero("lease", lease.out) +
+          ifNotZero("deposit", deposit) + ifNotZero("staked", staked)
 
-      lazy val stateChanges =
-        s"before: ${balancesStr(hearthBefore, leaseBefore, depositBefore)}, after: ${balancesStr(hearthAfter, leaseAfter, depositAfter)}"
+      val errorMessage = lockedAfterE.flatMap { lockedAfter =>
+        val hearthWithoutLockedAfter = hearthAfter - lockedAfter
 
-      val errorMessage =
+        lazy val stateChanges =
+          s"before: ${balancesStr(hearthBefore, leaseBefore, depositBefore, stakedBefore)}, " +
+            s"after: ${balancesStr(hearthAfter, leaseAfter, depositAfter, stakedAfter)}"
+
         if (hearthAfter < 0) s"negative hearth balance: before=$hearthBefore, after=$hearthAfter".asLeft
-        else if (hearthWithoutDepositAfter < 0) {
-          if (depositAfter > depositBefore) s"not enough funds for deposit, $stateChanges".asLeft
-          else s"trying to spend a deposit, $stateChanges".asLeft
-        } else if (hearthWithoutDepositAfter < leaseAfter.out) {
-          if (hearthWithoutDepositAfter + leaseAfter.in - leaseAfter.out < 0) s"negative effective balance, $stateChanges".asLeft
+        else if (hearthWithoutLockedAfter < 0) {
+          // Which of the two locks the sender fell short of: the one this transaction raised, if either did.
+          if (stakedAfter > stakedBefore) s"not enough funds to stake, $stateChanges".asLeft
+          else if (depositAfter > depositBefore) s"not enough funds for deposit, $stateChanges".asLeft
+          else if (depositBefore > 0) s"trying to spend a deposit, $stateChanges".asLeft
+          else s"trying to spend a stake, $stateChanges".asLeft
+        } else if (hearthWithoutLockedAfter < leaseAfter.out) {
+          if (hearthWithoutLockedAfter + leaseAfter.in - leaseAfter.out < 0) s"negative effective balance, $stateChanges".asLeft
           else if (leaseOutDiff == 0) s"trying to spend leased money, $stateChanges".asLeft
           else s"leased being more than own, $stateChanges".asLeft
-        } else if (hearthWithoutDepositAfter - leaseAfter.out < 0 && depositBefore > 0)
+        } else if (hearthWithoutLockedAfter - leaseAfter.out < 0 && lockedBefore > 0)
           s"trying to spend either a deposit or leased money, $stateChanges".asLeft
         else Either.unit
+      }
 
       errorMessage.leftMap(err => acc -> s"$err")
     }
@@ -89,7 +127,14 @@ object BalanceDiffValidation {
             val currentLeaseBalance = snapshot.leaseBalances.getOrElse(address, b.leaseBalance(address))
             val depositedOnNext = DepositInEmbers *
               snapshot.nextCommittedGenerators.find(_.sender.toAddress == address).size
-            checkHearth(address, balance, currentLeaseBalance, depositedOnNext).fold(error => List(error), _ => Nil)
+            // lockedStake is the larger of this period's stake and the next one's, so a snapshot restating the
+            // next period's has to be maxed against what this period already locks - it cannot free anything now.
+            // Filtered by period as well as address: a boundary block's snapshot carries StakingPayout's
+            // carry-forward for the period just starting alongside any Stake transaction for the one after, and
+            // taking the last entry blind would compare the wrong period's amount.
+            val restated    = b.nextPeriodStakes(snapshot, address)
+            val stakedAfter = restated.fold(b.lockedStake(address))(amount => math.max(b.stakedForPeriod(address), amount))
+            checkHearth(address, balance, currentLeaseBalance, depositedOnNext, stakedAfter).fold(error => List(error), _ => Nil)
           case _ =>
             Nil
         }

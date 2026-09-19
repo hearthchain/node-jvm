@@ -6,6 +6,8 @@ import com.typesafe.config.Config
 import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.state.{EmissionCurve, GenesisBlockHeight, Height}
+import tech.hearth.transaction.AssetIdLength
+import tech.hearth.transaction.Asset.IssuedAsset
 import pureconfig.*
 import pureconfig.generic.semiauto.deriveReader
 
@@ -82,10 +84,25 @@ case class FunctionalitySettings(
     daoAddress: Option[String] = None,
     blockRewardBoostPeriod: Int = 1000,
     maxValidEndorsers: Int = 5,
-    generationPeriodLength: Int = 1000
+    generationPeriodLength: Int = 1000,
+    // The asset new Cred is issued in at each generation period's end and paid out to stakers - see
+    // docs/notes/cred-economy.md. Base16, like GenesisAssetSettings.id, since it is config text rather than a
+    // decoded id; None means this network runs no Cred economy, and the period-boundary payout does nothing.
+    // Defaulted like daoAddress above, so no CUSTOM config template has to be migrated to add it.
+    credAsset: Option[String] = None
 ) {
   lazy val daoAddressParsed: Either[String, Option[Address]] =
     daoAddress.traverse(Address.fromString).leftMap(_ => "Incorrect dao-address")
+
+  lazy val credAssetParsed: Either[String, Option[IssuedAsset]] =
+    credAsset.traverse { id =>
+      ByteStr
+        .decodeBase16(id)
+        .toEither
+        .leftMap(_ => "Incorrect cred-asset")
+        .filterOrElse(_.arr.length == AssetIdLength, s"cred-asset must be $AssetIdLength bytes")
+        .map(IssuedAsset(_))
+    }
 
   require(featureCheckBlocksPeriod > 0, "feature-check-blocks-period must be greater than 0")
   require(
@@ -93,6 +110,9 @@ case class FunctionalitySettings(
     s"blocks-for-feature-activation must be in range 1 to $featureCheckBlocksPeriod"
   )
   require(generationPeriodLength > 0, "generation-period-length must be greater than 0")
+  // Forced here rather than left to the first period boundary that tries to mint: a typo would otherwise start the
+  // node happily and then fail every boundary block, i.e. stop following the chain a period later.
+  require(credAssetParsed.isRight, credAssetParsed.left.getOrElse(""))
 
   def activationWindowSize(height: Int): Int = featureCheckBlocksPeriod
 
@@ -128,7 +148,8 @@ object FunctionalitySettings {
     daoAddress = Some("thrth1da0fundsmjpfas88ydux2w3t9exjd3d4js77xg"),
     blockRewardBoostPeriod = 2_000,
     maxValidEndorsers = 64,
-    generationPeriodLength = 3000
+    generationPeriodLength = 3000,
+    credAsset = Some(PredefinedSnapshotSettings.TestnetORCRED)
   )
 
   val STAGENET: FunctionalitySettings = apply(
@@ -233,7 +254,8 @@ object PredefinedSnapshotSettings {
     )
   )
 
-  private val TestnetORCRED = "ddffc0847e4b4373163ccfdb088857479e854eb27b833137a4659ad29448f1bf"
+  // Also FunctionalitySettings.TESTNET.credAsset: the asset this network's staking payout mints into.
+  val TestnetORCRED = "ddffc0847e4b4373163ccfdb088857479e854eb27b833137a4659ad29448f1bf"
   // Same 5%/95% split as MAINNET (see above); short half-life instead (RewardsSettings.TESTNET) so the decay curve
   // is actually observable on a running testnet.
   val TESTNET: Seq[PredefinedSnapshotSettings] = Seq(

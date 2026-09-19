@@ -249,6 +249,17 @@ object PBTransactions {
           networkId
         )
 
+      case Data.Stake(StakeTransactionData(periodStart, amount, `empty`)) =>
+        vt.StakeTransaction.create(
+          sender.toPublicKey,
+          Height(periodStart),
+          amount,
+          feeAmount,
+          timestamp,
+          proofs,
+          networkId
+        )
+
       case _ =>
         Left(TxValidationError.UnsupportedTransactionType)
     }
@@ -348,6 +359,11 @@ object PBTransactions {
             pckCaIssuerChain.map(_.toByteString)
           )
         )
+        PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
+
+      case tx: vt.StakeTransaction =>
+        import tx.*
+        val data = Data.Stake(StakeTransactionData(periodStart.toInt, amount.value))
         PBTransactions.create(sender, networkId, fee.value, timestamp, proofs, data)
 
       case _ =>

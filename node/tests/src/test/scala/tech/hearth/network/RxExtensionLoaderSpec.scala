@@ -24,6 +24,8 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
   val MaxRollback = 10
   type Applier = (Channel, ExtensionBlocks) => Task[Either[ValidationError, Option[BigInt]]]
   val simpleApplier: Applier = (_, _) => Task(Right(Some(0)))
+  // Keeps the applier busy so the loader stays in ApplierState.Applying, which is what makes a request optimistic.
+  val neverApplier: Applier = (_, _) => Task.never
 
   override def testSchedulerName: String = "test-rx-extension-loader"
 
@@ -31,7 +33,8 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
       lastBlockIds: Seq[ByteStr] = Seq.empty,
       timeOut: FiniteDuration = 1.day,
       cacheTimeout: FiniteDuration = 3.minute,
-      applier: Applier = simpleApplier
+      applier: Applier = simpleApplier,
+      maxRollback: Int = MaxRollback
   )(
       f: (
           InMemoryInvalidBlockStorage,
@@ -54,7 +57,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         cacheTimeout,
         isLightMode = false,
         blacklistOnScoreMismatch = false,
-        Coeval(lastBlockIds.reverse.take(MaxRollback)),
+        Coeval(lastBlockIds.reverse.take(maxRollback)),
         op,
         invBlockStorage,
         blocks,
@@ -158,6 +161,55 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         _ <- send(blocks)((ch, allBlocks(101)))
       } yield {
         applied shouldBe true
+      })
+    }
+  }
+
+  // The extension's own ids are liquid and expire; only persisted history guarantees a resolvable anchor.
+  "should anchor an optimistic block id request in local history" in {
+    val allBlocks = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = neverApplier) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+      } yield {
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.take(2) shouldBe Seq(allBlocks(101).id(), allBlocks(100).id())
+        optimistic should contain(allBlocks(99).id())
+      })
+    }
+  }
+
+  // GetBlockIds is capped at BlockIdSeqSpec.MaxIds on the wire, and LegacyFrameCodec makes the *receiver* blacklist
+  // the sender of an oversize frame. lastBlockIds can be max-rollback + 1 long and an extension up to max-rollback,
+  // so concatenating them unguarded overruns the cap exactly when a lagging node is catching up.
+  "should keep an optimistic block id request within the wire limit" in {
+    val allBlocks = Seq.tabulate(BlockIdSeqSpec.MaxIds + 2)(block)
+    val history   = allBlocks.view.take(BlockIdSeqSpec.MaxIds).map(_.id()).toSeq
+    withExtensionLoader(history, applier = neverApplier, maxRollback = BlockIdSeqSpec.MaxIds - 1) { (_, blocks, sigs, ccsw, _) =>
+      val ch   = new EmbeddedChannel()
+      val last = allBlocks.takeRight(2)
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe BlockIdSeqSpec.MaxIds - 1
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock]
+        _ = ch.readOutbound[GetBlock]
+        _ <- send(blocks)((ch, last.head))
+        _ <- send(blocks)((ch, last.last))
+      } yield {
+        val anchors    = history.reverse.take(BlockIdSeqSpec.MaxIds - 1)
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.size shouldBe BlockIdSeqSpec.MaxIds
+        // the persisted anchors guarantee a non-empty reply, so the extension ids are the ones that give way
+        optimistic.takeRight(anchors.size) shouldBe anchors
+        optimistic.head shouldBe last.last.id()
       })
     }
   }

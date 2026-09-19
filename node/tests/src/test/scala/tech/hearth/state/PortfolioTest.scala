@@ -47,6 +47,22 @@ class PortfolioTest extends FunSuite {
     p.balance shouldBe 0
   }
 
+  test("staked hearth is neither spendable nor part of the effective balance") {
+    val p = Portfolio(balance = 100, staked = 30)
+
+    p.spendableBalance shouldBe 70
+    // Unlike a lease, staking costs forging weight too - see GeneratingBalanceProvider.unstakedEffectiveBalance
+    p.effectiveBalance(false) shouldBe Right(70)
+  }
+
+  test("combines staked balances") {
+    Portfolio(staked = 10).combine(Portfolio(staked = 20)) shouldBe Right(Portfolio(staked = 30))
+  }
+
+  test("pessimistic - staked balance is retained") {
+    Portfolio(balance = 100, staked = 30).pessimistic.staked shouldBe 30
+  }
+
   test("prevents overflow of Hearth") {
     Portfolio(Long.MaxValue - 1L).combine(Portfolio(Long.MaxValue - 2L)) shouldBe Left("Hearth balance sum overflow")
   }

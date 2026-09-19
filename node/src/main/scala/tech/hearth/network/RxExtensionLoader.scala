@@ -80,9 +80,14 @@ object RxExtensionLoader extends ScorexLogging {
               state
             case LoaderState.Idle =>
               val maybeKnownSigs = state.applierState match {
-                case ApplierState.Idle                => Some((lastBlockIds(), false))
-                case ApplierState.Applying(None, ext) => Some((ext.blocks.map(_.id()).reverse, true))
-                case _                                => None
+                case ApplierState.Idle => Some((lastBlockIds(), false))
+                // Liquid ids expire within a microblock interval, so persisted history has to follow them, and it is
+                // the half that must survive the wire cap. See docs/notes/block-sync.md.
+                case ApplierState.Applying(None, ext) =>
+                  val history = lastBlockIds()
+                  val hint    = ext.blocks.map(_.id()).reverse.take((BlockIdSeqSpec.MaxIds - history.size).max(0))
+                  Some(((hint ++ history).distinct, true))
+                case _ => None
               }
               maybeKnownSigs match {
                 case Some((knownSigs, optimistic)) =>
@@ -130,7 +135,9 @@ object RxExtensionLoader extends ScorexLogging {
           peerDatabase.blacklistAndClose(ch, s"Peer did not return any signatures and is likely on a fork")
           syncNext(state.withIdleLoader)
         case LoaderState.ExpectingSignatures(c, known, _) if c.channel == ch =>
-          val (_, unknown) = sigs.ids.span(id => known.contains(id))
+          // `known` now carries the whole anchor list, so membership has to be a set lookup rather than a Seq scan.
+          val knownIds     = known.toSet
+          val (_, unknown) = sigs.ids.span(knownIds.contains)
 
           val firstInvalid = sigs.ids.view.flatMap { sig =>
             invalidBlocks.find(sig).map(sig -> _)

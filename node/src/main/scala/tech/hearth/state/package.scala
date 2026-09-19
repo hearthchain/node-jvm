@@ -124,6 +124,7 @@ package object state {
     def apply(pf: Portfolio): Either[String, BlockFee] = for {
       _ <- Either.raiseWhen(pf.lease != LeaseBalance.empty)("lease balance not allowed in carry fee")
       _ <- Either.raiseWhen(pf.generationDeposit != 0)("generation deposit not allowed in carry fee")
+      _ <- Either.raiseWhen(pf.staked != 0)("stake not allowed in carry fee")
       _ <- Either.raiseWhen(pf.balance < 0)("carry fee can not be negative")
       _ <- Either.raiseWhen(pf.assets.values.exists(_ < 0))("asset carry fee can not be negative")
     } yield pf

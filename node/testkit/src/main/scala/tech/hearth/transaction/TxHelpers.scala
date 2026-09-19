@@ -473,6 +473,22 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
 
+  /** `periodStart` has no sensible default: StakeTransactionDiff requires it to be the *next* period's start, so a
+    * caller has to read it off the chain under test (`d.blockchain.currentGenerationPeriod.get.next.start`).
+    */
+  def stake(
+      sender: SigningKey = defaultSigner,
+      periodStart: Height,
+      amount: Long = 1.hearth,
+      fee: Long = FeeConstants(TransactionType.Stake) * FeeUnit,
+      timestamp: TxTimestamp = timestamp,
+      networkId: NetworkId = NetworkId.current
+  ): StakeTransaction =
+    StakeTransaction
+      .create(PublicKey(sender.publicKey), periodStart, amount, fee, timestamp, Proofs.empty, networkId)
+      .map(_.signWith(sender))
+      .explicitGet()
+
   def withdraw(
       sender: SigningKey = defaultSigner,
       fromMiner: Address = secondAddress,

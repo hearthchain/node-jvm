@@ -9,6 +9,8 @@ import java.lang.annotation.Target;
 
 @TagAnnotation
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.TYPE})
+// TYPE only: loadTestNames discovers carriers with Class.isAnnotationPresent, so a method-level tag would be
+// excluded from the integration job and never selected by the load job, i.e. silently stop running.
+@Target(ElementType.TYPE)
 public @interface LoadTest {
 }
