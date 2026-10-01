@@ -157,7 +157,7 @@ Two things to know when checking this by hand. `print Global/concurrentRestricti
 
 sbt 2's `ActionCache` treats every task as cacheable by default and, on a cache hit, replays the cached result
 *without re-running the body*. A task whose only job is an out-of-band filesystem write sbt's output tracking can't
-see (e.g. `stageForDocker`'s `IO.copyFile` into `docker/target/**`, not a declared task output) silently
+see (e.g. `stageForDocker`'s `IO.copyFile` into `docker/target/**`, or `node-it/docker`'s image in the docker daemon) silently
 no-ops on a cache hit - `setup-java`'s `cache: 'sbt'` persists that cache *across* CI runs, so a fresh checkout with
 an empty `docker/target/` can still hit stale and skip the copy, breaking `node-it/docker`'s later `docker build`.
 Same class of bug already fixed for `classpathOrdering`, `compilePRRaw`, `IntegrationTestsPlugin`'s
