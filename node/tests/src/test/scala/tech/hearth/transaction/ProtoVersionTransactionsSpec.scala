@@ -117,6 +117,21 @@ class ProtoVersionTransactionsSpec extends FreeSpec {
       decode(base64Str) shouldBe tx
     }
 
+    "StakeTransaction" in {
+      val tx        = TxHelpers.stake(Account, periodStart = Height(3), amount = 100L, fee = MinFee, timestamp = Now)
+      val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(tx)))
+      decode(base64Str) shouldBe tx
+    }
+
+    // 0 is a meaningful amount for this type (it releases the stake), so it has to survive the wire rather than
+    // being read back as an absent field
+    "StakeTransaction releasing the whole stake" in {
+      val tx        = TxHelpers.stake(Account, periodStart = Height(3), amount = 0L, fee = MinFee, timestamp = Now)
+      val base64Str = Base64.encode(PBUtils.encodeDeterministic(PBTransactions.protobuf(tx)))
+      decode(base64Str) shouldBe tx
+      decode(base64Str).asInstanceOf[StakeTransaction].amount.value shouldBe 0L
+    }
+
     "SettleTransaction" in {
       val settlements = Seq(SettleTransaction.Settlement(Account.toAddress, TestAsset, TxNonNegativeAmount.unsafeFrom(100L)))
       val tx          = TxHelpers.settle(Account, settlements = settlements, fee = MinFee, timestamp = Now)

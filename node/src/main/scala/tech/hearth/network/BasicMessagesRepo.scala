@@ -115,6 +115,8 @@ trait BlockIdSeqSpec[A <: AnyRef] extends MessageSpec[A] {
 
   override def serializeData(v: A): Array[Byte] = {
     val ids = unwrap(v)
+    // deserializeData enforces this too, but only on the peer, whose decoder blacklists us for a malformed frame.
+    require(ids.size <= MaxIds, s"Block id count ${ids.size} exceeds $MaxIds")
 
     ids.foldLeft(Ints.toByteArray(ids.size)) { case (bs, id) =>
       Bytes.concat(bs, Array(id.length.ensuring(_.isValidByte).toByte), id)

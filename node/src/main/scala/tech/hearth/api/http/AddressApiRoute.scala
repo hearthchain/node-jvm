@@ -84,7 +84,8 @@ case class AddressApiRoute(
               "regular"    -> regular,
               "generating" -> generating,
               "available"  -> available,
-              "effective"  -> effective
+              "effective"  -> effective,
+              "staked"     -> staked
             )
           )
         }

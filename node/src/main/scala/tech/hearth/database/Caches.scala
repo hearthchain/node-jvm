@@ -188,6 +188,25 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     }
   protected def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator]
 
+  protected val stakeCache: LoadingCache[Address, CurrentStake] = cache(dbSettings.maxCacheSize, loadStakeBalance)
+  protected def loadStakeBalance(address: Address): CurrentStake
+  protected def discardStake(address: Address): Unit = stakeCache.invalidate(address)
+
+  override def stakeAt(address: Address, at: GenerationPeriod): Long = {
+    val current = stakeCache.get(address)
+    // Fast path, and the common one: an untouched stake was set in some earlier period and is simply still in
+    // force. Only a stake restated at or after `at` began needs the history walked back past those restatements.
+    if (current.height < at.start) current.amount else resolveStake(address, current.prevHeight, at)
+  }
+
+  /** The amount in force for `at`, walking back from `from` over changes made at or after `at` started. */
+  protected def resolveStake(address: Address, from: Height, at: GenerationPeriod): Long
+
+  // Uncached: only the period-boundary payout enumerates, once per period, and caching a whole period's worth of
+  // stakers is exactly the memory cost keying by address instead of by period avoids.
+  override def stakes(at: GenerationPeriod): Seq[Stake] = loadStakes(at)
+  protected def loadStakes(at: GenerationPeriod): Seq[Stake]
+
   @volatile
   private var registeredEnclavesCache = Map.empty[GenerationPeriod, IndexedSeq[RegisteredEnclave]] // Only this and next periods
   override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] =
@@ -235,6 +254,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
       registeredEnclaves: Seq[RegisteredEnclave],
+      stakes: Map[AddressId, (CurrentStake, StakeNode)],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
   ): Unit
@@ -291,6 +311,10 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     for (gc <- snapshot.nextCommittedGenerators; address = gc.sender.toAddress if addressIdCache.get(address).isEmpty)
       newAddresses += address
 
+    // Nor does a staker, whose only balance change may be the fee it paid from an address seen for the first time
+    for (st <- snapshot.nextStakes if addressIdCache.get(st.address).isEmpty)
+      newAddresses += st.address
+
     val newAddressIds = (for {
       (address, offset) <- newAddresses.zipWithIndex
     } yield address -> AddressId(lastAddressId + offset + 1)).toMap
@@ -339,6 +363,16 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     } yield e.endorserIndex
 
     val registeredEnclaves = snapshot.nextRegisteredEnclaves
+
+    // One node per address, written the way a balance is: the last commitment in the block wins, and the height it
+    // lands at is what decides which periods the amount applies to - nothing is filed under a period.
+    val updatedStakeNodes = snapshot.nextStakes.view
+      .map(st => st.address -> st.amount)
+      .toMap
+      .map { case (address, amount) =>
+        val prev = stakeCache.get(address)
+        address -> (CurrentStake(amount, Height(height), prev.height), StakeNode(amount, prev.height))
+      }
 
     val committedPeriod = this.generationPeriodOf(current.height) match {
       case None =>
@@ -415,6 +449,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       committedPeriod,
       commitmentTransactionIds,
       registeredEnclaves,
+      updatedStakeNodes.map { case (address, node) => addressIdWithFallback(address, newAddressIds) -> node },
       conflictGenerators,
       stateHash.result()
     )
@@ -429,6 +464,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     for (((address, asset), (newBalance, _)) <- updatedBalanceNodes) balancesCache.put((address, asset), newBalance)
     for (id <- assetsToInvalidate) assetDescriptionCache.invalidate(id)
     leaseBalanceCache.putAll(leaseBalances.asJava)
+    for ((address, (currentStake, _)) <- updatedStakeNodes) stakeCache.put(address, currentStake)
 
     this.generationPeriodOf(current.height).foreach { currPeriod =>
       committedGeneratorsCache = committedGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
@@ -456,6 +492,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       approvedFeaturesCache = loadApprovedFeatures()
 
       committedGeneratorsCache = Map.empty
+      stakeCache.invalidateAll()
       registeredEnclavesCache = Map.empty
       conflictGeneratorsCache = Map.empty
 

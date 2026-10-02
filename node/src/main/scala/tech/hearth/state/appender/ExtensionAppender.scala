@@ -4,6 +4,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.consensus.PoSSelector
 import tech.hearth.lang.ValidationError
 import tech.hearth.metrics.{BlockStats, Metrics}
+import tech.hearth.network.RxExtensionLoader.{ApplyExtensionResult, ExtensionOutcome}
 import tech.hearth.network.{ExtensionBlocks, InvalidBlockStorage, PeerDatabase, formatBlocks, id}
 import tech.hearth.state.*
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
@@ -28,11 +29,11 @@ object ExtensionAppender extends ScorexLogging {
       invalidBlocks: InvalidBlockStorage,
       peerDatabase: PeerDatabase,
       scheduler: Scheduler
-  )(ch: Channel, extensionBlocks: ExtensionBlocks): Task[Either[ValidationError, Option[BigInt]]] = {
-    def appendExtension(extension: ExtensionBlocks): Either[ValidationError, Option[BigInt]] =
+  )(ch: Channel, extensionBlocks: ExtensionBlocks): Task[ApplyExtensionResult] = {
+    def appendExtension(extension: ExtensionBlocks): ApplyExtensionResult =
       if (extension.remoteScore <= blockchainUpdater.score) {
         log.trace(s"Ignoring extension $extension because declared remote was not greater than local score ${blockchainUpdater.score}")
-        Right(None)
+        Right(ExtensionOutcome.Dropped)
       } else {
         extension.blocks
           .collectFirst { case b if !b.signatureValid() => GenericError(s"Block $b has invalid signature") }
@@ -115,22 +116,24 @@ object ExtensionAppender extends ScorexLogging {
                       val newTransactions = newBlocks.view.flatMap(_.transactionData).toSet
                       utxStorage.removeAll(newTransactions)
                       utxStorage.addAndScheduleCleanup(droppedBlocks.flatMap(_._1.transactionData).filterNot(newTransactions))
-                      Right(Some(blockchainUpdater.score))
+                      Right(ExtensionOutcome.Appended(Some(blockchainUpdater.score)))
                   }
                 }
 
               case None =>
                 log.debug("No new blocks found in extension")
-                Right(None)
+                Right(ExtensionOutcome.Appended(None))
             }
           }
       }
 
     log.debug(s"${id(ch)} Attempting to append extension ${formatBlocks(extensionBlocks.blocks)}")
     Task(appendExtension(extensionBlocks)).executeOn(scheduler).map {
-      case Right(maybeNewScore) =>
-        log.debug(s"${id(ch)} Successfully appended extension ${formatBlocks(extensionBlocks.blocks)}")
-        Right(maybeNewScore)
+      case Right(outcome) =>
+        // A dropped extension must not read as a success: an optimistically loaded one is anchored on its ids.
+        val what = if (outcome == ExtensionOutcome.Dropped) "Dropped" else "Successfully appended"
+        log.debug(s"${id(ch)} $what extension ${formatBlocks(extensionBlocks.blocks)}")
+        Right(outcome)
       case Left(ve) =>
         val errorMessage = s"${id(ch)} Error appending extension ${formatBlocks(extensionBlocks.blocks)}: $ve"
 

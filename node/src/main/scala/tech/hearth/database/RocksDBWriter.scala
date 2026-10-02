@@ -401,6 +401,7 @@ class RocksDBWriter(
       committedPeriod: Option[GenerationPeriod],
       commitmentTransactionIds: Seq[TransactionId],
       registeredEnclaves: Seq[RegisteredEnclave],
+      stakes: Map[AddressId, (CurrentStake, StakeNode)],
       conflictGenerators: Seq[GeneratorIndex],
       stateHash: StateHashBuilder.Result
   ): Unit = {
@@ -455,6 +456,12 @@ class RocksDBWriter(
       for ((addressId, (currentLeaseBalance, leaseBalanceNode)) <- leaseBalances) {
         rw.put(Keys.leaseBalance(addressId), currentLeaseBalance)
         rw.put(Keys.leaseBalanceAt(addressId, currentLeaseBalance.height), leaseBalanceNode)
+      }
+
+      for ((addressId, (currentStake, stakeNode)) <- stakes) {
+        rw.put(Keys.stakeBalance(addressId), currentStake)
+        rw.put(Keys.stakeBalanceAt(addressId, currentStake.height), stakeNode)
+        rw.put(Keys.activeStake(addressId), Some(currentStake.height))
       }
 
       for ((orderId, (currentVolumeAndFee, volumeAndFeeNode)) <- filledQuantity) {
@@ -656,6 +663,11 @@ class RocksDBWriter(
 
         if (registeredEnclaves.nonEmpty) rw.put(Keys.registeredEnclaves(committedPeriod, h), Some(registeredEnclaves))
       }
+
+      // At a period boundary, drop candidates that are neither staking nor recently changed. Doing it here rather
+      // than on the release itself is what keeps a mid-period release in the set long enough to be paid for the
+      // period it was still staked in - see Keys.activeStake.
+      this.generationPeriodOf(h).filter(_.start == h).foreach(pruneActiveStakes(rw, _))
 
       this.generationPeriodOf(h).foreach { currPeriod => // None checked in Caches
         if (conflictGenerators.nonEmpty) rw.put(Keys.conflictGenerators(currPeriod, h), conflictGenerators)
@@ -867,6 +879,8 @@ class RocksDBWriter(
             rollbackBalanceHistory(rw, Keys.hearthBalance(addressId), Keys.hearthBalanceAt(addressId, _), currentHeight)
 
             rollbackLeaseBalance(rw, addressId, currentHeight)
+            rollbackStake(rw, addressId, currentHeight)
+            discardStake(address)
 
             balanceAtHeightCache.invalidate((currentHeight, addressId))
             leaseBalanceAtHeightCache.invalidate((currentHeight, addressId))
@@ -939,6 +953,7 @@ class RocksDBWriter(
             rw.delete(Keys.committedGenerators(committedPeriod, currentHeight))
             rw.delete(Keys.commitmentTransactions(committedPeriod, currentHeight))
             rw.delete(Keys.registeredEnclaves(committedPeriod, currentHeight))
+
           }
 
           discardedMeta.header.flatMap(_.challengedHeader.map(_.generator.toPublicKey.toAddress)) match {
@@ -1101,6 +1116,35 @@ class RocksDBWriter(
       rw.put(curVfKey, CurrentVolumeAndFee(prevVfNode.volume, prevVfNode.fee, vf.prevHeight, prevVfNode.prevHeight))
     }
     orderId
+  }
+
+  private def rollbackStake(rw: RW, addressId: AddressId, height: Height): Unit = {
+    val curStakeKey = Keys.stakeBalance(addressId)
+    val stake       = rw.get(curStakeKey)
+    if (stake.height == height) {
+      val prevNode = rw.get(Keys.stakeBalanceAt(addressId, stake.prevHeight))
+      rw.delete(Keys.stakeBalanceAt(addressId, height))
+      rw.put(curStakeKey, CurrentStake(prevNode.amount, stake.prevHeight, prevNode.prevHeight))
+      // An over-included candidate would be harmless (it resolves to 0 and filters out), but restoring it exactly
+      // is two lines and keeps a rolled-back node's candidate set identical to one that never saw the block.
+      if (stake.prevHeight <= Height(0)) rw.delete(Keys.activeStake(addressId))
+      else rw.put(Keys.activeStake(addressId), Some(stake.prevHeight))
+    }
+  }
+
+  /** Deletes candidates that neither hold a stake nor changed one during `period`. Reads the stake only for the
+    * entries whose height already rules out the second half, so a steady staker set costs one key read each.
+    */
+  private def pruneActiveStakes(rw: RW, period: GenerationPeriod): Unit = {
+    val stale = ArrayBuffer.empty[AddressId]
+    val key   = Keys.activeStake(AddressId(0L))
+    rw.iterateOver(key.keyBytes.dropRight(java.lang.Long.BYTES)) { dbEntry =>
+      val id = AddressId.fromByteArray(dbEntry.getKey.takeRight(java.lang.Long.BYTES))
+      key.parse(dbEntry.getValue).foreach { lastChange =>
+        if (lastChange < period.start && rw.get(Keys.stakeBalance(id)).amount == 0) stale += id
+      }
+    }
+    stale.foreach(id => rw.delete(Keys.activeStake(id)))
   }
 
   private def rollbackLeaseBalance(rw: RW, addressId: AddressId, height: Height): Unit = {
@@ -1413,6 +1457,64 @@ class RocksDBWriter(
 
   override def effectiveBalanceBanHeights(address: Address): Seq[Int] =
     readOnly(_.get(Keys.maliciousMinerBanHeights(address.toBytes))).map(_.toInt)
+
+  override def loadStakeBalance(address: Address): CurrentStake =
+    addressId(address).fold(CurrentStake.Unavailable)(id => readOnly(_.get(Keys.stakeBalance(id))))
+
+  /** Walks an address's stake history back to the most recent change made *before* `at` began. Only restatements
+    * inside `at` itself are skipped, so the walk is as long as the number of times that address restaked during
+    * that period - bounded by its own fee spend, and paid only by its own lookups.
+    */
+  override def resolveStake(address: Address, from: Height, at: GenerationPeriod): Long =
+    addressId(address).fold(0L) { id =>
+      readOnly { db =>
+        @tailrec def walk(height: Height): Long =
+          if (height <= Height(0)) 0L
+          else {
+            val node = db.get(Keys.stakeBalanceAt(id, height))
+            if (height < at.start) node.amount else walk(node.prevHeight)
+          }
+        walk(from)
+      }
+    }
+
+  /** Every non-zero stake in force for `at`, by prefix scan over the candidate set (see Keys.activeStake) rather
+    * than over every address that has ever staked. The candidates are a superset - a released stake lingers until
+    * the next boundary prunes it - so each one is still resolved through its own stake history and filtered.
+    */
+  override def loadStakes(at: GenerationPeriod): Seq[Stake] = {
+    val staked = ArrayBuffer.empty[(AddressId, Long)]
+
+    rdb.db.readOnly { ro =>
+      val candidates = Keys.activeStake(AddressId(0L))
+      ro.iterateOver(candidates.keyBytes.dropRight(java.lang.Long.BYTES)) { dbEntry => // Drop the address id: scan them all
+        val id      = AddressId.fromByteArray(dbEntry.getKey.takeRight(java.lang.Long.BYTES))
+        val current = ro.get(Keys.stakeBalance(id))
+        val amount =
+          if (current.height < at.start) current.amount
+          else {
+            @tailrec def walk(height: Height): Long =
+              if (height <= Height(0)) 0L
+              else {
+                val node = ro.get(Keys.stakeBalanceAt(id, height))
+                if (height < at.start) node.amount else walk(node.prevHeight)
+              }
+            walk(current.prevHeight)
+          }
+        if (amount > 0) staked += (id -> amount)
+      }
+
+      // An address is stored as the bytes of its hash, see Keys.idToAddress
+      val addresses = ro.multiGet(staked.view.map { case (id, _) => Keys.idToAddress(id) }.toVector, tech.hearth.crypto.Address.HASH_LEN)
+      staked.view.zipWithIndex.map { case ((id, amount), i) =>
+        // Throwing rather than skipping, as loadCommittedGenerators does: a silently dropped staker changes a
+        // spend lock, a forging weight and a payout share while the node keeps following a chain it now computes
+        // differently from its peers.
+        val address = addresses(i).getOrElse(throw new IllegalStateException(s"Can't find address for address id $id"))
+        Stake(address, amount)
+      }.toSeq
+    }
+  }
 
   override def loadCommittedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = {
     val approxGenerators = settings.functionalitySettings.maxValidEndorsers // Rough buffer size

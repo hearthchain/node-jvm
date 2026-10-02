@@ -15,9 +15,13 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
   confirm a suite is green; `testFull` is the real run, and is what `checkPR` invokes. Chain several tasks with one
   quoted `;` argument (`sbt "a/testFull; b/testFull"`) - passing them as separate arguments concatenates them into a
   single malformed command.
-- `sbt "node-it/docker;node-it/test"`: integration tests (needs Docker); slow, don't run by default. `node-it/docker`
-  builds the image from whatever `node`/`grpc-server` currently compile to; it is not rebuilt automatically, so re-run
-  it by hand after touching either module's sources before `node-it/testOnly ...`.
+- `sbt "node-it/docker;node-it/testFull"`: integration tests (needs Docker); slow, don't run by default. `testFull`
+  for the same reason as above - `node-it/test` is incremental too, and CI silently passed with a red suite for weeks
+  because of it. `node-it/docker` builds the image from whatever `node`/`grpc-server` currently compile to; it is not
+  rebuilt automatically, so re-run it by hand after touching either module's sources before `node-it/testOnly ...`.
+- `sbt node-it/loadTests` / `sbt node-it/integrationTests`: the `@LoadTest`-annotated suites and their complement,
+  discovered from the annotation. They are separate CI jobs and the load half runs serially. Read "Load tests" in
+  `docs/notes/testing.md` before touching one, or before changing how node-it is invoked in CI.
 - Sandboxed dev environments: the default Docker builder here cannot do nested overlayfs mounts, so `node-it/docker`
   (or any `docker build`/`docker buildx build` using the default `docker` driver) fails every `RUN` layer with
   `mount source: "overlay", ... err: operation not permitted`, even for a trivial `RUN echo`. Switch to a
@@ -30,9 +34,12 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
   `docker build` step needs the workaround, so letting `sbt node-it/docker` fail once first to stage fresh
   files into `docker/target` before the manual `buildx build` is a reasonable way to sequence it).
 - node-it test suites run with `-Dhearth.it.max-parallel-suites=N` to cap Docker resource usage (each suite starts
-  its own set of containers); pass this as a JVM property on the `sbt` command line, not inside the sbt shell.
-  Per-suite failures are deterministic (confirmed identical across parallelism 3 and 6 on the same code), so lowering
-  parallelism only helps with wall-clock/resource pressure, not with distinguishing real failures from flakiness.
+  its own set of containers); pass this as a JVM property on the `sbt` command line, not inside the sbt shell, and
+  with `--server` rather than `--client` (the thin client keeps the property to itself; see "A second assignment of a
+  Global key" in `docs/notes/build-tooling.md`).
+  Outside the `@LoadTest` suites, per-suite failures are deterministic (confirmed identical across parallelism 3 and 6
+  on the same code), so lowering parallelism only helps with wall-clock/resource pressure, not with distinguishing
+  real failures from flakiness. The `@LoadTest` suites are the exception, and the reason they get their own CI job.
   Per-suite logs land in `node-it/target/logs/<run-id>/<abbreviated.suite.Name>/`, but the real assertion/exception
   message for a failure is only in the sbt console output (the per-suite `test.log` is DEBUG-level container/HTTP
   traffic and rarely contains the failure reason); grep the sbt output for `*** FAILED ***`/`*** ABORTED ***` and the
@@ -67,9 +74,11 @@ Hard-won implementation knowledge lives in `docs/notes/`, one file per subsystem
 - Touching StartBoost, Reserve, BindApiKey, Settle, workBoost, the DCAP collateral registry (UpdateCollateral), or transaction signing outside a running node (`hearth util transaction sign`, `sign-commit-to-generation.sh`): read `docs/notes/hearth-transactions.md` first.
 - Touching keys or addresses (SigningKey, VrfKey, BLS, bech32), transaction JSON, the protobuf transaction schema, or proof verification: read `docs/notes/keys-and-signatures.md` first.
 - Touching fees, the carry, BlockRewardCalculator, EmissionCurve, RewardsSettings, or RewardApiRoute: read `docs/notes/economics.md` first.
+- Touching StakeTransaction, StakingPayout, the stake ledger (stored as a balance), or `FunctionalitySettings.credAsset`: read `docs/notes/cred-economy.md` first.
 - Writing or fixing tests (node-it suites and fixtures, grpc-server specs, node-tests helpers like withDomain/TestBlock/TxHelpers): read `docs/notes/testing.md` first.
 - Touching StateSnapshot, predefined snapshots, BlockDiffer, genesis settings, or balance snapshots: read `docs/notes/state-and-blocks.md` first.
 - Touching the BlockchainUpdates extension or events.StateUpdate: read `docs/notes/blockchain-updates.md` first.
+- Touching block synchronisation (RxExtensionLoader, ExtensionAppender, GetBlockIds/BlockIds, peer blacklisting on sync): read `docs/notes/block-sync.md` first.
 - Touching build.sbt, sbt plugins or tasks, the docker image (Dockerfile, entrypoint.sh, stageForDocker), the Debian package or its systemd unit, the crypto/protobuf-schemas dependencies, or doing a package or naming migration: read `docs/notes/build-tooling.md` first.
 - Touching docker/private configs or rebuilding its genesis: read `docs/notes/docker-private.md` first.
 - Touching the served OpenAPI UI, the vendored Scalar bundle, or `vendor-scalar.sh`: read `docs/notes/api-docs.md` first.

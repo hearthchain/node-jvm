@@ -102,6 +102,26 @@ case class SnapshotBlockchain(
   override def workDone(validator: Address, period: GenerationPeriod): Long =
     snapshot.workDone.getOrElse((validator, period), inner.workDone(validator, period))
 
+  // A commitment in this snapshot is in force for `at` when `at` starts at or after the period it named. Since a
+  // StakeTransaction can only ever name the next period, that is "this snapshot wins for the next period onward".
+  private def restatedFor(address: Address, at: GenerationPeriod): Option[Long] =
+    snapshot.nextStakes.findLast(s => s.address == address && at.start >= s.periodStart).map(_.amount)
+
+  override def stakeAt(address: Address, at: GenerationPeriod): Long =
+    restatedFor(address, at).getOrElse(inner.stakeAt(address, at))
+
+  override def stakes(at: GenerationPeriod): Seq[Stake] = {
+    val restated = snapshot.nextStakes.filter(at.start >= _.periodStart)
+    if (restated.isEmpty) inner.stakes(at)
+    else {
+      val overridden = restated.view.map(_.address).toSet
+      inner.stakes(at).filterNot(s => overridden(s.address)) ++
+        restated.view.map(_.address).distinct.flatMap { address =>
+          restatedFor(address, at).filter(_ > 0).map(Stake(address, _))
+        }
+    }
+  }
+
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions
       .get(id)

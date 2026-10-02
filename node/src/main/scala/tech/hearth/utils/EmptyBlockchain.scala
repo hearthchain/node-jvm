@@ -95,6 +95,10 @@ trait EmptyBlockchain extends Blockchain {
   override def settledAmount(client: Address, miner: Address, asset: IssuedAsset): Long = 0L
 
   override def workDone(validator: Address, period: GenerationPeriod): Long = 0L
+
+  override def stakeAt(address: Address, at: GenerationPeriod): Long = 0L
+
+  override def stakes(at: GenerationPeriod): Seq[Stake] = Seq.empty
 }
 
 object EmptyBlockchain extends EmptyBlockchain

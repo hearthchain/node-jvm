@@ -95,6 +95,34 @@ class TransactionFactorySpec extends FreeSpec {
       reserve.assetId shouldBe asset
     }
 
+    "builds a StakeTransaction from a well-formed request" in forAll(accountGen) { sender =>
+      val json = Json.obj(
+        "type"            -> TransactionType.Stake.id,
+        "senderPublicKey" -> PublicKey(sender.publicKey()).toString,
+        "periodStart"     -> 3,
+        "amount"          -> 100000000,
+        "fee"             -> 100000
+      )
+
+      val tx = TransactionFactory.parseRequest(json).explicitGet()
+      tx shouldBe a[StakeTransaction]
+      val stake = tx.asInstanceOf[StakeTransaction]
+      stake.periodStart shouldBe Height(3)
+      stake.amount.value shouldBe 100000000
+    }
+
+    "builds a StakeTransaction that releases the whole stake" in forAll(accountGen) { sender =>
+      val json = Json.obj(
+        "type"            -> TransactionType.Stake.id,
+        "senderPublicKey" -> PublicKey(sender.publicKey()).toString,
+        "periodStart"     -> 3,
+        "amount"          -> 0,
+        "fee"             -> 100000
+      )
+
+      TransactionFactory.parseRequest(json).explicitGet().asInstanceOf[StakeTransaction].amount.value shouldBe 0L
+    }
+
     // A real HPKE-sealed API key envelope is well under 280 hex chars, but exercise BindApiKeyRequest's large-blob
     // ByteStr format anyway (see requests.largeByteStrFormat) - the same 280-char decode-limit bug StartBoostRequest
     // hit before its fields got the same treatment.

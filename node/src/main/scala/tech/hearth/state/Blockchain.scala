@@ -107,6 +107,18 @@ trait Blockchain {
   // see "workBoost" in CLAUDE.md. Same history mechanism as reservedAmount/settledAmount above.
   def workDone(validator: Address, period: GenerationPeriod): Long
 
+  // Every HRTH stake in force for one generation period - the set StakingPayout walks at that period's end, and
+  // the source of both the spending lock and the forging-weight charge. Period-keyed like committedGenerators
+  // rather than a per-address current value, because a stake is always a stake *for a period*.
+  // One address's HRTH stake in force for one period: the most recent amount it set at a height *below* that
+  // period's start. A StakeTransaction always names the period after the one it lands in, so the change height is
+  // what decides which periods an amount applies to, and a stake needs nothing to keep it alive across periods.
+  def stakeAt(address: Address, at: GenerationPeriod): Long
+
+  // Every address with a non-zero stake in force for `at` - the set StakingPayout walks at that period's end.
+  // Unlike stakeAt this enumerates, so it is only for the boundary, never for a per-transaction check.
+  def stakes(at: GenerationPeriod): Seq[Stake]
+
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
 
@@ -168,8 +180,40 @@ object Blockchain {
     def hearthPortfolio(address: Address): Portfolio = Portfolio(
       blockchain.balance(address),
       blockchain.leaseBalance(address),
-      generationDeposit = blockchain.generationDeposit(address)
+      generationDeposit = blockchain.generationDeposit(address),
+      staked = blockchain.lockedStake(address)
     )
+
+    /** The HRTH a stake currently stops `address` spending.
+      *
+      * The larger of what is in force for this period and what the address last set, which is what will be in
+      * force for the next one. Raising a stake locks the new, larger amount as soon as the transaction is applied,
+      * since it already counts for the next period; lowering one keeps this period's larger amount locked until
+      * this period ends, at which point the two converge on their own.
+      */
+    def lockedStake(address: Address): Long =
+      blockchain.currentGenerationPeriod.fold(0L) { period =>
+        math.max(blockchain.stakeAt(address, period), blockchain.stakeAt(address, period.next))
+      }
+
+    /** The HRTH a stake currently costs `address` in forging weight, which is the amount it is also *earning* on -
+      * what is in force for this period, never what it has set for the next. Constant for a whole period, which is
+      * what makes it safe to subtract from a windowed effective balance - see
+      * GeneratingBalanceProvider.unstakedEffectiveBalance.
+      */
+    def stakedForPeriod(address: Address): Long =
+      blockchain.currentGenerationPeriod.fold(0L)(blockchain.stakeAt(address, _))
+
+    /** A generation period's total tracked work: what its committee's settlements burned, summed over the whole
+      * committed set rather than only over members that happen to have any.
+      *
+      * Two consensus paths read it and must never disagree - GeneratingBalanceProvider turns it into forging weight
+      * (WorkBoost), StakingPayout turns it into minted Cred - so it lives here rather than being summed twice.
+      * BigInt, not Long: each addend is safeSum'd at write time, but a sum over an unbounded committee is not
+      * itself Long-safe, and both callers must reject rather than wrap when it overflows.
+      */
+    def totalWork(period: GenerationPeriod): BigInt =
+      blockchain.committedGenerators(period).view.map(g => BigInt(blockchain.workDone(g.address, period))).sum
 
     /** The VRF key a generator registered when it committed to generating for `at`'s period.
       *

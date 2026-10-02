@@ -5,7 +5,7 @@ import scalapb.compiler.Version.scalapbVersion
 object Dependencies {
   private def nettyModule(module: String) = "io.netty" % s"netty-$module" % "4.2.17.Final"
 
-  val gProtoVersion = "4.36.1"
+  val gProtoVersion = "4.36.2"
   val gProto        = "com.google.protobuf" % "protobuf-java" % Dependencies.gProtoVersion
   val overrides = Def.setting(
     Seq(
@@ -17,7 +17,7 @@ object Dependencies {
       "com.google.code.gson"      % "gson"         % "2.14.0",
       "com.squareup.okio"         % "okio-jvm"     % "3.18.2",
       "org.apache.httpcomponents" % "httpclient"   % "4.5.14",
-      "org.slf4j"                 % "slf4j-api"    % "2.0.18",
+      "org.slf4j"                 % "slf4j-api"    % "2.0.20",
       "org.msgpack"               % "msgpack-core" % "0.9.12",
       nettyModule("codec-http2"),
       nettyModule("codec-http"),
@@ -29,7 +29,7 @@ object Dependencies {
       jacksonModule("core", "databind"),
       jacksonModule("datatype", "datatype-jdk8"),
       jacksonModule("datatype", "datatype-jsr310"),
-      "tools.jackson.core" % "jackson-databind" % "3.2.2",
+      "tools.jackson.core" % "jackson-databind" % "3.2.3",
       gProto
     )
   )
@@ -52,11 +52,11 @@ object Dependencies {
   private def grpcModule(module: String) = "io.grpc" % module % "1.83.1"
 
   val pekkoHttp       = pekkoHttpModule("pekko-http")
-  val googleGuava     = "com.google.guava"    % "guava"             % "33.7.1-jre"
+  val googleGuava     = "com.google.guava"    % "guava"             % "33.7.2-jre"
   val kamonCore       = kamonModule("core")
   val machinist       = "org.typelevel"      %% "machinist"         % "0.6.8"
-  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.3"
-  val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "3.0.13"
+  val logback         = "ch.qos.logback"      % "logback-classic"   % "1.6.5"
+  val asyncHttpClient = "org.asynchttpclient" % "async-http-client" % "3.0.14"
   val curve25519      = "com.wavesplatform"   % "curve25519-java"   % "0.6.6"
   val nettyHandler    = nettyModule("handler")
 
@@ -74,13 +74,13 @@ object Dependencies {
     // macOS aarch64
     amazonCorretto("osx-aarch_64"),
     // fallback Java
-    "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
+    "org.bouncycastle" % "bcprov-jdk18on" % "1.86",
     "tech.hearth"      % "crypto"         % "0.1.0-SNAPSHOT"
   )
 
   lazy val it = scalaTest +: Seq(
     logback,
-    "com.github.jnr" % "jnr-unixsocket" % "0.39.3", // To support Apple ARM
+    "com.github.jnr" % "jnr-unixsocket" % "0.39.5", // To support Apple ARM
     "com.spotify"    % "docker-client"  % "8.16.0",
     jacksonModule("dataformat", "dataformat-properties", "2.22.1"),
     asyncHttpClient
@@ -92,10 +92,9 @@ object Dependencies {
     logback,
     "org.scalatestplus" %% s"scalacheck-1-$scalaCheckMinor" % "3.2.20.0",
     "org.scalacheck"    %% "scalacheck"                     % s"1.$scalaCheckMinor.0",
-    "org.scalamock"     %% "scalamock"                      % "7.5.5",
-    // bcprov-jdk18on (cryptoProviders, above) only parses X.509; building signed certificate/CRL fixtures for DCAP
-    // collateral tests needs the higher-level builder API.
-    "org.bouncycastle" % "bcpkix-jdk18on" % "1.85" // bcprov-jdk18on's 1.85.2 patch has no matching bcpkix release yet
+    "org.scalamock"     %% "scalamock"                      % "7.6.0",
+    "org.scalamock"     %% "scalamock-scalatest"            % "7.6.0",
+    "org.bouncycastle"   % "bcpkix-jdk18on"                 % "1.86"
   ).map(_ % Test)
 
   lazy val logDeps = Seq(
@@ -103,8 +102,7 @@ object Dependencies {
     pekkoModule("slf4j") % Runtime
   )
 
-  // Check https://github.com/facebook/rocksdb/issues/13893 before bumping
-  private val rocksdb = "org.rocksdb" % "rocksdbjni" % "10.10.1.1"
+  private val rocksdb = "org.rocksdb" % "rocksdbjni" % "11.0.4"
 
   // What the docker image ships in place of the cross-platform jar above: every Linux native (x86_64, aarch64,
   // ppc64le, s390x, riscv64) at a third of the size. build.sbt resolves it in a configuration of its own, so it

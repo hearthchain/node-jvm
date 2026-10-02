@@ -380,6 +380,20 @@ package object database {
   def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
     data.view.flatMap(re => re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes).toArray
 
+  def readCurrentStake(data: Array[Byte]): CurrentStake =
+    if (data != null && data.length == 16)
+      CurrentStake(Longs.fromByteArray(data.take(8)), Height(Ints.fromByteArray(data.slice(8, 12))), Height(Ints.fromByteArray(data.takeRight(4))))
+    else CurrentStake.Unavailable
+
+  def writeCurrentStake(cs: CurrentStake): Array[Byte] =
+    Longs.toByteArray(cs.amount) ++ cs.height.toByteArray ++ cs.prevHeight.toByteArray
+
+  def readStakeNode(data: Array[Byte]): StakeNode =
+    if (data != null && data.length == 12) StakeNode(Longs.fromByteArray(data.take(8)), Height(Ints.fromByteArray(data.takeRight(4))))
+    else StakeNode.Empty
+
+  def writeStakeNode(sn: StakeNode): Array[Byte] = Longs.toByteArray(sn.amount) ++ sn.prevHeight.toByteArray
+
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)
     .map { bytes => GeneratorIndex(Ints.fromByteArray(bytes)) }

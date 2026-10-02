@@ -29,15 +29,11 @@ object GeneratingBalanceProvider {
     * chain tip) - the period being generated into is whichever one the block right after it falls in, matching
     * `appender.findBlockAndGetGenerators`'s own `parentHeight.next` -> `generationPeriodOf` derivation.
     *
-    * totalWork is a BigInt sum, not a plain Long one: individual `workDone` values are bounded (safeSum'd at
-    * write time in SettleTransactionDiff), but summing across an unbounded number of committed generators isn't
-    * itself guaranteed to fit a Long.
+    * The sum itself is Blockchain.totalWork, shared with StakingPayout so the two consensus readings of a period's
+    * work can never drift apart.
     */
   def workContext(blockchain: Blockchain, atHeight: Int): Option[(GenerationPeriod, BigInt)] =
-    blockchain.generationPeriodOf(Height(atHeight + 1)).flatMap(_.prev).map { workPeriod =>
-      val totalWork = blockchain.committedGenerators(workPeriod).view.map(g => BigInt(blockchain.workDone(g.address, workPeriod))).sum
-      workPeriod -> totalWork
-    }
+    blockchain.generationPeriodOf(Height(atHeight + 1)).flatMap(_.prev).map(workPeriod => workPeriod -> blockchain.totalWork(workPeriod))
 
   /** Same as `balance`, but reuses a `workContext` the caller already computed once instead of recomputing it -
     * see `workContext`'s own doc comment for why this matters.
@@ -46,6 +42,27 @@ object GeneratingBalanceProvider {
     val height = blockId.flatMap(blockchain.heightOf).getOrElse(blockchain.height)
     balanceAt(blockchain, account, height, blockId, context)
   }
+
+  /** Effective balance with the address's stake taken out: staking HRTH costs forging weight, not just liquidity.
+    *
+    * The term subtracted is `stakedForPeriod`, this period's own stake, not `lockedStake` - it is the stake the
+    * address is *earning* Cred on, so the same embers buy the yield and pay for it. That is also what keeps this
+    * safe to read as a current value against a windowed `effectiveBalance`: a period's stake cannot change once
+    * that period has started, so forging weight changes only where the committee itself does. Subtracting the lock
+    * instead would let any committed generator zero its own generating balance mid-period with one cheap
+    * transaction and no fund movement, which hands it a lever over `EndorsementFilter`'s 2/3 quorum denominator
+    * and over the `validGenerators.nonEmpty` case in `appender.findBlockAndGetGenerators`. The HRTH a raised stake
+    * locks is still unspendable in the meantime, through `lockedStake`; it just keeps counting as skin in the game
+    * until the period it was staked for actually starts.
+    *
+    * Every consensus caller hands in a blockchain positioned at the block it is asking about
+    * (`appender.appendBlock` does it explicitly, with `blockchainUpdater.referencedBlockchain(...)`), so reading
+    * the stake off `blockchain` rather than as of `blockId` resolves to the same state - the same property
+    * `workContext`'s own `workDone` read already relies on. A future caller passing a `blockId` older than the
+    * blockchain's tip would break that and would need the stake resolved at that height instead.
+    */
+  def unstakedEffectiveBalance(blockchain: Blockchain, account: Address, depth: Int, blockId: Option[BlockId] = None): Long =
+    math.max(0L, blockchain.effectiveBalance(account, depth, blockId) - blockchain.stakedForPeriod(account))
 
   private def balanceAt(
       blockchain: Blockchain,
@@ -58,7 +75,8 @@ object GeneratingBalanceProvider {
 
     val maybeChallengedMiner = blockchain.blockHeader(height + 1).flatMap(_.header.challengedHeader).map(_.generator.toAddress)
     val rawBalance =
-      blockchain.effectiveBalance(account, depth, blockId) + maybeChallengedMiner.map(blockchain.effectiveBalance(_, depth, blockId)).getOrElse(0L)
+      unstakedEffectiveBalance(blockchain, account, depth, blockId) +
+        maybeChallengedMiner.map(unstakedEffectiveBalance(blockchain, _, depth, blockId)).getOrElse(0L)
 
     context match {
       case None                          => rawBalance

@@ -141,6 +141,7 @@ object TransactionDiffer {
           case rtx: ReserveTransaction             => ReserveTransactionDiff(blockchain)(rtx).traced
           case batx: BindApiKeyTransaction         => BindApiKeyTransactionDiff(blockchain)(batx).traced
           case sttx: SettleTransaction             => SettleTransactionDiff(blockchain)(sttx).traced
+          case sktx: StakeTransaction              => StakeTransactionDiff(blockchain)(sktx).traced
           case _                                   => UnsupportedTransactionType.asLeft.traced
         }
       }

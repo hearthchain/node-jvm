@@ -11,8 +11,9 @@ import tech.hearth.transaction.TxHelpers
 
 /** GeneratingBalanceProvider.balance's workBoost wiring (see CLAUDE.md's "workBoost") is exercised by wrapping a
   * real domain's Blockchain (so effectiveBalance/generationPeriodOf are the genuine ones) with a Blockchain that
-  * injects committedGenerators/workDone for a specific period, the same "inject the minimal necessary state
-  * directly" technique SettleTransactionDiffTest/ReserveTransactionDiffTest use - rather than driving the domain
+  * injects committedGenerators/workDone for a specific period (WithState.blockchainWithCommitteeWork, shared with
+  * StakingPayoutTest), the same "inject the minimal necessary state directly" technique
+  * SettleTransactionDiffTest/ReserveTransactionDiffTest use - rather than driving the domain
   * through a real period boundary (which needs a real CommitToGenerationTransaction committing a generator for a
   * *later* period, well beyond the scope of what this is testing). generationPeriodLength = 1 makes the genesis
   * period exactly [1, 1], so its predecessor (GenerationPeriod.prev) is still well-defined and a height-1 balance
@@ -29,13 +30,7 @@ class GeneratingBalanceProviderTest extends FreeSpec with WithDomain {
     CommittedGenerator(address, TxHelpers.defaultBlsKey.publicKey, ByteStr.empty)
 
   private def withCommitteeWork(blockchain: Blockchain, committee: Seq[Address], work: Map[Address, Long]): Blockchain =
-    new Blockchain {
-      export blockchain.{committedGenerators as _, workDone as _, *}
-      override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] =
-        if (at == workPeriod) committee.map(committedGenerator).toIndexedSeq else blockchain.committedGenerators(at)
-      override def workDone(v: Address, p: GenerationPeriod): Long =
-        if (p == workPeriod) work.getOrElse(v, 0L) else blockchain.workDone(v, p)
-    }
+    blockchainWithCommitteeWork(blockchain, workPeriod, committee.map(committedGenerator), work)
 
   "GeneratingBalanceProvider.balance" - {
     "boosts a validator's generating balance using the previous period's tracked work, relative to the committee total" in withDomain(

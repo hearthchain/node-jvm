@@ -286,4 +286,30 @@ class TxStateSnapshotHashSpec extends PropSpec {
     List(reserved, settled, bound, enclaveReg, work).foreach(_ should not equal base)
     List(reserved, settled, bound, enclaveReg, work).distinct.length shouldBe 5
   }
+
+  property("stake entries are hashed, and a stake is distinguished by every field it declares") {
+    def hashOf(s: StateSnapshot): ByteStr =
+      TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
+
+    val staker = signer101.toAddress
+    val other  = signer102.toAddress
+    val base   = hashOf(StateSnapshot())
+
+    def staked(address: tech.hearth.account.Address, periodStart: Int, amount: Long): ByteStr =
+      hashOf(StateSnapshot(nextStakes = Seq(StakeCommitment(address, Height(periodStart), amount))))
+
+    val staking     = staked(staker, 1001, 5L)
+    val otherStaker = staked(other, 1001, 5L)
+    val otherPeriod = staked(staker, 2001, 5L)
+    val otherAmount = staked(staker, 1001, 6L)
+    // 0 is a release, not an absent entry: it has to hash differently from staking nothing at all
+    val releasing = staked(staker, 1001, 0L)
+
+    List(staking, otherStaker, otherPeriod, otherAmount, releasing).foreach(_ should not equal base)
+    List(staking, otherStaker, otherPeriod, otherAmount, releasing).distinct.length shouldBe 5
+
+    // One preimage per entry, so a block of k stakes costs O(k) to hash rather than O(stakers)
+    hashOf(StateSnapshot(nextStakes = Seq(StakeCommitment(staker, Height(1001), 5L), StakeCommitment(other, Height(1001), 5L)))) should
+      not equal staking
+  }
 }

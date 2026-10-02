@@ -114,6 +114,15 @@ object TxStateSnapshotHashBuilder {
       changedKeys += tag("workDone") ++ validator.toBytes ++ period.start.toByteArray ++ Longs.toByteArray(work)
     }
 
+    // A stake's own declared fields, the way nextCommittedGenerators hashes a commitment's rather than the deposit
+    // it implies. periodStart is in the preimage because the same address and amount mean different things for
+    // different periods, and because it is what the sender actually signed. Nothing about membership needs hashing
+    // separately: an amount of 0 is a release and anything else is a stake, so the set for a period is a function
+    // of these entries.
+    snapshot.nextStakes.foreach { stake =>
+      changedKeys += tag("stake") ++ stake.address.toBytes ++ stake.periodStart.toByteArray ++ Longs.toByteArray(stake.amount)
+    }
+
     txStatusOpt.foreach(txInfo =>
       txInfo.status match {
         case Status.Failed    => changedKeys += txInfo.id.arr ++ Array(1: Byte)
