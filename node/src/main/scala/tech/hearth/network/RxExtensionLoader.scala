@@ -312,31 +312,26 @@ object RxExtensionLoader extends ScorexLogging {
           state
         case ApplierState.Applying(maybeBuffer, applying) =>
           if (applying != extension) log.warn(s"Applied $extension doesn't match expected $applying")
-          maybeBuffer match {
-            case None =>
-              applicationResult match {
-                case Right(ExtensionOutcome.Appended(Some(newLocalScore))) if newLocalScore != applying.remoteScore && state.loaderState == Idle =>
-                  val reason = s"New local score $newLocalScore does not match declared remote score ${applying.remoteScore}"
-                  log.warn(reason)
-                  if (blacklistOnScoreMismatch) {
-                    peerDatabase.blacklistAndClose(extension.source, reason)
-                  }
-                case _ => // either extension contains invalid blocks, or score has not changed
+          (applicationResult, maybeBuffer) match {
+            case (Right(ExtensionOutcome.Appended(newLocalScore)), None) =>
+              newLocalScore.filter(_ != applying.remoteScore && state.loaderState == Idle).foreach { score =>
+                val reason = s"New local score $score does not match declared remote score ${applying.remoteScore}"
+                log.warn(reason)
+                if (blacklistOnScoreMismatch) {
+                  peerDatabase.blacklistAndClose(extension.source, reason)
+                }
               }
-
               state.copy(applierState = ApplierState.Idle)
-            case Some(Buffer(nextChannel, nextExtension)) =>
-              applicationResult match {
-                case Right(ExtensionOutcome.Appended(_)) =>
-                  log.trace(s"Successfully applied $extension, starting to apply an optimistically loaded one: $nextExtension")
-                  extensions.onNext(nextChannel -> nextExtension)
-                  syncNext(state.copy(applierState = ApplierState.Applying(None, nextExtension)))
-                // A drop is not an error, but it leaves the chain exactly as it was, and the buffered extension is
-                // anchored on ids from this one - applying it would report a fork rather than find its parent.
-                case _ =>
-                  log.debug(s"Did not apply $extension, discarding cached as well")
-                  syncNext(state.copy(applierState = ApplierState.Idle))
-              }
+            case (Right(ExtensionOutcome.Appended(_)), Some(Buffer(nextChannel, nextExtension))) =>
+              log.trace(s"Successfully applied $extension, starting to apply an optimistically loaded one: $nextExtension")
+              extensions.onNext(nextChannel -> nextExtension)
+              syncNext(state.copy(applierState = ApplierState.Applying(None, nextExtension)))
+            // A drop is not an error, but it leaves the chain exactly as it was, and whatever was loaded optimistically on
+            // top of this extension, buffered or still in flight, is anchored on its ids - applying it would report a
+            // fork rather than find its parent. Start over from local history.
+            case _ =>
+              log.debug(s"Did not apply $extension, discarding what was loaded on top of it")
+              syncNext(state.withIdleLoader.copy(applierState = ApplierState.Idle))
           }
       }
     }

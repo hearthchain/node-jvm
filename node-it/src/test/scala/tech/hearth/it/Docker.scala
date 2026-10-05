@@ -22,7 +22,7 @@ import org.apache.commons.io.IOUtils
 import org.asynchttpclient.Dsl.*
 import pureconfig.ConfigSource
 
-import java.io.{FileOutputStream, IOException}
+import java.io.FileOutputStream
 import java.net.{InetAddress, InetSocketAddress, URI, URL}
 import java.nio.file.{Files, Path, Paths}
 import java.time.format.DateTimeFormatter
@@ -42,7 +42,7 @@ import scala.util.{Random, Try}
 class Docker(
     suiteConfig: Config = empty,
     tag: String = "",
-    enableProfiling: Boolean = false,
+    enableProfiling: Boolean = Docker.ProfilingRequested,
     enableDebugger: Boolean = false,
     // Nodes peer over the container network, so the node-to-node port is only worth publishing for a suite that
     // speaks the binary protocol from the test JVM itself (see networkAddressAccessibleFromHost).
@@ -238,16 +238,14 @@ class Docker(
         var config = s"$javaOptions ${renderProperties(asProperties(overrides))} " +
           s"-Dlogback.stdout.level=TRACE -Dlogback.file.level=OFF -Dhearth.network.declared-address=$ip:$networkPort $ntpServer $maxCacheSize"
 
+        // %t, since java is PID 1 in every container: a restarted node writes a second recording instead of overwriting
+        if (enableProfiling) config += s"-XX:StartFlightRecording=$JfrSettings,filename=$ContainerLogDir/node-%t.jfr,dumponexit=true "
+
         // Debugger
         if (enableDebugger) config += s"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$internalDebuggerPort "
 
         config
       }
-
-      val profilerConfigEnv = if (enableProfiling) {
-        // https://www.yourkit.com/docs/java/help/startup_options.jsp
-        s"YOURKIT_OPTS=port=$ProfilerPort,listen=all,sampling,monitors,sessionname=HearthNode,dir=$ContainerRoot/profiler,logdir=$ContainerRoot,onexit=snapshot"
-      } else ""
 
       val debuggerPort = if (enableDebugger) Docker.freeDebuggerPort() else 0
 
@@ -279,10 +277,7 @@ class Docker(
         )
         .build()
 
-      val envs = Seq(
-        s"JAVA_OPTS=$configOverrides",
-        profilerConfigEnv
-      ).filter(_.nonEmpty)
+      val envs = Seq(s"JAVA_OPTS=$configOverrides")
 
       val containerConfig = ContainerConfig
         .builder()
@@ -472,39 +467,30 @@ class Docker(
     }
   }
 
+  // The JVM writes its recording on the graceful stop that profiling switches on, so this runs after the container is down.
   private def saveProfile(node: DockerNode): Unit = if (enableProfiling) {
     try {
-      val profilerDirStream = client.archiveContainer(node.containerId, ContainerRoot.resolve("profiler").toString)
-
+      val logDirStream = client.archiveContainer(node.containerId, ContainerLogDir.toString)
       try {
-        val archiveStream = new ArchiveStreamFactory().createArchiveInputStream(ArchiveStreamFactory.TAR, profilerDirStream)
-        val snapshotFile = Iterator
+        val archiveStream = new ArchiveStreamFactory().createArchiveInputStream(ArchiveStreamFactory.TAR, logDirStream)
+        Iterator
           .continually(Option(archiveStream.getNextEntry))
           .takeWhile(_.nonEmpty)
-          .collectFirst {
-            case Some(entry: TarArchiveEntry) if entry.isFile && entry.getName.contains(".snapshot") => entry
+          .collect { case Some(entry: TarArchiveEntry) if entry.isFile && entry.getName.endsWith(".jfr") => entry }
+          .foreach { entry =>
+            val target = logDir().resolve(s"${node.name}-${Paths.get(entry.getName).getFileName}")
+            val output = new FileOutputStream(target.toFile)
+            try IOUtils.copy(archiveStream, output)
+            finally output.close()
+            log.info(s"Saved the flight recording of ${node.name} to $target")
           }
-
-        snapshotFile.foreach { archiveFile =>
-          val output = new FileOutputStream(logDir().resolve(s"${node.name}.snapshot").toFile)
-          try {
-            IOUtils.copy(archiveStream, output)
-            log.info(s"The snapshot of ${node.name} was successfully saved")
-          } catch {
-            case e: Throwable => throw new IOException(s"Can't copy ${archiveFile.getName} of ${node.name} to local fs", e)
-          } finally {
-            output.close()
-          }
-        }
-      } catch {
-        case e: Throwable => throw new IOException(s"Can't read a profiler directory stream of ${node.name}", e)
       } finally {
         // Some kind of https://github.com/spotify/docker-client/issues/745
         // But we have to close this stream, otherwise the thread will be blocked
-        Try(profilerDirStream.close())
+        Try(logDirStream.close())
       }
     } catch {
-      case e: Throwable => log.warn(s"Can't save profiler logs of ${node.name}", e)
+      case e: Throwable => log.warn(s"Can't save the flight recording of ${node.name}", e)
     }
   }
 
@@ -590,8 +576,13 @@ object Docker {
   val GrpcExtension              = "tech.hearth.api.grpc.GRPCServerExtension"
   val BlockchainUpdatesExtension = "tech.hearth.events.BlockchainUpdates"
 
-  private val ContainerRoot = Paths.get("/usr/share/hearth")
-  private val ProfilerPort  = 10001
+  private val ContainerLogDir = Paths.get("/var/log/hearth") // HEARTH_LOG in docker/Dockerfile
+
+  /** Set by the CI job that runs the load tests, so every suite there records without opting in one by one. */
+  val ProfilingRequested: Boolean = sys.env.get("HEARTH_IT_PROFILE").contains("true")
+
+  // profile: 10 ms Java samples and lock parks over 10 ms; CPUTimeSample (JDK 25, Linux) also sees time in native code
+  private val JfrSettings = "settings=profile,jdk.CPUTimeSample#enabled=true"
 
   private val RunId = Option(System.getenv("RUN_ID")).getOrElse(DateTimeFormatter.ofPattern("MM-dd--HH_mm_ss").format(LocalDateTime.now()))
 

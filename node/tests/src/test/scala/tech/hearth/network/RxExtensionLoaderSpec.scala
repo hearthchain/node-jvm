@@ -228,10 +228,21 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     appliersRunAfterFirstExtension(ExtensionOutcome.Appended(Some(0))) shouldBe 2
   }
 
-  /** Drives the loader to the state where one extension is being applied and a second has been optimistically loaded
-    * and buffered, finishes the first one with `first`, and answers how many extensions reached the applier.
+  // Same anchoring problem, but the drop lands while the optimistic blocks are still on the wire: nothing is buffered
+  // yet, and the extension arrives to an idle applier that would take it as a fresh, normally anchored one.
+  "should discard an optimistic extension still being loaded when the previous one was dropped" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Dropped, finishFirstWhileLoading = true) shouldBe 1
+  }
+
+  "should apply an optimistic extension still being loaded when the previous one was appended" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Appended(Some(0)), finishFirstWhileLoading = true) shouldBe 2
+  }
+
+  /** Drives the loader to the state where one extension is being applied and a second is optimistically loaded on top
+    * of it, finishes the first one with `first` - after the second is buffered, or while its blocks are still awaited
+    * when `finishFirstWhileLoading` - and answers how many extensions reached the applier.
     */
-  private def appliersRunAfterFirstExtension(first: ExtensionOutcome): Int = {
+  private def appliersRunAfterFirstExtension(first: ExtensionOutcome, finishFirstWhileLoading: Boolean = false): Int = {
     val gate     = Promise[Unit]()
     val appliers = new AtomicInteger(0)
     val applier: Applier = (_, _) =>
@@ -239,6 +250,11 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         if (n == 1) Task.fromFuture(gate.future).map(_ => Right(first))
         else Task.now(Right(ExtensionOutcome.Appended(Some(0))))
       }
+
+    def finishFirst(): Future[Unit] = {
+      gate.success(())
+      Future(Thread.sleep(500))
+    }
 
     val allBlocks = Seq.tabulate(103)(block)
     withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = applier) { (_, blocks, sigs, ccsw, _) =>
@@ -255,9 +271,9 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         _ = ch.readOutbound[GetBlockIds].ids.head shouldBe allBlocks(101).id()
         _ <- send(sigs)((ch, BlockIds(Seq(allBlocks(101).id(), allBlocks(102).id()))))
         _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(102).id()
+        _ <- if (finishFirstWhileLoading) finishFirst() else Future.unit
         _ <- send(blocks)((ch, allBlocks(102)))
-        _ = gate.success(())
-        _ <- Future(Thread.sleep(500))
+        _ <- if (finishFirstWhileLoading) Future(Thread.sleep(500)) else finishFirst()
       } yield ())
     }
     appliers.get()

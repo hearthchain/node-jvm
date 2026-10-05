@@ -232,6 +232,10 @@ Selecting by name rather than by tag on the command line is the part worth expla
 
 `testOnly` also reports failures reliably, which `test` does not; `loadTests` and `integrationTests` both go through it. Both refuse to run an empty selection, and `loadTests` additionally refuses to start when `SCALATEST_EXCLUDE_TAGS` would filter out the very tag it selected on.
 
+### Profiling node-it suites
+
+`HEARTH_IT_PROFILE=true` in the environment of the sbt server makes every node container start a JFR recording (`settings=profile` plus JDK 25's `jdk.CPUTimeSample`, which also covers time in native code such as RocksDB and crypto providers), stops containers gracefully so the JVM can write it, and saves it as `<node>-node-<timestamp>.jfr` next to that node's log. The `run-load-tests` job sets it and uploads the recordings as the `load-test-profiles` artifact. Locally, `sbt --client` reuses a server that does not have the variable: `sbt --client shutdown` first, then start with `HEARTH_IT_PROFILE=true sbt --server ...`. A suite can still pass `enableProfiling` to `Docker` directly. The flag used to set a YourKit environment variable that nothing in the image read, which is why no profile ever came out of it.
+
 ## grpc-server tests (`WithBUDomain`, `BlockchainUpdatesSpec` family)
 
 `WithBUDomain.withDomainAndRepo`/`withManualHandle` default to funding `defaultSigner` with
