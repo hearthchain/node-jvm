@@ -51,7 +51,7 @@ class PortfolioTest extends FunSuite {
     val p = Portfolio(balance = 100, staked = 30)
 
     p.spendableBalance shouldBe 70
-    // Unlike a lease, staking costs forging weight too - see GeneratingBalanceProvider.unstakedEffectiveBalance
+    // Unlike a lease, staking costs forging weight too - see BalanceSnapshot.effectiveBalance
     p.effectiveBalance(false) shouldBe Right(70)
   }
 

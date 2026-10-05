@@ -1,6 +1,5 @@
 package tech.hearth.history
 
-import tech.hearth.*
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.test.{PropSpec, produce}
 import tech.hearth.transaction.TxHelpers
@@ -64,10 +63,10 @@ class BlockchainUpdaterKeyAndMicroBlockConflictTest extends PropSpec with Domain
 
         val keyBlock = d.createBlock(Nil)
         d.appendBlock(keyBlock)
-        d.blockchainUpdater.effectiveBalance(secondAccount.toAddress, 0) should be > 0L
+        d.effectiveBalanceAt(secondAccount.toAddress) should be > 0L
 
         d.appendMicroBlock(leaseCancel)
-        d.blockchainUpdater.effectiveBalance(secondAccount.toAddress, 0, Some(leaseBlockId)) should be > 0L
+        d.effectiveBalanceAt(secondAccount.toAddress, Some(leaseBlockId)) should be > 0L
 
         // The transfer block references the key block, where the lease is still in force, so the rich account cannot
         // move what it has leased out - the micro block that cancelled the lease is not on that branch

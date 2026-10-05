@@ -99,10 +99,10 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     "on start height of period1" in test { d =>
       d.appendBlock()
       val txIds                = d.commit(generators*)
-      val minerBalanceAtCommit = d.effBalance(miner.toAddress)
+      val minerBalanceAtCommit = d.blockchain.generatingBalance(miner.toAddress)
 
       d.appendUpTo(period1.end - 1)
-      val minerBalanceInPeriod1 = d.effBalance(miner.toAddress)
+      val minerBalanceInPeriod1 = d.blockchain.generatingBalance(miner.toAddress)
 
       d.checkAt(period1.start) {
         jsonBodyIs(
@@ -151,10 +151,10 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     "one generator is conflicting" in test { d =>
       d.appendBlock()
       val txIds                = d.commit(generators*)
-      val minerBalanceAtCommit = d.effBalance(miner.toAddress)
+      val minerBalanceAtCommit = d.blockchain.generatingBalance(miner.toAddress)
 
       d.appendUpTo(period1.end - 1)
-      val minerBalanceInPeriod1 = d.effBalance(miner.toAddress)
+      val minerBalanceInPeriod1 = d.blockchain.generatingBalance(miner.toAddress)
       d.appendConflicting()
 
       d.checkAt(period1.start) {
@@ -207,7 +207,7 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
       val txIds1 = d.commit(generators*)
 
       d.appendUpTo(period1.end - 1)
-      val minerBalanceInPeriod1 = d.effBalance(miner.toAddress)
+      val minerBalanceInPeriod1 = d.blockchain.generatingBalance(miner.toAddress)
       d.appendConflicting()
       val txIds2 = d.commit(validGenerator, miner)
 
@@ -251,14 +251,14 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     "on the period 2" in test { d =>
       d.appendBlock()
       val txIds1               = d.commit(generators*)
-      val minerBalanceAtCommit = d.effBalance(miner.toAddress)
+      val minerBalanceAtCommit = d.blockchain.generatingBalance(miner.toAddress)
 
       d.appendUpTo(period1.end - 1)
       d.appendConflicting()
       val txIds2 = d.commit(validGenerator, miner)
 
       d.appendUpTo(period2.start + 1)
-      val minerBalanceInPeriod2 = d.effBalance(miner.toAddress)
+      val minerBalanceInPeriod2 = d.blockchain.generatingBalance(miner.toAddress)
 
       d.checkAt(period1.start) {
         jsonBodyIs(

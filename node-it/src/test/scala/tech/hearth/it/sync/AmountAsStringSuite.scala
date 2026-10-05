@@ -45,16 +45,12 @@ class AmountAsStringSuite extends BaseFunSuite with ScorexLogging {
   test("amount as string in addresses api") {
     val firstBalance = sender.balanceDetails(firstAddress)
     sender.balance(firstAddress, amountsAsStrings = true).balance shouldBe firstBalance.regular
-    sender.balance(firstAddress, confirmations = Some(1), amountsAsStrings = true).balance shouldBe firstBalance.regular
 
     val balanceDetails = sender.balanceDetails(firstAddress, amountsAsStrings = true)
     balanceDetails.regular shouldBe firstBalance.regular
     balanceDetails.generating shouldBe firstBalance.generating
     balanceDetails.available shouldBe firstBalance.available
     balanceDetails.effective shouldBe firstBalance.effective
-
-    sender.effectiveBalance(firstAddress, amountsAsStrings = true).balance shouldBe firstBalance.effective
-    sender.effectiveBalance(firstAddress, confirmations = Some(1), amountsAsStrings = true).balance shouldBe firstBalance.effective
   }
 
   test("amount as string in exchange transaction") {

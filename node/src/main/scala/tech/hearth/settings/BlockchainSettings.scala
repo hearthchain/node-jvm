@@ -122,8 +122,6 @@ case class FunctionalitySettings(
       val ws = activationWindowSize(height)
       Range.inclusive((height - 1) / ws * ws + 1, ((height - 1) / ws + 1) * ws)
     }
-
-  def generatingBalanceDepth(height: Int): Int = 1000
 }
 
 object FunctionalitySettings {

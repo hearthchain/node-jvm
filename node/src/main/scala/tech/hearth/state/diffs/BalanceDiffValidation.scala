@@ -129,9 +129,8 @@ object BalanceDiffValidation {
               snapshot.nextCommittedGenerators.find(_.sender.toAddress == address).size
             // lockedStake is the larger of this period's stake and the next one's, so a snapshot restating the
             // next period's has to be maxed against what this period already locks - it cannot free anything now.
-            // Filtered by period as well as address: a boundary block's snapshot carries StakingPayout's
-            // carry-forward for the period just starting alongside any Stake transaction for the one after, and
-            // taking the last entry blind would compare the wrong period's amount.
+            // Filtered by period as well as address: only a restatement of the next period's stake moves the lock,
+            // so an entry naming any other period must not be compared against it.
             val restated    = b.nextPeriodStakes(snapshot, address)
             val stakedAfter = restated.fold(b.lockedStake(address))(amount => math.max(b.stakedForPeriod(address), amount))
             checkHearth(address, balance, currentLeaseBalance, depositedOnNext, stakedAfter).fold(error => List(error), _ => Nil)

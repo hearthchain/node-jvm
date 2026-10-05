@@ -276,10 +276,8 @@ object AsyncHttpApi extends Assertions {
       get(s"/blockchain/rewards$maybeHeight", amountsAsString).as[RewardStatus](amountsAsString)
     }
 
-    def balance(address: String, confirmations: Option[Int] = None, amountsAsStrings: Boolean = false): Future[Balance] = {
-      val maybeConfirmations = confirmations.fold("")(a => s"/$a")
-      get(s"/addresses/balance/$address$maybeConfirmations", amountsAsStrings).as[Balance](amountsAsStrings)
-    }
+    def balance(address: String, amountsAsStrings: Boolean = false): Future[Balance] =
+      get(s"/addresses/balance/$address", amountsAsStrings).as[Balance](amountsAsStrings)
 
     def balances(height: Option[Height], addresses: Seq[String], asset: Option[String]): Future[Seq[Balance]] = {
       for {
@@ -355,11 +353,6 @@ object AsyncHttpApi extends Assertions {
     def assetDistribution(asset: String, amountsAsStrings: Boolean = false): Future[AssetDistribution] = {
       val req = s"/assets/$asset/distribution"
       get(req, amountsAsStrings).as[AssetDistribution](amountsAsStrings)
-    }
-
-    def effectiveBalance(address: String, confirmations: Option[Int] = None, amountsAsStrings: Boolean = false): Future[Balance] = {
-      val maybeConfirmations = confirmations.fold("")(a => s"/$a")
-      get(s"/addresses/effectiveBalance/$address$maybeConfirmations", amountsAsStrings).as[Balance](amountsAsStrings)
     }
 
     def transfer(
@@ -668,8 +661,6 @@ object AsyncHttpApi extends Assertions {
 
     def transactionSerializer(body: JsObject): Future[TransactionSerialize] =
       postJsObjectWithApiKey(s"/utils/transactionSerialize", body).as[TransactionSerialize]
-
-    def accountEffectiveBalance(acc: String): Future[Long] = n.effectiveBalance(acc).map(_.balance)
 
     def accountBalance(acc: String): Future[Long] = n.balance(acc).map(_.balance)
 

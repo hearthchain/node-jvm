@@ -65,7 +65,7 @@ trait Blockchain {
   def balanceAtHeight(address: Address, height: Int, assetId: Asset = Hearth): Option[(Int, Long)]
 
   /** Retrieves Hearth balance snapshot in the [from, to] range (inclusive).
-    * Used only for getting a regular balance with confirmations and effective balance calculations.
+    * Used only for generating balance calculations.
     * @return Balance snapshots from most recent to oldest. May contain consecutive duplicate values
     */
   def balanceSnapshots(address: Address, from: Int, to: Option[BlockId]): Seq[BalanceSnapshot]
@@ -154,23 +154,8 @@ object Blockchain {
     def lastBlockIds(maxRollbackLength: Int): Seq[ByteStr] =
       (blockchain.height to blockchain.finalizedHeightOrFallback(maxRollbackLength).toInt by -1).flatMap(blockId)
 
-    def effectiveBalance(address: Address, confirmations: Int, block: Option[BlockId] = blockchain.lastBlockId): Long = {
-      val blockHeight = block.flatMap(b => blockchain.heightOf(b)).getOrElse(blockchain.height)
-      val bottomLimit = (blockHeight - confirmations + 1).max(1).min(blockHeight)
-      val balances    = blockchain.balanceSnapshots(address, bottomLimit, block)
-      val isBanned    = blockchain.effectiveBalanceBanHeights(address).exists(h => h >= bottomLimit && h <= blockHeight)
-      if (balances.isEmpty || isBanned) 0L else balances.view.map(_.effectiveBalance).min
-    }
-
     def generatingBalance(account: Address, blockId: Option[BlockId] = None): Long =
       GeneratingBalanceProvider.balance(blockchain, account, blockId)
-
-    def regularBalance(address: Address, atHeight: Int, confirmations: Int): Long = {
-      val bottomLimit = (atHeight - confirmations + 1).max(1).min(atHeight)
-      val blockId     = blockchain.blockHeader(atHeight).getOrElse(throw new IllegalArgumentException(s"Invalid block height: $atHeight")).id()
-      val balances    = blockchain.balanceSnapshots(address, bottomLimit, Some(blockId))
-      if (balances.isEmpty) 0L else balances.view.map(_.regularBalance).min
-    }
 
     def unsafeHeightOf(id: ByteStr): Int =
       blockchain
@@ -184,22 +169,14 @@ object Blockchain {
       staked = blockchain.lockedStake(address)
     )
 
-    /** The HRTH a stake currently stops `address` spending.
-      *
-      * The larger of what is in force for this period and what the address last set, which is what will be in
-      * force for the next one. Raising a stake locks the new, larger amount as soon as the transaction is applied,
-      * since it already counts for the next period; lowering one keeps this period's larger amount locked until
-      * this period ends, at which point the two converge on their own.
-      */
+    /** The HRTH a stake currently locks, see StakeLock. What the address last set is what the next period has. */
     def lockedStake(address: Address): Long =
       blockchain.currentGenerationPeriod.fold(0L) { period =>
-        math.max(blockchain.stakeAt(address, period), blockchain.stakeAt(address, period.next))
+        StakeLock(inForce = blockchain.stakeAt(address, period), latestSet = blockchain.stakeAt(address, period.next))
       }
 
-    /** The HRTH a stake currently costs `address` in forging weight, which is the amount it is also *earning* on -
-      * what is in force for this period, never what it has set for the next. Constant for a whole period, which is
-      * what makes it safe to subtract from a windowed effective balance - see
-      * GeneratingBalanceProvider.unstakedEffectiveBalance.
+    /** The stake in force for the current period, i.e. the amount `address` is earning on, never what it has set
+      * for the next.
       */
     def stakedForPeriod(address: Address): Long =
       blockchain.currentGenerationPeriod.fold(0L)(blockchain.stakeAt(address, _))

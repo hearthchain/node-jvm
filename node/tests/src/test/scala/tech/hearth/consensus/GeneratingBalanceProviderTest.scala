@@ -10,7 +10,7 @@ import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.TxHelpers
 
 /** GeneratingBalanceProvider.balance's workBoost wiring (see CLAUDE.md's "workBoost") is exercised by wrapping a
-  * real domain's Blockchain (so effectiveBalance/generationPeriodOf are the genuine ones) with a Blockchain that
+  * real domain's Blockchain (so balanceSnapshots/generationPeriodOf are the genuine ones) with a Blockchain that
   * injects committedGenerators/workDone for a specific period (WithState.blockchainWithCommitteeWork, shared with
   * StakingPayoutTest), the same "inject the minimal necessary state directly" technique
   * SettleTransactionDiffTest/ReserveTransactionDiffTest use - rather than driving the domain
@@ -59,9 +59,8 @@ class GeneratingBalanceProviderTest extends FreeSpec with WithDomain {
       AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(validator, 100.hearth)
     ) { d =>
       // No override applied: even the real committee (just defaultSigner, genesis-committed) has tracked no work,
-      // so totalWork is 0 and the boosted value has to equal the raw ingredient GeneratingBalanceProvider itself
-      // combines from - bypassing GeneratingBalanceProvider entirely confirms nothing was silently added.
-      d.blockchain.generatingBalance(validator) shouldBe d.blockchain.effectiveBalance(validator, 1000, None)
+      // so totalWork is 0 and the result has to be exactly the genesis balance, the validator's only one.
+      d.blockchain.generatingBalance(validator) shouldBe 100.hearth
     }
   }
 }

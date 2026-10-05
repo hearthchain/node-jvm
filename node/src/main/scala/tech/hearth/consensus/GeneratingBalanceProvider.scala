@@ -43,26 +43,15 @@ object GeneratingBalanceProvider {
     balanceAt(blockchain, account, height, blockId, context)
   }
 
-  /** Effective balance with the address's stake taken out: staking HRTH costs forging weight, not just liquidity.
-    *
-    * The term subtracted is `stakedForPeriod`, this period's own stake, not `lockedStake` - it is the stake the
-    * address is *earning* Cred on, so the same embers buy the yield and pay for it. That is also what keeps this
-    * safe to read as a current value against a windowed `effectiveBalance`: a period's stake cannot change once
-    * that period has started, so forging weight changes only where the committee itself does. Subtracting the lock
-    * instead would let any committed generator zero its own generating balance mid-period with one cheap
-    * transaction and no fund movement, which hands it a lever over `EndorsementFilter`'s 2/3 quorum denominator
-    * and over the `validGenerators.nonEmpty` case in `appender.findBlockAndGetGenerators`. The HRTH a raised stake
-    * locks is still unspendable in the meantime, through `lockedStake`; it just keeps counting as skin in the game
-    * until the period it was staked for actually starts.
-    *
-    * Every consensus caller hands in a blockchain positioned at the block it is asking about
-    * (`appender.appendBlock` does it explicitly, with `blockchainUpdater.referencedBlockchain(...)`), so reading
-    * the stake off `blockchain` rather than as of `blockId` resolves to the same state - the same property
-    * `workContext`'s own `workDone` read already relies on. A future caller passing a `blockId` older than the
-    * blockchain's tip would break that and would need the stake resolved at that height instead.
+  /** The least the address could forge on at any height of the window ending at `blockId`: balance plus leases in,
+    * less leases out, the generation deposit and the stake lock (see BalanceSnapshot.effectiveBalance).
     */
-  def unstakedEffectiveBalance(blockchain: Blockchain, account: Address, depth: Int, blockId: Option[BlockId] = None): Long =
-    math.max(0L, blockchain.effectiveBalance(account, depth, blockId) - blockchain.stakedForPeriod(account))
+  private def windowedBalance(blockchain: Blockchain, account: Address, height: Int, blockId: Option[BlockId]): Long = {
+    val bottom   = (height - SecondDepth + 1).max(1).min(height)
+    val balances = blockchain.balanceSnapshots(account, bottom, blockId)
+    val isBanned = blockchain.effectiveBalanceBanHeights(account).exists(h => h >= bottom && h <= height)
+    if (balances.isEmpty || isBanned) 0L else balances.view.map(_.effectiveBalance).min
+  }
 
   private def balanceAt(
       blockchain: Blockchain,
@@ -71,12 +60,10 @@ object GeneratingBalanceProvider {
       blockId: Option[BlockId],
       context: Option[(GenerationPeriod, BigInt)]
   ): Long = {
-    val depth = SecondDepth
-
     val maybeChallengedMiner = blockchain.blockHeader(height + 1).flatMap(_.header.challengedHeader).map(_.generator.toAddress)
     val rawBalance =
-      unstakedEffectiveBalance(blockchain, account, depth, blockId) +
-        maybeChallengedMiner.map(unstakedEffectiveBalance(blockchain, _, depth, blockId)).getOrElse(0L)
+      windowedBalance(blockchain, account, height, blockId) +
+        maybeChallengedMiner.map(windowedBalance(blockchain, _, height, blockId)).getOrElse(0L)
 
     context match {
       case None                          => rawBalance

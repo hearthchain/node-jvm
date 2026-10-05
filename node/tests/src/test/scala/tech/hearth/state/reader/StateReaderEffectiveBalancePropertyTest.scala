@@ -14,17 +14,16 @@ import tech.hearth.transaction.{CommitToGenerationTransaction, Transaction, TxHe
 class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
   import DomainPresets.*
 
-  property("No-interactions genesis account's effectiveBalance doesn't depend on depths") {
+  property("No-interactions genesis account's generating balance is its genesis balance") {
     val master = TxHelpers.signer(1)
 
     val emptyBlocksAmt = 10
-    val confirmations  = 20
 
     // The master is credited by the genesis snapshot, which is applied to the block at height 1
     val genesisBlock = block(Seq.empty)
     val nextBlocks   = List.fill(emptyBlocksAmt - 1)(block(Seq.empty))
     assertDiffAndState(genesisBlock +: nextBlocks, block(Seq.empty), balances = Seq(AddrWithBalance(master.toAddress))) { (_, newState) =>
-      newState.effectiveBalance(master.toAddress, confirmations) shouldBe ENOUGH_AMT
+      newState.generatingBalance(master.toAddress) shouldBe ENOUGH_AMT
     }
   }
 
@@ -239,5 +238,5 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
   }
 
   private def bs(height: Height, regularBalance: Long, leaseIn: Long = 0, leaseOut: Long = 0, deposits: Int = 0): BalanceSnapshot =
-    BalanceSnapshot(height, regularBalance, leaseIn, leaseOut, CommitToGenerationTransaction.DepositInEmbers * deposits)
+    BalanceSnapshot(height, regularBalance, leaseIn, leaseOut, CommitToGenerationTransaction.DepositInEmbers * deposits, staked = 0L)
 }

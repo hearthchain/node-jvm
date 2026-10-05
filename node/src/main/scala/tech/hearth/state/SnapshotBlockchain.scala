@@ -181,7 +181,7 @@ case class SnapshotBlockchain(
       val lease   = this.leaseBalance(address)
       val deposit = this.generationDeposit(address, h)
 
-      val bs = BalanceSnapshot(h, Portfolio(balance, lease, generationDeposit = deposit))
+      val bs = BalanceSnapshot(h, Portfolio(balance, lease, generationDeposit = deposit, staked = this.lockedStake(address)))
       // `from == h - 1` yields the liquid snapshot alone: the inner blockchain is only consulted from `h - 2` down.
       // Height 2 is the one exception, so that a generating balance at that height accounts for the genesis snapshot -
       // it used to be gated on RideV6 and applies unconditionally now.

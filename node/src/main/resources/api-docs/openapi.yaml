@@ -379,85 +379,6 @@ paths:
             application/json;large-significand-format=string:
               schema:
                 $ref: '#/components/schemas/BalanceDetailsLSF'
-  '/addresses/balance/{address}/{confirmations}':
-    get:
-      tags:
-        - addresses
-      summary: Confirmed regular balance in HRTH
-      description: >-
-        Get the minimum regular balance at a given address for {confirmations}
-        blocks back from the current height. Max number of confirmations is set
-        by `hearth.db.max-rollback-depth`, 2000 by default.
-      operationId: getConfirmedRegularBalance
-      parameters:
-        - $ref: '#/components/parameters/address'
-        - name: confirmations
-          in: path
-          description: Number of blocks
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Balance'
-            application/json;large-significand-format=string:
-              schema:
-                $ref: '#/components/schemas/BalanceLSF'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  '/addresses/effectiveBalance/{address}':
-    get:
-      tags:
-        - addresses
-      summary: Effective balance
-      description: Get the effective balance in HRTH at a given address
-      operationId: getEffectiveBalance
-      parameters:
-        - $ref: '#/components/parameters/address'
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Balance'
-            application/json;large-significand-format=string:
-              schema:
-                $ref: '#/components/schemas/BalanceLSF'
-  '/addresses/effectiveBalance/{address}/{confirmations}':
-    get:
-      tags:
-        - addresses
-      summary: Confirmed effective balance in HRTH
-      description: >-
-        Get the minimum effective balance at a given address for
-        {confirmations} blocks back from the current height. Max number of
-        confirmations is set by `hearth.db.max-rollback-depth`, 2000 by default.
-      operationId: getConfirmedEffectiveBalance
-      parameters:
-        - $ref: '#/components/parameters/address'
-        - name: confirmations
-          in: path
-          description: Number of blocks
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Balance'
-            application/json;large-significand-format=string:
-              schema:
-                $ref: '#/components/schemas/BalanceLSF'
-        '400':
-          $ref: '#/components/responses/BadRequest'
   '/blocks/{id}':
     get:
       tags:
@@ -3124,10 +3045,9 @@ components:
           type: integer
           format: int64
           description: >-
-            `available` plus what is leased in. Not the same quantity as
-            `/addresses/effectiveBalance`, which is a minimum over the
-            generating-balance window and nets off only the stake in force for
-            the current generation period.
+            `available` plus what is leased in, at the current height only.
+            `generating` is the minimum of this over the generating-balance
+            window, plus any work boost.
         staked:
           type: integer
           format: int64

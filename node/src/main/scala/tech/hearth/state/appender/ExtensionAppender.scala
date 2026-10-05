@@ -43,12 +43,13 @@ object ExtensionAppender extends ScorexLogging {
             val newBlocks = extensionWithValidSignatures.blocks.dropWhile(blockchainUpdater.contains)
 
             log.trace(
-              s"All blocks: ${extensionWithValidSignatures.blocks.view.map(b => s"${b.header.reference} <- ${b.id}").mkString("[", ",", "]")}, " +
-                s"new blocks: ${newBlocks.view.map(b => s"${b.header.reference} <- ${b.id}").mkString("[", ",", "]")}"
+              s"All blocks: ${extensionWithValidSignatures.blocks.view.map(b => s"${b.header.reference} <- ${b.id()}").mkString("[", ",\n", "]")}, " +
+                s"new blocks: ${newBlocks.view.map(b => s"${b.header.reference} <- ${b.id()}").mkString("[", ",\n", "]")}"
             )
 
             newBlocks.headOption.map(_.header.reference) match {
               case Some(lastCommonBlockId) =>
+                log.trace(s"Last common block ID: $lastCommonBlockId, blockchain last block: ${blockchainUpdater.lastBlockId}")
                 val initialHeight = blockchainUpdater.height
 
                 val droppedBlocksEi = for {

@@ -514,7 +514,7 @@ already-stored historical raw values, retroactively or lazily, is a small follow
 **Testing:** `WorkBoostTest` covers the pure curve directly (zero-total, zero-own-work, proportional share,
 truncation, the `(1 + MaxBoost)` bound). `GeneratingBalanceProviderTest` exercises the full wiring
 (period resolution, committee enumeration, `workDone` lookup, boost application) against a *real* domain's
-`effectiveBalance`/`generationPeriodOf` wrapped with a `Blockchain` that injects `committedGenerators`/`workDone`
+`balanceSnapshots`/`generationPeriodOf` wrapped with a `Blockchain` that injects `committedGenerators`/`workDone`
 for one specific period - the same "inject the minimal necessary state directly" technique used throughout this
 feature, chosen over driving a real period boundary crossing (which needs an actual `CommitToGenerationTransaction`
 committing a generator for a *later* period - see "node-it fixtures"'s own extensive notes in `docs/notes/testing.md` on how fiddly that is
