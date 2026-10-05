@@ -16,6 +16,7 @@ import io.netty.channel.Channel
 import monix.eval.Task
 import monix.execution.Scheduler
 import org.influxdb.dto.Point
+import tech.hearth.block.Block
 
 import scala.util.{Left, Right}
 
@@ -41,6 +42,11 @@ object ExtensionAppender extends ScorexLogging {
           .flatMap { extensionWithValidSignatures =>
             val newBlocks = extensionWithValidSignatures.blocks.dropWhile(blockchainUpdater.contains)
 
+            log.trace(
+              s"All blocks: ${extensionWithValidSignatures.blocks.view.map(b => s"${b.header.reference} <- ${b.id}").mkString("[", ",", "]")}, " +
+                s"new blocks: ${newBlocks.view.map(b => s"${b.header.reference} <- ${b.id}").mkString("[", ",", "]")}"
+            )
+
             newBlocks.headOption.map(_.header.reference) match {
               case Some(lastCommonBlockId) =>
                 val initialHeight = blockchainUpdater.height
@@ -56,7 +62,6 @@ object ExtensionAppender extends ScorexLogging {
 
                 droppedBlocksEi.flatMap { case (commonBlockHeight, droppedBlocks) =>
                   newBlocks.foreach { block =>
-                    // RideV6 is active
                     ParSignatureChecker.checkTxSignatures(block.transactionData)
                   }
 
