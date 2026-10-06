@@ -53,9 +53,9 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
       domain.appendBlockAt(aliceToBob.timestamp)(aliceToBob)
       domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative hearth balance")
 
-      effBalance(master.toAddress, domain) > 0 shouldBe true
-      effBalance(masterToAlice.transfers.head.address, domain) shouldBe 0L
-      effBalance(aliceToBob.transfers.head.address, domain) shouldBe 0L
+      generatingBalance(master.toAddress, domain) > 0 shouldBe true
+      generatingBalance(masterToAlice.transfers.head.address, domain) shouldBe 0L
+      generatingBalance(aliceToBob.transfers.head.address, domain) shouldBe 0L
     }
   }
 
@@ -69,9 +69,9 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         domain.appendMicroBlock(aliceToBob)
         domain.appendMicroBlockE(aliceToBob2) should produce("negative hearth balance")
 
-        // effBalance is the minimum over the generating window, so an account credited in the liquid block is still
+        // generatingBalance is the minimum over the generating window, so an account credited in the liquid block is still
         // at zero there; what the micro block did shows up in the balances
-        effBalance(master.toAddress, domain) > 0 shouldBe true
+        generatingBalance(master.toAddress, domain) > 0 shouldBe true
         domain.balance(masterToAlice.transfers.head.address) shouldBe 1L
         domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob.transfers.head.amount.value
     }
@@ -85,7 +85,7 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         // On top of the micro block, so what it carries stays and the competing transfer cannot be paid for
         domain.appendBlockAtE(aliceToBob2.timestamp)(aliceToBob2) should produce("negative hearth balance")
 
-        effBalance(master.toAddress, domain) > 0 shouldBe true
+        generatingBalance(master.toAddress, domain) > 0 shouldBe true
         domain.balance(masterToAlice.transfers.head.address) shouldBe 1L
         domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob.transfers.head.amount.value
     }
@@ -104,7 +104,7 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
         // unable to pay for this one
         domain.appendBlockE(competing) should beRight
 
-        effBalance(master.toAddress, domain) > 0 shouldBe true
+        generatingBalance(master.toAddress, domain) > 0 shouldBe true
         domain.balance(aliceToBob.transfers.head.address) shouldBe aliceToBob2.transfers.head.amount.value
     }
   }
@@ -175,5 +175,5 @@ class BlockchainUpdaterMicroblockSunnyDayTest extends PropSpec with DomainScenar
     }
   }
 
-  private def effBalance(aa: Address, domain: Domain): Long = domain.effBalance(aa)
+  private def generatingBalance(aa: Address, domain: Domain): Long = domain.blockchain.generatingBalance(aa)
 }

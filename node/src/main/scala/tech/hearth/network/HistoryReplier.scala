@@ -33,9 +33,14 @@ class HistoryReplier(score: => BigInt, history: History, settings: Synchronizati
     case GetBlock(sig) =>
       respondWith(
         ctx,
-        history.loadBlockBytes(sig).fold(s"Error loading block $sig") { bs =>
-          RawBytes(PBBlockSpec.messageCode, bs)
-        }
+        history
+          .loadBlockBytes(sig)
+          .fold[Message] {
+            log.debug(s"${id(ctx)} Block $sig not found")
+            BlockNotFound(sig)
+          } { bs =>
+            RawBytes(PBBlockSpec.messageCode, bs)
+          }
       )
 
     case MicroBlockRequest(microBlockId) =>

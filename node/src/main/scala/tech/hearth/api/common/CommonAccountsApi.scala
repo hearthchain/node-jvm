@@ -13,9 +13,7 @@ import monix.reactive.Observable
 trait CommonAccountsApi {
   import CommonAccountsApi.*
 
-  def balance(address: Address, confirmations: Int = 0): Long
-
-  def effectiveBalance(address: Address, confirmations: Int = 0): Long
+  def balance(address: Address): Long
 
   def balanceDetails(address: Address): Either[String, BalanceDetails]
 
@@ -29,7 +27,15 @@ trait CommonAccountsApi {
 }
 
 object CommonAccountsApi {
-  final case class BalanceDetails(regular: Long, generating: Long, available: Long, effective: Long, leaseIn: Long, leaseOut: Long)
+  final case class BalanceDetails(
+      regular: Long,
+      generating: Long,
+      available: Long,
+      effective: Long,
+      leaseIn: Long,
+      leaseOut: Long,
+      staked: Long
+  )
 
   def apply(
       compositeBlockchain: () => SnapshotBlockchain,
@@ -37,12 +43,7 @@ object CommonAccountsApi {
       blockchain: Blockchain
   ): CommonAccountsApi = new CommonAccountsApi {
 
-    override def balance(address: Address, confirmations: Int = 0): Long =
-      blockchain.regularBalance(address, blockchain.height, confirmations)
-
-    override def effectiveBalance(address: Address, confirmations: Int = 0): Long = {
-      blockchain.effectiveBalance(address, confirmations)
-    }
+    override def balance(address: Address): Long = blockchain.balance(address)
 
     override def balanceDetails(address: Address): Either[String, BalanceDetails] = {
       val portfolio = blockchain.hearthPortfolio(address)
@@ -53,10 +54,13 @@ object CommonAccountsApi {
           BalanceDetails(
             portfolio.balance,
             blockchain.generatingBalance(address),
-            portfolio.balance - portfolio.generationDeposit - portfolio.lease.out,
+            // spendableBalance rather than the subtraction spelled out again: it is the one definition of what is
+            // left after every lock, and it grew a third term (staked) alongside generationDeposit and lease.out.
+            portfolio.spendableBalance,
             effectiveBalance,
             portfolio.lease.in,
-            portfolio.lease.out
+            portfolio.lease.out,
+            portfolio.staked
           )
         )
     }

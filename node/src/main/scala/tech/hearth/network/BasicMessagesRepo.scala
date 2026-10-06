@@ -115,6 +115,8 @@ trait BlockIdSeqSpec[A <: AnyRef] extends MessageSpec[A] {
 
   override def serializeData(v: A): Array[Byte] = {
     val ids = unwrap(v)
+    // deserializeData enforces this too, but only on the peer, whose decoder blacklists us for a malformed frame.
+    require(ids.size <= MaxIds, s"Block id count ${ids.size} exceeds $MaxIds")
 
     ids.foldLeft(Ints.toByteArray(ids.size)) { case (bs, id) =>
       Bytes.concat(bs, Array(id.length.ensuring(_.isValidByte).toByte), id)
@@ -340,12 +342,12 @@ object BasicMessagesRepo {
 
     protected def codeOf(msg: AnyRef): Option[Byte] = {
       val aux: PartialFunction[AnyRef, Byte] = {
-        case x: RawBytes                      => x.code
-        case _: Transaction                   => PBTransactionSpec.messageCode
-        case _: BigInt | _: LocalScoreChanged => ScoreSpec.messageCode
-        case _: Block | _: BlockForged        => PBBlockSpec.messageCode
-        case x: tech.hearth.network.Message   => specsByClasses(x.getClass).messageCode
-        case _: Handshake                     => HandshakeSpec.messageCode
+        case x: RawBytes                                  => x.code
+        case _: Transaction                               => PBTransactionSpec.messageCode
+        case _: BigInt | _: LocalScoreChanged             => ScoreSpec.messageCode
+        case _: Block | _: BlockForged | _: BlockNotFound => PBBlockSpec.messageCode
+        case x: tech.hearth.network.Message               => specsByClasses(x.getClass).messageCode
+        case _: Handshake                                 => HandshakeSpec.messageCode
       }
 
       aux.lift(msg)

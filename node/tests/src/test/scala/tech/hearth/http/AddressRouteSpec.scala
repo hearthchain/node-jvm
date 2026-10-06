@@ -66,17 +66,13 @@ class AddressRouteSpec extends RouteSpec("/addresses") with RestAPISettingsHelpe
     ).route
   )
 
-  routePath("/balance/{address}/{confirmations}") in {
+  "rejects a balance height past the max balance depth" in {
     val address = TxHelpers.signer(1).toAddress
 
     for (_ <- 1 until 10) domain.appendBlock(TxHelpers.transfer(richAccount, address))
 
     val height        = domain.blockchain.height
     val minimumHeight = height - MaxBalanceDepth
-
-    Get(routePath(s"/balance/$address/${MaxBalanceDepth + 1}")) ~> route ~> check {
-      responseAs[JsObject] shouldBe Json.obj("error" -> 199, "message" -> s"Unable to get balance past height $minimumHeight")
-    }
 
     Get(routePath(s"/balance?address=$address&height=1")) ~> route ~> check {
       responseAs[JsObject] shouldBe Json.obj("error" -> 199, "message" -> s"Unable to get balance past height $minimumHeight")

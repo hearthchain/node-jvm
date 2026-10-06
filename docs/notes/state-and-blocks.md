@@ -14,8 +14,9 @@ long-standing, so do not "fix" it: only height 2 is exempt, so that a generating
 snapshot. That exemption was gated on RideV6 upstream, where the suites checked both behaviours; RideV6 is always
 active here, so it is unconditional and only the fixed behaviour is under test.
 
-A `BalanceSnapshot` carries the generation deposit in its own field: `regularBalance` is the full balance, with the
-deposit neither deducted from it nor part of it. The REST balance details split the same way — `regular` includes the
+A `BalanceSnapshot` carries the generation deposit and the stake lock in fields of their own: `regularBalance` is the
+full balance, with neither deducted from it. The lock's history is derived, not stored per height - see "A stake is a
+lock" in `docs/notes/cred-economy.md`. The REST balance details split the same way: `regular` includes the
 deposit, `available` and `effective` do not.
 
 ## BlockDiffer's reference precondition

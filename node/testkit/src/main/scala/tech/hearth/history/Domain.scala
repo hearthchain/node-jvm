@@ -180,9 +180,13 @@ case class Domain(
   def liquidSnapshot: StateSnapshot =
     blockchainUpdater.bestLiquidSnapshot.orEmpty
 
-  def microBlocks: Vector[MicroBlock] = blockchain.microblockIds.reverseIterator.flatMap(blockchain.microBlock).to(Vector)
+  /** Effective balance as of `block` (the tip by default) alone, with no window: zero while banned there. */
+  def effectiveBalanceAt(a: Address, block: Option[BlockId] = None): Long = {
+    val h = block.flatMap(blockchainUpdater.heightOf).getOrElse(blockchainUpdater.height)
+    if (blockchainUpdater.hasBannedEffectiveBalance(a, h)) 0L else blockchainUpdater.balanceSnapshots(a, h, block).head.effectiveBalance
+  }
 
-  def effBalance(a: Address): Long = blockchainUpdater.effectiveBalance(a, 1000)
+  def microBlocks: Vector[MicroBlock] = blockchain.microblockIds.reverseIterator.flatMap(blockchain.microBlock).to(Vector)
 
   def appendBlock(b: Block): BlockApplyResult = blockchainUpdater.processBlock(b).explicitGet()
 

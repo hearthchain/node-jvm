@@ -47,7 +47,11 @@ case class StateSnapshot(
     // Work attributed to a validator within the current generation period (epoch), fed by SettleTransaction's
     // burned share - see Keys.workDoneSuffix. Same "Diff reads current value, writes the final accumulated total"
     // convention as reservedAmounts/settledAmounts above, not a delta.
-    workDone: Map[(Address, GenerationPeriod), Long] = Map.empty
+    workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
+    // StakeTransaction's own fields, and StakingPayout's carry-forward of them into the next period. Appended
+    // rather than keyed, exactly like nextCommittedGenerators above: the period each one names is what the storage
+    // layer files it under, and a later entry for the same address in the same period wins.
+    nextStakes: Seq[StakeCommitment] = Seq.empty
 ) {
 
   // ignores lease balances from portfolios
@@ -91,7 +95,8 @@ object StateSnapshot {
       reservedAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
       apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
       settledAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
-      workDone: Map[(Address, GenerationPeriod), Long] = Map.empty
+      workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
+      nextStakes: Seq[StakeCommitment] = Seq.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
       for {
@@ -119,15 +124,17 @@ object StateSnapshot {
         reservedAmounts,
         apiKeyBindings,
         settledAmounts,
-        workDone
+        workDone,
+        nextStakes
       )
     r.leftMap(GenericError(_))
   }
 
   // ignores lease balances from portfolios
   private def balances(portfolios: Map[Address, Portfolio], blockchain: Blockchain): Either[String, VectorMap[(Address, Asset), Long]] =
-    flatTraverse(portfolios) { case (address, Portfolio(hearthAmount, _, assets, _)) =>
-      val assetBalancesE = flatTraverse(assets) {
+    flatTraverse(portfolios) { case (address, portfolio) =>
+      val hearthAmount = portfolio.balance
+      val assetBalancesE = flatTraverse(portfolio.assets) {
         case (_, 0) =>
           Right(VectorMap[(Address, Asset), Long]())
         case (assetId, balance) =>
@@ -161,7 +168,8 @@ object StateSnapshot {
   private def leaseBalances(portfolios: Map[Address, Portfolio], blockchain: Blockchain): Either[String, Map[Address, LeaseBalance]] =
     portfolios.toSeq
       .flatTraverse {
-        case (address, Portfolio(_, lease, _, _)) if lease.out != 0 || lease.in != 0 =>
+        case (address, portfolio) if portfolio.lease.out != 0 || portfolio.lease.in != 0 =>
+          val lease  = portfolio.lease
           val bLease = blockchain.leaseBalance(address)
           for {
             newIn  <- safeSum(bLease.in, lease.in, s"$address -> Lease")
@@ -221,7 +229,8 @@ object StateSnapshot {
         s1.reservedAmounts ++ s2.reservedAmounts,
         s1.apiKeyBindings ++ s2.apiKeyBindings,
         s1.settledAmounts ++ s2.settledAmounts,
-        s1.workDone ++ s2.workDone
+        s1.workDone ++ s2.workDone,
+        s1.nextStakes ++ s2.nextStakes
       )
 
   }

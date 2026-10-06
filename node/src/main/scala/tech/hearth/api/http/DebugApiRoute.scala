@@ -142,11 +142,7 @@ case class DebugApiRoute(
       miner.nextBlockGenerationOffsets.collect { case (address, Right(offset)) =>
         AccountMiningInfo(
           address.toString,
-          blockchain.effectiveBalance(
-            address,
-            ws.blockchainSettings.functionalitySettings.generatingBalanceDepth(blockchain.height),
-            blockchain.microblockIds.lastOption
-          ),
+          blockchain.generatingBalance(address),
           System.currentTimeMillis() + offset.toMillis
         )
       }

@@ -39,6 +39,26 @@ class MessageCodecSpec extends FreeSpec {
     ch.readOutbound[RawBytes]().code shouldBe GetBlockIdsSpec.messageCode
   }
 
+  "encodes BlockNotFound as a block message carrying only the id" in {
+    val ch = new EmbeddedChannel(new MessageCodec(PeerDatabase.NoOp))
+    val id = ByteStr(bytes32gen.sample.get)
+
+    ch.writeOutbound(BlockNotFound(id))
+
+    ch.readOutbound[RawBytes]() shouldBe RawBytes(PBBlockSpec.messageCode, id.arr)
+  }
+
+  "decodes a block message carrying only an id as BlockNotFound" in {
+    val codec = new SpyingMessageCodec
+    val ch    = new EmbeddedChannel(codec)
+    val id    = ByteStr(bytes32gen.sample.get)
+
+    ch.writeInbound(RawBytes(PBBlockSpec.messageCode, id.arr))
+
+    ch.readInbound[BlockNotFound]() shouldBe BlockNotFound(id)
+    codec.blockCalls shouldBe 0
+  }
+
   private class SpyingMessageCodec extends MessageCodec(PeerDatabase.NoOp) {
     var blockCalls = 0
 

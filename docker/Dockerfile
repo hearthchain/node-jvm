@@ -16,9 +16,11 @@ ENV HEARTH_DATA=/var/lib/hearth
 ENV HEARTH_LOG=/var/log/hearth
 ENV HEARTH_INSTALL_PATH=/usr/share/hearth
 
-# curl is the healthcheck below. Nothing is downloaded at build time: every jar the image runs on, the Linux-only
+# curl is the healthcheck below. libsodium is what tech.hearth:crypto signs and verifies with; without it the library
+# silently falls back to a pure-JVM BigInteger backend that is not constant-time and made transaction validation the
+# bottleneck of every load test. Nothing else is downloaded at build time: every jar the image runs on, the Linux-only
 # rocksdb and Corretto builds included, is staged into the build context by `sbt stageForDocker`.
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libsodium23
 
 # Setup node. There is deliberately no USER instruction: entrypoint.sh starts as root only to take ownership of a
 # bind-mounted data or log directory, then re-execs itself as hearth (uid 999) with setpriv, from util-linux in the

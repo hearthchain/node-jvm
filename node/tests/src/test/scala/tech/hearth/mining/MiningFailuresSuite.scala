@@ -49,7 +49,7 @@ class MiningFailuresSuite extends FlatSpec, WithNewDBForEachTest {
       override def blockHeader(height: Int): Option[SignedBlockHeader] = Some(SignedBlockHeader(genesis.header, genesis.signature))
 
       override def balanceSnapshots(address: Address, from: Int, to: Option[ByteStr]): Seq[BalanceSnapshot] =
-        Seq(BalanceSnapshot(Height(1), ENOUGH_AMT, 0, 0, 0))
+        Seq(BalanceSnapshot(Height(1), ENOUGH_AMT, 0, 0, 0, 0))
 
       override def bestLastBlockInfo(maxMicroblockTimestampMs: Long): Option[BlockMinerInfo] = Some(
         BlockMinerInfo(

@@ -102,6 +102,26 @@ case class SnapshotBlockchain(
   override def workDone(validator: Address, period: GenerationPeriod): Long =
     snapshot.workDone.getOrElse((validator, period), inner.workDone(validator, period))
 
+  // A commitment in this snapshot is in force for `at` when `at` starts at or after the period it named. Since a
+  // StakeTransaction can only ever name the next period, that is "this snapshot wins for the next period onward".
+  private def restatedFor(address: Address, at: GenerationPeriod): Option[Long] =
+    snapshot.nextStakes.findLast(s => s.address == address && at.start >= s.periodStart).map(_.amount)
+
+  override def stakeAt(address: Address, at: GenerationPeriod): Long =
+    restatedFor(address, at).getOrElse(inner.stakeAt(address, at))
+
+  override def stakes(at: GenerationPeriod): Seq[Stake] = {
+    val restated = snapshot.nextStakes.filter(at.start >= _.periodStart)
+    if (restated.isEmpty) inner.stakes(at)
+    else {
+      val overridden = restated.view.map(_.address).toSet
+      inner.stakes(at).filterNot(s => overridden(s.address)) ++
+        restated.view.map(_.address).distinct.flatMap { address =>
+          restatedFor(address, at).filter(_ > 0).map(Stake(address, _))
+        }
+    }
+  }
+
   override def transactionInfo(id: ByteStr): Option[(TxMeta, Transaction)] =
     snapshot.transactions
       .get(id)
@@ -161,7 +181,7 @@ case class SnapshotBlockchain(
       val lease   = this.leaseBalance(address)
       val deposit = this.generationDeposit(address, h)
 
-      val bs = BalanceSnapshot(h, Portfolio(balance, lease, generationDeposit = deposit))
+      val bs = BalanceSnapshot(h, Portfolio(balance, lease, generationDeposit = deposit, staked = this.lockedStake(address)))
       // `from == h - 1` yields the liquid snapshot alone: the inner blockchain is only consulted from `h - 2` down.
       // Height 2 is the one exception, so that a generating balance at that height accounts for the genesis snapshot -
       // it used to be gated on RideV6 and applies unconditionally now.

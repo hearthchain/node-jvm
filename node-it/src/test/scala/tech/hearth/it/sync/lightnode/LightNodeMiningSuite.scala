@@ -8,34 +8,37 @@ import tech.hearth.it.{BaseFunSuite, TransferSending}
 import tech.hearth.state.Height
 import tech.hearth.test.NumericExt
 
-class LightNodeMiningSuite extends BaseFunSuite with TransferSending {
-  override def nodeConfigs: Seq[Config] = {
-    val interval = "hearth.blockchain.custom.functionality.light-node-block-fields-absence-interval = 2"
-    // buildNonConflicting's withDefault/withSpecial always assigns the lowest-index NonConflictingNodes entry (node01)
-    // as the default (full) node and a later one (node04) as the special (light) one - but template.conf's genesis
-    // balances only grow with node index, so that pairing hands the light node a genesis balance 2.5x the full
-    // node's, and it then wins the early blocks this test asserts belong to the full node regardless of light-mode
-    // eligibility. Picking node07 (still in NonConflictingNodes = {1,4,6,7}) as the full node instead keeps it far
-    // enough ahead in balance to reliably win them.
-    Seq(
-      Default(6).overrides(interval),
-      Default(0).overrides(interval).overrides("hearth.enable-light-mode = true")
-    )
-  }
+import scala.concurrent.duration.*
 
-  test("node can mine in light mode after light-node-block-fields-absence-interval") {
+class LightNodeMiningSuite extends BaseFunSuite with TransferSending {
+  override def nodeConfigs: Seq[Config] = Seq(
+    Default(6),
+    Default(0).overrides("hearth.enable-light-mode = true")
+  )
+
+  // Light mode has no mining gate (supportsLightNodeBlockFields is always on), so which node mines any given early block
+  // is a balance-weighted race plus startup timing; only assert that a light node's block eventually lands and the full
+  // node accepts it.
+  test("node can mine in light mode") {
     val lightNode        = nodes.find(_.settings.enableLightMode).get
     val fullNode         = nodes.find(!_.settings.enableLightMode).get
     val lightNodeAddress = lightNode.keyPair.toAddress.toString
     val fullNodeAddress  = fullNode.keyPair.toAddress.toString
 
-    nodes.waitForHeight(Height(5))
-    // available (unlike the regular balance) excludes the generation deposit fullNode reserves as a committed
-    // generator.
+    nodes.waitForHeight(Height(2))
+    // Draining the full node's generating balance (available excludes its generation deposit) hands the light node
+    // nearly every following block, so the wait below doesn't hinge on a 1-in-7 race.
     fullNode.transfer(fullNode.keyPair, lightNodeAddress, fullNode.balanceDetails(fullNodeAddress).available - 1.hearth)
-    lightNode.blockSeq(Height(2), Height(5)).foreach(_.generator shouldBe fullNodeAddress)
 
-    lightNode.waitForHeight(Height(6))
-    lightNode.blockAt(Height(6)).generator shouldBe lightNodeAddress
+    val lightBlock = lightNode
+      .waitFor("block mined by the light node")(
+        n => n.blockSeq(Height(2), n.height).find(_.generator == lightNodeAddress),
+        _.isDefined,
+        1.second
+      )
+      .get
+
+    fullNode.waitForHeight(Height(lightBlock.height))
+    fullNode.blockAt(Height(lightBlock.height)).id shouldBe lightBlock.id
   }
 }

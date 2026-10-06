@@ -136,11 +136,28 @@ repo never runs an Rpm task regardless (Debian + Universal tarballs only). None 
 retract one. `gitDescribedVersion`'s `excludeLintKeys` entry needs the `git.` prefix (`git.gitDescribedVersion`,
 `SbtGit.GitKeys`), unlike the others.
 
+One of the 24 was *not* dead weight, and silencing it hid a real bug for months: `Global / maxParallelSuites`. The lint was right that nothing read it, but the reason was a shadowed assignment, not an idle plugin - see the next section. A lint entry for a key this repo's own code defines and reads deserves more suspicion than one for a packaging plugin's scope bridge; the `excludeLintKeys` list is the right fix only for the latter.
+
+## A second assignment of a Global key replaces the first, it does not add to it
+
+`concurrentRestrictions` is Global-scoped, and `IntegrationTestsPlugin` used to set it (limiting `Tags.ForkedTestGroup` to `maxParallelSuites`) alongside `build.sbt`'s own `inScope(Global)` assignment (limiting `Tags.Test`). Two assignments of one key in one scope is last-writer-wins, and `.sbt` files load after an AutoPlugin's `projectSettings`, so `build.sbt` won and the plugin's limit never existed:
+
+```
+$ sbt --client -Dhearth.it.max-parallel-suites=4 "print Global/concurrentRestrictions"
+* Limit test to 8
+```
+
+`-Dhearth.it.max-parallel-suites` was therefore a no-op on every CI run and in every invocation documented in `CLAUDE.md`. node-it's observed 4-way suite concurrency on a GitHub runner came from `Tags.limit(Tags.Test, min(SystemProcessors, 8))` with `SystemProcessors = 4`, which coincidentally matched the flag CI passed. Both limits now live in one `Seq` in `build.sbt`; the plugin keeps only the `maxParallelSuites` setting itself.
+
+`checkTestLimits` (`build.sbt`, sequenced into `compilePR`) now asserts the ForkedTestGroup cap is actually in force, so a third assignment of the key fails the build instead of quietly winning. Note that the `:=` deliberately replaces sbt's own default rule set rather than extending it; if you need one of those defaults back, add it to this `Seq` explicitly.
+
+Two things to know when checking this by hand. `print Global/concurrentRestrictions` is the authoritative check - `inspect` will happily show a defining assignment that lost. And `sbt --client -D...` sets the property on the *thin client*, not on the long-lived server that evaluates the setting, so the flag appears to be ignored even after the fix; use `sbt --server -D... --batch` (what CI runs) to verify a `-D`-driven setting.
+
 ## SBT 2 action-cache: side-effecting tasks need `Def.uncached`
 
 sbt 2's `ActionCache` treats every task as cacheable by default and, on a cache hit, replays the cached result
 *without re-running the body*. A task whose only job is an out-of-band filesystem write sbt's output tracking can't
-see (e.g. `stageForDocker`'s `IO.copyFile` into `docker/target/**`, not a declared task output) silently
+see (e.g. `stageForDocker`'s `IO.copyFile` into `docker/target/**`, or `node-it/docker`'s image in the docker daemon) silently
 no-ops on a cache hit - `setup-java`'s `cache: 'sbt'` persists that cache *across* CI runs, so a fresh checkout with
 an empty `docker/target/` can still hit stale and skip the copy, breaking `node-it/docker`'s later `docker build`.
 Same class of bug already fixed for `classpathOrdering`, `compilePRRaw`, `IntegrationTestsPlugin`'s
@@ -301,6 +318,12 @@ build context, and `docker/Dockerfile` `COPY`s them in. It used to package both 
   are metadata-only and can stay below. `--chown` must be numeric there: a `--link` layer has no user database.
 - Replacing the `RUN tar` with `COPY` also takes the unpacking out of the emulated leg of the multi-platform
   `linux/amd64,linux/arm64` build in `publish-docker-image.yml`; a `COPY` needs no emulation at all.
+
+## Docker image: libsodium comes from apt, and its absence is silent
+
+`tech.hearth:crypto` signs and verifies through libsodium (FFM, `dlopen` of `libsodium.so.23`), and `Crypto.select()` falls back to `JvmBackend` on any load failure without logging. The image shipped no libsodium for its whole life, so every container verified Ed25519 with `BigInteger.modPow`: in a `WideStateGenerationSuite` JFR profile 92k of 97k CPU samples were `JvmBackend.verifyDetached`, which is what made transaction validation, block application and every load test slow. That backend is also not constant-time. `libsodium23` is now on the existing `apt-get` line; it adds no emulated step to the multi-platform build, since that line already runs under QEMU for arm64. To check a build actually uses it, run any node-it suite with `HEARTH_IT_PROFILE=true` (see `testing.md`) and look for `libsodium.so.23` in `jfr print --events jdk.NativeLibrary`, and for no `Ed25519Math` frames.
+
+The node no longer tolerates the fallback: `CryptoBackendCheck` makes `startNode` stop with `Misconfiguration` when the library picked anything but libsodium, unless `HEARTH_CRYPTO_BACKEND=jvm` (the library's own switch) asks for the JVM backend on purpose. The Debian package depends on `libsodium23`. `UtilApp smoke` requires libsodium and runs an Ed25519 and a VRF round trip through it, and every `check-pr.yaml` job that runs node code installs it through `.github/actions/install-libsodium` (apt, brew, or upstream's MSVC build pinned by hash on Windows), with `HEARTH_CRYPTO_BACKEND=sodium` set workflow-wide so a job that loses it fails instead of slowing down. On Windows the library loads `libsodium.dll` by name, so the action only puts the DLL's directory on `PATH`; that is what makes the Windows smoke job a test of the lookup itself rather than of `HEARTH_SODIUM_LIB`.
 
 ## Docker image: the node runs as uid 999, dropped in the entrypoint
 

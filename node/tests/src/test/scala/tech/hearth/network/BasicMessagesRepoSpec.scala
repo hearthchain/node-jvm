@@ -2,7 +2,9 @@ package tech.hearth.network
 
 import com.google.common.primitives.Ints
 import com.google.protobuf.{ByteString, CodedOutputStream, WireFormat}
+import tech.hearth.BlockGen
 import tech.hearth.account.NetworkId
+import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.DigestLength
 import tech.hearth.mining.MiningConstraints
@@ -13,9 +15,16 @@ import tech.hearth.transaction.{Proofs, TxHelpers}
 
 import java.io.ByteArrayOutputStream
 
-class BasicMessagesRepoSpec extends FreeSpec {
+class BasicMessagesRepoSpec extends FreeSpec with BlockGen {
   // The longest network id the wire can carry, so these stay worst-case size checks.
   private val MaxSizedNetworkId = "a" * NetworkId.MaxLength
+
+  // BlockNotFound shares the block message code and is told apart by length alone.
+  "no valid block, even without transactions, is as short as a bare block id" in forAll(randomSignerBlockGen) { block =>
+    val bare = block.copy(transactionData = Seq.empty)
+
+    PBBlockSpec.serializeData(bare).length should be > Block.ReferenceLength
+  }
 
   "PBBlockSpec max length" in {
     val maxSizedHeader = PBBlock.Header(

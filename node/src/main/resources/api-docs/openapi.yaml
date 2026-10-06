@@ -379,85 +379,6 @@ paths:
             application/json;large-significand-format=string:
               schema:
                 $ref: '#/components/schemas/BalanceDetailsLSF'
-  '/addresses/balance/{address}/{confirmations}':
-    get:
-      tags:
-        - addresses
-      summary: Confirmed regular balance in HRTH
-      description: >-
-        Get the minimum regular balance at a given address for {confirmations}
-        blocks back from the current height. Max number of confirmations is set
-        by `hearth.db.max-rollback-depth`, 2000 by default.
-      operationId: getConfirmedRegularBalance
-      parameters:
-        - $ref: '#/components/parameters/address'
-        - name: confirmations
-          in: path
-          description: Number of blocks
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Balance'
-            application/json;large-significand-format=string:
-              schema:
-                $ref: '#/components/schemas/BalanceLSF'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  '/addresses/effectiveBalance/{address}':
-    get:
-      tags:
-        - addresses
-      summary: Effective balance
-      description: Get the effective balance in HRTH at a given address
-      operationId: getEffectiveBalance
-      parameters:
-        - $ref: '#/components/parameters/address'
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Balance'
-            application/json;large-significand-format=string:
-              schema:
-                $ref: '#/components/schemas/BalanceLSF'
-  '/addresses/effectiveBalance/{address}/{confirmations}':
-    get:
-      tags:
-        - addresses
-      summary: Confirmed effective balance in HRTH
-      description: >-
-        Get the minimum effective balance at a given address for
-        {confirmations} blocks back from the current height. Max number of
-        confirmations is set by `hearth.db.max-rollback-depth`, 2000 by default.
-      operationId: getConfirmedEffectiveBalance
-      parameters:
-        - $ref: '#/components/parameters/address'
-        - name: confirmations
-          in: path
-          description: Number of blocks
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Balance'
-            application/json;large-significand-format=string:
-              schema:
-                $ref: '#/components/schemas/BalanceLSF'
-        '400':
-          $ref: '#/components/responses/BadRequest'
   '/blocks/{id}':
     get:
       tags:
@@ -3103,6 +3024,7 @@ components:
         - effective
         - generating
         - regular
+        - staked
       type: object
       properties:
         address:
@@ -3118,11 +3040,21 @@ components:
         available:
           type: integer
           format: int64
-          description: '`regular` minus what is leased out'
+          description: '`regular` minus what is leased out, the generation deposit and what is staked'
         effective:
           type: integer
           format: int64
-          description: '`available` plus what is leased in'
+          description: >-
+            `available` plus what is leased in, at the current height only.
+            `generating` is the minimum of this over the generating-balance
+            window, plus any work boost.
+        staked:
+          type: integer
+          format: int64
+          description: >-
+            HRTH locked by a Stake transaction: not spendable, and no longer
+            counted toward forging weight once the period it was staked for
+            begins.
     BalanceDetailsLSF:
       required:
         - address
@@ -3130,6 +3062,7 @@ components:
         - effective
         - generating
         - regular
+        - staked
       type: object
       properties:
         address:
@@ -3141,6 +3074,8 @@ components:
         available:
           $ref: '#/components/schemas/AmountString'
         effective:
+          $ref: '#/components/schemas/AmountString'
+        staked:
           $ref: '#/components/schemas/AmountString'
     AssetDistribution:
       required:
@@ -3638,7 +3573,7 @@ components:
         type:
           type: integer
           minimum: 1
-          maximum: 11
+          maximum: 12
           description: Transaction type id
         id:
           allOf:
@@ -4026,6 +3961,39 @@ components:
           description: >-
             PEM issuer chain for pckCrl, PCK Platform or Processor CA to Intel
             Root CA
+    StakeTransaction:
+      title: StakeTransaction
+      description: >-
+        Stakes HRTH from the sender, starting with the generation period that
+        begins at `periodStart`, which must be the period after the one the
+        transaction is applied in. The HRTH is locked as soon as the transaction
+        is applied when `amount` raises the stake, but earns nothing until
+        `periodStart`; a reduction only frees funds once that period starts.
+        Several of these in one period are allowed and the last one wins.
+        Type 12.
+      type: object
+      required:
+        - periodStart
+        - amount
+      properties:
+        periodStart:
+          type: integer
+          format: int32
+          description: Start height of the next generation period
+        amount:
+          allOf:
+            - $ref: '#/components/schemas/Amount'
+          description: >-
+            The new total staked, not a delta; 0 releases the whole stake at
+            `periodStart`
+    StakeTransactionLSF:
+      title: StakeTransactionLSF
+      allOf:
+        - $ref: '#/components/schemas/StakeTransaction'
+        - type: object
+          properties:
+            amount:
+              $ref: '#/components/schemas/AmountString'
     Transaction:
       description: >-
         A transaction, as signed and broadcast. `type` selects which of the
@@ -4044,6 +4012,7 @@ components:
             - $ref: '#/components/schemas/SettleTransaction'
             - $ref: '#/components/schemas/WithdrawTransaction'
             - $ref: '#/components/schemas/UpdateCollateralTransaction'
+            - $ref: '#/components/schemas/StakeTransaction'
     TransactionLSF:
       allOf:
         - $ref: '#/components/schemas/TransactionBaseLSF'
@@ -4059,6 +4028,7 @@ components:
             - $ref: '#/components/schemas/SettleTransaction'
             - $ref: '#/components/schemas/WithdrawTransactionLSF'
             - $ref: '#/components/schemas/UpdateCollateralTransaction'
+            - $ref: '#/components/schemas/StakeTransactionLSF'
     TransactionInBlock:
       description: A transaction as it appears inside a block
       allOf:

@@ -6,7 +6,7 @@ import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.explicitGet
 import tech.hearth.common.utils.{Base16, Base64}
 import tech.hearth.crypto.bls.{BlsKeyPair, BlsSignature}
-import tech.hearth.crypto.{Bip39, Hex, Mnemonic, P256Curve, Sha256, SigningKey, VrfKey}
+import tech.hearth.crypto.{Bip39, Crypto, CryptoBackend, Ecvrf, Ed25519, Hex, Mnemonic, P256Curve, Sha256, SigningKey, VrfKey}
 import tech.hearth.lang.ValidationError
 import tech.hearth.mining.GeneratorKeys
 import tech.hearth.transaction.TxValidationError.GenericError
@@ -362,7 +362,10 @@ object UtilApp {
           generatorKeys.accounts.sizeIs == 1
       )(generatorKeys.accounts.head.address.toString)
 
-    def doSmokeTest(): ActionResult = {
+    def doSmokeTest(backend: CryptoBackend = Crypto.defaultBackend()): ActionResult = {
+      // libsodium is the native every platform has to load: without it the library falls back, silently, to JVM code
+      // that the node itself refuses to run on (CryptoBackendCheck)
+      require(backend.name == "libsodium", s"libsodium did not load, crypto runs on the ${backend.name} backend")
       val message = Base64.decode(
         "AgIZGwP/AAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFQAAAAAAAADnAAAAAAAAALeumraedvd5Slaw2xkVKB1DXUiMkdQG7TOnk5yvhzD4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADcnip8b5SPF0dONKf8Q+0DD3wVY/G6vd9jQMguDlSoxQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADQ0PMxCMjQs6H9Ericuy2oMAj6fPa7h5C7H86EurUIgwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       )
@@ -384,6 +387,14 @@ object UtilApp {
 
       val aggSig = BlsSignature.agg(Seq(blsSig1, blsSig2)).explicitGet()
       aggSig.verifyAgg(message, Seq(blsSK1.publicKey, blsSK2.publicKey)).explicitGet()
+
+      val seed = new Array[Byte](32)
+      Random.nextBytes(seed)
+      val signingKey = SigningKey.fromSeed(seed, backend)
+      require(Ed25519.verify(signingKey.sign(message, backend), message, signingKey.publicKey(), backend), "Ed25519 round trip failed")
+      val vrfKey = VrfKey.fromSeed(seed, backend)
+      val proved = Ecvrf.prove(vrfKey, message, backend)
+      require(Ecvrf.verify(vrfKey.publicKey(), message, proved.proof().bytes(), backend).isPresent, "VRF round trip failed")
 
       Right(Array.emptyByteArray)
     }

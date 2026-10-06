@@ -3,16 +3,20 @@ package tech.hearth.network
 import tech.hearth.block.Block
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
+import tech.hearth.network.RxExtensionLoader.ExtensionOutcome
 import tech.hearth.network.RxScoreObserver.ChannelClosedAndSyncWith
 import tech.hearth.test.FreeSpec
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.{BlockGen, RxScheduler}
-import io.netty.channel.{Channel, ChannelFuture}
+import io.netty.channel.{Channel, ChannelFuture, ChannelHandlerContext, ChannelOutboundHandlerAdapter, ChannelPromise}
 import io.netty.channel.embedded.EmbeddedChannel
 import io.netty.channel.local.LocalChannel
 import monix.eval.{Coeval, Task}
 import monix.reactive.Observable
 import monix.reactive.subjects.PublishSubject as PS
+
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration.*
 import scala.concurrent.{Future, Promise}
@@ -22,8 +26,10 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
   import RxExtensionLoaderSpec.*
 
   val MaxRollback = 10
-  type Applier = (Channel, ExtensionBlocks) => Task[Either[ValidationError, Option[BigInt]]]
-  val simpleApplier: Applier = (_, _) => Task(Right(Some(0)))
+  type Applier = (Channel, ExtensionBlocks) => Task[Either[ValidationError, ExtensionOutcome]]
+  val simpleApplier: Applier = (_, _) => Task(Right(ExtensionOutcome.Appended(Some(0))))
+  // Keeps the applier busy so the loader stays in ApplierState.Applying, which is what makes a request optimistic.
+  val neverApplier: Applier = (_, _) => Task.never
 
   override def testSchedulerName: String = "test-rx-extension-loader"
 
@@ -31,7 +37,9 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
       lastBlockIds: Seq[ByteStr] = Seq.empty,
       timeOut: FiniteDuration = 1.day,
       cacheTimeout: FiniteDuration = 3.minute,
-      applier: Applier = simpleApplier
+      applier: Applier = simpleApplier,
+      maxRollback: Int = MaxRollback,
+      notFound: PS[(Channel, BlockNotFound)] = PS[(Channel, BlockNotFound)]()
   )(
       f: (
           InMemoryInvalidBlockStorage,
@@ -54,10 +62,11 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         cacheTimeout,
         isLightMode = false,
         blacklistOnScoreMismatch = false,
-        Coeval(lastBlockIds.reverse.take(MaxRollback)),
+        Coeval(lastBlockIds.reverse.take(maxRollback)),
         op,
         invBlockStorage,
         blocks,
+        notFound,
         sigs,
         snapshots,
         ccsw,
@@ -71,6 +80,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
       f(invBlockStorage, blocks, sigs, ccsw, singleBlocks)
     } finally {
       blocks.onComplete()
+      notFound.onComplete()
       sigs.onComplete()
       ccsw.onComplete()
       timeout.onComplete()
@@ -96,6 +106,33 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     } yield {
       ch.isOpen shouldBe false
     })
+  }
+
+  // Under load a request can sit in the event loop's write queue for longer than the timeout; that is our delay, not the peer's.
+  "should not start the block id timeout before the request is sent" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) { (_, _, _, ccsw, _) =>
+    val writes = new HeldWrites
+    val ch     = new EmbeddedChannel(writes)
+    test(for {
+      _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+      _ = ch.isOpen shouldBe true
+      _ = writes.release()
+      _ <- ch.closeF()
+    } yield ())
+  }
+
+  "should not start the block timeout before the requests are sent" in withExtensionLoader(Seq.tabulate(100)(ref), 1.millis) {
+    (_, _, sigs, ccsw, _) =>
+      val writes = new HeldWrites
+      val ch     = new EmbeddedChannel(writes)
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds]
+        _ <- send(sigs)((ch, BlockIds(Range(97, 102).map(ref))))
+        _ = ch.readOutbound[GetBlock].id shouldBe ref(100)
+        _ = ch.isOpen shouldBe true
+        _ = writes.release()
+        _ <- ch.closeF()
+      } yield ())
   }
 
   "should request GetBlockIds and then span blocks from peer" in withExtensionLoader(Seq.tabulate(100)(ref)) { (_, _, sigs, ccsw, _) =>
@@ -143,7 +180,7 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
     val successfulApplier: Applier = (_, _) =>
       Task {
         applied = true
-        Right(None)
+        Right(ExtensionOutcome.Appended(None))
       }
     val allBlocks = Seq.tabulate(102)(block)
     withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = successfulApplier) { (_, blocks, sigs, ccsw, _) =>
@@ -158,6 +195,180 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
         _ <- send(blocks)((ch, allBlocks(101)))
       } yield {
         applied shouldBe true
+      })
+    }
+  }
+
+  // The extension's own ids are liquid and expire; only persisted history guarantees a resolvable anchor.
+  "should anchor an optimistic block id request in local history" in {
+    val allBlocks = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = neverApplier) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+      } yield {
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.take(2) shouldBe Seq(allBlocks(101).id(), allBlocks(100).id())
+        optimistic should contain(allBlocks(99).id())
+      })
+    }
+  }
+
+  // GetBlockIds is capped at BlockIdSeqSpec.MaxIds on the wire, and LegacyFrameCodec makes the *receiver* blacklist
+  // the sender of an oversize frame. lastBlockIds can be max-rollback + 1 long and an extension up to max-rollback,
+  // so concatenating them unguarded overruns the cap exactly when a lagging node is catching up.
+  "should keep an optimistic block id request within the wire limit" in {
+    val allBlocks = Seq.tabulate(BlockIdSeqSpec.MaxIds + 2)(block)
+    val history   = allBlocks.view.take(BlockIdSeqSpec.MaxIds).map(_.id()).toSeq
+    withExtensionLoader(history, applier = neverApplier, maxRollback = BlockIdSeqSpec.MaxIds - 1) { (_, blocks, sigs, ccsw, _) =>
+      val ch   = new EmbeddedChannel()
+      val last = allBlocks.takeRight(2)
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe BlockIdSeqSpec.MaxIds - 1
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.takeRight(5).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock]
+        _ = ch.readOutbound[GetBlock]
+        _ <- send(blocks)((ch, last.head))
+        _ <- send(blocks)((ch, last.last))
+      } yield {
+        val anchors    = history.reverse.take(BlockIdSeqSpec.MaxIds - 1)
+        val optimistic = ch.readOutbound[GetBlockIds].ids
+        optimistic.size shouldBe BlockIdSeqSpec.MaxIds
+        // the persisted anchors guarantee a non-empty reply, so the extension ids are the ones that give way
+        optimistic.takeRight(anchors.size) shouldBe anchors
+        optimistic.head shouldBe last.last.id()
+      })
+    }
+  }
+
+  // An optimistically loaded extension is anchored on the ids of the one still being applied. A dropped extension
+  // leaves the chain untouched without reporting an error, so those ids resolve to nothing and applying the buffered
+  // extension reports a fork that does not exist.
+  "should discard an optimistically loaded extension when the previous one was dropped" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Dropped) shouldBe 1
+  }
+
+  "should apply an optimistically loaded extension when the previous one was appended" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Appended(Some(0))) shouldBe 2
+  }
+
+  // Same anchoring problem, but the drop lands while the optimistic blocks are still on the wire: nothing is buffered
+  // yet, and the extension arrives to an idle applier that would take it as a fresh, normally anchored one.
+  "should discard an optimistic extension still being loaded when the previous one was dropped" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Dropped, finishFirstWhileLoading = true) shouldBe 1
+  }
+
+  "should apply an optimistic extension still being loaded when the previous one was appended" in {
+    appliersRunAfterFirstExtension(ExtensionOutcome.Appended(Some(0)), finishFirstWhileLoading = true) shouldBe 2
+  }
+
+  /** Drives the loader to the state where one extension is being applied and a second is optimistically loaded on top
+    * of it, finishes the first one with `first` - after the second is buffered, or while its blocks are still awaited
+    * when `finishFirstWhileLoading` - and answers how many extensions reached the applier.
+    */
+  private def appliersRunAfterFirstExtension(first: ExtensionOutcome, finishFirstWhileLoading: Boolean = false): Int = {
+    val gate     = Promise[Unit]()
+    val appliers = new AtomicInteger(0)
+    val applier: Applier = (_, _) =>
+      Task(appliers.incrementAndGet()).flatMap { n =>
+        if (n == 1) Task.fromFuture(gate.future).map(_ => Right(first))
+        else Task.now(Right(ExtensionOutcome.Appended(Some(0))))
+      }
+
+    def finishFirst(): Future[Unit] = {
+      gate.success(())
+      Future(Thread.sleep(500))
+    }
+
+    val allBlocks = Seq.tabulate(103)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = applier) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds].ids.size shouldBe MaxRollback
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.slice(97, 102).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+        // the first extension is now being applied, so this request is the optimistic one
+        _ = ch.readOutbound[GetBlockIds].ids.head shouldBe allBlocks(101).id()
+        _ <- send(sigs)((ch, BlockIds(Seq(allBlocks(101).id(), allBlocks(102).id()))))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(102).id()
+        _ <- if (finishFirstWhileLoading) finishFirst() else Future.unit
+        _ <- send(blocks)((ch, allBlocks(102)))
+        _ <- if (finishFirstWhileLoading) Future(Thread.sleep(500)) else finishFirst()
+      } yield ())
+    }
+    appliers.get()
+  }
+
+  // A liquid id the peer advertised can be superseded by a microblock before we ask for it; that is not misbehaviour.
+  "should apply the blocks before one the peer no longer has" in {
+    @volatile var applied         = Seq.empty[Block]
+    val recordingApplier: Applier = (_, ext) => Task { applied = ext.blocks; Right(ExtensionOutcome.Appended(None)) }
+    val notFound                  = PS[(Channel, BlockNotFound)]()
+    val allBlocks                 = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = recordingApplier, notFound = notFound) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds]
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.slice(97, 102).map(_.id()).toSeq)))
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(notFound)((ch, BlockNotFound(allBlocks(101).id())))
+      } yield {
+        applied shouldBe Seq(allBlocks(100))
+      })
+    }
+  }
+
+  "should finish loading the blocks before one the peer no longer has" in {
+    @volatile var applied         = Seq.empty[Block]
+    val recordingApplier: Applier = (_, ext) => Task { applied = ext.blocks; Right(ExtensionOutcome.Appended(None)) }
+    val notFound                  = PS[(Channel, BlockNotFound)]()
+    val allBlocks                 = Seq.tabulate(103)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = recordingApplier, notFound = notFound) { (_, blocks, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds]
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.slice(97, 103).map(_.id()).toSeq)))
+        _ <- send(notFound)((ch, BlockNotFound(allBlocks(102).id())))
+        _ = applied shouldBe empty
+        _ <- send(blocks)((ch, allBlocks(100)))
+        _ <- send(blocks)((ch, allBlocks(101)))
+      } yield {
+        applied shouldBe Seq(allBlocks(100), allBlocks(101))
+      })
+    }
+  }
+
+  "should ask for block ids again when the peer no longer has the first requested block" in {
+    val appliers                 = new AtomicInteger(0)
+    val countingApplier: Applier = (_, _) => Task { appliers.incrementAndGet(); Right(ExtensionOutcome.Appended(None)) }
+    val notFound                 = PS[(Channel, BlockNotFound)]()
+    val allBlocks                = Seq.tabulate(102)(block)
+    withExtensionLoader(allBlocks.view.take(100).map(_.id()).toSeq, applier = countingApplier, notFound = notFound) { (_, _, sigs, ccsw, _) =>
+      val ch = new EmbeddedChannel()
+      test(for {
+        _ <- send(ccsw)(ChannelClosedAndSyncWith(None, Some(BestChannel(ch, 1: BigInt))))
+        _ = ch.readOutbound[GetBlockIds]
+        _ <- send(sigs)((ch, BlockIds(allBlocks.view.slice(97, 102).map(_.id()).toSeq)))
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(100).id()
+        _ = ch.readOutbound[GetBlock].id shouldBe allBlocks(101).id()
+        _ <- send(notFound)((ch, BlockNotFound(allBlocks(100).id())))
+      } yield {
+        ch.readOutbound[GetBlockIds] should not be null
+        appliers.get() shouldBe 0
+        ch.isOpen shouldBe true
       })
     }
   }
@@ -177,6 +388,19 @@ class RxExtensionLoaderSpec extends FreeSpec with RxScheduler with BlockGen {
 }
 
 object RxExtensionLoaderSpec {
+
+  /** Passes messages on but leaves the caller's write future pending until [[release]], as a busy event loop would. */
+  class HeldWrites extends ChannelOutboundHandlerAdapter {
+    private val held = new ConcurrentLinkedQueue[ChannelPromise]()
+
+    override def write(ctx: ChannelHandlerContext, msg: AnyRef, promise: ChannelPromise): Unit = {
+      held.add(promise)
+      ctx.write(msg, ctx.newPromise())
+    }
+
+    def release(): Unit = Iterator.continually(held.poll()).takeWhile(_ != null).foreach(_.setSuccess())
+  }
+
   implicit class ChannelExt(val channel: Channel) extends AnyVal {
     def closeF(): Future[Unit] = {
       val closePromise = Promise[Unit]()

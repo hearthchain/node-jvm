@@ -4,6 +4,8 @@ import com.typesafe.config.ConfigFactory
 import tech.hearth.account.NetworkId
 import tech.hearth.common.state.ByteStr
 import tech.hearth.state.EmissionCurve
+import tech.hearth.transaction.AssetIdLength
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.test.FlatSpec
 
 import scala.concurrent.duration.*
@@ -207,5 +209,18 @@ class BlockchainSettingsSpecification extends FlatSpec {
         PredefinedSnapshotSettings.STAGENET
       )
     stagenet.hardCap should be(100_000_000L * Constants.UnitsInHearth + RewardsSettings.STAGENET.cEmit)
+  }
+
+  it should "parse cred-asset, and reject a malformed one at construction rather than at the first payout" in {
+    val id = "ddffc0847e4b4373163ccfdb088857479e854eb27b833137a4659ad29448f1bf"
+
+    FunctionalitySettings(credAsset = Some(id)).credAssetParsed should be(Right(Some(IssuedAsset(ByteStr.decodeBase16(id).get))))
+    FunctionalitySettings(credAsset = None).credAssetParsed should be(Right(None))
+
+    // require() runs in the case class body, so a bad value cannot produce a settings value at all
+    the[IllegalArgumentException] thrownBy FunctionalitySettings(credAsset = Some("not base16")) should have message
+      "requirement failed: Incorrect cred-asset"
+    the[IllegalArgumentException] thrownBy FunctionalitySettings(credAsset = Some("ddff")) should have message
+      s"requirement failed: cred-asset must be $AssetIdLength bytes"
   }
 }

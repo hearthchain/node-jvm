@@ -42,7 +42,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
         val (miner1, vrf1) = miners.head
         val (miner2, vrf2) = miners.tail.head
 
-        val miner1Balance = blockchain.effectiveBalance(miner1.toAddress, 0)
+        val miner1Balance = blockchain.generatingBalance(miner1.toAddress)
 
         val fork1 = mkFork(100, miner1, vrf1, blockchain, blocks.last)
         val fork2 = mkFork(100, miner2, vrf2, blockchain, blocks.last)
@@ -91,7 +91,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
         val height       = blockchain.height
-        val minerBalance = blockchain.effectiveBalance(miner.toAddress, 0)
+        val minerBalance = blockchain.generatingBalance(miner.toAddress)
         val lastBlock    = blockchain.lastBlockHeader.get
         val block        = forgeBlock(miner, vrf, blockchain, pos)()
 
@@ -103,7 +103,7 @@ class FPoSSelectorTest extends FreeSpec with WithNewDBForEachTest with DBCacheSe
       withEnv(chainGen(List(ENOUGH_AMT), 10), vrfActivated) { case Env(pos, blockchain, miners, _) =>
         val (miner, vrf) = miners.head
         val height       = blockchain.height
-        val minerBalance = blockchain.effectiveBalance(miner.toAddress, 0)
+        val minerBalance = blockchain.generatingBalance(miner.toAddress)
         val lastBlock    = blockchain.lastBlockHeader.get
         val block        = forgeBlock(miner, vrf, blockchain, pos)(updateDelay = _ - 1)
 
@@ -426,7 +426,7 @@ object FPoSSelectorTest {
     val height          = blockchain.height
     val lastBlockHeader = blockchain.lastBlockHeader.get
     val ggParentTS      = blockchain.blockHeader(height - 2).map(_.header.timestamp)
-    val minerBalance    = blockchain.effectiveBalance(miner.toAddress, 0)
+    val minerBalance    = blockchain.generatingBalance(miner.toAddress)
     val delay = updateDelay(
       pos
         .getValidBlockDelay(

@@ -23,8 +23,8 @@ class WideStateGenerationSuite extends BaseFreeSpec with TransferSending {
         |
         |hearth {
         |  network.traffic-logger {
-        |    ignore-tx-messages = [1, 2, 23, 25]
-        |    ignore-rx-messages = [1, 2, 25]
+        |    ignore-tx-messages = [1, 2, 31]
+        |    ignore-rx-messages = [1, 2, 31]
         |  }
         |  miner.minimal-block-generation-offset = 10s
         |  synchronization.utx-synchronizer {
@@ -32,12 +32,13 @@ class WideStateGenerationSuite extends BaseFreeSpec with TransferSending {
         |    max-buffer-time = 100ms
         |    max-queue-size = 50000
         |  }
+        |  # A node with no peers would accept broadcasts it can never relay: there is no UTX rebroadcast.
+        |  rest-api.minimum-peers = 1
         |  utx.allow-skip-checks = false
         |  utx.max-scripted-size = 1000000
         |}""".stripMargin
     ),
-    tag = getClass.getSimpleName,
-    enableProfiling = true
+    tag = getClass.getSimpleName
   )
 
   import NodeConfigs.*

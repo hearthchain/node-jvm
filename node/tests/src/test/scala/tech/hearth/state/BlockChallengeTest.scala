@@ -183,7 +183,7 @@ class BlockChallengeTest
       val originalBlock = d.createBlock(strictTime = true, generator = challengedMiner, stateHash = Some(Some(invalidStateHash)))
 
       val challengingGenBalanceBefore = d.blockchain.generatingBalance(challengingMinerAddr, Some(originalBlock.header.reference))
-      val challengingEffBalanceBefore = d.blockchain.effectiveBalance(challengingMinerAddr, 0)
+      val challengingEffBalanceBefore = d.effectiveBalanceAt(challengingMinerAddr)
       val challengedGenBalanceBefore  = d.blockchain.generatingBalance(challengedMiner.toAddress, Some(originalBlock.header.reference))
 
       val challengingBlock =
@@ -196,7 +196,7 @@ class BlockChallengeTest
       ) shouldBe challengingGenBalanceBefore + challengedGenBalanceBefore
 
       val minerReward = getLastBlockMinerReward(d)
-      d.blockchain.effectiveBalance(challengingMinerAddr, 0) shouldBe challengingEffBalanceBefore + minerReward
+      d.effectiveBalanceAt(challengingMinerAddr) shouldBe challengingEffBalanceBefore + minerReward
 
       d.blockchain.generatingBalance(challengingMinerAddr, Some(challengingBlock.id())) shouldBe challengingGenBalanceBefore
 
@@ -581,10 +581,10 @@ class BlockChallengeTest
       val challengingBlock =
         d.createChallengingBlock(challengingMiner.signingKey, originalBlock, strictTime = true, timestamp = Some(d.nextBlockTime(challengingMiner)))
 
-      val effBalanceBefore = d.blockchain.effectiveBalance(challengedMinerAddr, 0)
+      val effBalanceBefore = d.effectiveBalanceAt(challengedMinerAddr)
 
       d.appender.appendBlock(challengingBlock)
-      d.blockchain.effectiveBalance(challengedMinerAddr, 0) shouldBe 0L
+      d.effectiveBalanceAt(challengedMinerAddr) shouldBe 0L
 
       withClue(s"challenged $challengedMinerAddr: ") {
         d.commonApi.generatorsApi
@@ -601,7 +601,7 @@ class BlockChallengeTest
       d.blockchain.height shouldBe 3
 
       val expectedEffectiveBalance = effBalanceBefore - 1.hearth - TestValues.fee
-      d.blockchain.effectiveBalance(challengedMinerAddr, 0) shouldBe expectedEffectiveBalance
+      d.effectiveBalanceAt(challengedMinerAddr) shouldBe expectedEffectiveBalance
 
       withClue(s"challenged $challengedMinerAddr: ") {
         d.commonApi.generatorsApi
@@ -1285,14 +1285,6 @@ class BlockChallengeTest
         val balance = responseAs[JsArray].value.head.as[JsObject]
         (balance \ "id").as[String] shouldBe address.toString
         (balance \ "balance").as[Long] shouldBe expectedRegular
-      }
-      Get(s"/addresses/effectiveBalance/$address") ~> route ~> check {
-        val balance = responseAs[JsObject]
-        (balance \ "balance").as[Long] shouldBe expectedEffective
-      }
-      Get(s"/addresses/effectiveBalance/$address/1000") ~> route ~> check {
-        val balance = responseAs[JsObject]
-        (balance \ "balance").as[Long] shouldBe expectedGenerating
       }
     }
 

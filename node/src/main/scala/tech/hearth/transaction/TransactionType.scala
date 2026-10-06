@@ -5,7 +5,7 @@ enum TransactionType {
   def transactionName: String = s"${this.toString}Transaction"
 
   case Transfer, Exchange, Lease, LeaseCancel, CommitToGeneration, StartBoost, Reserve, BindApiKey, Settle, Withdraw,
-    UpdateCollateral
+    UpdateCollateral, Stake
 
 }
 

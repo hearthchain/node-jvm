@@ -2,6 +2,7 @@ package tech.hearth.settings
 
 import java.net.InetSocketAddress
 import com.typesafe.config.ConfigFactory
+import tech.hearth.network.{BasicMessagesRepo, HandshakeSpec, PBTransactionSpec}
 import tech.hearth.test.FlatSpec
 import pureconfig.ConfigSource
 import scala.concurrent.duration.*
@@ -82,6 +83,19 @@ class NetworkSettingsSpecification extends FlatSpec {
 
     networkSettings.derivedNonce should not be 0
     networkSettings.derivedNodeName should be(s"Node-${networkSettings.derivedNonce}")
+  }
+
+  // A stale code filters nothing and fails silently: logging every transaction on the netty event loop stalls it.
+  it should "only ignore traffic-logger codes the node actually speaks, transactions included" in {
+    val config          = loadConfig(ConfigFactory.empty())
+    val trafficLogger   = ConfigSource.fromConfig(config).at("hearth.network").loadOrThrow[NetworkSettings].trafficLogger
+    val knownCodes      = BasicMessagesRepo.specsByCodes.keySet + HandshakeSpec.messageCode
+    val transactionCode = PBTransactionSpec.messageCode
+
+    trafficLogger.ignoreTxMessages -- knownCodes shouldBe empty
+    trafficLogger.ignoreRxMessages -- knownCodes shouldBe empty
+    trafficLogger.ignoreTxMessages should contain(transactionCode)
+    trafficLogger.ignoreRxMessages should contain(transactionCode)
   }
 
   it should "fail with IllegalArgumentException on too long node name" in {

@@ -6,7 +6,7 @@ import pureconfig.ConfigSource
 import tech.hearth.common.utils.EitherExt2.explicitGet
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto
-import tech.hearth.crypto.{Bip39, KeyTree, SigningKey}
+import tech.hearth.crypto.{Bip39, JvmBackend, KeyTree, SigningKey}
 import tech.hearth.mining.{GeneratorKeys, MiningAccount}
 import tech.hearth.settings.{MinerSettings, WalletSettings}
 import tech.hearth.test.FlatSpec
@@ -202,5 +202,14 @@ class UtilAppSpec extends FlatSpec {
     val tx = TransactionFactory.parseRequest(signed).explicitGet()
     (signed \ "sender").as[String] shouldBe key.toAddress.toString
     crypto.verify(tx.proofs.head, tx.bodyBytes(), tx.sender) shouldBe true
+  }
+
+  // The smoke run is what proves a platform's natives load; a silent fall back to the JVM backend must fail it.
+  "smoke" should "fail when crypto does not run on libsodium" in {
+    an[IllegalArgumentException] should be thrownBy UtilApp.Actions.doSmokeTest(JvmBackend.INSTANCE)
+  }
+
+  it should "pass on the backend the library picks where libsodium is installed" in {
+    UtilApp.Actions.doSmokeTest() shouldBe Right(Array.emptyByteArray).withLeft[String]
   }
 }

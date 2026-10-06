@@ -29,15 +29,11 @@ object GeneratingBalanceProvider {
     * chain tip) - the period being generated into is whichever one the block right after it falls in, matching
     * `appender.findBlockAndGetGenerators`'s own `parentHeight.next` -> `generationPeriodOf` derivation.
     *
-    * totalWork is a BigInt sum, not a plain Long one: individual `workDone` values are bounded (safeSum'd at
-    * write time in SettleTransactionDiff), but summing across an unbounded number of committed generators isn't
-    * itself guaranteed to fit a Long.
+    * The sum itself is Blockchain.totalWork, shared with StakingPayout so the two consensus readings of a period's
+    * work can never drift apart.
     */
   def workContext(blockchain: Blockchain, atHeight: Int): Option[(GenerationPeriod, BigInt)] =
-    blockchain.generationPeriodOf(Height(atHeight + 1)).flatMap(_.prev).map { workPeriod =>
-      val totalWork = blockchain.committedGenerators(workPeriod).view.map(g => BigInt(blockchain.workDone(g.address, workPeriod))).sum
-      workPeriod -> totalWork
-    }
+    blockchain.generationPeriodOf(Height(atHeight + 1)).flatMap(_.prev).map(workPeriod => workPeriod -> blockchain.totalWork(workPeriod))
 
   /** Same as `balance`, but reuses a `workContext` the caller already computed once instead of recomputing it -
     * see `workContext`'s own doc comment for why this matters.
@@ -47,6 +43,16 @@ object GeneratingBalanceProvider {
     balanceAt(blockchain, account, height, blockId, context)
   }
 
+  /** The least the address could forge on at any height of the window ending at `blockId`: balance plus leases in,
+    * less leases out, the generation deposit and the stake lock (see BalanceSnapshot.effectiveBalance).
+    */
+  private def windowedBalance(blockchain: Blockchain, account: Address, height: Int, blockId: Option[BlockId]): Long = {
+    val bottom   = (height - SecondDepth + 1).max(1).min(height)
+    val balances = blockchain.balanceSnapshots(account, bottom, blockId)
+    val isBanned = blockchain.effectiveBalanceBanHeights(account).exists(h => h >= bottom && h <= height)
+    if (balances.isEmpty || isBanned) 0L else balances.view.map(_.effectiveBalance).min
+  }
+
   private def balanceAt(
       blockchain: Blockchain,
       account: Address,
@@ -54,11 +60,10 @@ object GeneratingBalanceProvider {
       blockId: Option[BlockId],
       context: Option[(GenerationPeriod, BigInt)]
   ): Long = {
-    val depth = SecondDepth
-
     val maybeChallengedMiner = blockchain.blockHeader(height + 1).flatMap(_.header.challengedHeader).map(_.generator.toAddress)
     val rawBalance =
-      blockchain.effectiveBalance(account, depth, blockId) + maybeChallengedMiner.map(blockchain.effectiveBalance(_, depth, blockId)).getOrElse(0L)
+      windowedBalance(blockchain, account, height, blockId) +
+        maybeChallengedMiner.map(windowedBalance(blockchain, _, height, blockId)).getOrElse(0L)
 
     context match {
       case None                          => rawBalance

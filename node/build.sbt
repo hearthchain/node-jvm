@@ -170,7 +170,10 @@ inConfig(Debian)(
     linuxStartScriptName := Some(s"${(Linux / packageName).value}@.service"),
     // Not /lib/systemd/system: on merged-usr systems dpkg chokes on a package that ships the aliased ./lib path
     defaultLinuxStartScriptLocation := "/usr/lib/systemd/system",
-    debianPackageDependencies += "java17-runtime-headless",
+    // OpenJDK 25 and Temurin 25 debs both provide the versioned virtual package; neither provides java25-runtime-headless
+    debianPackageDependencies += "java-runtime-headless (>= 25)",
+    // tech.hearth:crypto dlopens it; without it signing falls back, silently, to a slow non-constant-time JVM backend
+    debianPackageDependencies += "libsodium23",
     linuxPackageMappings := {
       val classifier = DebArchitecture(packageArchitecture.value).correttoClassifier
       val platformSpecificMappings = packageMapping(

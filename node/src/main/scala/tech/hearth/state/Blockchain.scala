@@ -65,7 +65,7 @@ trait Blockchain {
   def balanceAtHeight(address: Address, height: Int, assetId: Asset = Hearth): Option[(Int, Long)]
 
   /** Retrieves Hearth balance snapshot in the [from, to] range (inclusive).
-    * Used only for getting a regular balance with confirmations and effective balance calculations.
+    * Used only for generating balance calculations.
     * @return Balance snapshots from most recent to oldest. May contain consecutive duplicate values
     */
   def balanceSnapshots(address: Address, from: Int, to: Option[BlockId]): Seq[BalanceSnapshot]
@@ -107,6 +107,18 @@ trait Blockchain {
   // see "workBoost" in CLAUDE.md. Same history mechanism as reservedAmount/settledAmount above.
   def workDone(validator: Address, period: GenerationPeriod): Long
 
+  // Every HRTH stake in force for one generation period - the set StakingPayout walks at that period's end, and
+  // the source of both the spending lock and the forging-weight charge. Period-keyed like committedGenerators
+  // rather than a per-address current value, because a stake is always a stake *for a period*.
+  // One address's HRTH stake in force for one period: the most recent amount it set at a height *below* that
+  // period's start. A StakeTransaction always names the period after the one it lands in, so the change height is
+  // what decides which periods an amount applies to, and a stake needs nothing to keep it alive across periods.
+  def stakeAt(address: Address, at: GenerationPeriod): Long
+
+  // Every address with a non-zero stake in force for `at` - the set StakingPayout walks at that period's end.
+  // Unlike stakeAt this enumerates, so it is only for the boundary, never for a per-transaction check.
+  def stakes(at: GenerationPeriod): Seq[Stake]
+
   def lastStateHash(refId: Option[ByteStr]): ByteStr
 }
 
@@ -142,23 +154,8 @@ object Blockchain {
     def lastBlockIds(maxRollbackLength: Int): Seq[ByteStr] =
       (blockchain.height to blockchain.finalizedHeightOrFallback(maxRollbackLength).toInt by -1).flatMap(blockId)
 
-    def effectiveBalance(address: Address, confirmations: Int, block: Option[BlockId] = blockchain.lastBlockId): Long = {
-      val blockHeight = block.flatMap(b => blockchain.heightOf(b)).getOrElse(blockchain.height)
-      val bottomLimit = (blockHeight - confirmations + 1).max(1).min(blockHeight)
-      val balances    = blockchain.balanceSnapshots(address, bottomLimit, block)
-      val isBanned    = blockchain.effectiveBalanceBanHeights(address).exists(h => h >= bottomLimit && h <= blockHeight)
-      if (balances.isEmpty || isBanned) 0L else balances.view.map(_.effectiveBalance).min
-    }
-
     def generatingBalance(account: Address, blockId: Option[BlockId] = None): Long =
       GeneratingBalanceProvider.balance(blockchain, account, blockId)
-
-    def regularBalance(address: Address, atHeight: Int, confirmations: Int): Long = {
-      val bottomLimit = (atHeight - confirmations + 1).max(1).min(atHeight)
-      val blockId     = blockchain.blockHeader(atHeight).getOrElse(throw new IllegalArgumentException(s"Invalid block height: $atHeight")).id()
-      val balances    = blockchain.balanceSnapshots(address, bottomLimit, Some(blockId))
-      if (balances.isEmpty) 0L else balances.view.map(_.regularBalance).min
-    }
 
     def unsafeHeightOf(id: ByteStr): Int =
       blockchain
@@ -168,8 +165,32 @@ object Blockchain {
     def hearthPortfolio(address: Address): Portfolio = Portfolio(
       blockchain.balance(address),
       blockchain.leaseBalance(address),
-      generationDeposit = blockchain.generationDeposit(address)
+      generationDeposit = blockchain.generationDeposit(address),
+      staked = blockchain.lockedStake(address)
     )
+
+    /** The HRTH a stake currently locks, see StakeLock. What the address last set is what the next period has. */
+    def lockedStake(address: Address): Long =
+      blockchain.currentGenerationPeriod.fold(0L) { period =>
+        StakeLock(inForce = blockchain.stakeAt(address, period), latestSet = blockchain.stakeAt(address, period.next))
+      }
+
+    /** The stake in force for the current period, i.e. the amount `address` is earning on, never what it has set
+      * for the next.
+      */
+    def stakedForPeriod(address: Address): Long =
+      blockchain.currentGenerationPeriod.fold(0L)(blockchain.stakeAt(address, _))
+
+    /** A generation period's total tracked work: what its committee's settlements burned, summed over the whole
+      * committed set rather than only over members that happen to have any.
+      *
+      * Two consensus paths read it and must never disagree - GeneratingBalanceProvider turns it into forging weight
+      * (WorkBoost), StakingPayout turns it into minted Cred - so it lives here rather than being summed twice.
+      * BigInt, not Long: each addend is safeSum'd at write time, but a sum over an unbounded committee is not
+      * itself Long-safe, and both callers must reject rather than wrap when it overflows.
+      */
+    def totalWork(period: GenerationPeriod): BigInt =
+      blockchain.committedGenerators(period).view.map(g => BigInt(blockchain.workDone(g.address, period))).sum
 
     /** The VRF key a generator registered when it committed to generating for `at`'s period.
       *

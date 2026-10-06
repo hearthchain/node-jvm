@@ -9,7 +9,10 @@ description := "NODE integration tests"
 libraryDependencies ++= Dependencies.it
 
 val docker = taskKey[Unit]("Build docker image for integration tests")
-docker := {
+// Its output is the image in the docker daemon, invisible to ActionCache: a cache hit (persisted across CI runs by
+// setup-java's sbt cache) skips the build on a fresh runner with no image (see "SBT 2 action-cache" in
+// docs/notes/build-tooling.md).
+docker := Def.uncached {
   val log = streams.value.log
 
   val cwd   = baseDirectory.value.getParentFile / "docker"

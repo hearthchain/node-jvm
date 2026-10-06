@@ -45,8 +45,7 @@ class TwoNodesFinalizationTestSuite extends BaseFreeSpec, OptionValues, ScorexLo
     node2.broadcastRequest(commitTxn1)
     node2.broadcastRequest(commitTxn2)
 
-    // 20 blocks at this environment's actual ~12s/block pace (vs. the 10s configured average-block-delay) is close
-    // to 4 minutes, past waitForGenerationPeriod's 3-minute default.
+    // 20 blocks at the 10s min-block-time floor is over 3 minutes, past waitForGenerationPeriod's 3-minute default.
     node1.waitForGenerationPeriod(period1, 6.minutes)
 
     step("Generators")

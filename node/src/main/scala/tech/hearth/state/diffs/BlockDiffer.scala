@@ -202,7 +202,12 @@ object BlockDiffer {
           PredefinedSnapshot.build(s, SnapshotBlockchain(blockchain, rewardPart), blockTimestamp).map(rewardPart |+| _)
         case None => Right(rewardPart)
       }
-    } yield combined
+      // Last, and over a blockchain that already carries everything above: the staking payout raises the cred
+      // asset's total volume, and a predefined snapshot at this same height may have just re-issued that very
+      // asset. Reading the volume through `combined` makes the two mints compose instead of one overwriting the
+      // other, since StateSnapshot.assetVolumes carries a resulting total rather than a delta.
+      payout <- StakingPayout.atPeriodBoundary(SnapshotBlockchain(blockchain, combined), Height(newBlockHeight))
+    } yield combined |+| payout
   }
 
   def fromMicroBlock(

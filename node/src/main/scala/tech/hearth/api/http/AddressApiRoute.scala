@@ -39,8 +39,8 @@ case class AddressApiRoute(
 
   override lazy val route: Route =
     pathPrefix("addresses") {
-      balanceDetails ~ validate ~ balance ~ balances ~ balancesPost ~ balanceWithConfirmations ~ deleteAddress ~
-        seq ~ publicKey ~ effectiveBalance ~ effectiveBalanceWithConfirmations ~ blsPublicKey
+      balanceDetails ~ validate ~ balance ~ balances ~ balancesPost ~ deleteAddress ~
+        seq ~ publicKey ~ blsPublicKey
     } ~ root ~ create
 
   def deleteAddress: Route = (delete & withAuth & path(AddrSegment)) { address =>
@@ -84,33 +84,12 @@ case class AddressApiRoute(
               "regular"    -> regular,
               "generating" -> generating,
               "available"  -> available,
-              "effective"  -> effective
+              "effective"  -> effective,
+              "staked"     -> staked
             )
           )
         }
       )
-  }
-
-  def balanceWithConfirmations: Route = {
-    (path("balance" / AddrSegment / IntNumber) & get) { case (address, confirmations) =>
-      validateBalanceDepth(blockchain.height - confirmations)(
-        complete(balanceJson(address, confirmations))
-      )
-    }
-  }
-
-  def effectiveBalance: Route = {
-    path("effectiveBalance" / AddrSegment) { address =>
-      complete(effectiveBalanceJson(address, 0))
-    }
-  }
-
-  def effectiveBalanceWithConfirmations: Route = {
-    path("effectiveBalance" / AddrSegment / IntNumber) { (address, confirmations) =>
-      validateBalanceDepth(blockchain.height - confirmations)(
-        complete(effectiveBalanceJson(address, confirmations))
-      )
-    }
   }
 
   /** The endorser public key of one of this node's generators, so that an operator can see what a commitment from this
@@ -163,15 +142,7 @@ case class AddressApiRoute(
       ToResponseMarshallable(balances)
     }
 
-  private def balanceJson(acc: Address, confirmations: Int) = {
-    Balance(acc.toString, confirmations, commonAccountsApi.balance(acc, confirmations))
-  }
-
   private def balanceJson(acc: Address) = Balance(acc.toString, 0, commonAccountsApi.balance(acc))
-
-  private def effectiveBalanceJson(acc: Address, confirmations: Int) = {
-    Balance(acc.toString, confirmations, commonAccountsApi.effectiveBalance(acc, confirmations))
-  }
 
   private def validateBalanceDepth(height: Int): Directive0 = {
     if (height < blockchain.height - maxBalanceDepth)

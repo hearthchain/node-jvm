@@ -42,6 +42,11 @@ case class BlockIds(ids: Seq[ByteStr]) extends Message {
 
 case class GetBlock(id: ByteStr) extends Message
 
+/** The reply to a [[GetBlock]] the peer cannot serve, typically a liquid block id superseded by a later microblock. On
+  * the wire it is a block message whose payload is the bare id: no valid block is that short.
+  */
+case class BlockNotFound(id: ByteStr) extends Message
+
 case class LocalScoreChanged(newLocalScore: BigInt) extends Message
 
 case class RawBytes(code: Byte, data: Array[Byte]) extends Message {

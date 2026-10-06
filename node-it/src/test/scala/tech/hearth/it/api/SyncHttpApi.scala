@@ -215,11 +215,8 @@ object SyncHttpApi extends Assertions with matchers.should.Matchers {
     def accountsBalances(height: Option[Height], accounts: Seq[String], asset: Option[String] = None): Seq[(String, Long)] =
       sync(async(n).accountsBalances(height, accounts, asset))
 
-    def balance(address: String, confirmations: Option[Int] = None, amountsAsStrings: Boolean = false): Balance =
-      sync(async(n).balance(address, confirmations, amountsAsStrings))
-
-    def effectiveBalance(address: String, confirmations: Option[Int] = None, amountsAsStrings: Boolean = false): Balance =
-      sync(async(n).effectiveBalance(address, confirmations, amountsAsStrings))
+    def balance(address: String, amountsAsStrings: Boolean = false): Balance =
+      sync(async(n).balance(address, amountsAsStrings))
 
     def balanceDetails(acc: String, amountsAsStrings: Boolean = false): BalanceDetails = sync(async(n).balanceDetails(acc, amountsAsStrings))
 
