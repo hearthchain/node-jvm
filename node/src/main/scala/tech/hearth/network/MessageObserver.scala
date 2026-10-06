@@ -19,6 +19,9 @@ class MessageObserver extends ChannelInboundHandlerAdapter {
   private val blocksSubj               = ConcurrentSubject.publish[(Channel, Block)]
   val blocks: ChannelObservable[Block] = blocksSubj
 
+  private val blocksNotFoundSubj                       = ConcurrentSubject.publish[(Channel, BlockNotFound)]
+  val blocksNotFound: ChannelObservable[BlockNotFound] = blocksNotFoundSubj
+
   private val blockchainScoresSubj                = ConcurrentSubject.publish[(Channel, BigInt)]
   val blockchainScores: ChannelObservable[BigInt] = blockchainScoresSubj
 
@@ -42,6 +45,7 @@ class MessageObserver extends ChannelInboundHandlerAdapter {
 
   override def channelRead(ctx: ChannelHandlerContext, msg: AnyRef): Unit = msg match {
     case b: Block                       => blocksSubj.onNext((ctx.channel(), b))
+    case nf: BlockNotFound              => blocksNotFoundSubj.onNext((ctx.channel(), nf))
     case sc: BigInt                     => blockchainScoresSubj.onNext((ctx.channel(), sc))
     case s: BlockIds                    => signaturesSubj.onNext((ctx.channel(), s))
     case mbInv: MicroBlockInv           => microblockInvsSubj.onNext((ctx.channel(), mbInv))
@@ -56,6 +60,7 @@ class MessageObserver extends ChannelInboundHandlerAdapter {
   def shutdown(): Unit = {
     signaturesSubj.onComplete()
     blocksSubj.onComplete()
+    blocksNotFoundSubj.onComplete()
     blockchainScoresSubj.onComplete()
     microblockInvsSubj.onComplete()
     microblockResponsesSubj.onComplete()

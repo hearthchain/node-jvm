@@ -338,6 +338,7 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
       peerDatabase,
       knownInvalidBlocks,
       messageObserver.blocks,
+      messageObserver.blocksNotFound,
       messageObserver.blockIds,
       messageObserver.blockSnapshots,
       syncWithChannelClosed,

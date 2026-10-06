@@ -22,7 +22,16 @@ import monix.reactive.{Observable, Observer}
 import scala.concurrent.duration.*
 import scala.jdk.DurationConverters.*
 
-case class ExtensionBlocks(remoteScore: BigInt, blocks: Seq[Block], snapshots: Map[BlockId, BlockSnapshotResponse], source: Channel) {
+/** `truncated` marks an extension cut short because the peer no longer had one of its blocks, so applying it cannot
+  * bring us to `remoteScore`.
+  */
+case class ExtensionBlocks(
+    remoteScore: BigInt,
+    blocks: Seq[Block],
+    snapshots: Map[BlockId, BlockSnapshotResponse],
+    source: Channel,
+    truncated: Boolean = false
+) {
   override def toString: String = s"ExtensionBlocks($remoteScore, ${formatIds(blocks.map(_.id()))}"
 }
 
@@ -51,6 +60,7 @@ object RxExtensionLoader extends ScorexLogging {
       peerDatabase: PeerDatabase,
       invalidBlocks: InvalidBlockStorage,
       blocks: Observable[(Channel, Block)],
+      blocksNotFound: Observable[(Channel, BlockNotFound)],
       blockIds: Observable[(Channel, BlockIds)],
       snapshots: Observable[(Channel, BlockSnapshotResponse)],
       syncWithChannelClosed: Observable[ChannelClosedAndSyncWith],
@@ -76,6 +86,18 @@ object RxExtensionLoader extends ScorexLogging {
         timeoutSubject.onNext(ch)
         peerDatabase.blacklistAndClose(ch, reason)
       }.delayExecution(syncTimeOut)
+
+    // The timeout measures the peer, so it starts once the request has left our event loop, whose write queue can be
+    // many seconds deep under load. See docs/notes/block-sync.md.
+    def scheduleBlacklistAfterSent(ch: Channel, sent: ChannelFuture, reason: String): CancelableFuture[Unit] =
+      Task
+        .cancelable[Unit] { cb =>
+          val listener: ChannelFutureListener = _ => cb.onSuccess(())
+          sent.addListener(listener)
+          Task(sent.removeListener(listener)).void
+        }
+        .flatMap(_ => scheduleBlacklist(ch, reason))
+        .runAsyncLogErr
 
     def syncNext(state: State, syncWith: SyncWith = lastSyncWith().flatten): State =
       syncWith match {
@@ -105,10 +127,10 @@ object RxExtensionLoader extends ScorexLogging {
                     s"${id(ch)} Requesting block ids${if (optimistic) " optimistically" else ""}, last ${knownSigs.length} are ${formatIds(knownSigs)}"
                   )
 
-                  val blacklisting = scheduleBlacklist(ch, s"Timeout loading extension").runAsyncLogErr
-                  ch.writeAndFlush(GetBlockIds(knownSigs)).addListener { (f: ChannelFuture) =>
+                  val sent = ch.writeAndFlush(GetBlockIds(knownSigs)).addListener { (f: ChannelFuture) =>
                     if (!f.isSuccess) log.trace(s"Error requesting signatures: $ch", f.cause())
                   }
+                  val blacklisting = scheduleBlacklistAfterSent(ch, sent, s"Timeout loading extension")
 
                   state.withLoaderState(LoaderState.ExpectingSignatures(best, knownSigs, blacklisting))
                 case None =>
@@ -162,12 +184,12 @@ object RxExtensionLoader extends ScorexLogging {
                 state.withIdleLoader
               } else {
                 log.trace(s"${id(ch)} Requesting ${unknown.size} blocks")
-                val blacklistingAsync = scheduleBlacklist(ch, "Timeout loading first requested block").runAsyncLogErr
-                unknown.foreach { s =>
-                  ch.write(GetBlock(s))
-                  if (isLightMode) ch.write(GetSnapshot(s))
+                val writes = unknown.flatMap { s =>
+                  ch.write(GetBlock(s)) +: (if (isLightMode) Seq(ch.write(GetSnapshot(s))) else Seq.empty)
                 }
                 ch.flush()
+                // Writes on one channel complete in order, so the last one covers the whole batch.
+                val blacklistingAsync = scheduleBlacklistAfterSent(ch, writes.last, "Timeout loading first requested block")
                 state.withLoaderState(
                   LoaderState.ExpectingBlocksWithSnapshots(
                     c,
@@ -189,8 +211,16 @@ object RxExtensionLoader extends ScorexLogging {
 
     def onBlock(state: State, ch: Channel, block: Block): State = {
       state.loaderState match {
-        case LoaderState.ExpectingBlocksWithSnapshots(c, requested, expectedBlocks, receivedBlocks, expectedSnapshots, receivedSnapshots, _)
-            if c.channel == ch && expectedBlocks.contains(block.id()) =>
+        case LoaderState.ExpectingBlocksWithSnapshots(
+              c,
+              requested,
+              expectedBlocks,
+              receivedBlocks,
+              expectedSnapshots,
+              receivedSnapshots,
+              _,
+              truncated
+            ) if c.channel == ch && expectedBlocks.contains(block.id()) =>
           val updatedExpectedBlocks = expectedBlocks - block.id()
 
           BlockStats.received(block, BlockStats.Source.Ext, ch)
@@ -198,7 +228,7 @@ object RxExtensionLoader extends ScorexLogging {
 
           if (updatedExpectedBlocks.isEmpty && expectedSnapshots.isEmpty) {
             val blockById = (receivedBlocks + block).map(b => b.id() -> b).toMap
-            val ext       = ExtensionBlocks(c.score, requested.map(blockById), receivedSnapshots, ch)
+            val ext       = ExtensionBlocks(c.score, requested.map(blockById), receivedSnapshots, ch, truncated)
             log.debug(s"${id(ch)} $ext successfully received")
             extensionLoadingFinished(state.withIdleLoader, ext, ch)
           } else {
@@ -215,7 +245,8 @@ object RxExtensionLoader extends ScorexLogging {
                 receivedBlocks + block,
                 expectedSnapshots,
                 receivedSnapshots,
-                blacklistAsync
+                blacklistAsync,
+                truncated
               )
             )
           }
@@ -234,18 +265,71 @@ object RxExtensionLoader extends ScorexLogging {
       }
     }
 
+    // The peer advertised an id it can no longer serve, typically a liquid one superseded by a later microblock. Its
+    // blocks after that id are unreachable from what we hold, but the ones before it still extend our chain.
+    def onBlockNotFound(state: State, ch: Channel, notFound: BlockNotFound): State =
+      state.loaderState match {
+        case LoaderState.ExpectingBlocksWithSnapshots(c, requested, expectedBlocks, receivedBlocks, expectedSnapshots, receivedSnapshots, _, _)
+            if c.channel == ch && expectedBlocks.contains(notFound.id) =>
+          val prefix = requested.takeWhile(_ != notFound.id)
+          val keep   = prefix.toSet
+          if (prefix.isEmpty) {
+            log.debug(s"${id(ch)} Peer no longer has ${notFound.id.trim}, the first block requested, asking for block ids again")
+            syncNext(state.withIdleLoader)
+          } else {
+            log.debug(s"${id(ch)} Peer no longer has ${notFound.id.trim}, loading only the ${prefix.size} blocks before it")
+            val stillExpectedBlocks    = expectedBlocks.intersect(keep)
+            val stillExpectedSnapshots = expectedSnapshots.intersect(keep)
+            val keptBlocks             = receivedBlocks.filter(b => keep(b.id()))
+            val keptSnapshots          = receivedSnapshots.view.filterKeys(keep).toMap
+            if (stillExpectedBlocks.isEmpty && stillExpectedSnapshots.isEmpty) {
+              val blockById = keptBlocks.map(b => b.id() -> b).toMap
+              val ext       = ExtensionBlocks(c.score, prefix.map(blockById), keptSnapshots, ch, truncated = true)
+              extensionLoadingFinished(state.withIdleLoader, ext, ch)
+            } else {
+              val blacklistAsync = scheduleBlacklist(
+                ch,
+                timeoutMsg(isLightMode, stillExpectedBlocks.size, stillExpectedSnapshots.size, prefix)
+              ).runAsyncLogErr
+              state.withLoaderState(
+                LoaderState.ExpectingBlocksWithSnapshots(
+                  c,
+                  prefix,
+                  stillExpectedBlocks,
+                  keptBlocks,
+                  stillExpectedSnapshots,
+                  keptSnapshots,
+                  blacklistAsync,
+                  truncated = true
+                )
+              )
+            }
+          }
+        case _ =>
+          log.trace(s"${id(ch)} Received unexpected $notFound, ignoring at $state")
+          state
+      }
+
     def onSnapshot(state: State, ch: Channel, snapshot: BlockSnapshotResponse): State = {
       if (isLightMode) {
         state.loaderState match {
-          case LoaderState.ExpectingBlocksWithSnapshots(c, requested, expectedBlocks, receivedBlocks, expectedSnapshots, receivedSnapshots, _)
-              if c.channel == ch && expectedSnapshots.contains(snapshot.blockId) =>
+          case LoaderState.ExpectingBlocksWithSnapshots(
+                c,
+                requested,
+                expectedBlocks,
+                receivedBlocks,
+                expectedSnapshots,
+                receivedSnapshots,
+                _,
+                truncated
+              ) if c.channel == ch && expectedSnapshots.contains(snapshot.blockId) =>
             val updatedExpectedSnapshots = expectedSnapshots - snapshot.blockId
 
             BlockStats.receivedSnapshot(snapshot.blockId, BlockStats.Source.Ext, ch)
 
             if (updatedExpectedSnapshots.isEmpty && expectedBlocks.isEmpty) {
               val blockById = receivedBlocks.map(b => b.id() -> b).toMap
-              val ext       = ExtensionBlocks(c.score, requested.map(blockById), receivedSnapshots.updated(snapshot.blockId, snapshot), ch)
+              val ext       = ExtensionBlocks(c.score, requested.map(blockById), receivedSnapshots.updated(snapshot.blockId, snapshot), ch, truncated)
               log.debug(s"${id(ch)} $ext successfully received")
               extensionLoadingFinished(state.withIdleLoader, ext, ch)
             } else {
@@ -261,7 +345,8 @@ object RxExtensionLoader extends ScorexLogging {
                   receivedBlocks,
                   updatedExpectedSnapshots,
                   receivedSnapshots.updated(snapshot.blockId, snapshot),
-                  blacklistAsync
+                  blacklistAsync,
+                  truncated
                 )
               )
             }
@@ -314,7 +399,7 @@ object RxExtensionLoader extends ScorexLogging {
           if (applying != extension) log.warn(s"Applied $extension doesn't match expected $applying")
           (applicationResult, maybeBuffer) match {
             case (Right(ExtensionOutcome.Appended(newLocalScore)), None) =>
-              newLocalScore.filter(_ != applying.remoteScore && state.loaderState == Idle).foreach { score =>
+              newLocalScore.filter(_ != applying.remoteScore && state.loaderState == Idle && !applying.truncated).foreach { score =>
                 val reason = s"New local score $score does not match declared remote score ${applying.remoteScore}"
                 log.warn(reason)
                 if (blacklistOnScoreMismatch) {
@@ -353,6 +438,7 @@ object RxExtensionLoader extends ScorexLogging {
     Observable(
       blockIds.observeOn(scheduler).map { case (ch, sigs) => stateValue = onNewSignatures(stateValue, ch, sigs) },
       blocks.observeOn(scheduler).map { case (ch, block) => stateValue = onBlock(stateValue, ch, block) },
+      blocksNotFound.observeOn(scheduler).map { case (ch, notFound) => stateValue = onBlockNotFound(stateValue, ch, notFound) },
       snapshots.observeOn(scheduler).map { case (ch, snapshot) => stateValue = onSnapshot(stateValue, ch, snapshot) },
       syncWithChannelClosed.observeOn(scheduler).map { ch =>
         stateValue = onNewSyncWithChannelClosed(stateValue, ch)
@@ -408,7 +494,8 @@ object RxExtensionLoader extends ScorexLogging {
         receivedBlocks: Set[Block],
         expectedSnapshots: Set[BlockId],
         receivedSnapshots: Map[BlockId, BlockSnapshotResponse],
-        timeout: CancelableFuture[Unit]
+        timeout: CancelableFuture[Unit],
+        truncated: Boolean = false
     ) extends WithPeer {
       override def toString: String =
         s"ExpectingBlocks($channel,totalBlocks=${allBlocks.size},received=${receivedBlocks.size},expected=${

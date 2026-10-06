@@ -1,5 +1,7 @@
 package tech.hearth.network
 
+import tech.hearth.block.Block
+import tech.hearth.common.state.ByteStr
 import tech.hearth.utils.ScorexLogging
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.ChannelHandlerContext
@@ -19,6 +21,7 @@ class MessageCodec(peerDatabase: PeerDatabase) extends MessageToMessageCodec[Raw
       case r: RawBytes              => r
       case LocalScoreChanged(score) => RawBytes.from(ScoreSpec, score)
       case BlockForged(b)           => RawBytes.fromBlock(b)
+      case BlockNotFound(id)        => RawBytes(PBBlockSpec.messageCode, id.arr)
 
       // With a spec
       case GetPeers                      => RawBytes.from(GetPeersSpec, GetPeers)
@@ -41,12 +44,13 @@ class MessageCodec(peerDatabase: PeerDatabase) extends MessageToMessageCodec[Raw
     out.add(encodedMsg)
   }
 
-  override def decode(ctx: ChannelHandlerContext, msg: RawBytes, out: util.List[AnyRef]): Unit = {
-    specsByCodes(msg.code).deserializeData(msg.data) match {
-      case Success(x) => out.add(x)
-      case Failure(e) => block(ctx, e)
-    }
-  }
+  override def decode(ctx: ChannelHandlerContext, msg: RawBytes, out: util.List[AnyRef]): Unit =
+    if (msg.code == PBBlockSpec.messageCode && msg.data.length == Block.ReferenceLength) out.add(BlockNotFound(ByteStr(msg.data)))
+    else
+      specsByCodes(msg.code).deserializeData(msg.data) match {
+        case Success(x) => out.add(x)
+        case Failure(e) => block(ctx, e)
+      }
 
   protected def block(ctx: ChannelHandlerContext, e: Throwable): Unit = {
     peerDatabase.blacklistAndClose(ctx.channel(), s"Invalid message. ${e.getMessage}")
