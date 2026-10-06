@@ -99,6 +99,12 @@ Some suites (`GrpcReflectionApiSuite`, `BlockV5GrpcSuite`, `BlocksApiSuite`, and
 timing issue above, this makes such suites intermittently slow/flaky rather than deterministically broken. Not fixed
 as of this writing — `Builder`'s shuffle would need seeding or a balance-aware selection to make these reliably fast.
 
+### Block pace
+
+The configured `average-block-delay` does not set the block pace; `initial-base-target` and the generating balance of the miners a suite actually starts do. FairPoS delay is `min-block-time + 70000 * ln(1 - 5e17 * ln(hit) / (baseTarget * balance))` ms, and with several miners the block comes from the minimum over them, so what matters is the sum of the started miners' balances. At the old `initial-base-target = 50000` that sum had to be all nine genesis generators (400k HRTH) to get near 10s; no suite starts all nine, so a node01+node02 suite (`PreActivatedFeaturesTestSuite`) averaged ~25s/block and node01 alone ~47s. FairPoS's own base-target adjustment cannot rescue a suite: it moves 1% per block and only outside a 15s/5s window. Expected delays per miner set and base target are cheap to simulate in a few lines from that formula; `BaseTargetChecker` prints the single-miner delay per node from the real config.
+
+`initial-base-target = 500000` puts every subset between ~5.2s (all nine, near the 5s `min-block-time` floor) and ~11s (node01 alone), inside FairPoS's stable window, so the base target stays put for the whole run. It cut `PreActivatedFeaturesTestSuite` from 9m53s to 3m12s locally. A suite that is slow because it waits for heights should get its pace from here, not from a longer timeout.
+
 The REST API's block JSON moved the consensus fields out of the old nested `"nxt-consensus": {"generation-signature":
 ..., "base-target": ...}` object into flat top-level `"generationSignature"`/`"baseTarget"` fields
 (`BlockHeaderSerializer.toJson`); `node-it`'s own `api/model.scala` `Block`/`BlockHeader` readers still expected the
