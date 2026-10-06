@@ -665,6 +665,14 @@ object Application extends ScorexLogging {
     val log      = Logger(LoggerFactory.getLogger(getClass))
     val modeInfo = if (settings.enableLightMode) "in light mode" else "in full mode"
     log.info(s"Starting $modeInfo...")
+
+    val cryptoBackend = tech.hearth.crypto.Crypto.defaultBackend().name()
+    tech.hearth.crypto.CryptoBackendCheck.refusal(cryptoBackend, sys.env.get(tech.hearth.crypto.CryptoBackendCheck.RequestVariable)) match {
+      case Some(reason) =>
+        log.error(reason)
+        forceStopApplication(Misconfiguration)
+      case None => log.info(s"Crypto backend: $cryptoBackend")
+    }
     sys.addShutdownHook {
       SystemInformationReporter.report(settings.config)
     }
