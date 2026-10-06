@@ -319,6 +319,10 @@ build context, and `docker/Dockerfile` `COPY`s them in. It used to package both 
 - Replacing the `RUN tar` with `COPY` also takes the unpacking out of the emulated leg of the multi-platform
   `linux/amd64,linux/arm64` build in `publish-docker-image.yml`; a `COPY` needs no emulation at all.
 
+## Docker image: libsodium comes from apt, and its absence is silent
+
+`tech.hearth:crypto` signs and verifies through libsodium (FFM, `dlopen` of `libsodium.so.23`), and `Crypto.select()` falls back to `JvmBackend` on any load failure without logging. The image shipped no libsodium for its whole life, so every container verified Ed25519 with `BigInteger.modPow`: in a `WideStateGenerationSuite` JFR profile 92k of 97k CPU samples were `JvmBackend.verifyDetached`, which is what made transaction validation, block application and every load test slow. That backend is also not constant-time. `libsodium23` is now on the existing `apt-get` line; it adds no emulated step to the multi-platform build, since that line already runs under QEMU for arm64. To check a build actually uses it, run any node-it suite with `HEARTH_IT_PROFILE=true` (see `testing.md`) and look for `libsodium.so.23` in `jfr print --events jdk.NativeLibrary`, and for no `Ed25519Math` frames.
+
 ## Docker image: the node runs as uid 999, dropped in the entrypoint
 
 The image creates the `hearth` user (999:999) and `entrypoint.sh` re-execs itself as that user through `setpriv`
