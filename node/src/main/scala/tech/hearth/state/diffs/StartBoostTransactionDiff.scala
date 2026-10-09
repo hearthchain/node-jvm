@@ -70,17 +70,24 @@ object StartBoostTransactionDiff {
   }
 
   /** A recent block id in report_data[0:32] proves the quote wasn't generated long ago: the quote itself carries no
-    * timestamp, and a block id is unpredictable before the block exists.
+    * timestamp, and a block id is unpredictable before the block exists. The current block is excluded: its id
+    * changes with every microblock, so a quote of it stops resolving once the block is finished and the block
+    * carrying the StartBoost no longer validates. Below strictTxValidationHeight such quotes are on testnet, so an
+    * unknown id is let through there.
     */
   private def verifyFreshness(blockchain: Blockchain, reportData: ByteStr): Either[String, Unit] = {
     val claimedBlockId = ByteStr(reportData.arr.take(32))
-    for {
-      height <- blockchain.heightOf(claimedBlockId).toRight("Quote's report data does not reference a known block")
-      currentHeight = blockchain.height
-      _ <- Either.raiseWhen(height <= currentHeight - FreshnessWindowBlocks || height > currentHeight) {
-        s"Quote references block at height $height, outside the freshness window of the last $FreshnessWindowBlocks blocks"
-      }
-    } yield ()
+    val currentHeight  = blockchain.height
+    val strict         = currentHeight >= blockchain.settings.functionalitySettings.strictTxValidationHeight
+    blockchain.heightOf(claimedBlockId) match {
+      case None if strict => Left("Quote's report data does not reference a known block")
+      case None           => Right(())
+      case Some(height) =>
+        val newest = if (strict) currentHeight - 1 else currentHeight
+        Either.raiseWhen(height <= currentHeight - FreshnessWindowBlocks || height > newest) {
+          s"Quote references block at height $height, outside the freshness window of the last $FreshnessWindowBlocks blocks"
+        }
+    }
   }
 
   /** Chain of trust: the quote's own embedded PCK cert chain (leaf, PCK CA, root) is checked against the pinned

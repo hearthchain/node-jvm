@@ -110,6 +110,36 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       ) should produce("does not reference a known block")
     }
 
+    "rejects a quote of the current block, whose id changes with every microblock" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
+      d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
+      d.appendKeyBlock()
+
+      d.appendMicroBlockE(
+        TxHelpers.startBoost(sender, validator, quoteWithReportData(freshReportData(d)), nextPeriodStart)
+      ) should produce("outside the freshness window")
+    }
+
+    "below strictTxValidationHeight, lets through a quote of the current block or of an unknown one" in withDomain(
+      DeterministicFinality.configure(_.copy(strictTxValidationHeight = Int.MaxValue)),
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
+      d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
+      d.appendKeyBlock()
+
+      // Past the freshness check, the next one to fail is the missing PCK CRL.
+      d.appendMicroBlockE(
+        TxHelpers.startBoost(sender, validator, quoteWithReportData(freshReportData(d)), nextPeriodStart)
+      ) should produce("PCK CRL must be set")
+      d.appendMicroBlockE(
+        TxHelpers.startBoost(sender, validator, quoteWithReportData(Array.fill(32)(1.toByte) ++ enclaveKey.arr), nextPeriodStart)
+      ) should produce("PCK CRL must be set")
+    }
+
     "rejects a quote whose report data carries an all-zero enclave key" in withDomain(
       DeterministicFinality,
       AddrWithBalance.enoughBalances(sender)

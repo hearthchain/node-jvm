@@ -93,7 +93,7 @@ object TransactionDiffer {
             _ <- CommonValidation.disallowTxFromPast(blockchain.settings.functionalitySettings, prevBlockTs, tx)
             _ <- CommonValidation.disallowDuplicateIds(blockchain, tx)
             _ <- CommonValidation.disallowSendingGreaterThanBalance(blockchain, tx)
-            _ <- FeeValidation(tx)
+            _ <- FeeValidation(blockchain, tx)
           } yield ()
         }
     else Right(())

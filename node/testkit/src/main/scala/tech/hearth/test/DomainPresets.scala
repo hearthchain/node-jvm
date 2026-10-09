@@ -103,12 +103,14 @@ object DomainPresets {
     // uncommitted one tests fill via withDomain(balances = ...). Reward is pinned flat too (see DefaultRewardsSettings):
     // TESTNET's own RewardsSettings is tuned for observing the emission curve decay on a running testnet (short
     // half-life, large reward), not for tests that want a small, exactly predictable value to assert on - the same
-    // reasoning as history.DefaultBlockchainSettings.
+    // reasoning as history.DefaultBlockchainSettings. TESTNET's strictTxValidationHeight only grandfathers its own
+    // historical blocks, so tests validate strictly from genesis like every other network.
     val settings = TestSettings.withTestGenesis(HearthSettings.fromRootConfig(loadConfig(None)))
     settings.copy(blockchainSettings =
       settings.blockchainSettings.copy(
         genesisSettings = settings.blockchainSettings.genesisSettings.copy(timestamp = genesisTimestamp),
-        rewardsSettings = DefaultRewardsSettings
+        rewardsSettings = DefaultRewardsSettings,
+        functionalitySettings = settings.blockchainSettings.functionalitySettings.copy(strictTxValidationHeight = 0)
       )
     )
   }

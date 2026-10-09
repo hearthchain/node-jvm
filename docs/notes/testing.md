@@ -62,11 +62,7 @@ load main class poet`, from node10's mnemonic), silently discarding every argume
 reaches a container (mounting a rendered HOCON file instead of flattening to `-D`, say) has to keep that property, and
 would also fix the "no way to express an absent value" limitation described above.
 
-Minimum-fee validation is not implemented: `FeeValidation.getMinFee` computes the minimum fee for a transaction type,
-but nothing in `TransactionDiffer`/`CommonValidation` ever calls it — `FeeValidation.apply` only checks `fee > 0`. A
-transaction below the nominal minimum (e.g. a Transfer at 99999 instead of 100000) is currently accepted. This is
-deliberate debt pending a fee-rules design, not an oversight; `TransferTransactionSuite`'s `fee = 99999` case is
-commented out with a TODO until it exists.
+Minimum-fee validation is enforced (see "Minimum fee" in `docs/notes/economics.md`), so unit-test fixtures must pay at least `FeeValidation.FeeUnit` per unit; a multi-recipient `TxHelpers.massTransfer` needs an explicit `fee`, since its default does not add the per-recipient surcharge. node-it's `sync.calcMassTransferFee` mirrors the same formula, so node-it fee fixtures stay at the real minimum and a `fee - 1` case is genuinely rejected.
 
 Many individual suites carry their own `pre-activated-features`/`features.supported` overrides left over from the
 pre-migration feature set (ids 2 through 15+); since only id 1 (`SmallerMinimalGeneratingBalance`) is implemented now,

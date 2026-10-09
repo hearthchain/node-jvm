@@ -32,8 +32,23 @@ object FeeValidation {
     TransactionType.Stake              -> 1    // TODO: decide
   )
 
-  def apply(tx: Transaction): Either[ValidationError, Unit] =
-    Either.cond(tx.fee > 0 || !tx.isInstanceOf[Authorized], (), GenericError(s"Fee must be positive."))
+  def apply(blockchain: Blockchain, tx: Transaction): Either[ValidationError, Unit] =
+    for {
+      _ <- Either.cond(tx.fee > 0 || !tx.isInstanceOf[Authorized], (), GenericError(s"Fee must be positive."))
+      _ <- checkMinFee(blockchain, tx)
+    } yield ()
+
+  // A fee in an issued asset is held to that asset's own minAssetFee instead, in TransactionDiffer.feePortfolios.
+  private def checkMinFee(blockchain: Blockchain, tx: Transaction): Either[ValidationError, Unit] =
+    if (blockchain.height < blockchain.settings.functionalitySettings.strictTxValidationHeight || tx.feeAssetId != Hearth) Right(())
+    else
+      getMinFee(tx).flatMap { details =>
+        Either.cond(
+          tx.fee >= details.minFeeInHearth,
+          (),
+          GenericError(s"Fee for ${tx.tpe.transactionName} (${tx.fee} in HRTH) does not exceed minimal value of ${details.minFeeInHearth} HRTH")
+        )
+      }
 
   private def feeInUnits(tx: Transaction): Either[ValidationError, Long] = {
     FeeConstants

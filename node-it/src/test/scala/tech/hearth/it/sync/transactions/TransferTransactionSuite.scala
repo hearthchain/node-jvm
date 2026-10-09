@@ -87,9 +87,7 @@ class TransferTransactionSuite extends BaseTransactionSuite with CancelAfterFail
 
     val invalidTxs = Seq(
       (invalidTx(timestamp = System.currentTimeMillis + 1.day.toMillis), "Transaction timestamp .* is more than .*ms in the future"),
-      // TODO: minimum-fee validation isn't implemented yet (FeeValidation.getMinFee is computed but never checked
-      // by TransactionDiffer/CommonValidation); restore this case once fee rules are designed and enforced.
-      // (invalidTx(fee = 99999), "Fee .* does not exceed minimal value"),
+      (invalidTx(fee = minFee - 1), "Fee .* does not exceed minimal value"),
       // utils.byteArrayFromString rejects an over-long hex string outright (Base16.tryDecodeWithLimit), before an
       // attachment-specific length check ever runs. Hex encodes exactly 2 chars per byte with no compression, and
       // MaxAttachmentStringSize is sized from the same 140-byte bound as MaxAttachmentSize, so any attachment over

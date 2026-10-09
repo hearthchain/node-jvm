@@ -88,14 +88,11 @@ class TransferTransactionGrpcSuite extends GrpcBaseTransactionSuite with NTPTime
       "Transaction timestamp .* is more than .*ms in the past",
       Code.INVALID_ARGUMENT
     )
-    // TODO: minimum-fee validation isn't implemented yet (FeeValidation.getMinFee is computed but never checked
-    // by TransactionDiffer/CommonValidation); restore this case once fee rules are designed and enforced (see
-    // TransferTransactionSuite's analogous commented-out case).
-    // assertGrpcError(
-    //   sender.broadcastTransfer(firstAcc, Recipient().withPublicKeyHash(secondAddress), transferAmount, minFee - 1, waitForTx = true),
-    //   "Fee .* does not exceed minimal value",
-    //   Code.INVALID_ARGUMENT
-    // )
+    assertGrpcError(
+      sender.broadcastTransfer(firstAcc, Recipient().withPublicKeyHash(secondAddress), transferAmount, minFee - 1, waitForTx = true),
+      "Fee .* does not exceed minimal value",
+      Code.INVALID_ARGUMENT
+    )
 
     sender.hearthBalance(firstAddress).available shouldBe firstBalance
     sender.hearthBalance(firstAddress).effective shouldBe firstEffBalance

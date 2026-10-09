@@ -1,5 +1,6 @@
 package tech.hearth.events
 
+import tech.hearth.TestValues
 import tech.hearth.common.state.ByteStr
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.events.FakeObserver.*
@@ -37,7 +38,7 @@ class MetadataSpec extends FreeSpec with WithBUDomain {
       val order2   = TxHelpers.order(OrderType.BUY, asset, Hearth, amount = 100L, price = 1.hearth, sender = matcher, matcher = matcher)
       val exchange = TxHelpers.exchange(order1, order2, matcher, amount = 100L, price = 1.hearth)
 
-      val massTransfer = TxHelpers.massTransfer(issuer, Seq(matcher.toAddress -> 1L, leased.toAddress -> 1L), asset = asset)
+      val massTransfer = TxHelpers.massTransfer(issuer, Seq(matcher.toAddress -> 1L, leased.toAddress -> 1L), asset = asset, fee = TestValues.fee)
 
       d.appendBlock(transfer, lease, exchange, massTransfer)
 

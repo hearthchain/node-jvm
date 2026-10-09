@@ -76,10 +76,7 @@ class MassTransferTransactionGrpcSuite extends GrpcBaseTransactionSuite {
     sender.hearthBalance(secondAddress) shouldBe secondBalance
   }
 
-  // TODO: minimum-fee validation isn't implemented yet (FeeValidation.getMinFee is computed but never checked
-  // by TransactionDiffer/CommonValidation); restore this case once fee rules are designed and enforced (see
-  // TransferTransactionSuite's analogous commented-out case).
-  ignore("cannot make mass transfer when fee less then minimal ") {
+  test("cannot make mass transfer when fee less then minimal ") {
     val firstBalance               = sender.hearthBalance(firstAddress)
     val secondBalance              = sender.hearthBalance(secondAddress)
     val transfers                  = List(Transfer(Some(Recipient.of(secondAddress)), transferAmount))
@@ -99,7 +96,7 @@ class MassTransferTransactionGrpcSuite extends GrpcBaseTransactionSuite {
   test("cannot make mass transfer without having enough of effective balance") {
     val firstBalance               = sender.hearthBalance(firstAddress)
     val secondBalance              = sender.hearthBalance(secondAddress)
-    val transfers                  = List(Transfer(Some(Recipient.of(secondAddress)), firstBalance.regular - 2 * minFee))
+    val transfers                  = List(Transfer(Some(Recipient.of(secondAddress)), firstBalance.regular - minFee))
     val massTransferTransactionFee = calcMassTransferFee(transfers.size)
 
     sender.broadcastLease(firstAcc, Recipient.of(secondAddress), leasingAmount, minFee, waitForTx = true)

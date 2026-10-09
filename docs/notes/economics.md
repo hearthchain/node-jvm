@@ -24,6 +24,10 @@ each a repeated `Amount`) and tracked per microblock in `NgState.BlockData`. Rea
 `api.BlockMeta.totalFeeInHearth` and the REST `totalFee` field remain HRTH-only, derived from the HRTH entry of
 `total_fee`.
 
+### Minimum fee
+
+A fee paid in HRTH must be at least `FeeValidation.getMinFee` (`FeeConstants` units times `FeeUnit`, plus half a unit per transfer recipient), checked in `FeeValidation.apply` from `TransactionDiffer.validateCommon`, so it is skipped when `verify = false` (e.g. `Importer --no-verify`). A fee in an issued asset is held only to that asset's flat `minAssetFee` (`TransactionDiffer.feePortfolios`), not scaled by the transaction's units. The HRTH check starts at `FunctionalitySettings.strictTxValidationHeight`: 8395 on testnet, which carries an under-paid transfer at 1887, and 0 everywhere else. `DomainPresets.SettingsFromDefaultConfig` pins it to 0, since its TESTNET-derived settings would otherwise exempt test chains.
+
 ## HRTH emission curve
 
 `BlockRewardCalculator.fullRewardAt` no longer returns a flat, voted constant (see hearth-tokenomics-spec S2): the
