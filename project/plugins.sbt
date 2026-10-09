@@ -28,7 +28,7 @@ libraryDependencies ++= Seq(
 //  "com.fasterxml.jackson.module" %% "jackson-module-scala"              % "2.22.2",
   "org.hjson"                     % "hjson"                             % "3.1.0",
   ("org.vafer"                    % "jdeb"                              % "1.14").artifacts(Artifact("jdeb", "jar", "jar")),
-  "org.slf4j"                     % "jcl-over-slf4j"                    % "2.0.19",
+  "org.slf4j"                     % "jcl-over-slf4j"                    % "2.0.20",
   "com.github.docker-java"        % "docker-java-core"                  % dockerJavaVersion,
   "com.github.docker-java"        % "docker-java-transport-httpclient5" % dockerJavaVersion
 )
