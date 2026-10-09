@@ -89,7 +89,10 @@ case class FunctionalitySettings(
     // docs/notes/cred-economy.md. Base16, like GenesisAssetSettings.id, since it is config text rather than a
     // decoded id; None means this network runs no Cred economy, and the period-boundary payout does nothing.
     // Defaulted like daoAddress above, so no CUSTOM config template has to be migrated to add it.
-    credAsset: Option[String] = None
+    credAsset: Option[String] = None,
+    // First height enforcing the minimum HRTH fee and StartBoost's ban on quoting the current (liquid) block. Testnet
+    // carries blocks violating both below it; every other network enforces them from genesis.
+    strictTxValidationHeight: Int = 0
 ) {
   lazy val daoAddressParsed: Either[String, Option[Address]] =
     daoAddress.traverse(Address.fromString).leftMap(_ => "Incorrect dao-address")
@@ -147,7 +150,8 @@ object FunctionalitySettings {
     blockRewardBoostPeriod = 2_000,
     maxValidEndorsers = 64,
     generationPeriodLength = 3000,
-    credAsset = Some(PredefinedSnapshotSettings.TestnetORCRED)
+    credAsset = Some(PredefinedSnapshotSettings.TestnetORCRED),
+    strictTxValidationHeight = 8395
   )
 
   val STAGENET: FunctionalitySettings = apply(

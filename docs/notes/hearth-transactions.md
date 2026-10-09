@@ -112,7 +112,11 @@ planned). The diff:
 - checks quote freshness and extracts the enclave key: the TDX report's 64-byte `report_data` is `blockId(32) ++
   enclavePublicKey(32)` - `report_data[32:64]` carries the enclave's own ephemeral Ed25519 key (the only key
   generated inside the TEE, and so the only one worth registering), and `blockId` (`report_data[0:32]`) must name a
-  block within the last `FreshnessWindowBlocks` (100) blocks below the current height. Both values are embedded raw,
+  block within the last `FreshnessWindowBlocks` (100) blocks strictly below the current height. The current block is
+  excluded because its id changes with every microblock: a quote of the liquid block validates in its microblock, but
+  once the block is finished that id no longer resolves and the block carrying the StartBoost fails to import. Testnet
+  has four such StartBoosts (heights 5028-8394), so `FunctionalitySettings.strictTxValidationHeight` (8395 there, 0
+  elsewhere) lets an unknown or current-block id through below it. Both values are embedded raw,
   not hashed - unforgeability comes from the quote's own TDX hardware signature over `report_data`, not from hiding
   either value. The transaction sender is deliberately *not* bound into the quote (see #32): the sender becomes the enclave's
   `operator` on a first-registration-wins basis (see below), so a hijacked registration is escaped by restarting the

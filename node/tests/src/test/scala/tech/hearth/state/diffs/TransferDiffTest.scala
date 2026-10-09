@@ -7,7 +7,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock.create as block
 import tech.hearth.settings.{FunctionalitySettings, GenesisAssetSettings, TestFunctionalitySettings}
 import tech.hearth.test.*
-import tech.hearth.test.DomainPresets.ScriptsAndSponsorship
+import tech.hearth.test.DomainPresets.{ScriptsAndSponsorship, configure}
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.transaction.transfer.TransferTransaction.ParsedTransfer
@@ -40,6 +40,18 @@ class TransferDiffTest extends PropSpec with WithDomain {
           d.balance(recipient) shouldBe amount.value
         }
       }
+    }
+  }
+
+  property("fee in HRTH below the minimum is rejected from strictTxValidationHeight, accepted before it") {
+    val minFee    = FeeValidation.FeeUnit.toLong
+    val recipient = TxHelpers.signer(2).toAddress
+    withDomain(ScriptsAndSponsorship.configure(_.copy(strictTxValidationHeight = 3)), masterBalance) { d =>
+      d.appendBlock(TxHelpers.transfer(master, recipient, fee = minFee - 1))
+      d.appendBlockE(TxHelpers.transfer(master, recipient, fee = minFee - 1)) should produce(
+        s"does not exceed minimal value of $minFee HRTH"
+      )
+      d.appendBlockE(TxHelpers.transfer(master, recipient, fee = minFee)) should beRight
     }
   }
 

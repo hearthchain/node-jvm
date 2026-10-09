@@ -104,10 +104,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
     miner.assertBalances(secondAddress, balance2, eff2)
   }
 
-  // TODO: minimum-fee validation isn't implemented yet (FeeValidation.getMinFee is computed but never checked
-  // by TransactionDiffer/CommonValidation); restore this case once fee rules are designed and enforced (see
-  // TransferTransactionSuite's analogous commented-out case).
-  ignore("can not make mass transfer when fee less then required") {
+  test("can not make mass transfer when fee less then required") {
     val (balance1, eff1) = miner.accountBalances(firstAddress)
     val (balance2, eff2) = miner.accountBalances(secondAddress)
     val transfers        = List(Transfer(secondAddress, transferAmount))
@@ -124,7 +121,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
   test("can not make mass transfer without having enough of effective balance") {
     val (balance1, eff1) = miner.accountBalances(firstAddress)
     val (balance2, eff2) = miner.accountBalances(secondAddress)
-    val transfers        = List(Transfer(secondAddress, balance1 - 2 * minFee))
+    val transfers        = List(Transfer(secondAddress, balance1 - minFee))
 
     val leaseTxId = sender.lease(firstKeyPair, secondAddress, leasingAmount, minFee).id
     nodes.waitForHeightAriseAndTxPresent(leaseTxId)
@@ -220,9 +217,7 @@ class MassTransferTransactionSuite extends BaseTransactionSuite {
         ),
         (negativeTransferAmountRequest, "negative amount: -1 of asset"),
         (request(fee = 0), "insufficient fee"),
-        // TODO: minimum-fee validation isn't implemented yet (FeeValidation.getMinFee is computed but never checked
-        // by TransactionDiffer/CommonValidation); restore this case once fee rules are designed and enforced.
-        // (request(fee = 99999), "Fee .* does not exceed minimal value"),
+        (request(fee = calcMassTransferFee(1) - 1), "Fee .* does not exceed minimal value"),
         // utils.byteArrayFromString hex-decodes the attachment before the length check ever runs. Hex encodes
         // exactly 2 chars per byte with no compression, and MaxAttachmentStringSize is sized from the same
         // 140-byte bound as MaxAttachmentSize, so any attachment over MaxAttachmentSize is also over the generic

@@ -19,7 +19,9 @@ import tech.hearth.transaction.TxValidationError.InvalidStateHash
 import tech.hearth.transaction.TxHelpers
 
 class BlockDifferTest extends FreeSpec with WithDomain {
-  private val TransactionFee = 10
+  // The fee table below is in FeeScale units, the smallest scale at which a fee of 10 clears the minimum fee
+  private val FeeScale       = FeeValidation.FeeUnit / 10
+  private val TransactionFee = 10 * FeeScale
 
   private val signerA, signerB = randomKeyPair()
 
@@ -65,13 +67,13 @@ class BlockDifferTest extends FreeSpec with WithDomain {
 
           (2 to 9).foreach(appendPayment)
           d.blockchain.height shouldBe 9
-          d.blockchain.balance(signerA.toAddress) shouldBe InitialMinerBalance + 40
-          d.blockchain.balance(signerB.toAddress) shouldBe InitialMinerBalance + 34
+          d.blockchain.balance(signerA.toAddress) shouldBe InitialMinerBalance + 40 * FeeScale
+          d.blockchain.balance(signerB.toAddress) shouldBe InitialMinerBalance + 34 * FeeScale
 
           appendPayment(10)
           d.blockchain.height shouldBe 10
-          d.blockchain.balance(signerA.toAddress) shouldBe InitialMinerBalance + 40
-          d.blockchain.balance(signerB.toAddress) shouldBe InitialMinerBalance + 44
+          d.blockchain.balance(signerA.toAddress) shouldBe InitialMinerBalance + 40 * FeeScale
+          d.blockchain.balance(signerB.toAddress) shouldBe InitialMinerBalance + 44 * FeeScale
         }
     }
 

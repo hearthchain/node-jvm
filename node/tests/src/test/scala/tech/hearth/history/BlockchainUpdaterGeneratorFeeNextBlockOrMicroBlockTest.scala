@@ -14,15 +14,18 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
 
   type Setup = (SigningKey, TransferTransaction, TransferTransaction, TransferTransaction)
 
+  private val MinFee = FeeValidation.FeeUnit.toLong
+
   // The sender is credited by the genesis snapshot, which the domain applies as its own block at height 1
   val preconditionsAndPayments: Gen[Setup] = for {
     sender    <- accountGen
     recipient <- accountGen
     ts        <- positiveIntGen
-    somePayment: TransferTransaction = createHearthTransfer(sender, recipient.toAddress, 1, 10, ts + 1).explicitGet()
-    // The generator can afford this only out of what the earlier transaction's fee earned it
-    generatorPaymentOnFee: TransferTransaction = createHearthTransfer(defaultSigner, recipient.toAddress, 11, 1, ts + 2).explicitGet()
-    someOtherPayment: TransferTransaction      = createHearthTransfer(sender, recipient.toAddress, 1, 1, ts + 3).explicitGet()
+    somePayment: TransferTransaction = createHearthTransfer(sender, recipient.toAddress, 1, 10 * MinFee, ts + 1).explicitGet()
+    // More than the earlier transaction's fee earned the generator, even counting its share of its own fee
+    generatorPaymentOnFee: TransferTransaction =
+      createHearthTransfer(defaultSigner, recipient.toAddress, 11 * MinFee + 1, MinFee, ts + 2).explicitGet()
+    someOtherPayment: TransferTransaction = createHearthTransfer(sender, recipient.toAddress, 1, MinFee, ts + 3).explicitGet()
   } yield (sender, somePayment, generatorPaymentOnFee, someOtherPayment)
 
   /** The generator can pay for its own transaction and nothing more, so that what it spends beyond that is exactly what
@@ -49,7 +52,7 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
 
       val earnedSoFar = BlockDiffer.CurrentBlockFeePart(somePayment.fee.value)
       val affordable =
-        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, earnedSoFar, 1, somePayment.timestamp + 2).explicitGet()
+        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, earnedSoFar, MinFee, somePayment.timestamp + 2).explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable) should beRight
     }
@@ -60,7 +63,7 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
       case (domain, (_, somePayment, generatorPaymentOnFee, someOtherPayment)) =>
         domain.appendBlockAt(somePayment.timestamp)(somePayment)
 
-        // The whole fee plus one, which the carry only makes available a block later
+        // Beyond the whole fee, which the carry only makes available a block later
         domain.appendBlockAtE(generatorPaymentOnFee.timestamp)(generatorPaymentOnFee, someOtherPayment) should produce(
           "trying to spend a deposit"
         )
@@ -74,7 +77,8 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
 
       // The carry of the whole liquid block, micro blocks included, is credited when the next block references it
       val affordable =
-        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, somePayment.fee.value, 1, somePayment.timestamp + 2).explicitGet()
+        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, somePayment.fee.value, MinFee, somePayment.timestamp + 2)
+          .explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable, someOtherPayment) should beRight
     }

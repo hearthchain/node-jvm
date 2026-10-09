@@ -25,7 +25,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
     op match {
       case 1 =>
         val lease       = TxHelpers.lease(sender, recipient, amount, fee = 100000L, timestamp = nextTs)
-        val cancelLease = TxHelpers.leaseCancel(lease.id(), sender, fee = 1, timestamp = nextTs)
+        val cancelLease = TxHelpers.leaseCancel(lease.id(), sender, fee = 100000L, timestamp = nextTs)
         List(lease, cancelLease)
       case 2 =>
         List(
@@ -35,12 +35,12 @@ class RollbackSpec extends FreeSpec with WithDomain {
               recipient -> amount,
               recipient -> amount
             ),
-            fee = 10000,
+            fee = 200000L,
             timestamp = nextTs
           )
         )
       case _ =>
-        List(TxHelpers.transfer(sender, recipient, amount, fee = 1000, timestamp = nextTs))
+        List(TxHelpers.transfer(sender, recipient, amount, fee = 100000L, timestamp = nextTs))
     }
   }
 
@@ -105,7 +105,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
       val recipient      = TxHelpers.signer(2)
       val txCount        = (1 to 10).toList
       val initialBalance = 100.hearth
-      val fee            = 1
+      val fee            = 100000L
       withDomain(balances = Seq(AddrWithBalance(sender.toAddress, initialBalance))) { d =>
         val genesisSignature = d.lastBlockId
 
@@ -208,7 +208,7 @@ class RollbackSpec extends FreeSpec with WithDomain {
             to = recipient.toAddress,
             amount = assetAmount,
             asset = issuedAsset,
-            fee = 1,
+            fee = 100000L,
             feeAsset = Hearth
           )
         )
