@@ -45,12 +45,12 @@ jobs:
           report_paths: 'target/out/jvm/u/**/test-reports/*.xml'
           create_check: false
           check_name: 'Check PR'
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: hearth-all
           path: target/out/jvm/u/node/hearth-all-*.jar
       - name: Save debug data
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           if-no-files-found: ignore
@@ -107,7 +107,7 @@ jobs:
           create_check: false
           check_name: 'Run integration tests'
       - name: Upload Logs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           if-no-files-found: ignore
@@ -144,7 +144,7 @@ jobs:
           create_check: false
           check_name: 'Run load tests'
       - name: Upload Logs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           if-no-files-found: ignore
@@ -154,7 +154,7 @@ jobs:
             target/out/jvm/u/node-it/test-reports
             !target/out/jvm/u/node-it/logs/**/*.jfr
       - name: Upload Profiles
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           if-no-files-found: warn
