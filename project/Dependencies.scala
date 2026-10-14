@@ -64,7 +64,7 @@ object Dependencies {
 
   val scalaTest = "org.scalatest" %% "scalatest" % "3.2.20" % Test
 
-  val cli = Seq("com.github.scopt" %% "scopt" % "4.1.0")
+  val cli = Seq("com.github.scopt" %% "scopt" % "4.2.0")
 
   def amazonCorretto(c: String): ModuleID = ("software.amazon.cryptools" % "AmazonCorrettoCryptoProvider" % "2.5.0").classifier(c)
 
