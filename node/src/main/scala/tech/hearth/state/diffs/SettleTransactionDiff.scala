@@ -81,6 +81,7 @@ object SettleTransactionDiff {
       _ <- Either.raiseUnless(blockchain.committedGenerators(period).exists(_.address == registered.validator)) {
         GenericError(s"${registered.validator} is not a committed generator of period $period")
       }
+      exact = blockchain.height >= blockchain.settings.functionalitySettings.exactSettleSplitHeight
       accumulated <- tx.settlements.foldLeft(SettleAccumulator.empty(blockchain.workDone(registered.validator, period)).asRight[ValidationError]) {
         (acc, settlement) =>
           acc.flatMap { case SettleAccumulator(settledSoFar, nodeCreditSoFar, workDoneSoFar) =>
@@ -108,12 +109,16 @@ object SettleTransactionDiff {
                     s"exceeds total reserved $reserved"
                 )
               }
-              // newCumulative >= previouslySettled is already established above, so this delta is never negative -
-              // it's exactly the portion of this settlement newly confirmed since the last one seen for this key
-              // (on chain, or earlier in this same batch).
-              delta = newCumulative - previouslySettled
-              newNodeCredit <- nodeCreditSoFar.combine(Portfolio.build(settlement.assetId, ServingNodeCredPart(delta))).leftMap(GenericError(_))
-              newWorkDone <- safeSum(workDoneSoFar, BurnedWorkPart(delta), s"workDone for ${registered.validator} in $period")
+              // newCumulative >= previouslySettled is already established above, and floorOf is monotonic, so neither
+              // share is ever negative. previouslySettled includes earlier entries of this same batch.
+              newNodeCredit <- nodeCreditSoFar
+                .combine(Portfolio.build(settlement.assetId, share(ServingNodeCredPart, exact, previouslySettled, newCumulative)))
+                .leftMap(GenericError(_))
+              newWorkDone <- safeSum(
+                workDoneSoFar,
+                share(BurnedWorkPart, exact, previouslySettled, newCumulative),
+                s"workDone for ${registered.validator} in $period"
+              )
                 .leftMap(GenericError(_))
             } yield SettleAccumulator(settledSoFar.updated(key, newCumulative), newNodeCredit, newWorkDone)
           }
@@ -127,6 +132,14 @@ object SettleTransactionDiff {
       )
     } yield snapshot
   }
+
+  // The growth of the floored share of the cumulative counter, not the floored share of the delta: summed over every
+  // settlement of a (client, miner, asset) counter this telescopes to the share of its final value, so splitting a
+  // spend across settlements loses nothing and a delta below ten units still counts. `exact` is false only below
+  // FunctionalitySettings.exactSettleSplitHeight, where history was written truncating each delta to tens first.
+  private def share(part: Fraction, exact: Boolean, previouslySettled: Long, newCumulative: Long): Long =
+    if (exact) part.floorOf(newCumulative) - part.floorOf(previouslySettled)
+    else part(newCumulative - previouslySettled)
 
   private case class SettleAccumulator(
       settledAmounts: Map[(Address, Address, IssuedAsset), Long],

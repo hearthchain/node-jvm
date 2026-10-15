@@ -8,7 +8,7 @@ import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
-import tech.hearth.settings.GenesisAssetSettings
+import tech.hearth.settings.{GenesisAssetSettings, HearthSettings}
 import tech.hearth.state.{Blockchain, CommittedGenerator, GenerationPeriod, RegisteredEnclave, SnapshotBlockchain, StateSnapshot}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
@@ -34,9 +34,11 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
   private val asset         = IssuedAsset(ByteStr.fill(32)(7))
   private val assetQuantity = 1000L
 
-  private def withSettleDomain[A](f: Domain => A): A =
+  private def withSettleDomain[A](f: Domain => A): A = withSettleDomain(DeterministicFinality)(f)
+
+  private def withSettleDomain[A](settings: HearthSettings)(f: Domain => A): A =
     withDomain(
-      DeterministicFinality,
+      settings,
       AddrWithBalance.enoughBalances(sender) :+ AddrWithBalance(client, assets = Map(asset -> assetQuantity)),
       assets = Seq(GenesisAssetSettings(asset.id.toString, "Settled", decimals = 0, quantity = assetQuantity, minFee = TestValues.fee))
     )(f)
@@ -138,7 +140,7 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       val hearthBefore   = blockchain.balance(miner)
       val tx             = settleTx(60L)
       val snapshot       = SettleTransactionDiff(blockchain)(tx).explicitGet()
-      val expectedCredit = SettleTransactionDiff.ServingNodeCredPart(60L) // 60 / 10 * 3 = 18
+      val expectedCredit = SettleTransactionDiff.ServingNodeCredPart.floorOf(60L) // floor(60 * 0.3) = 18
 
       snapshot.settledAmounts((client, miner, asset)) shouldBe 60L
       // The fee is charged in Hearth, the node's share of the settlement in the settled asset - the miner holds
@@ -149,7 +151,7 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
 
     "credits the serving node its share truncated (not rounded), matching Fraction's own semantics" in withSettleDomain { d =>
       val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
-      val snapshot   = SettleTransactionDiff(blockchain)(settleTx(61L)).explicitGet() // 61 / 10 * 3 = 6 * 3 = 18, not 18.3
+      val snapshot   = SettleTransactionDiff(blockchain)(settleTx(61L)).explicitGet() // floor(61 * 0.3) = 18, not 18.3
 
       snapshot.balances((miner, asset)) shouldBe 18L
     }
@@ -158,18 +160,18 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       val blockchain1  = withReservation(withRegisteredEnclave(d.blockchain), 100L)
       val hearthBefore = blockchain1.balance(miner)
 
-      val tx1         = settleTx(40L) // credits 40 / 10 * 3 = 12
+      val tx1         = settleTx(40L) // credits floor(40 * 0.3) = 12
       val snapshot1   = SettleTransactionDiff(blockchain1)(tx1).explicitGet()
       val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
 
-      val tx2       = settleTx(100L) // delta 60, credits 60 / 10 * 3 = 18 more
+      val tx2       = settleTx(100L) // credits floor(100 * 0.3) - floor(40 * 0.3) = 18 more
       val snapshot2 = SettleTransactionDiff(blockchain2)(tx2).explicitGet()
 
       val totalFees = tx1.fee.value + tx2.fee.value
       snapshot2.balances((miner, Hearth)) shouldBe hearthBefore - totalFees
       snapshot2.balances((miner, asset)) shouldBe 12L + 18L
-      // Same total the node would have received from a single settlement straight to 100 (100 / 10 * 3 = 30).
-      (12L + 18L) shouldBe SettleTransactionDiff.ServingNodeCredPart(100L)
+      // Same total the node would have received from a single settlement straight to 100 (floor(100 * 0.3) = 30).
+      (12L + 18L) shouldBe SettleTransactionDiff.ServingNodeCredPart.floorOf(100L)
     }
 
     "rejects a settlement counter that decreases from what's already recorded" in withSettleDomain { d =>
@@ -223,7 +225,7 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       resultSnapshot.settledAmounts((client, miner, asset)) shouldBe 40L
       resultSnapshot.settledAmounts((otherClient, miner, asset)) shouldBe 60L
       resultSnapshot.balances((miner, Hearth)) shouldBe hearthBefore - tx.fee.value
-      // 40 / 10 * 3 = 12, 60 / 10 * 3 = 18, summed across both clients into the miner's one Portfolio.
+      // floor(40 * 0.3) = 12, floor(60 * 0.3) = 18, summed across both clients into the miner's one Portfolio.
       resultSnapshot.balances((miner, asset)) shouldBe 12L + 18L
     }
 
@@ -241,7 +243,7 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       val period        = d.blockchain.currentGenerationPeriod.get
       val withValidator = withCommittedGenerator(withRegisteredEnclave(d.blockchain, validator = validator), period, validator)
       val blockchain    = withReservation(withValidator, 100L)
-      val tx            = settleTx(60L) // delta 60, burned work = 60 / 10 * 6 = 36
+      val tx            = settleTx(60L) // burned work = floor(60 * 0.6) = 36
       val snapshot      = SettleTransactionDiff(blockchain)(tx).explicitGet()
 
       snapshot.workDone((validator, period)) shouldBe 36L
@@ -254,12 +256,38 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
       val withValidator = withCommittedGenerator(withRegisteredEnclave(d.blockchain, validator = validator), period, validator)
       val blockchain1   = withReservation(withValidator, 100L)
 
-      val snapshot1 = SettleTransactionDiff(blockchain1)(settleTx(40L)).explicitGet() // work 40 / 10 * 6 = 24
+      val snapshot1 = SettleTransactionDiff(blockchain1)(settleTx(40L)).explicitGet() // work floor(40 * 0.6) = 24
       snapshot1.workDone((validator, period)) shouldBe 24L
       val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
 
       val snapshot2 = SettleTransactionDiff(blockchain2)(settleTx(100L)).explicitGet() // delta 60, work 36 more
       snapshot2.workDone((validator, period)) shouldBe 60L
+    }
+
+    "splits a settlement smaller than ten units, totalling what one settlement to the final counter would" in withSettleDomain { d =>
+      // The TESTNET case: 222 settled at 8406, then a delta of 3 at 49294 that recorded no work at all.
+      val period      = d.blockchain.currentGenerationPeriod.get
+      val blockchain1 = withReservation(withRegisteredEnclave(d.blockchain), 500L)
+      val snapshot1   = SettleTransactionDiff(blockchain1)(settleTx(222L)).explicitGet()
+      val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
+      val snapshot2   = SettleTransactionDiff(blockchain2)(settleTx(225L)).explicitGet()
+
+      snapshot2.workDone((miner, period)) shouldBe 135L // floor(225 * 0.6)
+      snapshot2.balances((miner, asset)) shouldBe 67L   // floor(225 * 0.3)
+    }
+
+    "below exactSettleSplitHeight, truncates each settlement's delta the way TESTNET history was written" in withSettleDomain(
+      DeterministicFinality.configure(_.copy(exactSettleSplitHeight = Int.MaxValue))
+    ) { d =>
+      val period      = d.blockchain.currentGenerationPeriod.get
+      val blockchain1 = withReservation(withRegisteredEnclave(d.blockchain), 500L)
+      val snapshot1   = SettleTransactionDiff(blockchain1)(settleTx(222L)).explicitGet()
+      val blockchain2 = SnapshotBlockchain(blockchain1, snapshot1)
+      val snapshot2   = SettleTransactionDiff(blockchain2)(settleTx(225L)).explicitGet()
+
+      snapshot2.workDone((miner, period)) shouldBe 132L // 222 / 10 * 6, and nothing for the delta of 3
+      // The delta of 3 credits nothing, so the snapshot has no entry for it and the balance stays at the first credit.
+      SnapshotBlockchain(blockchain2, snapshot2).balance(miner, asset) shouldBe 66L
     }
 
     "checks the running total within the same batch, not just what's already on chain" in withSettleDomain { d =>
