@@ -379,16 +379,9 @@ the three shares is credited.** `p = φ_b·p (burned) + φ_n·p (serving node) +
 .Fraction(3, 10)`, hardcoded the same way `BlockDiffer.CurrentBlockFeePart`/`BlockRewardCalculator`'s tier
 fractions are - a fixed protocol constant next to the logic that uses it, not a per-network `BlockchainSettings`
 field, since nothing about this fraction is meant to differ mainnet/testnet/stagenet) implements `φ_n`: for each
-settlement, the newly-confirmed delta (`newCumulative - previouslySettled` - always non-negative, since it's
-computed only after the "counter non-decreasing" check passes) is split via `ServingNodeCredPart.apply` (integer
-division first, matching every other `Fraction` in this codebase - see "Block fees"'s truncation warning in `docs/notes/economics.md`) and
-credited to the miner (`tx.sender`, same identity as the settlement's `miner`/`RegisteredEnclave.operator`) in the
-settled asset. Computed incrementally per settlement rather than off the raw `cumulativeSpent` field directly, so
-splitting one client's spend across several `Settle` transactions credits the same total the node would have
-received from one transaction straight to the final value (`ServingNodeCredPart` is linear in its truncation
-behavior only when applied to the same delta either way - `SettleTransactionDiffTest`'s "credits the serving node
-incrementally" case pins this down: two transactions settling 40 then a further 60 credit `12 + 18 = 30`, the same
-as one settling 100 directly would (`100 / 10 * 3 = 30`)).
+settlement, the credit is `ServingNodeCredPart.floorOf(newCumulative) - ServingNodeCredPart.floorOf(previouslySettled)` (`SettleTransactionDiff.share`), credited to the miner (`tx.sender`, same identity as the settlement's `miner`/`RegisteredEnclave.operator`) in the settled asset; `BurnedWorkPart` is split the same way. Taking the growth of the floored share of the cumulative counter, rather than the floored share of each delta, makes the per-settlement credits telescope: over a counter's whole life they sum to exactly the share of its final value, however the spend was split across `Settle` transactions. `floorOf` multiplies before dividing, unlike `Fraction.apply` (which fees and block rewards still use, see "Block fees"'s truncation warning in `docs/notes/economics.md`).
+
+**The split used to be `Fraction.apply(delta)`, which divides first**, so a delta under 10 credited the node nothing and recorded no work, and every settlement dropped up to 9 units of each share. On TESTNET this made the payout for period [48001, 51000] zero: its only settlement moved a counter from 222 to 225, and `3 / 10 * 6 = 0`. History written that way is kept by `FunctionalitySettings.exactSettleSplitHeight` (49295 on TESTNET, the block after that last truncated settlement, 0 elsewhere and in `DomainPresets.SettingsFromDefaultConfig`): below it `share` still truncates each delta, because recomputing the 8406 settlement exactly (133 work instead of 132) would change its state hash. Any gate above 49294 replays history identically, since no Settle landed between it and the tip at rollout; the only requirement is that none lands before every testnet node runs the new rule. Pinned by `SettleTransactionDiffTest`'s "splits a settlement smaller than ten units..." and "below exactSettleSplitHeight..."
 
 `φ_v` is **not** credited to anyone: the verifier pool has no on-chain destination of any kind yet (no
 verifier-committee registry), so that 10% is, for now, folded into the effectively-burned remainder rather than

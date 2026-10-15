@@ -92,7 +92,10 @@ case class FunctionalitySettings(
     credAsset: Option[String] = None,
     // First height enforcing the minimum HRTH fee and StartBoost's ban on quoting the current (liquid) block. Testnet
     // carries blocks violating both below it; every other network enforces them from genesis.
-    strictTxValidationHeight: Int = 0
+    strictTxValidationHeight: Int = 0,
+    // First height splitting a settlement exactly (SettleTransactionDiff.share). Below it each delta is truncated to
+    // tens first, which testnet history carries; every other network splits exactly from genesis.
+    exactSettleSplitHeight: Int = 0
 ) {
   lazy val daoAddressParsed: Either[String, Option[Address]] =
     daoAddress.traverse(Address.fromString).leftMap(_ => "Incorrect dao-address")
@@ -151,7 +154,9 @@ object FunctionalitySettings {
     maxValidEndorsers = 64,
     generationPeriodLength = 3000,
     credAsset = Some(PredefinedSnapshotSettings.TestnetORCRED),
-    strictTxValidationHeight = 8395
+    strictTxValidationHeight = 8395,
+    // Right after the last settlement applied truncated (49294); none landed between it and the tip at rollout.
+    exactSettleSplitHeight = 49295
   )
 
   val STAGENET: FunctionalitySettings = apply(

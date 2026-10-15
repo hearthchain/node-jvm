@@ -31,7 +31,12 @@ object BlockDiffer {
   )
 
   case class Fraction(dividend: Int, divider: Int) {
+    // Divides first, so it drops up to `divider - 1` of `l` and a value below `divider` gets nothing. Fees and block
+    // rewards are pinned to it by consensus; new splits use floorOf.
     def apply(l: Long): Long = l / divider * dividend
+
+    // Multiplies first, so a value below `divider` still gets its share; BigInt because `l * dividend` can overflow.
+    def floorOf(l: Long): Long = (BigInt(l) * dividend / divider).toLong
   }
 
   case class TxFeeInfo(feeAsset: Asset, feeAmount: Long, carry: Portfolio, fee: Portfolio)
