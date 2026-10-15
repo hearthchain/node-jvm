@@ -24,9 +24,7 @@ import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.CommitToGenerationTransaction.DepositInEmbers
 import tech.hearth.transaction.assets.*
 import tech.hearth.transaction.assets.exchange.ExchangeTransaction
-import tech.hearth.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
-import tech.hearth.transaction.transfer.TransferTransaction
-import tech.hearth.transaction.{CommitToGenerationTransaction, *}
+import tech.hearth.transaction.*
 import tech.hearth.utils.ScorexLogging
 import io.netty.util.concurrent.DefaultThreadFactory
 import org.rocksdb.ReadOptions
@@ -928,17 +926,12 @@ class RocksDBWriter(
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
             val num = TxNum(idx.toShort)
-            (tx: @unchecked) match {
-              case _: TransferTransaction =>
-              // balances already restored
-
-              case _: LeaseTransaction | _: LeaseCancelTransaction =>
-              // leases already restored
-
+            // Order fills are the only per-transaction state; everything else was restored by the height-keyed rollbacks above
+            tx match {
               case tx: ExchangeTransaction =>
                 ordersToInvalidate += rollbackOrderFill(rw, tx.buyOrder.id(), currentHeight)
                 ordersToInvalidate += rollbackOrderFill(rw, tx.sellOrder.id(), currentHeight)
-              case _: CommitToGenerationTransaction =>
+              case _ =>
             }
 
             rw.delete(Keys.transactionAt(currentHeight, num, rdb.txHandle))

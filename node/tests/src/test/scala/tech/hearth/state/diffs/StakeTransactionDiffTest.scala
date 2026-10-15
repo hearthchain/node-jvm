@@ -358,5 +358,19 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
       stakedFor(d, period(d).next) shouldBe empty
       staked(d) shouldBe 0L
     }
+
+    // The block on top persists the stake block, so the rollback goes through RocksDBWriter, not just the liquid block
+    "restores the stake on rollback of a persisted block" in withStakeDomain { d =>
+      val next = period(d).next.start
+      d.appendBlock()
+      val beforeStake = d.blockchain.lastBlockId.get
+
+      d.appendBlock(TxHelpers.stake(sender, periodStart = next, amount = 10.hearth))
+      d.appendBlock()
+
+      d.rollbackTo(beforeStake)
+      stakedFor(d, period(d).next) shouldBe empty
+      staked(d) shouldBe 0L
+    }
   }
 }
