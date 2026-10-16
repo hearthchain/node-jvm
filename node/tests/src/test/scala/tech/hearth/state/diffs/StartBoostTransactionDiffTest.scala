@@ -195,6 +195,39 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("Debug TDs are not accepted")
     }
 
+    "rejects a migratable TD, whose memory a migration TD can move, even with pinned measurements" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
+      d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
+
+      val quote = quoteWithReportData(freshReportData(d), tdAttributes = Base16.decode("0000003000000000"))
+      d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("Migratable TDs are not accepted")
+    }
+
+    "rejects a TD with reserved attribute bits set" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
+      d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
+
+      // Bit 1 (low reserved range) and bit 40 (high reserved range), each on top of the fixture's SEPT_VE_DISABLE.
+      Seq("0200001000000000", "0000001000010000").foreach { attributes =>
+        val quote = quoteWithReportData(freshReportData(d), tdAttributes = Base16.decode(attributes))
+        d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("set reserved bits")
+      }
+    }
+
+    "accepts every attribute bit a hardened TD may set: SEPT_VE_DISABLE, PKS, KL, PERFMON" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
+      d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
+
+      val quote = quoteWithReportData(freshReportData(d), tdAttributes = Base16.decode("000000d000000080"))
+      d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("PCK CRL must be set")
+    }
+
     "below strictTxValidationHeight, lets through a quote with unpinned measurements" in withDomain(
       DeterministicFinality.configure(_.copy(strictTxValidationHeight = Int.MaxValue)),
       AddrWithBalance.enoughBalances(sender)

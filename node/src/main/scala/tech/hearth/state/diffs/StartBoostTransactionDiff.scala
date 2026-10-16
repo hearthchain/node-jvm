@@ -10,6 +10,8 @@ import tech.hearth.state.*
 import tech.hearth.transaction.StartBoostTransaction
 import tech.hearth.transaction.TxValidationError.{ActivationError, GenericError}
 
+import java.nio.{ByteBuffer, ByteOrder}
+
 /** StartBoostTransaction semantics: verify a TDX quote end to end and register its enclave for the next generation
   * period (see the StartBoost consensus plan). `StartBoostTxValidator` already rejected a malformed or SGX quote
   * before this ever runs, but re-parses here too since nothing carries the parsed value across from validation.
@@ -123,24 +125,33 @@ object StartBoostTransactionDiff {
     }
   }
 
-  /** Checked before the signatures only because it is cheaper; it means something only once they verify. A debug TD
-    * is rejected regardless of its measurements, which don't cover TD attributes, since the host can read its memory
-    * and so the enclave key.
+  /** Checked before the signatures only because it is cheaper; it means something only once they verify. TD
+    * attributes are checked regardless of the measurements, which don't cover them: the host picks them at TD
+    * creation, and a debug or migratable TD leaks its memory, and so the enclave key, however trusted its image.
     */
   private def verifyMeasurement(blockchain: Blockchain, report: DcapQuote.Td10ReportBody): Either[String, Unit] =
     if (blockchain.height < blockchain.settings.functionalitySettings.strictTxValidationHeight) Right(())
     else {
       val measurement = TdMeasurement(report)
+      val attributes  = ByteBuffer.wrap(report.tdAttributes.arr).order(ByteOrder.LITTLE_ENDIAN).getLong
       for {
-        _ <- Either.raiseWhen((report.tdAttributes.arr(0) & DebugTdAttribute) != 0)("Debug TDs are not accepted")
+        _ <- Either.raiseWhen((attributes & ~AllowedTdAttributes) != 0) {
+          if ((attributes & DebugTdAttribute) != 0) "Debug TDs are not accepted"
+          else if ((attributes & MigratableTdAttribute) != 0) "Migratable TDs are not accepted"
+          else s"Quote's TD attributes ${Base16.encode(report.tdAttributes.arr)} set reserved bits"
+        }
         _ <- Either.raiseUnless(PinnedMeasurements.contains(measurement)) {
           s"Quote's TD measurement (MRTD ${measurement.mrTd}, RTMR0-3 ${measurement.rtmrs.mkString(", ")}) is not pinned"
         }
       } yield ()
     }
 
-  // TDATTRIBUTES bit 0, little-endian (Intel TDX module spec, TD_PARAMS).
-  private val DebugTdAttribute = 0x01
+  // TDATTRIBUTES bits (Intel TDX module spec, TD_PARAMS), read little-endian. DEBUG lets the host read the TD's memory,
+  // MIGRATABLE lets a migration TD move it, and a reserved bit has no meaning the pinned image was built for, so only
+  // the bits a hardened TD legitimately sets are allowed: SEPT_VE_DISABLE (28), PKS (30), KL (31), PERFMON (63).
+  private val DebugTdAttribute      = 1L << 0
+  private val MigratableTdAttribute = 1L << 29
+  private val AllowedTdAttributes   = (1L << 28) | (1L << 30) | (1L << 31) | (1L << 63)
 
   /** Chain of trust: the quote's own embedded PCK cert chain (leaf, PCK CA, root) is checked against the pinned
     * Intel root - it doesn't need the on-chain pckCaIssuerChain too, since the chain the quote carries is already
