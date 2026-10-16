@@ -59,13 +59,14 @@ trait WithState extends BeforeAndAfterAll with DBCacheSettings with Matchers wit
     TestHelpers.deleteRecursively(path)
   }
 
-  protected def withRocksDBWriter[A](ws: HearthSettings)(test: RocksDBWriter => A): A = {
+  protected def withRocksDBWriter[A](ws: HearthSettings, work: Map[(Address, GenerationPeriod), Long] = Map.empty)(test: RocksDBWriter => A): A = {
     try {
       val (_, rdw) = TestStorageFactory(
         ws,
         rdb,
         ntpTime,
-        ignoreBlockchainUpdateTriggers
+        ignoreBlockchainUpdateTriggers,
+        work
       )
       Using.resource(rdw)(test)
     } finally {
@@ -451,7 +452,9 @@ trait WithDomain extends WithState {
       generators: Seq[SigningKey] = Nil,
       assets: Seq[GenesisAssetSettings] = Seq.empty,
       // How the updater brings the node down on an unimplemented activated feature; pass a probe to observe it
-      onFatalStop: ApplicationStopReason => Unit = forceStopApplication
+      onFatalStop: ApplicationStopReason => Unit = forceStopApplication,
+      // workDone to report regardless of what was written, see TestStorageFactory
+      work: Map[(Address, GenerationPeriod), Long] = Map.empty
   )(test: Domain => A): A = {
     val noExplicitGenerators = generators.isEmpty &&
       settings.blockchainSettings.predefinedSnapshots.find(_.height == GenesisBlockHeight.toInt).forall(_.generators.isEmpty)
@@ -469,7 +472,7 @@ trait WithDomain extends WithState {
     val settingsWithGenesis =
       settings.withGenesisBalances(effectiveBalances*).withGenesisGenerators(effectiveGenerators*).withGenesisAssets(assets*)
 
-    withRocksDBWriter(settingsWithGenesis) { blockchain =>
+    withRocksDBWriter(settingsWithGenesis, work) { blockchain =>
       var domain: Domain = null
       val bcu = wrapBU(
         new BlockchainUpdaterImpl(

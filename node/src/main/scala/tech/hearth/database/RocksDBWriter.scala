@@ -463,6 +463,18 @@ class RocksDBWriter(
         rw.put(Keys.activeStake(addressId), Some(currentStake.height))
       }
 
+      // Recorded rather than recomputed on request: the boundary after this one prunes Keys.activeStake, after which
+      // the period's total stake can no longer be rebuilt from state
+      snapshot.stakingPayout.foreach { payout =>
+        rw.put(Keys.stakingPayout(payout.period.start, rdb.apiHandle), Some(payout))
+        payout.payouts.foreach { p =>
+          rw.put(
+            Keys.addressStakingPayout(addressIdWithFallback(p.address, newAddresses), payout.period.start, rdb.apiHandle),
+            Some(AddressPayout(payout.period, payout.asset, p.staked, p.credited))
+          )
+        }
+      }
+
       for ((orderId, (currentVolumeAndFee, volumeAndFeeNode)) <- filledQuantity) {
         rw.put(Keys.filledVolumeAndFee(orderId), currentVolumeAndFee)
         rw.put(Keys.filledVolumeAndFeeAt(orderId, currentVolumeAndFee.height), volumeAndFeeNode)
@@ -940,6 +952,8 @@ class RocksDBWriter(
           }
 
           rw.delete(Keys.generatorBalances(currentHeight, rdb.apiHandle))
+          // Only the first block of a period pays out, and what it pays is the period before it
+          currentPeriod.filter(_.start == currentHeight).flatMap(_.prev).foreach(rollbackStakingPayout(rw, _))
           currentPeriod.foreach { currentPeriod =>
             rw.delete(Keys.conflictGenerators(currentPeriod, currentHeight)) // TODO: test
 
@@ -1124,6 +1138,18 @@ class RocksDBWriter(
       // is two lines and keeps a rolled-back node's candidate set identical to one that never saw the block.
       if (stake.prevHeight <= Height(0)) rw.delete(Keys.activeStake(addressId))
       else rw.put(Keys.activeStake(addressId), Some(stake.prevHeight))
+    }
+  }
+
+  private def rollbackStakingPayout(rw: RW, period: GenerationPeriod): Unit = {
+    val key = Keys.stakingPayout(period.start, rdb.apiHandle)
+    rw.get(key).foreach { payout =>
+      // Every staker already had an address id before the block that paid it, so none was rolled back with it
+      for {
+        p         <- payout.payouts
+        addressId <- rw.get(Keys.addressId(p.address))
+      } rw.delete(Keys.addressStakingPayout(addressId, period.start, rdb.apiHandle))
+      rw.delete(key)
     }
   }
 

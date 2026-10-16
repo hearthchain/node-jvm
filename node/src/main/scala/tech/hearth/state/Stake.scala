@@ -42,3 +42,6 @@ case class PeriodPayout(period: GenerationPeriod, asset: IssuedAsset, issued: Lo
 }
 
 case class StakerPayout(address: Address, staked: Long, credited: Long)
+
+/** One address's line of a [[PeriodPayout]], stored per address so that its payout history is a range read. */
+case class AddressPayout(period: GenerationPeriod, asset: IssuedAsset, staked: Long, credited: Long)

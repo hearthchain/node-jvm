@@ -394,6 +394,59 @@ package object database {
 
   def writeStakeNode(sn: StakeNode): Array[Byte] = Longs.toByteArray(sn.amount) ++ sn.prevHeight.toByteArray
 
+  private def readPeriod(in: ByteArrayDataInput): GenerationPeriod = GenerationPeriod(Height(in.readInt()), in.readInt())
+
+  private def writePeriod(out: ByteArrayDataOutput, period: GenerationPeriod): Unit = {
+    out.writeInt(period.start.toInt)
+    out.writeInt(period.length)
+  }
+
+  private def readIssuedAsset(in: ByteArrayDataInput): IssuedAsset = IssuedAsset(ByteStr(in.readBytes(transaction.AssetIdLength)))
+
+  /** period ++ asset ++ issued ++ length-prefixed totalStaked ++ (address ++ staked ++ credited) per staker */
+  def readPeriodPayout(data: Array[Byte]): PeriodPayout = {
+    val in          = newDataInput(data)
+    val period      = readPeriod(in)
+    val asset       = readIssuedAsset(in)
+    val issued      = in.readLong()
+    val totalStaked = BigInt(in.readBytes(in.readInt()))
+    val payouts = Seq.fill(in.readInt()) {
+      StakerPayout(Address.fromBytes(in.readBytes(Address.HASH_LEN)).get(), in.readLong(), in.readLong())
+    }
+    PeriodPayout(period, asset, issued, totalStaked, payouts)
+  }
+
+  def writePeriodPayout(payout: PeriodPayout): Array[Byte] = {
+    val out = newDataOutput()
+    writePeriod(out, payout.period)
+    out.write(payout.asset.id.arr)
+    out.writeLong(payout.issued)
+    val totalStaked = payout.totalStaked.toByteArray
+    out.writeInt(totalStaked.length)
+    out.write(totalStaked)
+    out.writeInt(payout.payouts.size)
+    payout.payouts.foreach { p =>
+      out.write(p.address.toBytes)
+      out.writeLong(p.staked)
+      out.writeLong(p.credited)
+    }
+    out.toByteArray
+  }
+
+  def readAddressPayout(data: Array[Byte]): AddressPayout = {
+    val in = newDataInput(data)
+    AddressPayout(readPeriod(in), readIssuedAsset(in), in.readLong(), in.readLong())
+  }
+
+  def writeAddressPayout(payout: AddressPayout): Array[Byte] = {
+    val out = newDataOutput()
+    writePeriod(out, payout.period)
+    out.write(payout.asset.id.arr)
+    out.writeLong(payout.staked)
+    out.writeLong(payout.credited)
+    out.toByteArray
+  }
+
   def readConflictGenerators(data: Array[Byte]): Seq[GeneratorIndex] = data
     .grouped(Ints.BYTES)
     .map { bytes => GeneratorIndex(Ints.fromByteArray(bytes)) }
