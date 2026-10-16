@@ -2,12 +2,15 @@ package tech.hearth.state.diffs
 
 import cats.syntax.either.*
 import tech.hearth.common.state.ByteStr
+import tech.hearth.common.utils.Base16
 import tech.hearth.crypto.P256Curve
 import tech.hearth.crypto.dcap.{DcapQuote, IntelPki}
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.transaction.StartBoostTransaction
 import tech.hearth.transaction.TxValidationError.{ActivationError, GenericError}
+
+import java.nio.{ByteBuffer, ByteOrder}
 
 /** StartBoostTransaction semantics: verify a TDX quote end to end and register its enclave for the next generation
   * period (see the StartBoost consensus plan). `StartBoostTxValidator` already rejected a malformed or SGX quote
@@ -18,6 +21,8 @@ import tech.hearth.transaction.TxValidationError.{ActivationError, GenericError}
   * Intel's DCAP spec) or re-checked for freshness at StartBoost time (only at the UpdateCollateral submission that
   * put it on chain) - a TEE running under a since-downgraded TCB is not yet rejected. Neither has a settled design
   * yet; don't guess at either from this comment without checking whether one has landed since.
+  *
+  * TD measurements are pinned in consensus (PinnedMeasurements) rather than in a governance-updatable registry, #40.
   */
 object StartBoostTransactionDiff {
 
@@ -27,15 +32,44 @@ object StartBoostTransactionDiff {
     */
   val FreshnessWindowBlocks = 100
 
+  /** A TD's launch measurement (MRTD) and its runtime measurement registers. RTMR3 (the workload) is only as
+    * trustworthy as the firmware, kernel and command line in RTMR0-2 that extended it: an unpinned kernel can replay
+    * RTMR3's expected event log, so all four are pinned together.
+    */
+  case class TdMeasurement(mrTd: ByteStr, rtmrs: Seq[ByteStr])
+
+  object TdMeasurement {
+    def apply(report: DcapQuote.Td10ReportBody): TdMeasurement =
+      TdMeasurement(report.mrTd, Seq(report.rtmr0, report.rtmr1, report.rtmr2, report.rtmr3))
+
+    private[StartBoostTransactionDiff] def hex(mrTd: String, rtmrs: String*): TdMeasurement =
+      TdMeasurement(ByteStr(Base16.decode(mrTd)), rtmrs.map(r => ByteStr(Base16.decode(r))))
+  }
+
+  /** The TEE miner images a StartBoost quote may run, fixed in consensus until a governance-updatable registry
+    * replaces it (#40). Collected from every StartBoost on testnet: the image in use since height 8394. The two
+    * earlier RTMR3 values (heights 5028-8359) only pass below strictTxValidationHeight.
+    */
+  val PinnedMeasurements: Set[TdMeasurement] = Set(
+    TdMeasurement.hex(
+      "ba87a347454466680bfd267446df89d8117c04ea9f28234dd3d84e1a8a957d5adaf02d4aa88433b559fb13bd40f0109e",
+      "09d747e568e012bb560b37604e25f1a83988037d8286e81bb97e46fb31ec4d35edf9e23236ae573265417e7ed2f89b99",
+      "a7fabeb3d8e66993a5317851812ae8e0bdbe323069c15a08cf6a2a9d50d6dc8a68c31c84d203b8592f02cc2ed32d3c34",
+      "7f78757985a18b275a41eef903c8a796510298eb2b616046b62b8eff0790987c69deea773f13974420726d9ef1a08946",
+      "8cbb141233f31f5e76b569e4bf31246fffca005506cd24c902a191533c9be7e2bcdc9a72dfab34e7cf9a5b2b35dbd6e8"
+    )
+  )
+
   def apply(blockchain: Blockchain)(tx: StartBoostTransaction): Either[ValidationError, StateSnapshot] =
     for {
       quote <- DcapQuote.parse(tx.tdxQuote.arr).leftMap(e => GenericError(s"Invalid quote: $e"))
       _     <- Either.raiseUnless(quote.header.teeType == DcapQuote.TdxTeeType)(GenericError("SGX quotes are not accepted"))
-      tdReportData <- quote.body match {
-        case DcapQuote.Td10QuoteBody(body) => Right(body.userReportData)
-        case DcapQuote.Td15QuoteBody(body) => Right(body.td10.userReportData)
+      tdReport <- quote.body match {
+        case DcapQuote.Td10QuoteBody(body) => Right(body)
+        case DcapQuote.Td15QuoteBody(body) => Right(body.td10)
         case DcapQuote.SgxQuoteBody(_)     => Left(GenericError("SGX quotes are not accepted"))
       }
+      tdReportData = tdReport.userReportData
       current <- blockchain.currentGenerationPeriod.toRight(ActivationError("DeterministicFinality is not yet activated"))
       next = current.next
       _ <- Either.raiseUnless(tx.generationPeriodStart == next.start) {
@@ -49,6 +83,7 @@ object StartBoostTransactionDiff {
       _ <- Either.raiseWhen(blockchain.registeredEnclaves(next).exists(_.enclavePublicKey == enclaveKey)) {
         GenericError(s"Enclave $enclaveKey is already registered for period $next")
       }
+      _ <- verifyMeasurement(blockchain, tdReport).leftMap(GenericError(_))
       _ <- verifyQuoteSignatures(blockchain, tx, quote).leftMap(GenericError(_))
       _ <- verifyTcbStatus(blockchain, quote).leftMap(GenericError(_))
       snapshot <- StateSnapshot.build(
@@ -89,6 +124,34 @@ object StartBoostTransactionDiff {
         }
     }
   }
+
+  /** Checked before the signatures only because it is cheaper; it means something only once they verify. TD
+    * attributes are checked regardless of the measurements, which don't cover them: the host picks them at TD
+    * creation, and a debug or migratable TD leaks its memory, and so the enclave key, however trusted its image.
+    */
+  private def verifyMeasurement(blockchain: Blockchain, report: DcapQuote.Td10ReportBody): Either[String, Unit] =
+    if (blockchain.height < blockchain.settings.functionalitySettings.strictTxValidationHeight) Right(())
+    else {
+      val measurement = TdMeasurement(report)
+      val attributes  = ByteBuffer.wrap(report.tdAttributes.arr).order(ByteOrder.LITTLE_ENDIAN).getLong
+      for {
+        _ <- Either.raiseWhen((attributes & ~AllowedTdAttributes) != 0) {
+          if ((attributes & DebugTdAttribute) != 0) "Debug TDs are not accepted"
+          else if ((attributes & MigratableTdAttribute) != 0) "Migratable TDs are not accepted"
+          else s"Quote's TD attributes ${Base16.encode(report.tdAttributes.arr)} set reserved bits"
+        }
+        _ <- Either.raiseUnless(PinnedMeasurements.contains(measurement)) {
+          s"Quote's TD measurement (MRTD ${measurement.mrTd}, RTMR0-3 ${measurement.rtmrs.mkString(", ")}) is not pinned"
+        }
+      } yield ()
+    }
+
+  // TDATTRIBUTES bits (Intel TDX module spec, TD_PARAMS), read little-endian. DEBUG lets the host read the TD's memory,
+  // MIGRATABLE lets a migration TD move it, and a reserved bit has no meaning the pinned image was built for, so only
+  // the bits a hardened TD legitimately sets are allowed: SEPT_VE_DISABLE (28), PKS (30), KL (31), PERFMON (63).
+  private val DebugTdAttribute      = 1L << 0
+  private val MigratableTdAttribute = 1L << 29
+  private val AllowedTdAttributes   = (1L << 28) | (1L << 30) | (1L << 31) | (1L << 63)
 
   /** Chain of trust: the quote's own embedded PCK cert chain (leaf, PCK CA, root) is checked against the pinned
     * Intel root - it doesn't need the on-chain pckCaIssuerChain too, since the chain the quote carries is already

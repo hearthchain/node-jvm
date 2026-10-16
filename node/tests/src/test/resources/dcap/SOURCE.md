@@ -27,3 +27,5 @@ same upstream repo (`rust-crates/samples/`, MIT licensed), for `DcapQuoteTest`. 
 trailing bytes beyond the quote's own declared signature length, exercising the "quote embedded in a larger buffer"
 parse path. These are quote structure fixtures only, not verified end-to-end against `root.der`'s trust chain (no
 DCAP quote signature verification exists in this repo yet, only structural parsing - see `DcapQuote`).
+
+`testnet-startboost-51018.hex` is the `tdxQuote` of testnet's StartBoost `180fe83a3d929fbd...` at height 51018 (sender `thrth1hjaq9lencvjt799vwq3evaznu3gv93m7j9kgqz`), copied unmodified from the chain; `StartBoostTransactionDiffTest` checks its measurement is in `StartBoostTransactionDiff.PinnedMeasurements`, so a typo in the pinned hex can't go unnoticed.

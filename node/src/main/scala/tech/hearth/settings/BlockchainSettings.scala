@@ -90,8 +90,9 @@ case class FunctionalitySettings(
     // decoded id; None means this network runs no Cred economy, and the period-boundary payout does nothing.
     // Defaulted like daoAddress above, so no CUSTOM config template has to be migrated to add it.
     credAsset: Option[String] = None,
-    // First height enforcing the minimum HRTH fee and StartBoost's ban on quoting the current (liquid) block. Testnet
-    // carries blocks violating both below it; every other network enforces them from genesis.
+    // First height enforcing the minimum HRTH fee, StartBoost's ban on quoting the current (liquid) block and its
+    // pinned TD measurements. Testnet carries blocks violating all three below it; every other network enforces them
+    // from genesis.
     strictTxValidationHeight: Int = 0,
     // First height splitting a settlement exactly (SettleTransactionDiff.share). Below it each delta is truncated to
     // tens first, which testnet history carries; every other network splits exactly from genesis.
