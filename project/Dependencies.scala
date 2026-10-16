@@ -64,7 +64,7 @@ object Dependencies {
 
   val scalaTest = "org.scalatest" %% "scalatest" % "3.2.20" % Test
 
-  val cli = Seq("com.github.scopt" %% "scopt" % "4.1.0")
+  val cli = Seq("com.github.scopt" %% "scopt" % "4.2.0")
 
   def amazonCorretto(c: String): ModuleID = ("software.amazon.cryptools" % "AmazonCorrettoCryptoProvider" % "2.5.0").classifier(c)
 
@@ -102,7 +102,7 @@ object Dependencies {
     pekkoModule("slf4j") % Runtime
   )
 
-  private val rocksdb = "org.rocksdb" % "rocksdbjni" % "11.0.4"
+  private val rocksdb = "org.rocksdb" % "rocksdbjni" % "11.1.2"
 
   // What the docker image ships in place of the cross-platform jar above: every Linux native (x86_64, aarch64,
   // ppc64le, s390x, riscv64) at a third of the size. build.sbt resolves it in a configuration of its own, so it
