@@ -406,6 +406,12 @@ object ApiError {
     override val message: String  = "no api key binding for this enclave key and client"
   }
 
+  case object StakingPayoutDoesNotExist extends ApiError {
+    override val id: Int          = 408
+    override val code: StatusCode = StatusCodes.NotFound
+    override val message: String  = "the period paid no staking payout, or has not ended yet"
+  }
+
   object ScriptErrorJson {
     def apply(errId: Int, tx: Transaction, message: String): JsObject =
       Json.obj(
