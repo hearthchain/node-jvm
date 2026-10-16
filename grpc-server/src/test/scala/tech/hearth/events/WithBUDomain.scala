@@ -9,7 +9,8 @@ import tech.hearth.events.protobuf.BlockchainUpdated as PBBlockchainUpdated
 import tech.hearth.events.repo.LiquidState
 import tech.hearth.history.Domain
 import tech.hearth.settings.{Constants, GenesisAssetSettings, HearthSettings}
-import tech.hearth.state.Height
+import tech.hearth.account.Address
+import tech.hearth.state.{GenerationPeriod, Height}
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.utils.Schedulers
 import monix.execution.ExecutionModel.SynchronousExecution
@@ -30,9 +31,11 @@ trait WithBUDomain extends WithDomain { suite: Suite =>
       settings: HearthSettings,
       balances: Seq[AddrWithBalance] = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, DefaultSignerBalance)),
       assets: Seq[GenesisAssetSettings] = Seq.empty,
-      generators: Seq[tech.hearth.crypto.SigningKey] = Nil
+      generators: Seq[tech.hearth.crypto.SigningKey] = Nil,
+      // workDone to report regardless of what was written, see TestStorageFactory
+      work: Map[(Address, GenerationPeriod), Long] = Map.empty
   )(f: (Domain, Repo) => Unit, wrapDB: RocksDB => RocksDB = identity): Unit = {
-    withDomain(settings, balances = balances, assets = assets, generators = generators) { d =>
+    withDomain(settings, balances = balances, assets = assets, generators = generators, work = work) { d =>
       tempDb { rdb =>
         val repo = new Repo(wrapDB(rdb.db), d.blocksApi)
         d.triggers = Seq(repo)

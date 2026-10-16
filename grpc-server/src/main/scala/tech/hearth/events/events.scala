@@ -27,9 +27,12 @@ final case class StateUpdate(
     assets: Seq[AssetStateUpdate],
     leases: Seq[LeaseUpdate],
     reserves: Seq[ReserveUpdate],
-    settlements: Seq[SettleUpdate]
+    settlements: Seq[SettleUpdate],
+    // Not a before/after pair: in a rollback update it is the payout that was undone, so `reverse` keeps it as is
+    stakingPayout: Option[PeriodPayout] = None
 ) {
-  def isEmpty: Boolean = balances.isEmpty && leases.isEmpty && assets.isEmpty && reserves.isEmpty && settlements.isEmpty
+  def isEmpty: Boolean =
+    balances.isEmpty && leases.isEmpty && assets.isEmpty && reserves.isEmpty && settlements.isEmpty && stakingPayout.isEmpty
 
   def reverse: StateUpdate = copy(
     balances.map(_.reverse).reverse,
@@ -37,7 +40,8 @@ final case class StateUpdate(
     assets.map(_.reverse).reverse,
     leases.map(_.reverse).reverse,
     reserves.map(_.reverse).reverse,
-    settlements.map(_.reverse).reverse
+    settlements.map(_.reverse).reverse,
+    stakingPayout
   )
 }
 
@@ -94,6 +98,29 @@ object StateUpdate {
 
     def toPB(v: SettleUpdate): PBSettleUpdate =
       PBSettleUpdate(v.client.toByteString, v.operator.toByteString, Some(PBAmounts.fromAssetAndAmount(v.asset, v.after)), v.before)
+  }
+
+  object StakingPayout {
+    import tech.hearth.events.protobuf.StateUpdate.StakingPayout as PBStakingPayout
+
+    def fromPB(v: PBStakingPayout): PeriodPayout =
+      PeriodPayout(
+        GenerationPeriod(Height(v.periodStart), v.periodEnd - v.periodStart + 1),
+        IssuedAsset(v.assetId.toByteStr),
+        v.issued,
+        BigInt(v.totalStaked.toByteArray),
+        v.payouts.map(p => StakerPayout(p.address.toAddress, p.staked, p.credited))
+      )
+
+    def toPB(v: PeriodPayout): PBStakingPayout =
+      PBStakingPayout(
+        v.period.start.toInt,
+        v.period.end.toInt,
+        v.asset.id.toByteString,
+        v.issued,
+        ByteString.copyFrom(v.totalStaked.toByteArray),
+        v.payouts.map(p => PBStakingPayout.Payout(p.address.toByteString, p.staked, p.credited))
+      )
   }
 
   case class LeasingBalanceUpdate(address: Address, before: LeaseBalance, after: LeaseBalance) {
@@ -267,7 +294,8 @@ object StateUpdate {
       v.assets.map(AssetStateUpdate.fromPB),
       v.individualLeases.map(LeaseUpdate.fromPB),
       v.reserves.map(ReserveUpdate.fromPB),
-      v.settlements.map(SettleUpdate.fromPB)
+      v.settlements.map(SettleUpdate.fromPB),
+      v.stakingPayout.map(StakingPayout.fromPB)
     )
   }
 
@@ -278,7 +306,8 @@ object StateUpdate {
       v.assets.map(AssetStateUpdate.toPB),
       v.leases.map(LeaseUpdate.toPB),
       v.reserves.map(ReserveUpdate.toPB),
-      v.settlements.map(SettleUpdate.toPB)
+      v.settlements.map(SettleUpdate.toPB),
+      v.stakingPayout.map(StakingPayout.toPB)
     )
   }
 
@@ -344,7 +373,9 @@ object StateUpdate {
         assets = assetsMap.values.toList,
         leases = leasesMap.values.toList,
         reserves = reservesMap.values.toList,
-        settlements = settlementsMap.values.toList
+        settlements = settlementsMap.values.toList,
+        // Only the first block of a period carries one, so two never meet
+        stakingPayout = y.stakingPayout.orElse(x.stakingPayout)
       )
     }
   }
@@ -417,7 +448,7 @@ object StateUpdate {
       before = blockchain.settledAmount(client, operator, asset) if before != after
     } settlements += SettleUpdate(client, operator, asset, before, after)
 
-    StateUpdate(balances.toVector, leaseBalanceUpdates, assets, updatedLeases.toSeq, reserves.toVector, settlements.toVector)
+    StateUpdate(balances.toVector, leaseBalanceUpdates, assets, updatedLeases.toSeq, reserves.toVector, settlements.toVector, snapshot.stakingPayout)
   }
 
   private def transactionsMetadata(snapshot: StateSnapshot): Seq[TransactionMetadata] =
