@@ -7,7 +7,7 @@ purpose: Implementation notes for the BlockchainUpdates stream extension (reserv
 ## Reserves and settlements on the BlockchainUpdates stream
 
 `events.StateUpdate` mirrors only a subset of `StateSnapshot`; every hearth-specific field it doesn't name is
-silently dropped from the event stream. Two of them are now carried: `reserves`/`settlements`
+silently dropped from the event stream. Three of them are now carried: `stakingPayout` (see "Reading payouts back" in `docs/notes/cred-economy.md`), and `reserves`/`settlements`
 (`StateUpdate.ReserveUpdate`/`SettleUpdate`, protobuf `StateUpdate.reserves`/`settlements` in the sibling
 `protobuf-schemas` repo), mirroring `snapshot.reservedAmounts`/`settledAmounts`. The rest (`workDone`,
 `apiKeyBindings`, `registeredEnclaves`, ...) are still dropped - adding one means touching all five places at once:
