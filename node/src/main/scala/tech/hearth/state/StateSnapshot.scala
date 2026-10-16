@@ -52,8 +52,7 @@ case class StateSnapshot(
     // rather than keyed, exactly like nextCommittedGenerators above: the period each one names is what the storage
     // layer files it under, and a later entry for the same address in the same period wins.
     nextStakes: Seq[StakeCommitment] = Seq.empty,
-    // What StakingPayout paid for the period that just ended, kept for the API and the BlockchainUpdates stream. Not
-    // hashed: the Cred it credited is already in `balances` and `assetVolumes`, which are.
+    // Not hashed: the Cred it credited is already in `balances` and `assetVolumes`, which are
     stakingPayout: Option[PeriodPayout] = None
 ) {
 

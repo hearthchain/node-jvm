@@ -463,8 +463,8 @@ class RocksDBWriter(
         rw.put(Keys.activeStake(addressId), Some(currentStake.height))
       }
 
-      // Recorded rather than recomputed on request: the boundary after this one prunes Keys.activeStake, after which
-      // the period's total stake can no longer be rebuilt from state
+      // Recorded, not recomputed on request: the next boundary prunes Keys.activeStake, after which the period's total
+      // stake cannot be rebuilt. See "Reading payouts back" in docs/notes/cred-economy.md
       snapshot.stakingPayout.foreach { payout =>
         rw.put(Keys.stakingPayout(payout.period.start, rdb.apiHandle), Some(payout))
         payout.payouts.foreach { p =>

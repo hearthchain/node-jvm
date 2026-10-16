@@ -415,7 +415,7 @@ trait WithDomain extends WithState {
   /** A period's committee and its tracked work, injected. `workDone` is written only by SettleTransactionDiff,
     * which cannot be driven to its accept path for the same reason blockchainWithRegisteredEnclave exists - so
     * anything reading a period's work (GeneratingBalanceProvider's workBoost, StakingPayout's issuance) has to be
-    * handed it directly.
+    * handed it directly. To reach a payout through the real append path, pass `withDomain(work = ...)` instead.
     */
   def blockchainWithCommitteeWork(
       blockchain: Blockchain,

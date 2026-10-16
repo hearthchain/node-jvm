@@ -1,14 +1,10 @@
 package tech.hearth.api.common
 
-import com.google.common.primitives.Ints
 import tech.hearth.account.Address
 import tech.hearth.database.{DBExt, Keys, RDB}
 import tech.hearth.state.{AddressPayout, Blockchain, GenerationPeriod, Height, NG, PeriodPayout}
 
-/** Staking payouts as they were paid, read back from what the node recorded at each period boundary rather than
-  * recomputed: the candidate index a payout enumerates stakers from is pruned at the next boundary, so a past period's
-  * total stake cannot be rebuilt from current state.
-  */
+/** Staking payouts as the node recorded them at each period boundary. */
 trait CommonStakingApi {
 
   /** What `period` paid its stakers; `None` when it paid nothing or has not ended yet. */
@@ -33,16 +29,16 @@ object CommonStakingApi {
         p      <- payout.payouts if p.address == address
       } yield AddressPayout(payout.period, payout.asset, p.staked, p.credited)
 
-      stored(address, from, to) ++ liquid
+      // A key block landing between the two reads stores the liquid payout, so it can come back from both
+      (stored(address, from, to) ++ liquid).distinctBy(_.period.start)
     }
 
     private def stored(address: Address, from: Height, to: Height): Seq[AddressPayout] =
       rdb.db.readOnly { ro =>
         ro.get(Keys.addressId(address)).toSeq.flatMap { addressId =>
           val key    = Keys.addressStakingPayout(addressId, from, rdb.apiHandle)
-          val prefix = key.keyBytes.dropRight(Ints.BYTES) // the period start
           val stored = Seq.newBuilder[AddressPayout]
-          ro.iterateOverWithSeek(prefix, key.keyBytes, Some(rdb.apiHandle.handle)) { entry =>
+          ro.iterateOverWithSeek(Keys.addressStakingPayoutPrefix(addressId), key.keyBytes, Some(rdb.apiHandle.handle)) { entry =>
             val payout = key.parse(entry.getValue)
             payout.filter(_.period.start <= to).foreach(stored += _)
             payout.exists(_.period.start < to)

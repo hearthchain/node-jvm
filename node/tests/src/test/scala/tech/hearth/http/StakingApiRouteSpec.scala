@@ -102,6 +102,21 @@ class StakingApiRouteSpec extends RouteSpec("/blockchain/staking") with WithDoma
     }
   }
 
+  "GET /blockchain/staking/payouts/address/{address} bounds" - {
+    "rejects a from below the first height" in withStakingDomain { d =>
+      Get(routePath(s"/payouts/address/${alice.toAddress.toBech32}?from=-1")) ~> route(d) ~> check {
+        status shouldBe BadRequest
+        (responseAs[JsObject] \ "message").as[String] should include("from must be at least 1 and no greater than to")
+      }
+    }
+
+    "rejects a from above to" in withStakingDomain { d =>
+      Get(routePath(s"/payouts/address/${alice.toAddress.toBech32}?from=9&to=5")) ~> route(d) ~> check {
+        status shouldBe BadRequest
+      }
+    }
+  }
+
   "GET /blockchain/staking/{address}" - {
     "reports the stake in force now, the one in force next period, and what is locked" in withStakingDomain { d =>
       d.appendBlock(TxHelpers.stake(alice, periodStart = second.start, amount = 100.hearth))

@@ -384,13 +384,13 @@ object Keys {
   def activeStake(addressId: AddressId): Key[Option[Height]] =
     Key.opt(ActiveStake, addressId.toByteArray, bs => tech.hearth.state.Height(Ints.fromByteArray(bs)), _.toByteArray)
 
-  /** What a finished period paid its stakers, keyed by its start. Kept in the API column family: it is derived from
-    * consensus state, and nothing but the API reads it.
-    */
+  // In the API column family: derived from consensus state, and read only by the API
   def stakingPayout(periodStart: Height, cfh: RDB.ApiHandle): Key[Option[PeriodPayout]] =
     Key.opt(StakingPayout, h(periodStart), readPeriodPayout, writePeriodPayout, Some(cfh.handle))
 
-  /** One address's line of [[stakingPayout]], keyed so that an address's whole history is one prefix ordered by period. */
+  // Keyed so that an address's whole history is one prefix, ordered by period
+  def addressStakingPayoutPrefix(addressId: AddressId): Array[Byte] = AddressStakingPayout.prefixBytes ++ addressId.toByteArray
+
   def addressStakingPayout(addressId: AddressId, periodStart: Height, cfh: RDB.ApiHandle): Key[Option[AddressPayout]] =
     Key.opt(AddressStakingPayout, hBytes(addressId.toByteArray, periodStart), readAddressPayout, writeAddressPayout, Some(cfh.handle))
 }

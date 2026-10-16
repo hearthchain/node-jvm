@@ -18,8 +18,11 @@ case class StakingApiRoute(blockchain: Blockchain, api: CommonStakingApi) extend
           payout <- api.payout(period).toRight(ApiError.StakingPayoutDoesNotExist)
         } yield StakingApiRoute.payoutJson(payout)
       )
-    } ~ (get & path("payouts" / "address" / AddrSegment) & parameters("from".as[Int].?, "to".as[Int].?)) { (address, from, to) =>
-      complete(api.payouts(address, Height(from.getOrElse(1)), Height(to.getOrElse(Int.MaxValue))).map(StakingApiRoute.addressPayoutJson))
+    } ~ (get & path("payouts" / "address" / AddrSegment) & parameters("from".as[Int].?, "to".as[Int].?)) { (address, fromParam, toParam) =>
+      val (from, to) = (fromParam.getOrElse(1), toParam.getOrElse(Int.MaxValue))
+      // Checked here rather than left to the scan: a negative height sorts after every positive one in a key
+      if (from < 1 || from > to) complete(ApiError.CustomValidationError(s"from must be at least 1 and no greater than to, got [$from, $to]"))
+      else complete(api.payouts(address, Height(from), Height(to)).map(StakingApiRoute.addressPayoutJson))
     } ~ (get & path(AddrSegment)) { address =>
       val period = blockchain.currentGenerationPeriod
       complete(

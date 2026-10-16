@@ -10,9 +10,8 @@ import tech.hearth.utils.Time
 object TestStorageFactory {
 
   /** @param work
-    *   `workDone` to report from storage regardless of what was written. Only SettleTransactionDiff writes work, and no
-    *   fixture can drive a Settle (see "Testing" in docs/notes/cred-economy.md), so this is how a domain test reaches a
-    *   staking payout through the real block append path.
+    *   `workDone` to report regardless of what was written, for a domain test to reach a staking payout through the
+    *   real append path. A diff-level test injects work with WithState.blockchainWithCommitteeWork instead.
     */
   def apply(
       settings: HearthSettings,
@@ -21,14 +20,11 @@ object TestStorageFactory {
       blockchainUpdateTriggers: BlockchainUpdateTriggers,
       work: Map[(Address, GenerationPeriod), Long] = Map.empty
   ): (BlockchainUpdaterImpl, RocksDBWriter) = {
-    val executor = MoreExecutors.newDirectExecutorService()
-    val rocksDBWriter: RocksDBWriter =
-      if (work.isEmpty) RocksDBWriter(rdb, settings.blockchainSettings, settings.dbSettings, settings.enableLightMode, Some(executor))
-      else
-        new RocksDBWriter(rdb, settings.blockchainSettings, settings.dbSettings, settings.enableLightMode, executor) {
-          override def workDone(validator: Address, period: GenerationPeriod): Long =
-            work.getOrElse((validator, period), super.workDone(validator, period))
-        }
+    val rocksDBWriter =
+      new RocksDBWriter(rdb, settings.blockchainSettings, settings.dbSettings, settings.enableLightMode, MoreExecutors.newDirectExecutorService()) {
+        override def workDone(validator: Address, period: GenerationPeriod): Long =
+          work.getOrElse((validator, period), super.workDone(validator, period))
+      }
     (
       new BlockchainUpdaterImpl(rocksDBWriter, settings, time, blockchainUpdateTriggers),
       rocksDBWriter

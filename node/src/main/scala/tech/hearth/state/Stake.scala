@@ -1,7 +1,6 @@
 package tech.hearth.state
 
 import tech.hearth.account.Address
-import tech.hearth.transaction.Asset.IssuedAsset
 
 /** One address's HRTH stake, as it stands for some generation period.
   *
@@ -22,26 +21,3 @@ case class Stake(address: Address, amount: Long)
   * height - but it is what the sender signed, so it is kept in the preimage and validated rather than inferred.
   */
 case class StakeCommitment(address: Address, periodStart: Height, amount: Long)
-
-/** What one finished period paid its stakers, as [[StakingPayout]] computed it at the first block of the next one.
-  *
-  * The credited Cred is already in the snapshot's balances; this keeps the inputs it was split by next to it, so the
-  * API and the BlockchainUpdates stream can show a payout as one thing rather than as anonymous balance changes that
-  * no transaction explains. It is derived data, not consensus state: nothing reads it back to validate a block, and
-  * the state hash does not cover it.
-  *
-  * @param issued
-  *   the period's total tracked work, which is what was split.
-  * @param totalStaked
-  *   the sum of every `staked` below; `BigInt` for the same reason the split itself is.
-  * @param payouts
-  *   one entry per staker, including those whose share floored to zero and were credited nothing.
-  */
-case class PeriodPayout(period: GenerationPeriod, asset: IssuedAsset, issued: Long, totalStaked: BigInt, payouts: Seq[StakerPayout]) {
-  def credited: Long = payouts.map(_.credited).sum
-}
-
-case class StakerPayout(address: Address, staked: Long, credited: Long)
-
-/** One address's line of a [[PeriodPayout]], stored per address so that its payout history is a range read. */
-case class AddressPayout(period: GenerationPeriod, asset: IssuedAsset, staked: Long, credited: Long)

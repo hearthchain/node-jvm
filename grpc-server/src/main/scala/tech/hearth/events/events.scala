@@ -28,7 +28,8 @@ final case class StateUpdate(
     leases: Seq[LeaseUpdate],
     reserves: Seq[ReserveUpdate],
     settlements: Seq[SettleUpdate],
-    // Not a before/after pair: in a rollback update it is the payout that was undone, so `reverse` keeps it as is
+    // Not a before/after pair, so `reverse` drops it: in a rollback it would read as a new payout, and the reversed
+    // balances already undo the Cred
     stakingPayout: Option[PeriodPayout] = None
 ) {
   def isEmpty: Boolean =
@@ -41,7 +42,7 @@ final case class StateUpdate(
     leases.map(_.reverse).reverse,
     reserves.map(_.reverse).reverse,
     settlements.map(_.reverse).reverse,
-    stakingPayout
+    stakingPayout = None
   )
 }
 
@@ -100,7 +101,7 @@ object StateUpdate {
       PBSettleUpdate(v.client.toByteString, v.operator.toByteString, Some(PBAmounts.fromAssetAndAmount(v.asset, v.after)), v.before)
   }
 
-  object StakingPayout {
+  object PeriodPayoutPB {
     import tech.hearth.events.protobuf.StateUpdate.StakingPayout as PBStakingPayout
 
     def fromPB(v: PBStakingPayout): PeriodPayout =
@@ -295,7 +296,7 @@ object StateUpdate {
       v.individualLeases.map(LeaseUpdate.fromPB),
       v.reserves.map(ReserveUpdate.fromPB),
       v.settlements.map(SettleUpdate.fromPB),
-      v.stakingPayout.map(StakingPayout.fromPB)
+      v.stakingPayout.map(PeriodPayoutPB.fromPB)
     )
   }
 
@@ -307,7 +308,7 @@ object StateUpdate {
       v.leases.map(LeaseUpdate.toPB),
       v.reserves.map(ReserveUpdate.toPB),
       v.settlements.map(SettleUpdate.toPB),
-      v.stakingPayout.map(StakingPayout.toPB)
+      v.stakingPayout.map(PeriodPayoutPB.toPB)
     )
   }
 
