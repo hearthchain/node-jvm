@@ -86,6 +86,14 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
       credBalance(snapshot, bob) shouldBe Some(100L)
     }
 
+    "records what each staker was paid for the finished period" in withPayoutDomain() { d =>
+      val snapshot = payout(d, Seq(Stake(alice, 75L), Stake(bob, 25L)), work = 400L)
+
+      snapshot.stakingPayout shouldBe Some(
+        PeriodPayout(finished, credAsset, issued = 400L, totalStaked = 100, Seq(StakerPayout(alice, 75L, 300L), StakerPayout(bob, 25L, 100L)))
+      )
+    }
+
     "mints exactly what it credited" in withPayoutDomain() { d =>
       val snapshot = payout(d, Seq(Stake(alice, 75L), Stake(bob, 25L)), work = 400L)
 
@@ -108,6 +116,12 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
       snapshot.assetVolumes shouldBe Map(credAsset -> BigInt(99L))
     }
 
+    "still lists a staker whose share floors to zero in the period's record" in withPayoutDomain() { d =>
+      val snapshot = payout(d, Seq(Stake(alice, 1000L), Stake(bob, 1L)), work = 100L)
+
+      snapshot.stakingPayout.map(_.payouts) shouldBe Some(Seq(StakerPayout(alice, 1000L, 99L), StakerPayout(bob, 1L, 0L)))
+    }
+
     "pays nothing for a stake that was only declared for the period now starting" in withPayoutDomain() { d =>
       // Alice staked during the finished period, so her stake is filed under the starting one and earns from it on
       val snapshot = payout(d, staked = Seq.empty, work = 400L, restated = Seq(Stake(alice, 100L)))
@@ -121,6 +135,7 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
 
       snapshot.balances shouldBe empty
       snapshot.assetVolumes shouldBe empty
+      snapshot.stakingPayout shouldBe None
     }
 
     "emits nothing when the period produced no work" in withPayoutDomain() { d =>
@@ -128,6 +143,7 @@ class StakingPayoutTest extends FreeSpec with WithDomain {
 
       snapshot.balances shouldBe empty
       snapshot.assetVolumes shouldBe empty
+      snapshot.stakingPayout shouldBe None
     }
 
     "emits nothing on a network with no cred asset" in withPayoutDomain(credAssetId = None) { d =>

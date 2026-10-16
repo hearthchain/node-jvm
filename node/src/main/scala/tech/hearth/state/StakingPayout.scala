@@ -1,7 +1,6 @@
 package tech.hearth.state
 
 import cats.syntax.either.*
-import tech.hearth.account.Address
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxValidationError.GenericError
@@ -59,27 +58,38 @@ object StakingPayout {
         case None => Right(StateSnapshot.empty)
         case Some((asset, description)) =>
           for {
-            payouts <- distribute(blockchain.totalWork(finished), blockchain.stakes(finished))
-            credited = payouts.values.sum
+            record <- distribute(finished, asset, blockchain.totalWork(finished), blockchain.stakes(finished))
+            credited = record.fold(0L)(_.credited)
             s <- StateSnapshot.build(
               blockchain,
-              portfolios = payouts.view.mapValues(Portfolio.build(asset, _)).toMap,
+              // A share that floors to zero writes no balance entry, keeping no-op writes out of the state hash
+              portfolios = record.toSeq
+                .flatMap(_.payouts)
+                .collect {
+                  case p if p.credited > 0 => p.address -> Portfolio.build(asset, p.credited)
+                }
+                .toMap,
               updatedAssetVolumes = if (credited > 0) Map(asset -> (description.totalVolume + BigInt(credited))) else Map.empty[IssuedAsset, BigInt]
             )
-          } yield s
+          } yield s.copy(stakingPayout = record)
       }
     } yield snapshot
 
-  /** Each staker's share of the finished period's issuance, by what it staked for that period. Entries that floor to zero are left
-    * out entirely rather than written as a no-op balance, and the truncation dust they leave behind is never
-    * minted - `credited` above is the sum of what was actually handed out, not the issuance it was computed from.
+  /** Each staker's share of the finished period's issuance, by what it staked for that period, together with what it
+    * was split from; `None` when nothing was issued or nobody staked. Shares floor independently, and the
+    * truncation dust they leave behind is never minted - what is credited is the sum of the shares, not the issuance.
     *
     * Rejects rather than wraps when a period's work does not fit a Long. A single staker's share is the whole of
     * `issued`, so `BigInt.toLong` below would silently truncate it to arbitrary low bits, minting a wrong supply
     * instead of failing - the same trap WorkBoost guards with `require(isValidLong)` on the other consumer of this
     * sum. Guarding `issued` covers every share and their total too, since the shares sum to at most `issued`.
     */
-  private def distribute(issued: BigInt, staked: Seq[Stake]): Either[ValidationError, Map[Address, Long]] = {
+  private def distribute(
+      finished: GenerationPeriod,
+      asset: IssuedAsset,
+      issued: BigInt,
+      staked: Seq[Stake]
+  ): Either[ValidationError, Option[PeriodPayout]] = {
     val totalStaked = staked.view.map(s => BigInt(s.amount)).sum
 
     Either
@@ -87,12 +97,10 @@ object StakingPayout {
       .map { _ =>
         // With nobody staked there is no one the issuance could be owed to, so it is not emitted at all rather than
         // carried forward - accumulating it would hand a windfall to whoever stakes first.
-        if (issued <= 0 || totalStaked <= 0) Map.empty
-        else
-          staked.view
-            .map(stake => stake.address -> (issued * BigInt(stake.amount) / totalStaked).toLong)
-            .filter { case (_, owed) => owed > 0 }
-            .toMap
+        Option.when(issued > 0 && totalStaked > 0) {
+          val payouts = staked.map(stake => StakerPayout(stake.address, stake.amount, (issued * BigInt(stake.amount) / totalStaked).toLong))
+          PeriodPayout(finished, asset, issued.toLong, totalStaked, payouts)
+        }
       }
   }
 }
