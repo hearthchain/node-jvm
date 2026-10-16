@@ -1122,6 +1122,118 @@ paths:
                     type: integer
                     format: int64
                     description: Cumulative amount already settled
+  '/blockchain/staking/{address}':
+    get:
+      tags:
+        - blockchain
+      summary: Stake of an address
+      description: >-
+        Get the HRTH an address has staked. A stake set during a period takes
+        effect from the next one, so the stake in force now and the one in
+        force next period can differ; the larger of the two is locked.
+      operationId: getStake
+      parameters:
+        - $ref: '#/components/parameters/address'
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                required:
+                  - address
+                  - current
+                  - next
+                  - locked
+                type: object
+                properties:
+                  address:
+                    $ref: '#/components/schemas/Address'
+                  current:
+                    type: integer
+                    format: int64
+                    description: Stake in force for the current period, which is what it earns on
+                  next:
+                    type: integer
+                    format: int64
+                    description: Stake in force from the next period on
+                  locked:
+                    type: integer
+                    format: int64
+                    description: HRTH the stake makes unspendable now
+  '/blockchain/staking/payouts/{periodStart}':
+    get:
+      tags:
+        - blockchain
+      summary: Staking payout of a period
+      description: >-
+        Get what a finished generation period paid its stakers. The payout is
+        minted in the first block of the next period: the period's total
+        tracked work is split between the stakers pro rata to their stake, each
+        share rounded down, and credited in the cred asset.
+      operationId: getStakingPayout
+      parameters:
+        - name: periodStart
+          in: path
+          description: Height of the first block of the period
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakingPayout'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: >-
+            The period paid nothing (nobody staked, no work was done, or the
+            network has no cred asset), or has not ended yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: 408
+                message: the period paid no staking payout, or has not ended yet
+  '/blockchain/staking/payouts/address/{address}':
+    get:
+      tags:
+        - blockchain
+      summary: Staking payouts of an address
+      description: >-
+        Get what an address was paid for each period it was staked in, oldest
+        period first. Periods that paid nothing are not listed.
+      operationId: getAddressStakingPayouts
+      parameters:
+        - $ref: '#/components/parameters/address'
+        - name: from
+          in: query
+          description: Lowest period start height to include
+          required: false
+          schema:
+            type: integer
+            format: int32
+        - name: to
+          in: query
+          description: Highest period start height to include
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AddressStakingPayout'
   '/transactions/info/{id}':
     get:
       tags:
@@ -4206,6 +4318,88 @@ components:
           properties:
             amount:
               $ref: '#/components/schemas/AmountString'
+    StakingPayout:
+      required:
+        - periodStart
+        - periodEnd
+        - paidAtHeight
+        - assetId
+        - issued
+        - totalStaked
+        - credited
+        - payouts
+      type: object
+      properties:
+        periodStart:
+          type: integer
+          format: int32
+        periodEnd:
+          type: integer
+          format: int32
+        paidAtHeight:
+          type: integer
+          format: int32
+          description: Height of the block that minted the payout, the first of the next period
+        assetId:
+          $ref: '#/components/schemas/AssetId'
+        issued:
+          type: integer
+          format: int64
+          description: The period's total tracked work, which is what was split
+        totalStaked:
+          type: integer
+          description: Sum of every staker's stake for the period
+        credited:
+          type: integer
+          format: int64
+          description: >-
+            Sum of every staker's credited amount. Can be less than issued:
+            what each share loses to rounding down is never minted.
+        payouts:
+          type: array
+          items:
+            required:
+              - address
+              - staked
+              - credited
+            type: object
+            properties:
+              address:
+                $ref: '#/components/schemas/Address'
+              staked:
+                type: integer
+                format: int64
+              credited:
+                type: integer
+                format: int64
+                description: 0 when the share rounded down to nothing
+    AddressStakingPayout:
+      required:
+        - periodStart
+        - periodEnd
+        - paidAtHeight
+        - assetId
+        - staked
+        - credited
+      type: object
+      properties:
+        periodStart:
+          type: integer
+          format: int32
+        periodEnd:
+          type: integer
+          format: int32
+        paidAtHeight:
+          type: integer
+          format: int32
+        assetId:
+          $ref: '#/components/schemas/AssetId'
+        staked:
+          type: integer
+          format: int64
+        credited:
+          type: integer
+          format: int64
     RewardStatus:
       type: object
       required:

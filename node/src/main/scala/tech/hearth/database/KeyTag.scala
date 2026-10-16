@@ -96,7 +96,9 @@ enum KeyTag {
     WorkDoneKeysAtHeight,
     StakeBalanceHistory,
     StakeBalance,
-    ActiveStake
+    ActiveStake,
+    StakingPayout,
+    AddressStakingPayout
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }

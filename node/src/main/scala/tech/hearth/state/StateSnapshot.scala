@@ -51,7 +51,9 @@ case class StateSnapshot(
     // StakeTransaction's own fields, and StakingPayout's carry-forward of them into the next period. Appended
     // rather than keyed, exactly like nextCommittedGenerators above: the period each one names is what the storage
     // layer files it under, and a later entry for the same address in the same period wins.
-    nextStakes: Seq[StakeCommitment] = Seq.empty
+    nextStakes: Seq[StakeCommitment] = Seq.empty,
+    // Not hashed: the Cred it credited is already in `balances` and `assetVolumes`, which are
+    stakingPayout: Option[PeriodPayout] = None
 ) {
 
   // ignores lease balances from portfolios
@@ -230,7 +232,8 @@ object StateSnapshot {
         s1.apiKeyBindings ++ s2.apiKeyBindings,
         s1.settledAmounts ++ s2.settledAmounts,
         s1.workDone ++ s2.workDone,
-        s1.nextStakes ++ s2.nextStakes
+        s1.nextStakes ++ s2.nextStakes,
+        s2.stakingPayout.orElse(s1.stakingPayout)
       )
 
   }
