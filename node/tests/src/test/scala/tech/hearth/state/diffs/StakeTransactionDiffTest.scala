@@ -7,7 +7,7 @@ import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
 import tech.hearth.state.{GenerationPeriod, Height}
 import tech.hearth.test.*
-import tech.hearth.test.DomainPresets.*
+import tech.hearth.test.StakingFixtures.*
 import tech.hearth.transaction.{Proofs, StakeTransaction, Transaction, TxHelpers}
 
 import scala.collection.mutable
@@ -27,16 +27,11 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
   private val sender  = TxHelpers.signer(11)
   private val address = sender.toAddress
 
-  // Long enough that the block after a boundary block is still inside the same period: a transaction is validated
-  // against the period of the block carrying it, so both the stake transactions here and the commitment below have
-  // to land before the next boundary, not on it. Periods are [1, 4], [5, 8], [9, 12], ...
-  private val PeriodLength = 4
-
   private val StakerBalance = 1000.hearth
 
   private def withStakeDomain[A](f: Domain => A): A =
     withDomain(
-      DeterministicFinality.configure(_.copy(generationPeriodLength = PeriodLength)),
+      stakingSettings(credAsset = None),
       AddrWithBalance.enoughBalances(miner) :+ AddrWithBalance(address, StakerBalance)
     )(f)
 
@@ -46,23 +41,6 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     d.blockchain.stakes(p).map(s => s.address -> s.amount)
 
   private def staked(d: Domain): Long = d.blockchain.hearthPortfolio(address).staked
-
-  /** Advances to the first block of the next period, committing the sender as its generator first so that it can
-    * actually mine there. Leaves the chain on the boundary block itself, which is where the payout and the
-    * carry-forward both happen.
-    */
-  private def crossPeriodBoundary(d: Domain, afterEachBlock: Domain => Unit = _ => ()): Unit = {
-    val nextStart = d.blockchain.currentGenerationPeriod.get.next.start
-    // The commitment goes in the very next block, which PeriodLength guarantees is still inside the current period -
-    // CommitToGenerationTransactionDiff would reject it in the boundary block itself, where "the next period" has
-    // already moved on by one.
-    d.appendBlock(TxHelpers.commitToGeneration(nextStart, miner))
-    afterEachBlock(d)
-    while (d.blockchain.height < nextStart.toInt) {
-      d.appendBlock()
-      afterEachBlock(d)
-    }
-  }
 
   "StakeTransactionDiff" - {
     "rejects a periodStart that is not the next period's start" in withStakeDomain { d =>
@@ -164,7 +142,7 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     "keeps it out once the stake is earning" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
 
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       d.blockchain.generatingBalance(address) shouldBe (d.blockchain.balance(address) - 10.hearth)
     }
@@ -173,9 +151,9 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     // any other credit.
     "keeps a released stake out of the generating balance until the window has passed it" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 0))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       staked(d) shouldBe 0L
       d.blockchain.generatingBalance(address) shouldBe (d.blockchain.balance(address) - 10.hearth)
@@ -185,9 +163,9 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     // at 6 writes the stake key but moves no lock, and 9 changes the lock with no balance change at all.
     "records the lock in balance snapshots from the block that sets it to the period start that releases it" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 0))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       d.appendBlock()
 
       d.rocksDBWriter.height shouldBe 9
@@ -211,9 +189,9 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
       record(d)
       append(restake(200.hearth))
       append(restake(100.hearth))
-      crossPeriodBoundary(d, record)
+      crossPeriodBoundary(d, miner, record)
       append(restake(50.hearth))
-      crossPeriodBoundary(d, record)
+      crossPeriodBoundary(d, miner, record)
       append(restake(0))
       append()
 
@@ -225,13 +203,13 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
 
     "keeps charging the larger amount after a stake is lowered mid-period" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 30.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
       d.blockchain.generatingBalance(address) shouldBe (d.blockchain.balance(address) - 30.hearth)
 
       // Unlocked down to 10 now, but the window still holds the heights where 30 was locked
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       staked(d) shouldBe 10.hearth
       d.blockchain.generatingBalance(address) shouldBe (d.blockchain.balance(address) - 30.hearth)
     }
@@ -239,7 +217,7 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     "starts earning at the start of the next period" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
 
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       stakedFor(d, period(d)) shouldBe Seq(address -> 10.hearth)
       staked(d) shouldBe 10.hearth
@@ -248,8 +226,8 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     "keeps a stake in place across further periods with no transaction to renew it" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
 
-      crossPeriodBoundary(d)
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
+      crossPeriodBoundary(d, miner)
 
       // Carried into each new period by StakingPayout, without a transaction to restate it
       stakedFor(d, period(d)) shouldBe Seq(address -> 10.hearth)
@@ -258,7 +236,7 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
 
     "raising a stake locks the larger amount at once" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 30.hearth))
 
@@ -269,29 +247,29 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
 
     "lowering a stake frees nothing until the next period starts" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 30.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
       stakedFor(d, period(d)) shouldBe Seq(address -> 30.hearth)
       staked(d) shouldBe 30.hearth
 
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       stakedFor(d, period(d)) shouldBe Seq(address -> 10.hearth)
       staked(d) shouldBe 10.hearth
     }
 
     "releases everything at the next period's start when the amount is 0" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 0))
       // Still locked: the stake it zeroes has one more period to earn in
       staked(d) shouldBe 10.hearth
 
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       staked(d) shouldBe 0L
       // And it is not carried forward again, so the next period's set no longer holds it
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       stakedFor(d, period(d)) shouldBe empty
     }
 
@@ -299,7 +277,7 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     // is for the period it was still staked in, so dropping it the moment it released would silently underpay it.
     "still enumerates a stake released mid-period for the period it was staked in" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       val staking = period(d)
 
       d.appendBlock(TxHelpers.stake(sender, periodStart = staking.next.start, amount = 0))
@@ -311,9 +289,9 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
 
     "stops enumerating it once that period has passed" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 0))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       stakedFor(d, period(d)) shouldBe empty
       staked(d) shouldBe 0L
@@ -327,7 +305,7 @@ class StakeTransactionDiffTest extends FreeSpec with WithDomain {
     // state behind - and, since a stake is a balance now, that the boundary wrote none of its own to begin with.
     "restores the stake on rollback of a boundary block that also carries one" in withStakeDomain { d =>
       d.appendBlock(TxHelpers.stake(sender, periodStart = period(d).next.start, amount = 10.hearth))
-      crossPeriodBoundary(d)
+      crossPeriodBoundary(d, miner)
 
       val starting = period(d).next
       d.appendBlock(TxHelpers.commitToGeneration(starting.start, miner))
