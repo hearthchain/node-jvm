@@ -102,7 +102,7 @@ object Dependencies {
     pekkoModule("slf4j") % Runtime
   )
 
-  private val rocksdb = "org.rocksdb" % "rocksdbjni" % "11.1.2"
+  private val rocksdb = "org.rocksdb" % "rocksdbjni" % "11.8.1"
 
   // What the docker image ships in place of the cross-platform jar above: every Linux native (x86_64, aarch64,
   // ppc64le, s390x, riscv64) at a third of the size. build.sbt resolves it in a configuration of its own, so it
