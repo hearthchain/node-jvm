@@ -71,6 +71,8 @@ Who may generate is decided in one place, `appender.generatorEligibility`, so th
 
 An implicit generator has no endorser key and no deposit: it is never in the `GeneratorSet`, never endorses and can't be punished for a conflicting endorsement. Its balance is checked like any miner's (`appender.minerBalance`).
 
+An uncommitted generator picks its VRF key freely, knowing the hit sources of the next 100 blocks (`PoSSelector.getHitSource` looks 100 blocks back), so it can grind keys for those draws. This is deliberate, not an oversight. A ground key only helps against other generators, and only on draws whose hit sources were known when it was picked: a lone outsider takes every block whatever its key, and once another generator joins, hit sources from 100 blocks after that on include the newcomer's VRF outputs, which nobody could predict. The newcomer can grind just the same when it joins, so the edge is symmetric and bounded by 100 blocks. Changing how the hit is computed inside that window does not help: while a generator mines alone, every later hit source is a function of its key and the chain it started from, so any rule computed from chain data only moves the window. A committed generator that commits late gets the same bounded edge in the first blocks of its period.
+
 A challenger is held to the same rule only when it declares a key: `BlockChallengerImpl` declares one when it is uncommitted and nobody committed can generate, and `processBlockWithChallenge` checks that. Otherwise a challenge stays as it was, since a challenger's generating balance includes the challenged miner's. `ChallengedHeader.vrfPublicKey` keeps the challenged block's own key, so the original header still verifies.
 
 ## Genesis commitments
