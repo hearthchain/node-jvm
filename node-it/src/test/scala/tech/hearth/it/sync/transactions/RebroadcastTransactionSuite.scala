@@ -44,8 +44,8 @@ class RebroadcastTransactionSuite extends BaseTransactionSuite with NodesFromDoc
 
     nodeAIsMiner.ensureTxDoesntExist(txId)
     nodeBIsNotMiner.signedBroadcast(tx)
-    nodeAIsMiner.waitForUtxIncreased(0)
-    nodeAIsMiner.utxSize shouldBe 1
+    // Not the UTX size: node A is the miner and can pack the tx into a microblock between two polls
+    nodeAIsMiner.waitForTransaction(txId)
   }
 
   test("should not rebroadcast a transaction if that's not allowed in config") {
