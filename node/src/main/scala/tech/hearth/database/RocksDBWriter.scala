@@ -402,6 +402,7 @@ class RocksDBWriter(
       registeredEnclaves: Seq[RegisteredEnclave],
       stakes: Map[AddressId, (CurrentStake, StakeNode)],
       conflictGenerators: Seq[GeneratorIndex],
+      implicitGenerator: Option[ImplicitGenerator],
       stateHash: StateHashBuilder.Result
   ): Unit = {
     log.trace(s"Persisting block ${blockMeta.id} at height $height")
@@ -682,6 +683,7 @@ class RocksDBWriter(
 
       this.generationPeriodOf(h).foreach { currPeriod => // None checked in Caches
         if (conflictGenerators.nonEmpty) rw.put(Keys.conflictGenerators(currPeriod, h), conflictGenerators)
+        if (implicitGenerator.nonEmpty) rw.put(Keys.implicitGenerator(currPeriod, h), implicitGenerator)
       }
 
       // TODO: Option to not store
@@ -956,6 +958,7 @@ class RocksDBWriter(
           currentPeriod.filter(_.start == currentHeight).flatMap(_.prev).foreach(rollbackStakingPayout(rw, _))
           currentPeriod.foreach { currentPeriod =>
             rw.delete(Keys.conflictGenerators(currentPeriod, currentHeight)) // TODO: test
+            rw.delete(Keys.implicitGenerator(currentPeriod, currentHeight))
 
             // Mirrors doAppend: the genesis block commits generators for the current period, any other block for the next one
             val committedPeriod = if (currentHeight == GenesisBlockHeight) currentPeriod else currentPeriod.next
@@ -1628,6 +1631,17 @@ class RocksDBWriter(
       }
       r
     }
+  }
+
+  override def loadImplicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator] = {
+    val key    = Keys.implicitGenerator(at, at.start)
+    val result = new mutable.ArrayBuffer[ImplicitGenerator]()
+    rdb.db.readOnly { ro =>
+      ro.iterateOver(key.keyBytes.dropRight(Ints.BYTES)) { dbEntry => // Drop height
+        result ++= key.parse(dbEntry.getValue)
+      }
+    }
+    result.toIndexedSeq
   }
 
   override def lastStateHash(refId: Option[ByteStr]): ByteStr =

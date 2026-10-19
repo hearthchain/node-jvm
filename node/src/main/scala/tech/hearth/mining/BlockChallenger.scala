@@ -14,9 +14,10 @@ import tech.hearth.network.MicroBlockSynchronizer.MicroblockData
 import tech.hearth.settings.HearthSettings
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
+import tech.hearth.state.appender
 import tech.hearth.state.appender.MaxTimeDrift
 import tech.hearth.state.diffs.BlockDiffer
-import tech.hearth.state.{BlockFee, Blockchain, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
+import tech.hearth.state.{BlockFee, Blockchain, GeneratorEligibility, Height, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
 import tech.hearth.transaction.TxValidationError.GenericError
 import tech.hearth.transaction.{BlockchainUpdater, Transaction}
 import tech.hearth.utils.{ScorexLogging, Time}
@@ -156,10 +157,8 @@ class BlockChallengerImpl(
       challengedFinalizationVoting: Option[FinalizationVoting]
   ): Task[Either[ValidationError, Block]] = Task {
     // The challenging block takes the place of the challenged one, so it is built on the same parent
-    val prevBlock = blockchainUpdater
-      .heightOf(challengedBlock.header.reference)
-      .flatMap(blockchainUpdater.blockHeader)
-      .getOrElse(blockchainUpdater.lastBlockHeader.get)
+    val prevHeight      = Height(blockchainUpdater.heightOf(challengedBlock.header.reference).getOrElse(blockchainUpdater.height))
+    val prevBlock       = blockchainUpdater.blockHeader(prevHeight.toInt).getOrElse(blockchainUpdater.lastBlockHeader.get)
     val prevBlockHeader = prevBlock.header
 
     for {
@@ -171,6 +170,12 @@ class BlockChallengerImpl(
         (),
         GenericError(s"Challenging block timestamp ($blockTime) is not better than challenged block timestamp (${challengedBlock.header.timestamp})")
       )
+      // An uncommitted challenger commits implicitly, like any uncommitted generator. Whether anyone else may challenge
+      // is not decided by its own balance alone: the challenged miner's counts towards it.
+      vrfPublicKey = appender.generatorEligibility(blockchainUpdater, challengedBlock.header.reference, prevHeight, sk.toAddress).eligibility match {
+        case GeneratorEligibility.Uncommitted => Some(ByteStr(vk.publicKey()))
+        case _                                => None
+      }
       consensusData <- pos.consensusData(
         vk,
         blockchainUpdater.height,
@@ -190,7 +195,8 @@ class BlockChallengerImpl(
         blockFeatures(blockchainUpdater, settings),
         stateHash = None,
         challengedHeader = None,
-        finalizationVoting = challengedFinalizationVoting
+        finalizationVoting = challengedFinalizationVoting,
+        vrfPublicKey = vrfPublicKey
       )
       hitSource <- pos.validateGenerationSignature(blockWithoutChallengeAndStateHash)
       blockchainWithNewBlock = SnapshotBlockchain(
@@ -240,10 +246,12 @@ class BlockChallengerImpl(
             challengedBlock.header.generator,
             challengedStateHash,
             challengedSignature,
-            challengedFinalizationVoting
+            challengedFinalizationVoting,
+            challengedBlock.header.vrfPublicKey
           )
         ),
-        finalizationVoting = None
+        finalizationVoting = None,
+        vrfPublicKey = vrfPublicKey
       )
     } yield {
       log.debug(s"Forged challenging block $challengingBlock")

@@ -44,6 +44,46 @@ package object appender {
       block.transactionData.zip(s.snapshots).map { case (tx, pbs) => PBSnapshots.fromProtobuf(pbs, tx.id(), height) }
     )
 
+  /** The committed generators of the block after `parentBlockId` that can generate it: neither poor nor in conflict. */
+  def eligibleGenerators(blockchain: Blockchain, parentBlockId: ByteStr, parentHeight: Height): GeneratorSet = {
+    val blockHeight         = parentHeight.next
+    val currentPeriod       = blockchain.generationPeriodOf(blockHeight)
+    val conflictGenerators  = currentPeriod.fold(ConflictGenerators.empty)(blockchain.conflictGenerators).upTo(blockHeight)
+    val committedGenerators = currentPeriod.fold(Nil)(blockchain.committedGenerators)
+    // Computed once for the whole committee rather than left for each generatingBalance call to recompute -
+    // see GeneratingBalanceProvider.workContext's own doc comment for why that matters.
+    val workContext = GeneratingBalanceProvider.workContext(blockchain, parentHeight.toInt)
+    committedGenerators.view
+      .map(cg => cg -> GeneratingBalanceProvider.balanceWithContext(blockchain, cg.address, Some(parentBlockId), workContext))
+      .zipWithIndex
+      .collect {
+        case ((cg, balance), idx)
+            if !conflictGenerators.contains(GeneratorIndex(idx)) && GeneratingBalanceProvider.isGeneratingBalanceValid(balance) =>
+          GeneratorInfo(GeneratorIndex(idx), cg.address, cg.endorserPublicKey, balance)
+      }
+      .toSeq
+  }
+
+  /** Whether `generator` may generate the block after `parentBlockId`, and how. The miner asks this before it forges a
+    * block, and findBlockAndGetGenerators checks a block against it, so the two can't disagree.
+    */
+  def generatorEligibility(
+      blockchain: Blockchain,
+      parentBlockId: ByteStr,
+      parentHeight: Height,
+      generator: Address
+  ): (generatorSet: GeneratorSet, eligibility: GeneratorEligibility) = {
+    val generatorSet = eligibleGenerators(blockchain, parentBlockId, parentHeight)
+    val period       = blockchain.generationPeriodOf(parentHeight.next)
+    val eligibility = GeneratorEligibility(
+      generator,
+      period.fold(Nil)(blockchain.committedGenerators),
+      generatorSet,
+      period.fold(Nil)(blockchain.implicitGenerators)
+    )
+    (generatorSet, eligibility)
+  }
+
   /** @return generatorBalances before newBlock
     */
   def findBlockAndGetGenerators(
@@ -51,43 +91,15 @@ package object appender {
       newBlock: Block
   ): Either[ValidationError, (parentHeight: Height, generatorSet: GeneratorSet)] = {
     val parentBlockId = newBlock.header.reference
+    val minerAddress  = newBlock.header.generator.toAddress
     val r = for {
       parentHeight <- blockchain
         .heightOf(parentBlockId)
         .map(Height(_))
         .toRight(s"height: history does not contain parent $parentBlockId")
-
-      blockHeight   = parentHeight.next
-      currentPeriod = blockchain.generationPeriodOf(blockHeight)
-      minerAddress  = newBlock.header.generator.toAddress
-
-      conflictGenerators  = currentPeriod.fold(ConflictGenerators.empty)(blockchain.conflictGenerators).upTo(blockHeight)
-      committedGenerators = currentPeriod.fold(Nil)(blockchain.committedGenerators)
-      // Computed once for the whole committee rather than left for each generatingBalance call to recompute -
-      // see GeneratingBalanceProvider.workContext's own doc comment for why that matters.
-      workContext = GeneratingBalanceProvider.workContext(blockchain, parentHeight.toInt)
-      validGenerators = committedGenerators.view
-        .map(cg => cg -> GeneratingBalanceProvider.balanceWithContext(blockchain, cg.address, Some(parentBlockId), workContext))
-        .zipWithIndex
-        .collect {
-          case ((cg, balance), idx)
-              if !conflictGenerators.contains(GeneratorIndex(idx))
-                && blockchain.isGeneratingBalanceValid(parentHeight, newBlock.header, balance) =>
-            GeneratorInfo(GeneratorIndex(idx), cg.address, cg.endorserPublicKey, balance)
-        }
-        .toSeq
-
-      generatorSet = validGenerators.view.map(_.address).toSet
-
-      // TODO: `validGenerators.nonEmpty` is wrong and should go. An ineligible generator - poor or in conflict - must
-      // never mine, but when every committed generator of the period is ineligible this lets one of them through
-      // anyway (the VRF lookup then passes, since it does hold a commitment). Removing it fails the conflict-endorser
-      // suites and PredefinedSnapshotSpec, which still encode the current behaviour.
-      _ <- Either.raiseWhen(validGenerators.nonEmpty && !generatorSet.contains(minerAddress)) {
-        s"$minerAddress is not allowed to generate a block, allowed: ${generatorSet.mkString(", ")}. " +
-          s"If this is your node: commit to generation for the next period"
-      }
-    } yield (parentHeight, validGenerators)
+      (generatorSet, eligibility) = generatorEligibility(blockchain, parentBlockId, parentHeight, minerAddress)
+      _ <- eligibility.check(minerAddress, newBlock.header.vrfPublicKey)
+    } yield (parentHeight, generatorSet)
 
     r.leftMap(GenericError(_))
   }
@@ -207,6 +219,15 @@ package object appender {
       (challengedHitSource, _) <-
         if (verify) validateBlock(blockchainUpdater, pos, time, data.generatorSet)(challengedBlock, data.parentHeight)
         else pos.validateGenerationSignature(challengedBlock).map(_ -> Seq.empty)
+
+      // A challenger declaring a VRF key commits implicitly, so it may only when it could generate the block uncommitted
+      challenger = block.header.generator.toAddress
+      _ <- block.header.vrfPublicKey
+        .traverse(_ =>
+          generatorEligibility(blockchainUpdater, block.header.reference, data.parentHeight, challenger).eligibility
+            .check(challenger, block.header.vrfPublicKey)
+        )
+        .leftMap(GenericError(_))
 
       (hitSource, balances) <-
         if (verify) validateBlock(blockchainUpdater, pos, time, data.generatorSet)(block, data.parentHeight)

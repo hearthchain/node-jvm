@@ -260,6 +260,17 @@ case class SnapshotBlockchain(
     if (registeredHere) base ++ snapshot.nextRegisteredEnclaves else base
   }
 
+  // Like conflictGenerators, read off the liquid block's header: the key it carries commits for the period it is in
+  override def implicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator] = {
+    val base = inner.implicitGenerators(at)
+    val committedHere = for {
+      (signedHeader, _) <- blockMeta
+      vrfPublicKey      <- signedHeader.header.vrfPublicKey
+      if this.currentGenerationPeriod.contains(at)
+    } yield ImplicitGenerator(signedHeader.header.generator.toAddress, vrfPublicKey)
+    base ++ committedHere
+  }
+
   override def conflictGenerators(at: GenerationPeriod): ConflictGenerators = {
     lazy val base = inner.conflictGenerators(at)
     this.currentGenerationPeriod.fold(ConflictGenerators.empty) { currPeriod =>

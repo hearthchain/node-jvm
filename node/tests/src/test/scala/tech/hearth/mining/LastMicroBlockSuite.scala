@@ -166,11 +166,11 @@ class LastMicroBlockSuite extends FreeSpec with WithDomain with TestSchedulerOps
     }
   }.get
 
-  // The last micro block below spends both generators down, so the block after it is the first block of a period with an
-  // empty generator set. Generating in such a period without a commitment - with an arbitrary VRF key, fixed for the
-  // period by the first block that uses it - is the intended rule, but it needs a new block field and is not implemented,
-  // so no one can extend the chain here and the miner has nothing left to schedule. Everything else about this test is
-  // fixed: enable it once the rule exists.
+  // The last micro block below spends both of this node's generators down, and the attempt to generate block 4 is meant
+  // to build on a reference that leaves that micro block out (min-micro-block-age), where they can still generate. But
+  // the miner decides whether to schedule an attempt at all from the chain head, where all three accounts are poor, so
+  // nothing is ever scheduled and the tick sequence runs dry. That is a question of what min-micro-block-age should
+  // mean for scheduling, independent of who may generate in a period without committed generators.
   "transfer in the last microblock of period, but it removed" ignore withManager { manager =>
     val channels     = manager(new DefaultChannelGroup(GlobalEventExecutor.INSTANCE))
     val thisNodeAcc2 = Wallet.account(Domain.DefaultWalletMnemonic, nonce = 1)

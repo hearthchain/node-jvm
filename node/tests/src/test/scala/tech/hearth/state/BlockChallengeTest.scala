@@ -857,6 +857,41 @@ class BlockChallengeTest
     }
   }
 
+  property("Block of an uncommitted generator can be challenged by another uncommitted one, each with its own VRF key") {
+    val outsider = TxHelpers.signer(1)
+    withDomain(settings, balances = AddrWithBalance.enoughBalances(defaultSigner, outsider, challengerNode.signingKey)) { d =>
+      // defaultSigner, the only committed generator, spends all but its deposit, so nobody committed can generate
+      val fee = 1.hearth
+      d.appendBlock(
+        TxHelpers.transfer(
+          defaultSigner,
+          TxHelpers.address(9),
+          d.balance(defaultSigner.toAddress) - CommitToGenerationTransaction.DepositInEmbers - fee,
+          fee = fee
+        )
+      )
+
+      val outsiderVrfKey = ByteStr(TxHelpers.vrfKeyOf(outsider).publicKey())
+      val originalBlock = d.createBlock(
+        generator = outsider,
+        strictTime = true,
+        stateHash = Some(Some(invalidStateHash)),
+        timestamp = Some(Long.MaxValue),
+        vrfPublicKey = Some(outsiderVrfKey)
+      )
+
+      appendAndCheck(originalBlock, d) { block =>
+        val challengerVrfKey = ByteStr(challengerNode.vrfKey.publicKey())
+        block.header.vrfPublicKey shouldBe Some(challengerVrfKey)
+        block.header.challengedHeader.flatMap(_.vrfPublicKey) shouldBe Some(outsiderVrfKey)
+        d.lastBlockId shouldBe block.id()
+        d.blockchain.implicitGenerators(d.blockchain.currentGenerationPeriod.get) shouldBe Seq(
+          ImplicitGenerator(challengerNode.address, challengerVrfKey)
+        )
+      }
+    }
+  }
+
   property(s"NODE-910. Block at LightNode activation height can be challenged") {
     withDomain(
       DomainPresets.BlockRewardDistribution,

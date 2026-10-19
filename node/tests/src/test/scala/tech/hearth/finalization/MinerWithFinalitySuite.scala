@@ -2,6 +2,7 @@ package tech.hearth.finalization
 
 import tech.hearth.TestValues
 import tech.hearth.block.BlockEndorsement
+import tech.hearth.common.state.ByteStr
 import tech.hearth.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
@@ -158,7 +159,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
   }
 
   "Mining works if not committed, but all generators have no right to mine" - {
-    def test(makeGeneratorSetEmptyF: Domain => Unit): Unit = withManager { manager =>
+    def test(makeGeneratorSetEmptyF: (Domain, TestScheduler) => Unit): Unit = withManager { manager =>
       val channels = manager(new DefaultChannelGroup(GlobalEventExecutor.INSTANCE))
       var miner    = Miner.StrictDisabledMiner
       withDomain(
@@ -195,7 +196,7 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         d.appender.appendBlock(block2)
 
         log.debug("Spending")
-        makeGeneratorSetEmptyF(d)
+        makeGeneratorSetEmptyF(d, appenderScheduler)
 
         log.debug("Trigger thisNode forging")
         d.testTime.setTimeIfGreater(d.nextBlockTime(thisNodeAcc, TxHelpers.vrfKeyOf(thisNodeAcc)))
@@ -204,15 +205,15 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
         appenderScheduler.tickNext("appender-2")
 
         d.lastBlock.header.generator.toAddress shouldBe thisNodeAcc.toAddress
+        // Not committed, so the block commits it implicitly, with the VRF key it carries
+        d.lastBlock.header.vrfPublicKey shouldBe Some(ByteStr(TxHelpers.vrfKeyOf(thisNodeAcc).publicKey()))
       }
     }
 
     // There are no tests with conflicting generators, because the miner can't be conflicting, it can only spend all HRTH
 
-    // The spending below empties the generator set, and generating in such a period without a commitment is the
-    // intended rule that is not implemented yet - see the same note in MultipleAccountsMinerWithFinalitySuite
     "spending in" - {
-      "block" ignore test { d =>
+      "block" in test { (d, appenderScheduler) =>
         log.debug("Append block3 with spending all hearth by miner")
         val block3 = d.createBlock(
           txs = Seq(
@@ -227,9 +228,11 @@ class MinerWithFinalitySuite extends BaseFinalizationSpec, TestSchedulerOps {
           strictTime = true
         )
         d.appender.appendBlock(block3)
+        // A scheduled attempt first waits for the block it was scheduled on to appear, polling once a second
+        appenderScheduler.tickNext("appender-block3")
       }
 
-      "microblock" ignore test { d =>
+      "microblock" in test { (d, _) =>
         log.debug("Append micro block with spending all hearth by miner")
         d.appender.appendBlock(d.createBlock(generator = otherNodeAcc, strictTime = true))
         d.appendMicroBlock(

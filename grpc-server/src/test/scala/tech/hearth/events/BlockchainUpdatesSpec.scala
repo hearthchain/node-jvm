@@ -5,6 +5,7 @@ import com.google.protobuf.ByteString
 import tech.hearth.TestValues
 import tech.hearth.account.{Address, PublicKey}
 import tech.hearth.common.state.ByteStr
+import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.crypto.DigestLength
 import tech.hearth.db.InterferableDB
 import tech.hearth.db.WithState.AddrWithBalance
@@ -690,9 +691,10 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
         )
 
       // defaultSigner is auto-committed as the sole generator, so its genesis balance can't be 0 any more: it must
-      // cover CommitToGenerationTransaction.DepositInEmbers. That deposit sits alongside the reward in every update.
-      val deposit = CommitToGenerationTransaction.DepositInEmbers
-      withDomainAndRepo(settings, balances = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, deposit))) { case (d, repo) =>
+      // cover CommitToGenerationTransaction.DepositInEmbers, and clear the generating minimum on top of it to generate.
+      // That balance sits alongside the reward in every update.
+      val startBalance = CommitToGenerationTransaction.DepositInEmbers + GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
+      withDomainAndRepo(settings, balances = Seq(AddrWithBalance(TxHelpers.defaultSigner.toAddress, startBalance))) { case (d, repo) =>
         val blockReward   = d.blockchain.settings.rewardsSettings.initialReward
         val daoAddrReward = BlockRewardCalculator.MaxAddressReward
 
@@ -706,15 +708,15 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
           Seq(
             Set(
               PBStateUpdate
-                .BalanceUpdate(miner.toByteString, Some(Amount(ByteString.EMPTY, deposit + blockReward - daoAddrReward)), deposit),
+                .BalanceUpdate(miner.toByteString, Some(Amount(ByteString.EMPTY, startBalance + blockReward - daoAddrReward)), startBalance),
               PBStateUpdate.BalanceUpdate(daoAddress.toByteString, Some(Amount(ByteString.EMPTY, daoAddrReward)))
             ),
             Set(
               PBStateUpdate
                 .BalanceUpdate(
                   miner.toByteString,
-                  Some(Amount(ByteString.EMPTY, deposit + 2 * (blockReward - daoAddrReward))),
-                  deposit + blockReward - daoAddrReward
+                  Some(Amount(ByteString.EMPTY, startBalance + 2 * (blockReward - daoAddrReward))),
+                  startBalance + blockReward - daoAddrReward
                 ),
               PBStateUpdate
                 .BalanceUpdate(daoAddress.toByteString, Some(Amount(ByteString.EMPTY, 2 * daoAddrReward)), daoAddrReward)
@@ -723,8 +725,8 @@ class BlockchainUpdatesSpec extends FreeSpec with WithBUDomain with ScalaFutures
               PBStateUpdate
                 .BalanceUpdate(
                   miner.toByteString,
-                  Some(Amount(ByteString.EMPTY, deposit + 3 * (blockReward - daoAddrReward))),
-                  deposit + 2 * (blockReward - daoAddrReward)
+                  Some(Amount(ByteString.EMPTY, startBalance + 3 * (blockReward - daoAddrReward))),
+                  startBalance + 2 * (blockReward - daoAddrReward)
                 ),
               PBStateUpdate
                 .BalanceUpdate(daoAddress.toByteString, Some(Amount(ByteString.EMPTY, 3 * daoAddrReward)), 2 * daoAddrReward)

@@ -180,9 +180,10 @@ class MinerImpl(
         _ <- Either.raiseWhen(blockchain.isConflict(newBlockHeight, address)) {
           s"$address is conflict on $newBlockHeight. Try to commit to generation on next period"
         }
-      } yield balance
+        vrfPublicKey <- appender.generatorEligibility(blockchain, reference, Height(height), address).eligibility.declaredVrfPublicKey(vrfKey)
+      } yield (balance, vrfPublicKey)
 
-      def retryReasons(balance: Long) = for {
+      def retryReasons(balance: Long, vrfPublicKey: Option[ByteStr]) = for {
         _ <- checkQuorumAvailable()
         validBlockDelay <- pos
           .getValidBlockDelay(height, vrfKey, refBaseTarget, balance)
@@ -212,15 +213,16 @@ class MinerImpl(
             blockFeatures(blockchain),
             if (blockchain.supportsLightNodeBlockFields(newBlockHeight.toInt)) stateHash else None,
             challengedHeader = None,
-            finalizationVoting = None // Haven't voted in a key block
+            finalizationVoting = None, // Haven't voted in a key block
+            vrfPublicKey = vrfPublicKey
           )
           .leftMap(_.err)
       } yield ForgeAttemptResult.Success(block, totalConstraint)
 
       stopReasons
         .leftMap(ForgeAttemptResult.PermanentFailure.apply)
-        .flatMap { balance =>
-          retryReasons(balance).leftMap(ForgeAttemptResult.TemporaryFailure.apply)
+        .flatMap { (balance, vrfPublicKey) =>
+          retryReasons(balance, vrfPublicKey).leftMap(ForgeAttemptResult.TemporaryFailure.apply)
         }
     }.merge
   }

@@ -247,6 +247,12 @@ object Keys {
       writeRegisteredEnclaves
     )
 
+  /** Key: Int(period.start) ++ Int(height of the block that carried the VRF key), the same shape as conflictGenerators:
+    * a block commits at most one implicit generator, for the period it is in.
+    */
+  def implicitGenerator(period: GenerationPeriod, height: Height): Key[Option[ImplicitGenerator]] =
+    Key.opt(ImplicitGenerators, h(period.start) ++ h(height), readImplicitGenerator, writeImplicitGenerator)
+
   def conflictGenerators(committedPeriod: GenerationPeriod, conflictEndorsementHeight: Height): Key[Seq[GeneratorIndex]] =
     Key(
       ConflictGenerators,

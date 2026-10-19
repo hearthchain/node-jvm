@@ -20,3 +20,9 @@ case class GenerationCommitment(sender: PublicKey, endorserPublicKey: BlsPublicK
 
 /** A [[GenerationCommitment]] as the state holds it: the sender is only ever needed by address once committed. */
 case class CommittedGenerator(address: Address, endorserPublicKey: BlsPublicKey, vrfPublicKey: ByteStr)
+
+/** A generator that mined in a period it never committed to, which it may only start doing while none of that period's
+  * committed generators can generate. Its first block there carries the VRF key, and that key is its commitment for the
+  * rest of the period. It has no endorser key, so it never endorses.
+  */
+case class ImplicitGenerator(address: Address, vrfPublicKey: ByteStr)

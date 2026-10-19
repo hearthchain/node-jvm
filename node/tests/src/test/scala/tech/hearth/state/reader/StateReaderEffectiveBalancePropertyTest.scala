@@ -1,6 +1,7 @@
 package tech.hearth.state.reader
 
 import tech.hearth.TestValues
+import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.lagonaki.mocks.TestBlock.create as block
@@ -130,9 +131,10 @@ class StateReaderEffectiveBalancePropertyTest extends PropSpec with WithDomain {
   }
 
   property("correct balance snapshots") {
-    val transferTx   = transfer(to = signer(1).toAddress, amount = 3.hearth, fee = 0.1.hearth)
-    val leaseTx      = lease(recipient = signer(1).toAddress, amount = 2.hearth, fee = 0.1.hearth)
-    val startBalance = 7.hearth
+    val transferTx = transfer(to = signer(1).toAddress, amount = 3.hearth, fee = 0.1.hearth)
+    val leaseTx    = lease(recipient = signer(1).toAddress, amount = 2.hearth, fee = 0.1.hearth)
+    // Enough to clear the generating minimum after what it spends below, or defaultSigner could not generate
+    val startBalance = GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator + 7.hearth
     // defaultSigner generates the blocks below, so it is a committed generator: its deposit is locked on top of what
     // it spends, and shows up in the snapshots as `deposits` rather than as a deduction from the regular balance.
     val genesisBalance = startBalance + CommitToGenerationTransaction.DepositInEmbers

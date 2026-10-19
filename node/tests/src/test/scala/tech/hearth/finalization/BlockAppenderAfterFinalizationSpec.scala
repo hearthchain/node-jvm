@@ -328,7 +328,7 @@ class BlockAppenderAfterFinalizationSpec extends BaseFinalizationSpec {
       log.debug("Append block 4")
       d.appender.appendBlockWithoutFallback(
         d.createBlock(generator = committedGenerator1, strictTime = true)
-      ) should produce("less than required for generation")
+      ) should produce(s"$committedGenerator1Addr is not allowed to generate a block")
     }
 
     "that not committed, if generator set is empty in the removed micro block" in withDomain(

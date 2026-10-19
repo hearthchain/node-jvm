@@ -399,9 +399,11 @@ case class Domain(
       stateHash: Option[Option[ByteStr]] = None,
       challengedHeader: Option[ChallengedHeader] = None,
       timestamp: Option[Long] = None,
-      finalizationVoting: Option[FinalizationVoting] = None
+      finalizationVoting: Option[FinalizationVoting] = None,
+      // The key an uncommitted generator commits with by this block, see ImplicitGenerator
+      vrfPublicKey: Option[ByteStr] = None
   ): Block =
-    createBlockE(txs, ref, strictTime, generator, vrfKey, stateHash, challengedHeader, timestamp, finalizationVoting)
+    createBlockE(txs, ref, strictTime, generator, vrfKey, stateHash, challengedHeader, timestamp, finalizationVoting, vrfPublicKey)
       .explicitGet()
 
   def createBlockE(
@@ -413,7 +415,8 @@ case class Domain(
       stateHash: Option[Option[ByteStr]] = None,
       challengedHeader: Option[ChallengedHeader] = None,
       timestamp: Option[Long] = None,
-      finalizationVoting: Option[FinalizationVoting] = None
+      finalizationVoting: Option[FinalizationVoting] = None,
+      vrfPublicKey: Option[ByteStr] = None
   ): Either[ValidationError, Block] = {
     val vrfKey    = vrfKeyOpt.getOrElse(TxHelpers.vrfKeyOf(generator))
     val reference = ref.getOrElse(randomSig)
@@ -464,7 +467,8 @@ case class Domain(
           featureVotes = Nil,
           stateHash = None,
           challengedHeader,
-          finalizationVoting = finalizationVoting
+          finalizationVoting = finalizationVoting,
+          vrfPublicKey = vrfPublicKey
         )
       resultStateHash <- stateHash.map(Right(_)).getOrElse {
         if (blockchain.supportsLightNodeBlockFields(blockchain.height + 1)) {
@@ -511,7 +515,8 @@ case class Domain(
           featureVotes = Nil,
           resultStateHash,
           challengedHeader,
-          finalizationVoting = finalizationVoting
+          finalizationVoting = finalizationVoting,
+          vrfPublicKey = vrfPublicKey
         )
     } yield resultBlock
   }
@@ -542,7 +547,8 @@ case class Domain(
             challengedBlock.sender,
             challengedBlock.header.stateHash,
             challengedBlock.signature,
-            challengedBlock.header.finalizationVoting
+            challengedBlock.header.finalizationVoting,
+            challengedBlock.header.vrfPublicKey
           )
         )
       ),
@@ -653,14 +659,14 @@ object Domain {
           // A generator's VRF key is whatever it registered when committing, see Blockchain.vrfPublicKeyOf. It is
           // resolved at the new block's own height, as PoSSelector does: on the first block of a period the parent's
           // period is the previous committee's, which the new block's generator need not belong to.
-          def vrfKeyOf(generator: tech.hearth.account.PublicKey): Either[ValidationError, ByteStr] =
-            bcu.vrfPublicKeyOf(generator, Height(parentHeight + 1)).left.map(TxValidationError.GenericError(_))
+          def vrfKeyOf(generator: tech.hearth.account.PublicKey, declared: Option[ByteStr]): Either[ValidationError, ByteStr] =
+            bcu.vrfPublicKeyOf(generator, declared, Height(parentHeight + 1)).left.map(TxValidationError.GenericError(_))
 
           for {
-            vrfPK <- vrfKeyOf(block.header.generator)
+            vrfPK <- vrfKeyOf(block.header.generator, block.header.vrfPublicKey)
             hs    <- crypto.verifyVRF(block.header.generationSignature, prevHs.arr, vrfPK)
             challengedHs <- block.header.challengedHeader.traverse(ch =>
-              vrfKeyOf(ch.generator).flatMap(crypto.verifyVRF(ch.generationSignature, prevHs.arr, _))
+              vrfKeyOf(ch.generator, ch.vrfPublicKey).flatMap(crypto.verifyVRF(ch.generationSignature, prevHs.arr, _))
             )
             data <- findBlockAndGetGenerators(bcu, block)
           } yield (hs, challengedHs, data.generatorSet)

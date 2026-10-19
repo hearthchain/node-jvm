@@ -88,6 +88,8 @@ trait EmptyBlockchain extends Blockchain {
 
   override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = IndexedSeq.empty
 
+  override def implicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator] = IndexedSeq.empty
+
   override def reservedAmount(sender: Address, miner: Address, asset: IssuedAsset): Long = 0L
 
   override def apiKeyBinding(enclavePublicKey: ByteStr, sender: Address): Option[ByteStr] = None
