@@ -306,33 +306,14 @@ A fee is charged before what the same transaction earns is credited, so having i
 matcher that starts at zero fails with `negative hearth balance: before=0, after=-fee` even though the matcher fees it
 collects would more than cover it. Fund whoever pays a fee for the fee itself.
 
-As implemented today, a commitment is mandatory with no exceptions. A block's VRF proof is only ever verified against a
-VRF key the generator committed earlier (`Blockchain.vrfPublicKeyOf`), so an account that has not committed for a
-period cannot produce a block in it — no matter how few committed generators there are, or how many of them are poor or
-in conflict.
+A committed generator mines only while it can generate (not poor, not in conflict); an uncommitted one only while no committed generator of the period can, and its first block there has to carry its VRF key (`Domain.createBlock(..., vrfPublicKey = ...)`). See "Generators without a commitment" in `docs/notes/state-and-blocks.md`. Two consequences for fixtures:
 
-The intended rule has one exception, and it is **not implemented yet**: when a period's generator set is *empty*,
-anyone may generate in it without having committed. Such a generator picks an arbitrary VRF key, but only once per
-period — the first block of the period carries the key, and every later block of that period is verified against the
-key that first one carried. That needs a new field in the block and changes through the main sources, so nothing in the
-node does it today; a period whose generator set is empty currently cannot be extended at all.
+- A miner funded with its deposit alone can't generate any more: the old guard in `findBlockAndGetGenerators` let a poor committed generator through whenever every committed generator was poor, and fee and balance suites leaned on that. Fund a miner with `GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator` on top of its deposit; a fee test that needs the miner to own nothing beyond what it earns spends that minimum in the same transfer, as `BlockchainUpdaterGeneratorFee*Test` do.
+- Rejections through `d.appendBlockE` and through `d.appender` can differ in wording: `Domain.processBlock` resolves the VRF key before it asks `findBlockAndGetGenerators`, the real appender the other way round. Assert on generator-rule messages through `d.appender.appendBlockWithoutFallback`.
 
-An ineligible generator — poor or in conflict — must never mine either. `findBlockAndGetGenerators` does not enforce
-that yet: it only rejects a foreign miner `when(validGenerators.nonEmpty && ...)`, so when *every* committed generator
-of the period is ineligible one of them is still let through. That guard is wrong and is marked TODO; dropping it
-currently fails the conflict-endorser suites and `PredefinedSnapshotSpec`, which encode the present behaviour rather than
-the intended rule.
+After a key block goes through the appender, the miner's attempt first polls once a second for that block to appear, so a tick sequence needs one extra `appenderScheduler.tickNext` before it ticks the miner; `MultipleAccountsMinerWithFinalitySuite` and `MinerWithFinalitySuite` do this.
 
-A test that empties a generator set is therefore testing the unimplemented rule, whatever else it looks like it is
-about, and the symptom is always the same: the miner never schedules an attempt for the uncommitted account, so the
-tick sequence runs dry with `no tasks in scheduler`. Six are `ignore`d until the rule exists, with everything else
-about them — accounts, commitments, funding, tick sequences — already fixed:
-
-- `LastMicroBlockSuite`, "transfer in the last microblock of period" — the last micro block spends both generators
-  down, so the block after it is the first of a period with no generator left;
-- `MinerWithFinalitySuite`, "Mining works if not committed, but all generators have no right to mine" (both);
-- `MultipleAccountsMinerWithFinalitySuite`, all three — an uncommitted second account generating once the committed
-  first one is spent down.
+`LastMicroBlockSuite`'s "transfer in the last microblock of period, but it removed" is still `ignore`d, for a reason unrelated to commitments: it expects an attempt for block 4 on a reference that leaves out the spending micro block, but the miner decides whether to schedule from the chain head, where all of the node's accounts are poor.
 
 `BlockChallengerImpl` takes a `GeneratorKeys` — the node's own generator keys, exactly as `BlockEndorser` does. It used
 to take a bare `Seq[(SigningKey, VrfKey)]` that both `Application` and the testkit's `Domain` filled with `Seq.empty`,

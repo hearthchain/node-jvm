@@ -63,6 +63,16 @@ of a period is the *incoming* one, which is deliberate, not an off-by-one.
 Only the hit source is taken from the parent (`PoSSelector.getHitSource(parentHeight)`, with its 100-block lookback):
 a block's VRF proof is over the parent's hit source, made with the key its own period commits.
 
+## Generators without a commitment
+
+When none of a period's committed generators can generate (poor or in conflict), anyone with enough generating balance may, without a `CommitToGenerationTransaction`. Its VRF key can't be looked up from a commitment, so its first block in the period carries it in `BlockHeader.vrfPublicKey` (protobuf `Block.Header.vrf_public_key = 14`), and that key is its commitment for the rest of the period: an `ImplicitGenerator`, kept per period and read off the header the way conflicting generators are (`Keys.implicitGenerator(period, height)`, `Caches`, `SnapshotBlockchain.implicitGenerators` for the liquid block, rolled back with the block). `Blockchain.vrfPublicKeyOf` resolves committed generators first, then implicit ones.
+
+Who may generate is decided in one place, `appender.generatorEligibility`, so the appender and the miner can't drift apart: a committed generator that can generate; an implicit generator of the period, for the rest of the period, even after committed generators recover; or an uncommitted one, while none of the committed generators can. A committed generator that can't generate never falls back to generating uncommitted, and the old `validGenerators.nonEmpty` guard that let a poor committed generator through is gone. Only an uncommitted generator's first block may carry a key, and it must. More than one uncommitted generator may join the same period, as long as the committed ones stay unable.
+
+An implicit generator has no endorser key and no deposit: it is never in the `GeneratorSet`, never endorses and can't be punished for a conflicting endorsement. Its balance is checked like any miner's (`appender.minerBalance`).
+
+A challenger is held to the same rule only when it declares a key: `BlockChallengerImpl` declares one when it is uncommitted and nobody committed can generate, and `processBlockWithChallenge` checks that. Otherwise a challenge stays as it was, since a challenger's generating balance includes the challenged miner's. `ChallengedHeader.vrfPublicKey` keeps the challenged block's own key, so the original header still verifies.
+
 ## Genesis commitments
 
 `GenesisSettings` carries two commitments to what the genesis block must come out as. Both are optional, and both are

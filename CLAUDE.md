@@ -76,7 +76,7 @@ Hard-won implementation knowledge lives in `docs/notes/`, one file per subsystem
 - Touching fees, the carry, BlockRewardCalculator, EmissionCurve, RewardsSettings, or RewardApiRoute: read `docs/notes/economics.md` first.
 - Touching StakeTransaction, StakingPayout, the stake ledger (stored as a balance), `FunctionalitySettings.credAsset`, or the staking payout API (StakingApiRoute, CommonStakingApi): read `docs/notes/cred-economy.md` first.
 - Writing or fixing tests (node-it suites and fixtures, grpc-server specs, node-tests helpers like withDomain/TestBlock/TxHelpers): read `docs/notes/testing.md` first.
-- Touching StateSnapshot, predefined snapshots, BlockDiffer, genesis settings, or balance snapshots: read `docs/notes/state-and-blocks.md` first.
+- Touching StateSnapshot, predefined snapshots, BlockDiffer, genesis settings, balance snapshots, or who may generate a block (generatorEligibility, implicit generators, BlockHeader.vrfPublicKey): read `docs/notes/state-and-blocks.md` first.
 - Touching the BlockchainUpdates extension or events.StateUpdate: read `docs/notes/blockchain-updates.md` first.
 - Touching block synchronisation (RxExtensionLoader, ExtensionAppender, GetBlockIds/BlockIds, peer blacklisting on sync): read `docs/notes/block-sync.md` first.
 - Touching build.sbt, sbt plugins or tasks, the docker image (Dockerfile, entrypoint.sh, stageForDocker), the Debian package or its systemd unit, the crypto/protobuf-schemas dependencies, or doing a package or naming migration: read `docs/notes/build-tooling.md` first.
