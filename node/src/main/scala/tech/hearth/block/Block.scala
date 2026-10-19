@@ -27,7 +27,9 @@ case class BlockHeader(
     transactionsRoot: ByteStr,
     stateHash: Option[ByteStr],
     challengedHeader: Option[ChallengedHeader],
-    finalizationVoting: Option[FinalizationVoting]
+    finalizationVoting: Option[FinalizationVoting],
+    // Set only on the first block an uncommitted generator forges in a period, see Blockchain.generatorEligibility
+    vrfPublicKey: Option[ByteStr] = None
 ) {
   val score: Coeval[BigInt] = Coeval.evalOnce((BigInt("18446744073709551616") / baseTarget).ensuring(_ > 0))
 }
@@ -40,7 +42,8 @@ case class ChallengedHeader(
     generator: PublicKey,
     stateHash: Option[ByteStr],
     headerSignature: ByteStr,
-    finalizationVoting: Option[FinalizationVoting]
+    finalizationVoting: Option[FinalizationVoting],
+    vrfPublicKey: Option[ByteStr] = None
 )
 
 case class Block(
@@ -81,7 +84,8 @@ case class Block(
             featureVotes = ch.featureVotes,
             stateHash = ch.stateHash,
             challengedHeader = None,
-            finalizationVoting = ch.finalizationVoting
+            finalizationVoting = ch.finalizationVoting,
+            vrfPublicKey = ch.vrfPublicKey
           )
         }
         .getOrElse(header)
@@ -130,7 +134,8 @@ object Block {
       transactionData: Seq[Transaction],
       stateHash: Option[ByteStr],
       challengedHeader: Option[ChallengedHeader],
-      finalizationVoting: Option[FinalizationVoting]
+      finalizationVoting: Option[FinalizationVoting],
+      vrfPublicKey: Option[ByteStr] = None
   ): Block = {
     Block(
       BlockHeader(
@@ -143,7 +148,8 @@ object Block {
         mkTransactionsRoot(transactionData),
         stateHash,
         challengedHeader,
-        finalizationVoting
+        finalizationVoting,
+        vrfPublicKey
       ),
       ByteStr.empty,
       transactionData
@@ -176,7 +182,8 @@ object Block {
       featureVotes: Seq[Short],
       stateHash: Option[ByteStr],
       challengedHeader: Option[ChallengedHeader],
-      finalizationVoting: Option[FinalizationVoting]
+      finalizationVoting: Option[FinalizationVoting],
+      vrfPublicKey: Option[ByteStr] = None
   ): Either[GenericError, Block] =
     create(
       timestamp,
@@ -188,7 +195,8 @@ object Block {
       txs,
       stateHash,
       challengedHeader,
-      finalizationVoting
+      finalizationVoting,
+      vrfPublicKey
     ).validate
       .map(_.sign(signer))
 
