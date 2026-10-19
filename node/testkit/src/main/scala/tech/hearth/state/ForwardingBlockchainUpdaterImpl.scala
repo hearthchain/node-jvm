@@ -74,4 +74,6 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
   override def committedGenerators(at: GenerationPeriod): IndexedSeq[CommittedGenerator] = delegate.committedGenerators(at)
 
   override def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave] = delegate.registeredEnclaves(at)
+
+  override def implicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator] = delegate.implicitGenerators(at)
 }

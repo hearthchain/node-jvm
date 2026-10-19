@@ -39,7 +39,8 @@ object TestBlock {
         b.header.featureVotes,
         b.header.stateHash,
         b.header.challengedHeader,
-        b.header.finalizationVoting
+        b.header.finalizationVoting,
+        b.header.vrfPublicKey
       )
 
     BlockWithSigner(x.explicitGet(), signer)
@@ -65,7 +66,8 @@ object TestBlock {
       features: Seq[Short] = Seq.empty[Short],
       stateHash: Option[ByteStr] = None,
       baseTarget: Long = 2L,
-      challengedHeader: Option[ChallengedHeader] = None
+      challengedHeader: Option[ChallengedHeader] = None,
+      vrfPublicKey: Option[ByteStr] = None
   ): BlockWithSigner =
     sign(
       signer,
@@ -79,7 +81,8 @@ object TestBlock {
         transactionData = txs,
         stateHash = stateHash,
         challengedHeader = challengedHeader,
-        finalizationVoting = None
+        finalizationVoting = None,
+        vrfPublicKey = vrfPublicKey
       )
     )
 

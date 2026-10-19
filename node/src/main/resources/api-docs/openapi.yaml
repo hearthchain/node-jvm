@@ -3435,6 +3435,10 @@ components:
           $ref: '#/components/schemas/PublicKey'
         stateHash:
           $ref: '#/components/schemas/Hash'
+        vrfPublicKey:
+          allOf:
+            - $ref: '#/components/schemas/VrfPublicKey'
+          description: The VRF key the challenged block carried, if any
         finalizationVoting:
           $ref: '#/components/schemas/FinalizationVoting'
     BlockHeaderBase:
@@ -3488,6 +3492,14 @@ components:
           allOf:
             - $ref: '#/components/schemas/Hash'
           description: Present once state hashes are enabled on the chain
+        vrfPublicKey:
+          allOf:
+            - $ref: '#/components/schemas/VrfPublicKey'
+          description: >-
+            Present only on the first block a generator forges in a generation
+            period it is not committed to, which it may do while none of the
+            committed generators can generate. The key is its commitment for the
+            rest of the period.
         challengedHeader:
           $ref: '#/components/schemas/ChallengedHeader'
         finalizationVoting:
@@ -4524,6 +4536,18 @@ components:
           description: >-
             Height at which this generator produced a conflicting endorsement,
             if any
+        implicit:
+          type: boolean
+          description: >-
+            Present, and true, for a generator that is not committed to the
+            period but generated in it while none of the committed generators
+            could. Such a generator never endorses.
+        vrfPublicKey:
+          allOf:
+            - $ref: '#/components/schemas/VrfPublicKey'
+          description: >-
+            For an implicit generator, the VRF key its first block in the period
+            carried
     GeneratorDataLSF:
       allOf:
         - $ref: '#/components/schemas/GeneratorData'

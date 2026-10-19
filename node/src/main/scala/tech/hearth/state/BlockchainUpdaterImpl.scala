@@ -807,6 +807,10 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.conflictGenerators(at)
   }
 
+  override def implicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator] = readLock {
+    snapshotBlockchain.implicitGenerators(at)
+  }
+
   override def currentGeneratorSet: Option[GeneratorSet] = readLock {
     ngState.map(_.finalizationState.generatorSet)
   }

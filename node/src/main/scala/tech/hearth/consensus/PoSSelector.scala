@@ -55,7 +55,7 @@ case class PoSSelector(
   def validateBlockDelay(parentHeight: Int, header: BlockHeader, parent: BlockHeader, effectiveBalance: Long): Either[ValidationError, Unit] = {
     for {
       parentHitSource <- getHitSource(parentHeight)
-      gs <- vrfPublicKeyOf(header.generator, Height(parentHeight + 1))
+      gs <- vrfPublicKeyOf(header.generator, header.vrfPublicKey, Height(parentHeight + 1))
         .flatMap(crypto.verifyVRF(header.generationSignature, parentHitSource.arr, _))
         .map(_.arr)
       ts = posCalculator().calculateDelay(hit(gs), parent.baseTarget, effectiveBalance) + parent.timestamp
@@ -72,7 +72,7 @@ case class PoSSelector(
       parentHeight =>
         for {
           hs        <- getHitSource(parentHeight)
-          vrfPK     <- vrfPublicKeyOf(block.header.generator, Height(parentHeight + 1))
+          vrfPK     <- vrfPublicKeyOf(block.header.generator, block.header.vrfPublicKey, Height(parentHeight + 1))
           hitSource <- crypto.verifyVRF(block.header.generationSignature, hs.arr, vrfPK)
         } yield hitSource
     }
@@ -82,8 +82,8 @@ case class PoSSelector(
     *   block of a period, and it is the block's own period that holds the commitment its generator mines under - the
     *   same period [[tech.hearth.state.appender.findBlockAndGetGenerators]] admits it from.
     */
-  private def vrfPublicKeyOf(generator: PublicKey, blockHeight: Height): Either[ValidationError, ByteStr] =
-    blockchain.vrfPublicKeyOf(generator, blockHeight).leftMap(GenericError(_))
+  private def vrfPublicKeyOf(generator: PublicKey, declared: Option[ByteStr], blockHeight: Height): Either[ValidationError, ByteStr] =
+    blockchain.vrfPublicKeyOf(generator, declared, blockHeight).leftMap(GenericError(_))
 
   def checkBaseTargetLimit(baseTarget: Long, height: Int): Either[ValidationError, Unit] = {
     def stopNode(): ValidationError = {

@@ -71,14 +71,15 @@ class PredefinedSnapshotSpec extends FreeSpec with WithDomain with EitherValues 
 
   "the genesis block" - {
     "has no transactions and applies the predefined snapshot" in
-      withDomain(TransactionStateSnapshot, Seq(address(1) -> 100.hearth, address(2) -> 5.hearth, defaultAddress -> 200.hearth)) { d =>
+      // defaultSigner mines the block below, so it has to clear the generating minimum
+      withDomain(TransactionStateSnapshot, Seq(address(1) -> 100.hearth, address(2) -> 5.hearth, defaultAddress -> 2000.hearth)) { d =>
         d.blockchain.height shouldBe 1
         d.lastBlock.transactionData shouldBe empty
         d.blockchain.balance(address(1)) shouldBe 100.hearth
         d.blockchain.balance(address(2)) shouldBe 5.hearth
-        d.blockchain.hearthAmount(1) shouldBe 305.hearth
+        d.blockchain.hearthAmount(1) shouldBe 2105.hearth
         d.appendBlock()
-        d.blockchain.hearthAmount(2) shouldBe 305.hearth + d.blockchain.settings.rewardsSettings.initialReward
+        d.blockchain.hearthAmount(2) shouldBe 2105.hearth + d.blockchain.settings.rewardsSettings.initialReward
       }
 
     "issues the predefined assets and credits them" in {

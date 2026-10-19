@@ -31,10 +31,12 @@ object PBBlocks {
           ch.generator.toPublicKey,
           Option.unless(ch.stateHash.isEmpty)(ch.stateHash.toByteStr),
           ch.headerSignature.toByteStr,
-          ch.finalizationVoting.map(PBFinalizationVotings.vanilla(_).get)
+          ch.finalizationVoting.map(PBFinalizationVotings.vanilla(_).get),
+          Option.unless(ch.vrfPublicKey.isEmpty)(ch.vrfPublicKey.toByteStr)
         )
       },
-      header.finalizationVoting.map(PBFinalizationVotings.vanilla(_).get)
+      header.finalizationVoting.map(PBFinalizationVotings.vanilla(_).get),
+      Option.unless(header.vrfPublicKey.isEmpty)(header.vrfPublicKey.toByteStr)
     )
 
   def vanilla(block: PBBlock): Try[VanillaBlock] = Try {
@@ -61,10 +63,12 @@ object PBBlocks {
         ch.generator.toByteString,
         ch.stateHash.getOrElse(ByteStr.empty).toByteString,
         ch.headerSignature.toByteString,
-        ch.finalizationVoting.map(PBFinalizationVotings.protobuf)
+        ch.finalizationVoting.map(PBFinalizationVotings.protobuf),
+        ch.vrfPublicKey.getOrElse(ByteStr.empty).toByteString
       )
     },
-    header.finalizationVoting.map(PBFinalizationVotings.protobuf)
+    header.finalizationVoting.map(PBFinalizationVotings.protobuf),
+    header.vrfPublicKey.getOrElse(ByteStr.empty).toByteString
   )
 
   def protobuf(block: VanillaBlock): PBBlock = {

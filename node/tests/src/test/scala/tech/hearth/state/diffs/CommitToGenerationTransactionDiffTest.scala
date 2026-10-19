@@ -87,6 +87,16 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
       }
     }
 
+    "with a VRF public key that isn't 32 bytes" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+      Seq(31, 33).foreach { length =>
+        val baseTx     = TxHelpers.commitToGeneration(Height(3001), sender)
+        val unsignedTx = baseTx.copy(vrfPublicKey = ByteStr(baseTx.vrfPublicKey.arr.padTo(length, 1.toByte).take(length)))
+        val signedTx   = unsignedTx.copy(proofs = Proofs(ByteStr(sender.sign(unsignedTx.bodyBytes()))))
+
+        d.appendBlockE(signedTx) should produce(s"VRF public key of $length bytes, expected 32")
+      }
+    }
+
     "twice" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
       log.info("First")
       d.appendBlock(TxHelpers.commitToGeneration(Height(3001), sender))

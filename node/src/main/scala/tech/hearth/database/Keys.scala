@@ -247,6 +247,10 @@ object Keys {
       writeRegisteredEnclaves
     )
 
+  /** Key: Int(period.start) ++ Int(height): at most one per block, like conflictGenerators */
+  def implicitGenerator(period: GenerationPeriod, height: Height): Key[Option[ImplicitGenerator]] =
+    Key.opt(ImplicitGenerators, h(period.start) ++ h(height), readImplicitGenerator, writeImplicitGenerator)
+
   def conflictGenerators(committedPeriod: GenerationPeriod, conflictEndorsementHeight: Height): Key[Seq[GeneratorIndex]] =
     Key(
       ConflictGenerators,

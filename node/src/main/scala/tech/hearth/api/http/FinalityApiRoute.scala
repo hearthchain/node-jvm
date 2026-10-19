@@ -62,5 +62,5 @@ object FinalityApiRoute {
       "transactionId"  -> ge.commitTxnId,
       "balance"        -> ge.balance,
       "conflictHeight" -> ge.conflictHeight
-    )
+    ) ++ GeneratorsApiRoute.implicitJson(ge)
 }

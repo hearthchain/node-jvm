@@ -11,11 +11,12 @@ import scala.jdk.OptionConverters.*
 
 package object crypto {
   // Constants
-  val SignatureLength: Int   = 64
-  val KeyLength: Int         = 32
-  val PrivateKeyLength       = 64
-  val DigestLength: Int      = 32
-  val EthereumKeyLength: Int = 64
+  val SignatureLength: Int    = 64
+  val KeyLength: Int          = 32
+  val VrfPublicKeyLength: Int = 32
+  val PrivateKeyLength        = 64
+  val DigestLength: Int       = 32
+  val EthereumKeyLength: Int  = 64
 
   // Digests
   def fastHash(m: Array[Byte]): Array[Byte]   = Blake2b256.hash(m)

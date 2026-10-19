@@ -56,7 +56,11 @@ object BlockHeaderSerializer {
 
     val featuresJson  = createFeaturesJson(blockHeader.featureVotes)
     val generatorJson = createGeneratorJson(blockHeader.generator)
-    val stateHashJson = createStateHashJson(blockHeader.stateHash)
+    def createVrfPublicKeyJson(vrfPublicKey: Option[ByteStr]): JsObject =
+      vrfPublicKey.fold(JsObject.empty)(pk => Json.obj("vrfPublicKey" -> pk.toString))
+
+    val stateHashJson    = createStateHashJson(blockHeader.stateHash)
+    val vrfPublicKeyJson = createVrfPublicKeyJson(blockHeader.vrfPublicKey)
 
     val challengedHeaderJson =
       blockHeader.challengedHeader match {
@@ -68,6 +72,7 @@ object BlockHeaderSerializer {
               ) ++ createFeaturesJson(ch.featureVotes) ++
                 createGeneratorJson(ch.generator) ++
                 createStateHashJson(ch.stateHash) ++
+                createVrfPublicKeyJson(ch.vrfPublicKey) ++
                 createFinalizationJson(ch.finalizationVoting)
             }
           )
@@ -79,7 +84,8 @@ object BlockHeaderSerializer {
     Json.obj(
       "timestamp" -> blockHeader.timestamp,
       "reference" -> blockHeader.reference.toString
-    ) ++ consensusJson ++ featuresJson ++ generatorJson ++ stateHashJson ++ challengedHeaderJson ++ finalizationHeaderJson
+    ) ++ consensusJson ++ featuresJson ++ generatorJson ++ stateHashJson ++ vrfPublicKeyJson ++ challengedHeaderJson ++
+      finalizationHeaderJson
   }
 
   def toJson(header: BlockHeader, blockSize: Int, transactionCount: Int, signature: ByteStr): JsObject =

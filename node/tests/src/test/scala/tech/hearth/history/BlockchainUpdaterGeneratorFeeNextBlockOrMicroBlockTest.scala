@@ -1,6 +1,7 @@
 package tech.hearth.history
 
 import tech.hearth.common.utils.EitherExt2.*
+import tech.hearth.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.settings.HearthSettings
 import tech.hearth.state.diffs.*
@@ -24,17 +25,18 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
     somePayment: TransferTransaction = createHearthTransfer(sender, recipient.toAddress, 1, 10 * MinFee, ts + 1).explicitGet()
     // More than the earlier transaction's fee earned the generator, even counting its share of its own fee
     generatorPaymentOnFee: TransferTransaction =
-      createHearthTransfer(defaultSigner, recipient.toAddress, 11 * MinFee + 1, MinFee, ts + 2).explicitGet()
+      createHearthTransfer(defaultSigner, recipient.toAddress, MinimalEffectiveBalanceForGenerator + 11 * MinFee + 1, MinFee, ts + 2).explicitGet()
     someOtherPayment: TransferTransaction = createHearthTransfer(sender, recipient.toAddress, 1, MinFee, ts + 3).explicitGet()
   } yield (sender, somePayment, generatorPaymentOnFee, someOtherPayment)
 
   /** The generator can pay for its own transaction and nothing more, so that what it spends beyond that is exactly what
     * it has earned. Its generation deposit is locked, hence the deposit plus the fee; the reward is zeroed because it
-    * alone would cover the transfer under test.
+    * alone would cover the transfer under test. It also holds the generating minimum, or it could not generate at all,
+    * and every transfer of its own spends that minimum on top of what it measures.
     */
   private def fundGeneratorForItsOwnFeeOnly(s: Setup): Seq[AddrWithBalance] = Seq(
     AddrWithBalance(s._1.toAddress, ENOUGH_AMT),
-    AddrWithBalance(defaultSigner.toAddress, CommitToGenerationTransaction.DepositInEmbers + s._3.fee.value)
+    AddrWithBalance(defaultSigner.toAddress, CommitToGenerationTransaction.DepositInEmbers + MinimalEffectiveBalanceForGenerator + s._3.fee.value)
   )
 
   private val settings: HearthSettings = {
@@ -52,7 +54,13 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
 
       val earnedSoFar = BlockDiffer.CurrentBlockFeePart(somePayment.fee.value)
       val affordable =
-        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, earnedSoFar, MinFee, somePayment.timestamp + 2).explicitGet()
+        createHearthTransfer(
+          defaultSigner,
+          somePayment.transfers.head.address,
+          MinimalEffectiveBalanceForGenerator + earnedSoFar,
+          MinFee,
+          somePayment.timestamp + 2
+        ).explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable) should beRight
     }
@@ -77,7 +85,13 @@ class BlockchainUpdaterGeneratorFeeNextBlockOrMicroBlockTest extends PropSpec wi
 
       // The carry of the whole liquid block, micro blocks included, is credited when the next block references it
       val affordable =
-        createHearthTransfer(defaultSigner, somePayment.transfers.head.address, somePayment.fee.value, MinFee, somePayment.timestamp + 2)
+        createHearthTransfer(
+          defaultSigner,
+          somePayment.transfers.head.address,
+          MinimalEffectiveBalanceForGenerator + somePayment.fee.value,
+          MinFee,
+          somePayment.timestamp + 2
+        )
           .explicitGet()
 
       domain.appendBlockAtE(affordable.timestamp)(affordable, someOtherPayment) should beRight

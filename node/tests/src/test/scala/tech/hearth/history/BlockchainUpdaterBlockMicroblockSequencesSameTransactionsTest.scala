@@ -1,6 +1,7 @@
 package tech.hearth.history
 
 import tech.hearth.common.utils.EitherExt2.*
+import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.settings.HearthSettings
 import tech.hearth.state.diffs.*
@@ -23,8 +24,10 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
     MicroblocksActivatedAt0HearthSettings.copy(blockchainSettings = bs.copy(rewardsSettings = withFlatReward(bs.rewardsSettings, 0)))
   }
 
-  private def minerDeposit(miner: SigningKey): AddrWithBalance =
-    AddrWithBalance(miner.toAddress, CommitToGenerationTransaction.DepositInEmbers)
+  // The deposit, and the generating minimum on top of it: a committed generator below that can't generate
+  private val minerStartBalance = CommitToGenerationTransaction.DepositInEmbers + GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
+
+  private def minerDeposit(miner: SigningKey): AddrWithBalance = AddrWithBalance(miner.toAddress, minerStartBalance)
 
   /** Appends the sequence the sizes describe, as blocks and the micro blocks extending them. Built one at a time
     * through the domain, because each block's proof and state hash depend on the state the previous one left.
@@ -75,7 +78,7 @@ class BlockchainUpdaterBlockMicroblockSequencesSameTransactionsTest extends Prop
       domain.appendBlockAt(ts, miner)()
 
       // 40% of the fee credited in the block the micro extends, the 60% carry in the one after it
-      domain.balance(miner.toAddress) shouldBe (CommitToGenerationTransaction.DepositInEmbers + payment.fee.value)
+      domain.balance(miner.toAddress) shouldBe (minerStartBalance + payment.fee.value)
       domain.balance(master.toAddress) shouldBe (ENOUGH_AMT - payment.fee.value)
     }
   }

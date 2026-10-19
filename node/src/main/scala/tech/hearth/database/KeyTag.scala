@@ -98,7 +98,8 @@ enum KeyTag {
     StakeBalance,
     ActiveStake,
     StakingPayout,
-    AddressStakingPayout
+    AddressStakingPayout,
+    ImplicitGenerators
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }

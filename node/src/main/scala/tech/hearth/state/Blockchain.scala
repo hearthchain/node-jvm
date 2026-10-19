@@ -86,6 +86,9 @@ trait Blockchain {
 
   def conflictGenerators(at: GenerationPeriod): ConflictGenerators
 
+  /** In the order they first mined in `at`, see [[ImplicitGenerator]] */
+  def implicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator]
+
   def registeredEnclaves(at: GenerationPeriod): IndexedSeq[RegisteredEnclave]
 
   // ReserveTransaction's accumulated total, keyed by (sender, miner, asset) - not tied to a generation period,
@@ -192,7 +195,8 @@ object Blockchain {
     def totalWork(period: GenerationPeriod): BigInt =
       blockchain.committedGenerators(period).view.map(g => BigInt(blockchain.workDone(g.address, period))).sum
 
-    /** The VRF key a generator registered when it committed to generating for `at`'s period.
+    /** The VRF key a generator registered for `at`'s period: by committing to it, or implicitly, by the first block it
+      * mined there without a commitment (see [[ImplicitGenerator]]).
       *
       * A generator's VRF key is derived independently of its signing key, so it cannot be taken from a block header:
       * only the commitment says which VRF key that generator's blocks are verified against.
@@ -205,12 +209,18 @@ object Blockchain {
         period <- blockchain
           .generationPeriodOf(at)
           .toRight(s"No generation period at $at, so $generatorAddress has no registered VRF public key")
-        committed <- blockchain
+        vrfPublicKey <- blockchain
           .committedGenerators(period)
           .find(_.address == generatorAddress)
+          .map(_.vrfPublicKey)
+          .orElse(blockchain.implicitGenerators(period).find(_.address == generatorAddress).map(_.vrfPublicKey))
           .toRight(s"$generatorAddress is not a committed generator of period $period")
-      } yield committed.vrfPublicKey
+      } yield vrfPublicKey
     }
+
+    /** The header's own key if it declares one (GeneratorEligibility.check decides whether it may), else the registered one */
+    def vrfPublicKeyOf(generator: PublicKey, declared: Option[ByteStr], at: Height): Either[String, ByteStr] =
+      declared.fold(vrfPublicKeyOf(generator, at))(Right(_))
 
     // TODO: lock?
     // TODO: not efficient? See RocksDBWriter.balanceSnapshots
@@ -227,9 +237,6 @@ object Blockchain {
       val committedTimes = idxOnCurrent.size + Numbers.when(hasOnNext)(1)
       committedTimes * CommitToGenerationTransaction.DepositInEmbers
     }
-
-    def isGeneratingBalanceValid(height: Height, blockHeader: BlockHeader, balance: Long): Boolean =
-      GeneratingBalanceProvider.isGeneratingBalanceValid(balance)
 
     def lastBlockReward: Option[Long] = blockchain.blockReward(blockchain.height)
 

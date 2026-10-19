@@ -33,11 +33,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
     )
     .configure(_.copy(generationPeriodLength = 2))
 
-  // Every test here has an uncommitted account generate once the committed one is spent down, which is the intended
-  // rule for an empty generator set - an arbitrary VRF key, fixed for the period by the first block that uses it. It
-  // needs a new block field and is not implemented, so the miner never schedules for the uncommitted account and the
-  // tick sequences run dry. Enable these once the rule exists.
-  "Not committed Account 2 produces a valid block when committed Account 1 spends all hearth" ignore withManager { manager =>
+  "Not committed Account 2 produces a valid block when committed Account 1 spends all hearth" in withManager { manager =>
     val minerAcc                  = acc1
     val notCommittedAcc           = acc2
     val otherNodeNotCommittedAcc1 = otherNodeAcc1
@@ -79,6 +75,8 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
         strictTime = true
       )
       d.appender.appendBlock(block2)
+      // A scheduled attempt first waits for the block it was scheduled on to appear, polling once a second
+      appenderScheduler.tickNext("appender-0")
 
       log.debug("Trigger forging block3")
       time.setTimeIfGreater(d.nextBlockTime(minerAcc, TxHelpers.vrfKeyOf(minerAcc)))
@@ -120,7 +118,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
   }
 
   "Not committed Account 2 produces an invalid block" - {
-    "its attempt to forge doesn't stop current mining of Account 1" ignore withManager { manager =>
+    "its attempt to forge doesn't stop current mining of Account 1" in withManager { manager =>
       val minerAcc               = acc1
       val notCommittedAcc        = acc2
       val otherNodeCommittedAcc1 = otherNodeAcc1
@@ -162,6 +160,8 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
           strictTime = true
         )
         d.appender.appendBlock(block2)
+        // A scheduled attempt first waits for the block it was scheduled on to appear, polling once a second
+        appenderScheduler.tickNext("appender-0")
 
         log.debug("Trigger forging block3")
         time.setTimeIfGreater(d.nextBlockTime(minerAcc, TxHelpers.vrfKeyOf(minerAcc)))
@@ -217,7 +217,7 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
       }
     }
 
-    "it tries again after new microblock of Account 1" ignore withManager { manager =>
+    "it tries again after new microblock of Account 1" in withManager { manager =>
       val minerAcc               = acc1
       val notCommittedAcc        = acc2
       val otherNodeCommittedAcc1 = otherNodeAcc1
@@ -259,6 +259,8 @@ class MultipleAccountsMinerWithFinalitySuite extends BaseFinalizationSpec, TestS
           strictTime = true
         )
         d.appender.appendBlock(block2)
+        // A scheduled attempt first waits for the block it was scheduled on to appear, polling once a second
+        appenderScheduler.tickNext("appender-0")
 
         log.debug("Trigger forging block3")
         time.setTimeIfGreater(d.nextBlockTime(minerAcc, TxHelpers.vrfKeyOf(minerAcc)))

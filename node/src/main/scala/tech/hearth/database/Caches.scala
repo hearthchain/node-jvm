@@ -239,6 +239,20 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     }
   protected def loadConflictGenerators(at: GenerationPeriod): ConflictGenerators
 
+  @volatile
+  private var implicitGeneratorsCache = Map.empty[GenerationPeriod, IndexedSeq[ImplicitGenerator]] // Only the current period
+  override def implicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator] =
+    if (this.currentGenerationPeriod.contains(at))
+      implicitGeneratorsCache.getOrElse(
+        at, {
+          val r = loadImplicitGenerators(at)
+          implicitGeneratorsCache = implicitGeneratorsCache.updated(at, r)
+          r
+        }
+      )
+    else loadImplicitGenerators(at)
+  protected def loadImplicitGenerators(at: GenerationPeriod): IndexedSeq[ImplicitGenerator]
+
   protected def doAppend(
       blockMeta: PBBlockMeta,
       snapshot: StateSnapshot,
@@ -256,6 +270,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       registeredEnclaves: Seq[RegisteredEnclave],
       stakes: Map[AddressId, (CurrentStake, StakeNode)],
       conflictGenerators: Seq[GeneratorIndex],
+      implicitGenerator: Option[ImplicitGenerator],
       stateHash: StateHashBuilder.Result
   ): Unit
 
@@ -364,6 +379,9 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
 
     val registeredEnclaves = snapshot.nextRegisteredEnclaves
 
+    // Read off the header, like conflictGenerators: the key commits for the period the block itself is in
+    val implicitGenerator = block.header.vrfPublicKey.map(ImplicitGenerator(block.header.generator.toAddress, _))
+
     // One node per address, written the way a balance is: the last commitment in the block wins, and the height it
     // lands at is what decides which periods the amount applies to - nothing is filed under a period.
     val updatedStakeNodes = snapshot.nextStakes.view
@@ -377,9 +395,10 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
     val committedPeriod = this.generationPeriodOf(current.height) match {
       case None =>
         require(
-          committedGenerators.isEmpty && conflictGenerators.isEmpty && registeredEnclaves.isEmpty,
+          committedGenerators.isEmpty && conflictGenerators.isEmpty && registeredEnclaves.isEmpty && implicitGenerator.isEmpty,
           s"Expected empty conflict/next committed generators and registered enclaves, got: " +
-            s"committedGenerators=$committedGenerators, conflictGenerators=$conflictGenerators, registeredEnclaves=$registeredEnclaves"
+            s"committedGenerators=$committedGenerators, conflictGenerators=$conflictGenerators, registeredEnclaves=$registeredEnclaves, " +
+            s"implicitGenerator=$implicitGenerator"
         )
         None
 
@@ -396,6 +415,10 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
           registeredEnclavesCache = registeredEnclavesCache.updatedWith(committedPeriod) { orig =>
             Some(orig.getOrElse(Vector.empty) ++ registeredEnclaves)
           }
+
+        implicitGenerator.foreach { ig =>
+          implicitGeneratorsCache = implicitGeneratorsCache.updatedWith(currPeriod)(orig => Some(orig.getOrElse(Vector.empty) :+ ig))
+        }
 
         if (conflictGenerators.nonEmpty)
           conflictGeneratorsCache = conflictGeneratorsCache.updatedWith(currPeriod) { orig =>
@@ -451,6 +474,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       registeredEnclaves,
       updatedStakeNodes.map { case (address, node) => addressIdWithFallback(address, newAddressIds) -> node },
       conflictGenerators,
+      implicitGenerator,
       stateHash.result()
     )
 
@@ -470,6 +494,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       committedGeneratorsCache = committedGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
       registeredEnclavesCache = registeredEnclavesCache.view.filterKeys(_ >= currPeriod).toMap
       conflictGeneratorsCache = conflictGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
+      implicitGeneratorsCache = implicitGeneratorsCache.view.filterKeys(_ >= currPeriod).toMap
     }
   }
 
@@ -495,6 +520,7 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
       stakeCache.invalidateAll()
       registeredEnclavesCache = Map.empty
       conflictGeneratorsCache = Map.empty
+      implicitGeneratorsCache = Map.empty
 
       discardedBlocks
     }

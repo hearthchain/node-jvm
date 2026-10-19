@@ -380,6 +380,14 @@ package object database {
   def writeRegisteredEnclaves(data: Seq[RegisteredEnclave]): Array[Byte] =
     data.view.flatMap(re => re.enclavePublicKey.arr ++ re.validator.toBytes ++ re.operator.toBytes).toArray
 
+  /** The generator's address (fixed width, Address.HASH_LEN) ++ the VRF key it committed with */
+  def readImplicitGenerator(data: Array[Byte]): ImplicitGenerator = {
+    val (addressBytes, vrfPublicKey) = data.splitAt(Address.HASH_LEN)
+    ImplicitGenerator(Address.fromBytes(addressBytes).get(), ByteStr(vrfPublicKey))
+  }
+
+  def writeImplicitGenerator(ig: ImplicitGenerator): Array[Byte] = ig.address.toBytes ++ ig.vrfPublicKey.arr
+
   def readCurrentStake(data: Array[Byte]): CurrentStake =
     if (data != null && data.length == 16)
       CurrentStake(Longs.fromByteArray(data.take(8)), Height(Ints.fromByteArray(data.slice(8, 12))), Height(Ints.fromByteArray(data.takeRight(4))))

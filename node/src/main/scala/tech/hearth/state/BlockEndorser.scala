@@ -2,6 +2,7 @@ package tech.hearth.state
 
 import com.typesafe.scalalogging.StrictLogging
 import tech.hearth.block.BlockEndorsement
+import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.mining.GeneratorKeys
 import tech.hearth.network.{ChannelGroupExt, EndorseBlock}
 import io.netty.channel.group.ChannelGroup
@@ -58,7 +59,7 @@ object BlockEndorser {
         if minerIndex >= 0 // -1 means no miner among committed, impossible
 
         balances = generatorSet.collect {
-          case x if blockchain.isGeneratingBalanceValid(votingHeight, votingBlockHeader.header, x.balance) => x.address -> x.balance
+          case x if GeneratingBalanceProvider.isGeneratingBalanceValid(x.balance) => x.address -> x.balance
         }.toMap
 
         filter = {

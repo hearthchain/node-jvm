@@ -1,6 +1,7 @@
 package tech.hearth.history
 
 import tech.hearth.common.utils.EitherExt2.*
+import tech.hearth.consensus.GeneratingBalanceProvider.MinimalEffectiveBalanceForGenerator
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.settings.HearthSettings
 import tech.hearth.state.diffs.*
@@ -21,17 +22,19 @@ class BlockchainUpdaterGeneratorFeeSameBlockTest extends PropSpec with DomainSce
     fee                          <- smallFeeGen
     ts                           <- positiveIntGen
     payment: TransferTransaction <- hearthTransferGeneratorP(ts, sender, recipient.toAddress)
-    generatorPaymentOnFee: TransferTransaction = createHearthTransfer(defaultSigner, recipient.toAddress, payment.fee.value, fee, ts + 1)
-      .explicitGet()
+    generatorPaymentOnFee: TransferTransaction =
+      createHearthTransfer(defaultSigner, recipient.toAddress, MinimalEffectiveBalanceForGenerator + payment.fee.value, fee, ts + 1)
+        .explicitGet()
   } yield (sender, payment, generatorPaymentOnFee)
 
   /** The generator can pay for its own transaction and nothing more, so that what it may spend on top of that is
     * exactly what it has earned within the block. Its generation deposit is locked, hence the deposit plus the fee, and
-    * the reward is zeroed because it alone would cover the transfer under test.
+    * the reward is zeroed because it alone would cover the transfer under test. It also holds the generating minimum, or
+    * it could not generate at all, and every transfer of its own spends that minimum on top of what it measures.
     */
   private def fundGeneratorForItsOwnFeeOnly(s: Setup): Seq[AddrWithBalance] = Seq(
     AddrWithBalance(s._1.toAddress, ENOUGH_AMT),
-    AddrWithBalance(defaultSigner.toAddress, CommitToGenerationTransaction.DepositInEmbers + s._3.fee.value)
+    AddrWithBalance(defaultSigner.toAddress, CommitToGenerationTransaction.DepositInEmbers + MinimalEffectiveBalanceForGenerator + s._3.fee.value)
   )
 
   private val withoutReward: HearthSettings = {
@@ -56,7 +59,7 @@ class BlockchainUpdaterGeneratorFeeSameBlockTest extends PropSpec with DomainSce
       val affordable = createHearthTransfer(
         defaultSigner,
         generatorPaymentOnFee.transfers.head.address,
-        BlockDiffer.CurrentBlockFeePart(somePayment.fee.value),
+        MinimalEffectiveBalanceForGenerator + BlockDiffer.CurrentBlockFeePart(somePayment.fee.value),
         generatorPaymentOnFee.fee.value,
         generatorPaymentOnFee.timestamp
       ).explicitGet()

@@ -3,6 +3,7 @@ package tech.hearth.mining
 import com.typesafe.config.ConfigFactory
 import tech.hearth.WithNewDBForEachTest
 import tech.hearth.block.Block
+import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.consensus.PoSSelector
 import tech.hearth.db.{DBCacheSettings, WithState}
@@ -137,12 +138,14 @@ class BlockWithMaxBaseTargetTest extends FreeSpec with WithNewDBForEachTest with
 
       // Built after the first block is applied: carrying a state hash changes that block's id, so this has to reference
       // the rebuilt one
+      // Nobody is committed to generate here, so the account generates uncommitted, carrying its VRF key
       val secondBlock = TestBlock
         .create(
           ts + 3,
           firstBlock.id(),
           Seq.empty,
-          account
+          account,
+          vrfPublicKey = Some(ByteStr(TxHelpers.vrfKeyOf(account).publicKey()))
         )
         .block
 
