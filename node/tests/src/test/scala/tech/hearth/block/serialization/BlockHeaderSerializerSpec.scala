@@ -1,7 +1,7 @@
 package tech.hearth.block.serialization
 
 import tech.hearth.account.PublicKey
-import tech.hearth.block.BlockHeader
+import tech.hearth.block.{BlockHeader, ChallengedHeader}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.test.FreeSpec
 import tech.hearth.transaction.TxHelpers
@@ -23,6 +23,13 @@ class BlockHeaderSerializerSpec extends FreeSpec {
   "JSON shows the VRF public key an uncommitted generator commits with" in {
     val vrfPublicKey = ByteStr(TxHelpers.defaultVrfKey.publicKey())
     (BlockHeaderSerializer.toJson(header.copy(vrfPublicKey = Some(vrfPublicKey))) \ "vrfPublicKey").as[String] shouldBe vrfPublicKey.toString
+  }
+
+  "JSON shows the VRF public key of a challenged block" in {
+    val vrfPublicKey = ByteStr(TxHelpers.defaultVrfKey.publicKey())
+    val challenged   = ChallengedHeader(1000, 100, ByteStr.fill(80)(2), Nil, header.generator, None, ByteStr.fill(64)(4), None, Some(vrfPublicKey))
+    (BlockHeaderSerializer.toJson(header.copy(challengedHeader = Some(challenged))) \ "challengedHeader" \ "vrfPublicKey")
+      .as[String] shouldBe vrfPublicKey.toString
   }
 
   "JSON has no VRF public key for a committed generator's block" in {

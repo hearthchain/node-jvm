@@ -297,6 +297,37 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     }
   }
 
+  "implicit generators" - {
+    val outsider     = TxHelpers.signer(1002)
+    val outsiderAddr = outsider.toAddress.toString
+    val vrfPublicKey = ByteStr(TxHelpers.vrfKeyOf(outsider).publicKey())
+
+    // Committed by the genesis snapshot, and spent below its generating balance by the block below
+    val genesisCommitted = Json.obj("address" -> minerAddr, "transactionId" -> JsNull, "balance" -> 0)
+    val implicitEntry    = Json.obj("address" -> outsiderAddr, "transactionId" -> JsNull, "implicit" -> true, "vrfPublicKey" -> vrfPublicKey.toString)
+
+    "are listed from the block that committed them on, in its period only" in withDomain(
+      defaultSettings,
+      balances = AddrWithBalance.enoughBalances(miner, outsider)
+    ) { d =>
+      val fee = 1_0000_0000L
+      d.appendBlock(
+        TxHelpers.transfer(miner, TxHelpers.address(9), d.balance(miner.toAddress) - CommitToGenerationTransaction.DepositInEmbers - fee, fee = fee)
+      )
+      d.appender.appendBlock(d.createBlock(generator = outsider, strictTime = true, vrfPublicKey = Some(vrfPublicKey)))
+      d.checkAt(3) { jsonBodyIs(genesisCommitted, implicitEntry) }
+
+      // The first block of the next period, where nobody is committed
+      d.appender.appendBlock(d.createBlock(generator = outsider, strictTime = true, vrfPublicKey = Some(vrfPublicKey)))
+      d.checkAt(3) { jsonBodyIs(genesisCommitted, implicitEntry) }
+      d.checkAt(2) {
+        status shouldBe OK
+        responseAs[JsArray].value.map(e => (e \ "address").as[String]) should not contain outsiderAddr
+      }
+      d.checkAt(period1.start) { jsonBodyIs(implicitEntry) }
+    }
+  }
+
   private def test(f: Domain => Unit): Unit = withDomain(defaultSettings, balances = defaultInitBalances)(f)
 
   private def jsonBodyIsEmpty()(using position: Position): Unit = jsonBodyIs()

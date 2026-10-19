@@ -3,9 +3,10 @@ package tech.hearth.api.common
 import com.google.common.primitives.Ints
 import tech.hearth.account.Address
 import tech.hearth.api.common.CommonGeneratorsApi.GeneratorEntry
+import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.bls.BlsPublicKey
 import tech.hearth.database.{AddressId, DBExt, Keys, RDB}
-import tech.hearth.state.{Blockchain, ConflictGenerators, GeneratorIndex, Height, NG, StateSnapshot, TransactionId}
+import tech.hearth.state.{Blockchain, ConflictGenerators, GeneratorIndex, Height, ImplicitGenerator, NG, StateSnapshot, TransactionId}
 import tech.hearth.transaction.CommitToGenerationTransaction
 import tech.hearth.utils.ScorexLogging
 
@@ -21,7 +22,7 @@ object CommonGeneratorsApi {
     private val approxGenerators = blockchain.settings.functionalitySettings.maxValidEndorsers // Rough buffer size
 
     override def generators(at: Height): Seq[GeneratorEntry] = blockchain.generationPeriodOf(at).fold(Nil) { period =>
-      val (addresses, blsPks, txIds, balances, conflict) = rdb.db.readOnly { ro =>
+      val (addresses, blsPks, txIds, balances, conflict, implicitGenerators) = rdb.db.readOnly { ro =>
         val committedKey       = Keys.committedGenerators(period, at)
         val committedKeyPrefix = committedKey.keyBytes.dropRight(Ints.BYTES) // Drop height
 
@@ -73,7 +74,25 @@ object CommonGeneratorsApi {
           }
         }
 
-        (addresses, blsPks, txnIds, balances, conflict)
+        // Like conflicting generators, as of `at`: a generator commits implicitly only by a block of the period
+        val implicitGenerators =
+          if (at.toInt >= blockchain.height) blockchain.implicitGenerators(period)
+          else {
+            val implicitKey       = Keys.implicitGenerator(period, at)
+            val implicitKeyPrefix = implicitKey.keyBytes.dropRight(Ints.BYTES) // Drop height
+            val result            = mutable.ArrayBuffer.empty[ImplicitGenerator]
+            ro.iterateOverWithSeek(implicitKeyPrefix, implicitKeyPrefix) { dbEntry =>
+              val h = Height(Ints.fromByteArray(dbEntry.getKey.takeRight(Ints.BYTES)))
+              if (h > at) false
+              else {
+                result ++= implicitKey.parse(dbEntry.getValue)
+                true
+              }
+            }
+            result.toSeq
+          }
+
+        (addresses, blsPks, txnIds, balances, conflict, implicitGenerators)
       }
 
       if (blockchain.currentGenerationPeriod.exists(_.next == period)) // NG
@@ -103,7 +122,7 @@ object CommonGeneratorsApi {
 
             GeneratorEntry(address, b, txnId, conflict.heightOf(idx))
           }
-          .toSeq
+          .toSeq ++ implicitGenerators.map(ig => GeneratorEntry(ig.address, None, None, None, Some(ig.vrfPublicKey)))
       } else {
         log.warn(s"Different size: addresses=${addresses.size}, balances=${balances.size}, blsPks=${blsPks.size}")
         Seq.empty
@@ -111,10 +130,18 @@ object CommonGeneratorsApi {
     }
   }
 
-  /** @param balance None if unknown
-    */
-  /** @param commitTxnId
+  /** @param balance
+    *   None if unknown
+    * @param commitTxnId
     *   None for a generator committed by the genesis snapshot, which has no commitment transaction
+    * @param implicitVrfPublicKey
+    *   The VRF key of a generator that committed implicitly, see [[tech.hearth.state.ImplicitGenerator]]
     */
-  case class GeneratorEntry(address: Address, balance: Option[Long], commitTxnId: Option[TransactionId], conflictHeight: Option[Height])
+  case class GeneratorEntry(
+      address: Address,
+      balance: Option[Long],
+      commitTxnId: Option[TransactionId],
+      conflictHeight: Option[Height],
+      implicitVrfPublicKey: Option[ByteStr] = None
+  )
 }

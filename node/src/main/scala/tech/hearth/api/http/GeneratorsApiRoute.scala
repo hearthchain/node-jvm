@@ -50,6 +50,11 @@ object GeneratorsApiRoute {
       builder += "conflictHeight" -> h.toInt
     }
 
+    x.implicitVrfPublicKey.foreach { vrfPublicKey =>
+      builder += "implicit"     -> true
+      builder += "vrfPublicKey" -> vrfPublicKey.toString
+    }
+
     builder.result()
   }
 }
