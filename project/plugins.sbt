@@ -14,7 +14,7 @@ libraryDependencies ++= Seq(
 
 Seq(
   "com.eed3si9n"       % "sbt-assembly"        % "2.4.1",
-  "com.github.sbt"     % "sbt-git"             % "2.1.0",
+  "com.github.sbt"     % "sbt-git"             % "3.0.0-RC1",
   "com.github.sbt"     % "sbt-native-packager" % "1.11.7",
   "com.github.sbt"     % "sbt-pgp"             % "2.3.1",
   "org.scalameta"      % "sbt-scalafmt"        % "2.6.2",
