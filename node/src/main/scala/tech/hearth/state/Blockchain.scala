@@ -218,9 +218,7 @@ object Blockchain {
       } yield vrfPublicKey
     }
 
-    /** The key a block's generation signature verifies against: the one its header declares, if any, or else the one
-      * its generator registered. Whether a header may declare one is appender.findBlockAndGetGenerators' call.
-      */
+    /** The header's own key if it declares one (GeneratorEligibility.check decides whether it may), else the registered one */
     def vrfPublicKeyOf(generator: PublicKey, declared: Option[ByteStr], at: Height): Either[String, ByteStr] =
       declared.fold(vrfPublicKeyOf(generator, at))(Right(_))
 
@@ -239,9 +237,6 @@ object Blockchain {
       val committedTimes = idxOnCurrent.size + Numbers.when(hasOnNext)(1)
       committedTimes * CommitToGenerationTransaction.DepositInEmbers
     }
-
-    def isGeneratingBalanceValid(height: Height, blockHeader: BlockHeader, balance: Long): Boolean =
-      GeneratingBalanceProvider.isGeneratingBalanceValid(balance)
 
     def lastBlockReward: Option[Long] = blockchain.blockReward(blockchain.height)
 

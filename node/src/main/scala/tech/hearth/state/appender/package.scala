@@ -44,46 +44,6 @@ package object appender {
       block.transactionData.zip(s.snapshots).map { case (tx, pbs) => PBSnapshots.fromProtobuf(pbs, tx.id(), height) }
     )
 
-  /** The committed generators of the block after `parentBlockId` that can generate it: neither poor nor in conflict. */
-  def eligibleGenerators(blockchain: Blockchain, parentBlockId: ByteStr, parentHeight: Height): GeneratorSet = {
-    val blockHeight         = parentHeight.next
-    val currentPeriod       = blockchain.generationPeriodOf(blockHeight)
-    val conflictGenerators  = currentPeriod.fold(ConflictGenerators.empty)(blockchain.conflictGenerators).upTo(blockHeight)
-    val committedGenerators = currentPeriod.fold(Nil)(blockchain.committedGenerators)
-    // Computed once for the whole committee rather than left for each generatingBalance call to recompute -
-    // see GeneratingBalanceProvider.workContext's own doc comment for why that matters.
-    val workContext = GeneratingBalanceProvider.workContext(blockchain, parentHeight.toInt)
-    committedGenerators.view
-      .map(cg => cg -> GeneratingBalanceProvider.balanceWithContext(blockchain, cg.address, Some(parentBlockId), workContext))
-      .zipWithIndex
-      .collect {
-        case ((cg, balance), idx)
-            if !conflictGenerators.contains(GeneratorIndex(idx)) && GeneratingBalanceProvider.isGeneratingBalanceValid(balance) =>
-          GeneratorInfo(GeneratorIndex(idx), cg.address, cg.endorserPublicKey, balance)
-      }
-      .toSeq
-  }
-
-  /** Whether `generator` may generate the block after `parentBlockId`, and how. The miner asks this before it forges a
-    * block, and findBlockAndGetGenerators checks a block against it, so the two can't disagree.
-    */
-  def generatorEligibility(
-      blockchain: Blockchain,
-      parentBlockId: ByteStr,
-      parentHeight: Height,
-      generator: Address
-  ): (generatorSet: GeneratorSet, eligibility: GeneratorEligibility) = {
-    val generatorSet = eligibleGenerators(blockchain, parentBlockId, parentHeight)
-    val period       = blockchain.generationPeriodOf(parentHeight.next)
-    val eligibility = GeneratorEligibility(
-      generator,
-      period.fold(Nil)(blockchain.committedGenerators),
-      generatorSet,
-      period.fold(Nil)(blockchain.implicitGenerators)
-    )
-    (generatorSet, eligibility)
-  }
-
   /** @return generatorBalances before newBlock
     */
   def findBlockAndGetGenerators(
@@ -97,7 +57,7 @@ package object appender {
         .heightOf(parentBlockId)
         .map(Height(_))
         .toRight(s"height: history does not contain parent $parentBlockId")
-      (generatorSet, eligibility) = generatorEligibility(blockchain, parentBlockId, parentHeight, minerAddress)
+      (generatorSet, eligibility) = GeneratorEligibility.at(blockchain, parentBlockId, parentHeight, minerAddress)
       _ <- eligibility.check(minerAddress, newBlock.header.vrfPublicKey)
     } yield (parentHeight, generatorSet)
 
@@ -215,19 +175,11 @@ package object appender {
     val challengedBlock = block.toOriginal
     for {
       data <- findBlockAndGetGenerators(blockchainUpdater, challengedBlock)
+      _    <- checkDeclaringChallenger(blockchainUpdater, block, data.parentHeight, data.generatorSet).leftMap(GenericError(_))
 
       (challengedHitSource, _) <-
         if (verify) validateBlock(blockchainUpdater, pos, time, data.generatorSet)(challengedBlock, data.parentHeight)
         else pos.validateGenerationSignature(challengedBlock).map(_ -> Seq.empty)
-
-      // A challenger declaring a VRF key commits implicitly, so it may only when it could generate the block uncommitted
-      challenger = block.header.generator.toAddress
-      _ <- block.header.vrfPublicKey
-        .traverse(_ =>
-          generatorEligibility(blockchainUpdater, block.header.reference, data.parentHeight, challenger).eligibility
-            .check(challenger, block.header.vrfPublicKey)
-        )
-        .leftMap(GenericError(_))
 
       (hitSource, balances) <-
         if (verify) validateBlock(blockchainUpdater, pos, time, data.generatorSet)(block, data.parentHeight)
@@ -248,6 +200,23 @@ package object appender {
           )
     } yield applyResult -> blockchainUpdater.height
   }
+
+  /** A challenger that declares a VRF key commits implicitly, so it may only when it could generate the block
+    * uncommitted, and on its own balance: the challenged miner's balance it otherwise counts can't commit it. Checked
+    * before the block's VRF proof is, which uses that key.
+    */
+  private def checkDeclaringChallenger(blockchain: Blockchain, block: Block, parentHeight: Height, generatorSet: GeneratorSet): Either[String, Unit] =
+    if (block.header.vrfPublicKey.isEmpty) Right(())
+    else {
+      val challenger = block.header.generator.toAddress
+      for {
+        _ <- GeneratorEligibility.of(blockchain, parentHeight.next, generatorSet, challenger).check(challenger, block.header.vrfPublicKey)
+        ownBalance = blockchain.generatingBalance(challenger, Some(block.header.reference))
+        _ <- Either.raiseUnless(GeneratingBalanceProvider.isGeneratingBalanceValid(ownBalance)) {
+          s"$challenger can't generate on its own balance $ownBalance, so it can't commit a VRF public key by challenging"
+        }
+      } yield ()
+    }
 
   /** @return
     *   Hit source
@@ -276,7 +245,7 @@ package object appender {
           parent <- blockchain.parentHeader(block.header).toRight(GenericError(s"parent: history does not contain parent ${block.header.reference}"))
           grandParent = blockchain.parentHeader(parent, 2)
 
-          minerBalance <- minerBalance(blockchain, miner, parentHeight, block).leftMap(GenericError(_))
+          minerBalance <- minerBalance(blockchain, miner, block).leftMap(GenericError(_))
           _            <- Either.cond(blockTime - currentTs < MaxTimeDrift, (), BlockFromFuture(blockTime, currentTs))
           _            <- pos.validateBaseTarget(parentHeight.toInt, block, parent, grandParent)
           hitSource    <- pos.validateGenerationSignature(block)
@@ -291,14 +260,14 @@ package object appender {
         case x               => x
       }
 
-  private def minerBalance(blockchain: Blockchain, minerAddress: Address, parentHeight: Height, block: Block): Either[String, Long] = {
+  private def minerBalance(blockchain: Blockchain, minerAddress: Address, block: Block): Either[String, Long] = {
     val parentBlockId = Some(block.header.reference)
 
     val ownBalance        = blockchain.generatingBalance(minerAddress, parentBlockId)
     val challengedBalance = block.header.challengedHeader.map(ch => blockchain.generatingBalance(ch.generator.toAddress, parentBlockId)).getOrElse(0L)
     val balance           = ownBalance + challengedBalance
 
-    if (blockchain.isGeneratingBalanceValid(parentHeight, block.header, balance)) Either.right(balance)
+    if (GeneratingBalanceProvider.isGeneratingBalanceValid(balance)) Either.right(balance)
     else if (minerAddress == block.sender.toAddress) Either.left(s"generator's effective balance $balance is less than required for generation")
     else Either.right(0L) // Ignore for a regular generator, not a miner
   }

@@ -62,5 +62,5 @@ object FinalityApiRoute {
       "transactionId"  -> ge.commitTxnId,
       "balance"        -> ge.balance,
       "conflictHeight" -> ge.conflictHeight
-    ) ++ ge.implicitVrfPublicKey.fold(Json.obj())(vrfPublicKey => Json.obj("implicit" -> true, "vrfPublicKey" -> vrfPublicKey.toString))
+    ) ++ GeneratorsApiRoute.implicitJson(ge)
 }

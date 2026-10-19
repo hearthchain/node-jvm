@@ -306,6 +306,15 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
     val genesisCommitted = Json.obj("address" -> minerAddr, "transactionId" -> JsNull, "balance" -> 0)
     val implicitEntry    = Json.obj("address" -> outsiderAddr, "transactionId" -> JsNull, "implicit" -> true, "vrfPublicKey" -> vrfPublicKey.toString)
 
+    val secondOutsider     = TxHelpers.signer(1003)
+    val secondVrfPublicKey = ByteStr(TxHelpers.vrfKeyOf(secondOutsider).publicKey())
+    val secondImplicitEntry = Json.obj(
+      "address"       -> secondOutsider.toAddress.toString,
+      "transactionId" -> JsNull,
+      "implicit"      -> true,
+      "vrfPublicKey"  -> secondVrfPublicKey.toString
+    )
+
     "are listed from the block that committed them on, in its period only" in withDomain(
       defaultSettings,
       balances = AddrWithBalance.enoughBalances(miner, outsider)
@@ -325,6 +334,25 @@ class GeneratorsApiRouteSpec extends RouteSpec("/generators") with WithDomain {
         responseAs[JsArray].value.map(e => (e \ "address").as[String]) should not contain outsiderAddr
       }
       d.checkAt(period1.start) { jsonBodyIs(implicitEntry) }
+    }
+
+    "are listed as of a past height of the period" in withDomain(
+      defaultSettings,
+      balances = AddrWithBalance.enoughBalances(miner, outsider, secondOutsider)
+    ) { d =>
+      val fee = 1_0000_0000L
+      d.appendBlock(
+        TxHelpers.transfer(miner, TxHelpers.address(9), d.balance(miner.toAddress) - CommitToGenerationTransaction.DepositInEmbers - fee, fee = fee)
+      )
+      d.appender.appendBlock(d.createBlock(generator = outsider, strictTime = true, vrfPublicKey = Some(vrfPublicKey)))
+      // Period 1, where nobody is committed: the outsider joins at its start, the second one a block later
+      d.appender.appendBlock(d.createBlock(generator = outsider, strictTime = true, vrfPublicKey = Some(vrfPublicKey)))
+      d.appender.appendBlock(d.createBlock(generator = secondOutsider, strictTime = true, vrfPublicKey = Some(secondVrfPublicKey)))
+      d.appender.appendBlock(d.createBlock(generator = outsider, strictTime = true))
+      d.blockchain.height shouldBe period1.end.toInt
+
+      d.checkAt(period1.start) { jsonBodyIs(implicitEntry) }
+      d.checkAt(period1.start + 1) { jsonBodyIs(implicitEntry, secondImplicitEntry) }
     }
   }
 

@@ -50,11 +50,10 @@ object GeneratorsApiRoute {
       builder += "conflictHeight" -> h.toInt
     }
 
-    x.implicitVrfPublicKey.foreach { vrfPublicKey =>
-      builder += "implicit"     -> true
-      builder += "vrfPublicKey" -> vrfPublicKey.toString
-    }
-
-    builder.result()
+    builder.result() ++ implicitJson(x)
   }
+
+  /** The fields an implicit generator's entry adds, see [[tech.hearth.state.ImplicitGenerator]] */
+  def implicitJson(x: CommonGeneratorsApi.GeneratorEntry): JsObject =
+    x.implicitVrfPublicKey.fold(Json.obj())(vrfPublicKey => Json.obj("implicit" -> true, "vrfPublicKey" -> vrfPublicKey.toString))
 }

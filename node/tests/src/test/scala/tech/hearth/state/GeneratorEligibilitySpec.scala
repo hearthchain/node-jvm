@@ -29,7 +29,7 @@ class GeneratorEligibilitySpec extends FreeSpec {
   }
 
   "an uncommitted generator may generate once no committed one can" in {
-    GeneratorEligibility(outsiderAddress, committed, Nil, Nil) shouldBe Uncommitted
+    GeneratorEligibility(outsiderAddress, committed, Nil, Nil) shouldBe Uncommitted(Set(committed.head.vrfPublicKey))
   }
 
   "an implicit generator keeps its key after the committed generators recover" in {
@@ -38,8 +38,8 @@ class GeneratorEligibilitySpec extends FreeSpec {
 
   "a block" - {
     "by an uncommitted generator has to carry a VRF key" in {
-      Uncommitted.check(outsiderAddress, None) shouldBe a[Left[?, ?]]
-      Uncommitted.check(outsiderAddress, Some(vrfPublicKey)) shouldBe Right(())
+      Uncommitted(Set.empty).check(outsiderAddress, None) shouldBe a[Left[?, ?]]
+      Uncommitted(Set.empty).check(outsiderAddress, Some(vrfPublicKey)) shouldBe Right(())
     }
 
     "by a generator with a registered VRF key can't carry another" in {

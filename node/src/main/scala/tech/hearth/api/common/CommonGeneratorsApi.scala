@@ -56,7 +56,7 @@ object CommonGeneratorsApi {
         val conflictKeyPrefix = conflictKey.keyBytes.dropRight(Ints.BYTES) // Drop height
 
         val conflict = {
-          if (at == Height(blockchain.height)) blockchain.conflictGenerators(period)
+          if (at.toInt >= blockchain.height) blockchain.conflictGenerators(period)
           else {
             var conflict = ConflictGenerators.empty
             ro.iterateOverWithSeek(conflictKeyPrefix, conflictKeyPrefix) { dbEntry =>

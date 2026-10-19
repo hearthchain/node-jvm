@@ -22,6 +22,7 @@ object CommitToGenerationTransactionDiff {
       _ <- tx.commitmentSignature
         .verifyBasic(tx.popMessage, tx.endorserPublicKey)
         .leftMap(e => GenericError(s"Invalid commitment signature: $e"))
+      _ <- GeneratorEligibility.checkVrfPublicKeyLength(tx.vrfPublicKey).leftMap(GenericError(_))
       // Proves the sender holds the VRF key it registers, so that a mistyped key fails here rather than silently
       // leaving a generator unable to produce a verifiable block for the whole period
       _ <- crypto

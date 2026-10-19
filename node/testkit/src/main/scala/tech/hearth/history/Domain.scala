@@ -529,7 +529,8 @@ case class Domain(
       ref: Option[ByteStr] = None,
       txs: Option[Seq[Transaction]] = None,
       challengedHeader: Option[ChallengedHeader] = None,
-      timestamp: Option[Long] = None
+      timestamp: Option[Long] = None,
+      vrfPublicKey: Option[ByteStr] = None
   ): Block = {
     createBlock(
       txs.getOrElse(challengedBlock.transactionData),
@@ -552,7 +553,8 @@ case class Domain(
           )
         )
       ),
-      timestamp = timestamp
+      timestamp = timestamp,
+      vrfPublicKey = vrfPublicKey
     )
   }
 

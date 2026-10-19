@@ -28,7 +28,7 @@ case class BlockHeader(
     stateHash: Option[ByteStr],
     challengedHeader: Option[ChallengedHeader],
     finalizationVoting: Option[FinalizationVoting],
-    // Set only on the first block an uncommitted generator forges in a period, see Blockchain.generatorEligibility
+    // Set only on the first block an uncommitted generator forges in a period, see GeneratorEligibility
     vrfPublicKey: Option[ByteStr] = None
 ) {
   val score: Coeval[BigInt] = Coeval.evalOnce((BigInt("18446744073709551616") / baseTarget).ensuring(_ > 0))

@@ -59,6 +59,48 @@ class ImplicitGeneratorSpec extends FreeSpec with WithDomain {
     )
   }
 
+  "the VRF key an uncommitted generator declares" - {
+    "has to be 32 bytes" in withDomain(settings, balances) { d =>
+      spendAll(d, committed)
+      Seq(31, 33).foreach { length =>
+        val declared = ByteStr(outsiderVrfKey.arr.padTo(length, 1.toByte).take(length))
+        val block    = d.createBlock(generator = outsider, strictTime = true, vrfPublicKey = Some(declared))
+        d.appender.appendBlockWithoutFallback(block).left.value.toString should include(s"VRF public key of $length bytes, expected 32")
+      }
+    }
+
+    "can't be registered in the period already" in withDomain(settings, AddrWithBalance.enoughBalances(committed, outsider, secondOutsider)) { d =>
+      spendAll(d, committed)
+      d.appender.appendBlock(d.createBlock(generator = outsider, strictTime = true, vrfPublicKey = Some(outsiderVrfKey)))
+
+      val committedVrfKey = ByteStr(TxHelpers.vrfKeyOf(committed).publicKey())
+      Seq(outsiderVrfKey, committedVrfKey).foreach { taken =>
+        val block = d.createBlock(generator = secondOutsider, strictTime = true, vrfPublicKey = Some(taken))
+        d.appender.appendBlockWithoutFallback(block).left.value.toString should include(s"VRF public key $taken is already registered")
+      }
+    }
+  }
+
+  "an uncommitted challenger has to be able to generate on its own balance to declare a VRF key" in withDomain(settings, balances) { d =>
+    spendAll(d, committed)
+    val original = d.createBlock(
+      generator = outsider,
+      strictTime = true,
+      stateHash = Some(Some(ByteStr.fill(32)(1))),
+      vrfPublicKey = Some(outsiderVrfKey)
+    )
+    val poorChallenger = TxHelpers.signer(3)
+    val challenging = d.createChallengingBlock(
+      poorChallenger,
+      original,
+      // Late enough for its delay, so that only who it is decides
+      vrfPublicKey = Some(ByteStr(TxHelpers.vrfKeyOf(poorChallenger).publicKey()))
+    )
+    d.appender.appendBlockWithoutFallback(challenging).left.value.toString should include(
+      s"${poorChallenger.toAddress} can't generate on its own balance"
+    )
+  }
+
   "an implicit generator" - {
     "mines its later blocks of the period with the key it committed, after it is persisted" in withDomain(settings, balances) { d =>
       spendAll(d, committed)

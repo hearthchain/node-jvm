@@ -1,6 +1,7 @@
 package tech.hearth.mining
 
 import cats.data.EitherT
+import cats.syntax.either.*
 import cats.syntax.traverse.*
 import tech.hearth.account.Address
 import tech.hearth.block.{Block, ChallengedHeader, FinalizationVoting}
@@ -14,7 +15,6 @@ import tech.hearth.network.MicroBlockSynchronizer.MicroblockData
 import tech.hearth.settings.HearthSettings
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
-import tech.hearth.state.appender
 import tech.hearth.state.appender.MaxTimeDrift
 import tech.hearth.state.diffs.BlockDiffer
 import tech.hearth.state.{BlockFee, Blockchain, GeneratorEligibility, Height, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
@@ -170,12 +170,11 @@ class BlockChallengerImpl(
         (),
         GenericError(s"Challenging block timestamp ($blockTime) is not better than challenged block timestamp (${challengedBlock.header.timestamp})")
       )
-      // An uncommitted challenger commits implicitly, like any uncommitted generator. Whether anyone else may challenge
-      // is not decided by its own balance alone: the challenged miner's counts towards it.
-      vrfPublicKey = appender.generatorEligibility(blockchainUpdater, challengedBlock.header.reference, prevHeight, sk.toAddress).eligibility match {
-        case GeneratorEligibility.Uncommitted => Some(ByteStr(vk.publicKey()))
-        case _                                => None
-      }
+      vrfPublicKey <- (GeneratorEligibility.at(blockchainUpdater, challengedBlock.header.reference, prevHeight, sk.toAddress).eligibility match {
+        // A challenger's balance includes the challenged miner's, so one that can't generate on its own may still challenge
+        case GeneratorEligibility.Denied(_) => Right(None)
+        case eligibility                    => eligibility.declaredVrfPublicKey(vk)
+      }).leftMap(GenericError(_))
       consensusData <- pos.consensusData(
         vk,
         blockchainUpdater.height,

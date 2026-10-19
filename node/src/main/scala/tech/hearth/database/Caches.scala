@@ -397,7 +397,8 @@ abstract class Caches extends Blockchain, Storage, StrictLogging {
         require(
           committedGenerators.isEmpty && conflictGenerators.isEmpty && registeredEnclaves.isEmpty && implicitGenerator.isEmpty,
           s"Expected empty conflict/next committed generators and registered enclaves, got: " +
-            s"committedGenerators=$committedGenerators, conflictGenerators=$conflictGenerators, registeredEnclaves=$registeredEnclaves"
+            s"committedGenerators=$committedGenerators, conflictGenerators=$conflictGenerators, registeredEnclaves=$registeredEnclaves, " +
+            s"implicitGenerator=$implicitGenerator"
         )
         None
 
