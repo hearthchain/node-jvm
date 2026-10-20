@@ -518,22 +518,27 @@ class BlockchainUpdaterImpl(
           case _ =>
             for {
               _ <- microBlock.signaturesValid()
-              (totalBlock, referencedComputedStateHash) <- ng
+              (totalBlock, referencedComputedStateHash, acceptedConflicts) <- ng
                 .liquidBlockOf(microBlock.reference)
                 .toRight(GenericError(s"No referenced block exists: $microBlock"))
                 .map { liquid =>
-                  Block.create(
-                    liquid.block,
-                    liquid.block.transactionData ++ microBlock.transactionData,
-                    microBlock.wholeBlockSignature,
-                    microBlock.stateHash,
-                    FinalizationVoting.combine(liquid.block.header.finalizationVoting, microBlock.finalizationVoting)
-                  ) -> liquid.data.liquidStateHash
+                  val accepted = liquid.block.header.finalizationVoting
+                  (
+                    Block.create(
+                      liquid.block,
+                      liquid.block.transactionData ++ microBlock.transactionData,
+                      microBlock.wholeBlockSignature,
+                      microBlock.stateHash,
+                      FinalizationVoting.combine(accepted, microBlock.finalizationVoting)
+                    ),
+                    liquid.data.liquidStateHash,
+                    accepted.fold(Set.empty[GeneratorIndex])(_.conflict.map(_.endorserIndex).toSet)
+                  )
                 }
               _ <- Either.raiseUnless(totalBlock.signatureValid()) {
                 MicroBlockAppendError("Invalid total block signature", microBlock)
               }
-              b <- appender.validateFinalizationVoting(totalBlock, rocksdb, ng.finalizationState.generatorSet)
+              b <- appender.validateFinalizationVoting(totalBlock, rocksdb, ng.finalizationState.generatorSet, acceptedConflicts)
               blockDifferResult <- BlockDiffer.fromMicroBlock(
                 this,
                 rocksdb.lastBlockTimestamp,

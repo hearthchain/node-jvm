@@ -99,6 +99,34 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
       }
     }.run()
 
+    "with conflicting endorsement of poor generator" in new BaseTest {
+      override def continue(d: Domain): Unit = {
+        d.appender.appendBlock(
+          d.createBlock(
+            txs = Seq(
+              TxHelpers.transfer(
+                from = committedGenerator2,
+                to = committedGenerator1Addr,
+                amount = d.blockchain.balance(committedGenerator2Addr) - CommitToGenerationTransaction.DepositInEmbers - 2.hearth
+              )
+            ),
+            generator = committedGenerator1,
+            strictTime = true
+          )
+        )
+
+        log.debug("Append block 4 with poor generator conflicting endorsement")
+        val block4 = d.createBlock(
+          generator = committedGenerator1,
+          strictTime = true,
+          finalizationVoting = Some(mkFinalizationVoting().withConflict(committedGenerator2, committedGenerator2Idx, d.lastBlockId))
+        )
+        d.appender.appendBlockWithoutFallback(block4) should produce(
+          s"Conflicting endorsement sender $committedGenerator2Addr has insufficient balance"
+        )
+      }
+    }.run()
+
     "nonempty aggregated signature, but empty valid endorsers" in new BaseTest {
       override def continue(d: Domain): Unit = {
         val block3WithVotes = d.createBlock(

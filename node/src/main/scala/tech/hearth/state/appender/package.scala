@@ -5,7 +5,7 @@ import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.typesafe.scalalogging.Logger
 import tech.hearth.account.Address
-import tech.hearth.block.{Block, BlockEndorsement, BlockSnapshot, FinalizationVoting}
+import tech.hearth.block.{Block, BlockEndorsement, BlockSnapshot}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.consensus.{GeneratingBalanceProvider, PoSSelector}
 import tech.hearth.lang.ValidationError
@@ -229,7 +229,7 @@ package object appender {
       r <- blockConsensusValidation(blockchain, pos, time.correctedTime())(block, parentHeight)
       _ <- validateStateHash(block, blockchain)
       _ <- validateChallengedHeader(block, blockchain)
-      b <- validateFinalizationVoting(block, blockchain, generatorSet)
+      b <- validateFinalizationVoting(block, blockchain, generatorSet, acceptedConflicts = Set.empty)
     } yield (r, b)
 
   private def blockConsensusValidation(blockchain: Blockchain, pos: PoSSelector, currentTs: Long)(
@@ -298,7 +298,7 @@ package object appender {
 
   private def validateConflictingEndorsement(
       blockchain: Blockchain,
-      finalizationVoting: FinalizationVoting,
+      acceptedConflicts: Set[GeneratorIndex],
       commitedGenerators: IndexedSeq[CommittedGenerator],
       conflictingGenerators: Set[GeneratorIndex],
       validEndorsements: Set[Address],
@@ -319,7 +319,7 @@ package object appender {
     }
     _ <- Either.raiseUnless(
       generatorsWithEnoughBalance.contains(conflictingEndorsement.endorserIndex) ||
-        finalizationVoting.conflict.exists(_.endorserIndex == conflictingEndorsement.endorserIndex) // Allow in NG
+        acceptedConflicts.contains(conflictingEndorsement.endorserIndex)
     ) {
       s"Conflicting endorsement sender $address has insufficient balance"
     }
@@ -337,7 +337,16 @@ package object appender {
     _ <- conflictingEndorsement.signatureValid(blsPublicKey).leftMap(err => s"Invalid conflicting endorsement signature from $address: $err")
   } yield ()
 
-  def validateFinalizationVoting(block: Block, blockchain: Blockchain, generatorSet: GeneratorSet): Either[ValidationError, GeneratorSet] =
+  /** @param acceptedConflicts
+    *   endorsers whose conflicting endorsements the liquid block already carries: a microblock is validated with the
+    *   voting combined over the whole liquid block, while NG's generator set has already dropped them as conflicting
+    */
+  def validateFinalizationVoting(
+      block: Block,
+      blockchain: Blockchain,
+      generatorSet: GeneratorSet,
+      acceptedConflicts: Set[GeneratorIndex]
+  ): Either[ValidationError, GeneratorSet] =
     block.header.finalizationVoting
       .fold(generatorSet.asRight[String]) { fv =>
         for {
@@ -374,7 +383,7 @@ package object appender {
           _ <- fv.conflict.traverse(
             validateConflictingEndorsement(
               blockchain,
-              fv,
+              acceptedConflicts,
               allCommittedGenerators,
               knownConflictGenerators,
               validEndorserAddresses,
