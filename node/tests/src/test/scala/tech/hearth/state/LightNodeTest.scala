@@ -7,11 +7,11 @@ import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
 import tech.hearth.mining.MiningConstraint
-import tech.hearth.network.{BlockSnapshotResponse, ExtensionBlocks, InvalidBlockStorage, PeerDatabase}
+import tech.hearth.network.{BlockSnapshotResponse, ExtensionBlocks}
 import tech.hearth.protobuf.PBSnapshots
 import tech.hearth.settings.HearthSettings
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.Applied
-import tech.hearth.state.appender.{BlockAppender, ExtensionAppender}
+import tech.hearth.state.appender.BlockAppender
 import tech.hearth.state.diffs.BlockDiffer
 import tech.hearth.test.*
 import tech.hearth.transaction.TxHelpers
@@ -116,7 +116,9 @@ class LightNodeTest extends PropSpec with WithDomain {
         DomainPresets.TransactionStateSnapshot.copy(enableLightMode = isLightMode),
         AddrWithBalance.enoughBalances(sender, TxHelpers.defaultSigner)
       ) { d =>
-        val chainSize = 3
+        // Finality trails the tip by two blocks here, and sync never forks below it, so the competing branch must
+        // replace at most two blocks
+        val chainSize = 2
         val genesisId = d.lastBlockId
         val betterBlocks = (1 to chainSize).map { idx =>
           val txs =
@@ -144,19 +146,7 @@ class LightNodeTest extends PropSpec with WithDomain {
           new EmbeddedChannel()
         )
 
-        val appender =
-          ExtensionAppender(
-            d.blockchain,
-            d.utxPool,
-            d.posSelector,
-            TestTime(extensionBlocks.blocks.last.header.timestamp),
-            InvalidBlockStorage.NoOp,
-            PeerDatabase.NoOp,
-            Scheduler.global
-          )(
-            new EmbeddedChannel(),
-            _
-          )
+        val appender = d.extensionAppender(TestTime(extensionBlocks.blocks.last.header.timestamp))
 
         appender(extensionBlocks).runSyncUnsafe(scala.concurrent.duration.Duration(60, "s")) should beRight
         d.lastBlock.header.stateHash shouldBe expectedStateHash

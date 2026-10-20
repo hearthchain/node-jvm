@@ -16,25 +16,27 @@ import tech.hearth.events.BlockchainUpdateTriggers
 import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.lang.ValidationError
 import tech.hearth.mining.{BlockChallenger, BlockChallengerImpl, GeneratorKeys, MiningAccount}
-import tech.hearth.network.{MessageCodec, PeerDatabase}
+import tech.hearth.network.{ExtensionBlocks, InvalidBlockStorage, MessageCodec, PeerDatabase}
+import tech.hearth.network.RxExtensionLoader.ApplyExtensionResult
 import tech.hearth.settings.{MiningAccount as MiningAccountSettings, HearthSettings}
 import tech.hearth.state.*
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult.{Applied, Ignored}
-import tech.hearth.state.appender.{BlockAppender, findBlockAndGetGenerators}
+import tech.hearth.state.appender.{BlockAppender, ExtensionAppender, findBlockAndGetGenerators}
 import tech.hearth.state.diffs.{BlockDiffer, TransactionDiffer}
 import tech.hearth.test.TestTime
 import tech.hearth.transaction.*
 import tech.hearth.transaction.Asset.{IssuedAsset, Hearth}
 import tech.hearth.transaction.smart.script.trace.TracedResult
-import tech.hearth.utils.{Schedulers, SystemTime}
-import tech.hearth.utx.UtxPoolImpl
+import tech.hearth.utils.{Schedulers, SystemTime, Time}
+import tech.hearth.utx.{UtxPool, UtxPoolImpl}
 import tech.hearth.wallet.Wallet
 import tech.hearth.{Application, TestValues, crypto}
 import io.netty.channel.embedded.EmbeddedChannel
 import io.netty.channel.group.{ChannelGroup, DefaultChannelGroup}
 import io.netty.util.concurrent.GlobalEventExecutor
 import monix.eval.Task
+import monix.execution.Scheduler
 import monix.execution.ExecutionModel.SynchronousExecution
 import monix.execution.schedulers.SchedulerService
 import org.rocksdb.RocksDB
@@ -97,6 +99,23 @@ case class Domain(
 
   lazy val blockAppender: Block => Task[Either[ValidationError, BlockApplyResult]] =
     BlockAppender(blockchain, testTime, utxPool, posSelector, BlockEndorser.Disabled, scheduler)(_, None)
+
+  /** The appender a node runs a fetched extension through, with no-op peer and invalid block storage. */
+  def extensionAppender(
+      time: Time = testTime,
+      utx: UtxPool = utxPool,
+      appenderScheduler: Scheduler = Scheduler.global
+  ): ExtensionBlocks => Task[ApplyExtensionResult] =
+    ExtensionAppender(
+      blockchain,
+      utx,
+      posSelector,
+      time,
+      InvalidBlockStorage.NoOp,
+      PeerDatabase.NoOp,
+      appenderScheduler
+    )(new EmbeddedChannel(), _)
+
   lazy val blockChallenger: Option[BlockChallenger] =
     if (!settings.enableLightMode)
       Some(

@@ -52,6 +52,8 @@ class ForwardingBlockchainUpdaterImpl(delegate: CompleteBlockchainUpdater) exten
     processMicroBlock,
     computeNextReward,
     removeAfter,
+    syncBoundary,
+    lastBlockIds,
     lastBlockInfo,
     isLastBlockId,
     referencedBlockchain,
