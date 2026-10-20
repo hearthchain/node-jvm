@@ -38,4 +38,25 @@ class ExtensionAppenderSpec extends FlatSpec with WithDomain {
       utx.close()
     }
 
+  it should "reject a fork deeper than max-rollback while finality lags further behind" in {
+    val settings = DomainPresets.DeterministicFinality.copy(synchronizationSettings =
+      DomainPresets.DeterministicFinality.synchronizationSettings.copy(maxRollback = 1)
+    )
+    withDomain(settings) { d =>
+      d.appendBlock()
+      val fork3 = d.createBlock(strictTime = true)
+      d.appendBlock()
+      d.appendBlock()
+      d.blockchain.finalizedHeight.fold(0)(_.toInt) should be <= 2 // finality alone would let a fork from height 2 through
+      val tip = d.blockchain.lastBlockId
+
+      d.extensionAppender()(ExtensionBlocks(d.blockchain.score + 1, Seq(fork3), Map.empty, new EmbeddedChannel()))
+        .runSyncUnsafe(scala.concurrent.duration.Duration(60, "s"))
+        .left
+        .value
+        .toString should include("below the sync boundary 3")
+      d.blockchain.height shouldBe 4
+      d.blockchain.lastBlockId shouldBe tip
+    }
+  }
 }
