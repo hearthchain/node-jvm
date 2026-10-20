@@ -70,7 +70,7 @@ class BlockchainUpdaterImpl(
   private def publishLastBlockInfo(): Unit =
     for (id <- this.lastBlockId; ts <- ngState.map(_.base.header.timestamp).orElse(rocksdb.lastBlockTimestamp)) {
       val blockchainReady = ts + maxBlockReadinessAge > time.correctedTime()
-      internalLastBlockInfo.onNext(LastBlockInfo(id, Height(height), score, this.finalizedHeightOrFallback(maxSyncRollbackLength), blockchainReady))
+      internalLastBlockInfo.onNext(LastBlockInfo(id, Height(height), score, syncBoundary, blockchainReady))
     }
 
   publishLastBlockInfo()
@@ -104,6 +104,10 @@ class BlockchainUpdaterImpl(
   override def bestLiquidSnapshotAndFees: Option[(StateSnapshot, BlockFee, BlockFee)] = readLock(ngState.map(_.bestLiquidSnapshotAndFees))
 
   override val settings: BlockchainSettings = hearthSettings.blockchainSettings
+
+  override def syncBoundary: Height = readLock(this.finalizedHeightOrFallback(maxSyncRollbackLength))
+
+  override def lastBlockIds: Seq[ByteStr] = readLock((height to syncBoundary.toInt by -1).flatMap(this.blockId))
 
   override def isLastBlockId(id: ByteStr): Boolean = readLock {
     ngState.fold(rocksdb.lastBlockId.contains(id))(_.contains(id))
@@ -552,7 +556,7 @@ class BlockchainUpdaterImpl(
 
               log.info(s"${microBlock.stringRepr(blockId)} appended, diff=${snapshot.hashString}")
               internalLastBlockInfo.onNext(
-                LastBlockInfo(blockId, Height(height), score, this.finalizedHeightOrFallback(maxSyncRollbackLength), ready = true)
+                LastBlockInfo(blockId, Height(height), score, syncBoundary, ready = true)
               )
 
               miner.scheduleMining(baseBlockchain = None, cancelMicroBlockMining = false)

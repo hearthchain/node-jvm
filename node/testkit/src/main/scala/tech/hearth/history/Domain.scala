@@ -113,7 +113,6 @@ case class Domain(
       time,
       InvalidBlockStorage.NoOp,
       PeerDatabase.NoOp,
-      settings.synchronizationSettings.maxRollback,
       appenderScheduler
     )(new EmbeddedChannel(), _)
 

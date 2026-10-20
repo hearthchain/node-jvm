@@ -193,7 +193,6 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
         time,
         knownInvalidBlocks,
         peerDatabase,
-        settings.synchronizationSettings.maxRollback,
         appenderScheduler
       )
     val processMicroBlock =
@@ -343,7 +342,7 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
       settings.synchronizationSettings.processedBlocksCacheTimeout,
       settings.enableLightMode,
       settings.synchronizationSettings.blacklistOnScoreMismatch,
-      Coeval(blockchainUpdater.lastBlockIds(settings.synchronizationSettings.maxRollback)),
+      Coeval(blockchainUpdater.lastBlockIds),
       peerDatabase,
       knownInvalidBlocks,
       messageObserver.blocks,
