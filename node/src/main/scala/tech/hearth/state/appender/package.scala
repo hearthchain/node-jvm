@@ -337,10 +337,7 @@ package object appender {
     _ <- conflictingEndorsement.signatureValid(blsPublicKey).leftMap(err => s"Invalid conflicting endorsement signature from $address: $err")
   } yield ()
 
-  /** @param acceptedConflicts
-    *   endorsers whose conflicting endorsements the liquid block already carries: a microblock is validated with the
-    *   voting combined over the whole liquid block, while NG's generator set has already dropped them as conflicting
-    */
+  /** @param acceptedConflicts conflicts the liquid block already carries, which NG's generator set has dropped */
   def validateFinalizationVoting(
       block: Block,
       blockchain: Blockchain,

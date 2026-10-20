@@ -60,7 +60,7 @@ object EndorsementStorage {
         _ <- Either.raiseWhen(msg.endorserIndex >= filter.normalizedGeneratorSet.size)(
           s"There are only ${filter.normalizedGeneratorSet.size} endorsers"
         )
-        // Any int32 off the wire: GeneratorIndex itself throws on a negative one
+        // Any int32 off the wire; GeneratorIndex.checked throws below -1
         endorserIndex <- Either.cond(msg.endorserIndex >= 0, GeneratorIndex(msg.endorserIndex), s"Invalid endorser index: ${msg.endorserIndex}")
         _             <- Either.raiseWhen(msg.endorserIndex == filter.miner.toInt)("Miner can't sent endorsements")
         (endorserAddr, endorserPk, balance) = filter.normalizedGeneratorSet(msg.endorserIndex)
