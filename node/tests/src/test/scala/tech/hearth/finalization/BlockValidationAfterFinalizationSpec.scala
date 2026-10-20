@@ -69,19 +69,7 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
 
     "with endorsement of poor generator" in new BaseTest {
       override def continue(d: Domain): Unit = {
-        d.appender.appendBlock(
-          d.createBlock(
-            txs = Seq(
-              TxHelpers.transfer(
-                from = committedGenerator2,
-                to = committedGenerator1Addr,
-                amount = d.blockchain.balance(committedGenerator2Addr) - CommitToGenerationTransaction.DepositInEmbers - 2.hearth
-              )
-            ),
-            generator = committedGenerator1,
-            strictTime = true
-          )
-        )
+        d.makeGenerator2Poor()
 
         log.debug("Append block 4 with poor generator endorsement")
         val block4 = d.createBlock(
@@ -101,19 +89,7 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
 
     "with conflicting endorsement of poor generator" in new BaseTest {
       override def continue(d: Domain): Unit = {
-        d.appender.appendBlock(
-          d.createBlock(
-            txs = Seq(
-              TxHelpers.transfer(
-                from = committedGenerator2,
-                to = committedGenerator1Addr,
-                amount = d.blockchain.balance(committedGenerator2Addr) - CommitToGenerationTransaction.DepositInEmbers - 2.hearth
-              )
-            ),
-            generator = committedGenerator1,
-            strictTime = true
-          )
-        )
+        d.makeGenerator2Poor()
 
         log.debug("Append block 4 with poor generator conflicting endorsement")
         val block4 = d.createBlock(
@@ -124,6 +100,20 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
         d.appender.appendBlockWithoutFallback(block4) should produce(
           s"Conflicting endorsement sender $committedGenerator2Addr has insufficient balance"
         )
+      }
+    }.run()
+
+    "with conflicting endorsement of poor generator in microblock" in new BaseTest {
+      override def continue(d: Domain): Unit = {
+        d.makeGenerator2Poor()
+        d.appender.appendBlock(d.createBlock(generator = committedGenerator1, strictTime = true))
+
+        // A conflict new to the liquid block: only those it already carries are exempt from the balance check
+        val microBlock = d.createMicroBlock(
+          signer = Some(committedGenerator1),
+          finalizationVoting = Some(mkFinalizationVoting().withConflict(committedGenerator2, committedGenerator2Idx, d.lastBlockId))
+        )(TxHelpers.transfer(committedGenerator3, committedGenerator1Addr))
+        d.appendMicroBlockE(microBlock) should produce(s"Conflicting endorsement sender $committedGenerator2Addr has insufficient balance")
       }
     }.run()
 
@@ -312,6 +302,22 @@ class BlockValidationAfterFinalizationSpec extends BaseFinalizationSpec {
 
       def createBlock(finalizationVoting: FinalizationVoting): Block =
         d.createBlock(generator = committedGenerator1, strictTime = true, finalizationVoting = Some(finalizationVoting))
+
+      /** Appends block 3, leaving committedGenerator2 its deposit plus too little to generate. */
+      def makeGenerator2Poor(): Unit =
+        d.appender.appendBlock(
+          d.createBlock(
+            txs = Seq(
+              TxHelpers.transfer(
+                from = committedGenerator2,
+                to = committedGenerator1Addr,
+                amount = d.blockchain.balance(committedGenerator2Addr) - CommitToGenerationTransaction.DepositInEmbers - 2.hearth
+              )
+            ),
+            generator = committedGenerator1,
+            strictTime = true
+          )
+        )
     }
   }
 }
