@@ -3,7 +3,7 @@ package tech.hearth.state.appender
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
-import tech.hearth.network.{ExtensionBlocks, InvalidBlockStorage, PeerDatabase}
+import tech.hearth.network.ExtensionBlocks
 import tech.hearth.test.*
 import tech.hearth.transaction.TxHelpers
 import tech.hearth.utils.SystemTime
@@ -16,19 +16,9 @@ class ExtensionAppenderSpec extends FlatSpec with WithDomain {
 
   "Extension appender" should "drop duplicate transactions from UTX" in
     withDomain(balances = AddrWithBalance.enoughBalances(TxHelpers.defaultSigner, sender)) { d =>
-      val utx  = new UtxPoolImpl(SystemTime, d.blockchain, d.settings.utxSettings, d.settings.minerSettings.enable)
-      val time = TestTime()
-      val extensionAppender =
-        ExtensionAppender(
-          d.blockchain,
-          utx,
-          d.posSelector,
-          time,
-          InvalidBlockStorage.NoOp,
-          PeerDatabase.NoOp,
-          d.settings.synchronizationSettings.maxRollback,
-          global
-        )(new EmbeddedChannel(), _)
+      val utx               = new UtxPoolImpl(SystemTime, d.blockchain, d.settings.utxSettings, d.settings.minerSettings.enable)
+      val time              = TestTime()
+      val extensionAppender = d.extensionAppender(time, utx)
 
       // The transfer is sent by someone other than the miner: a block's minimum valid timestamp depends on the
       // generating balance, so spending from the miner between building this block and validating it would push the

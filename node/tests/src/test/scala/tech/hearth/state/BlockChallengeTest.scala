@@ -19,12 +19,12 @@ import tech.hearth.mining.{BlockChallenger, BlockChallengerImpl, GeneratorKeys, 
 
 import java.util.concurrent.atomic.AtomicInteger
 import tech.hearth.network.MicroBlockSynchronizer.MicroblockData
-import tech.hearth.network.{ExtensionBlocks, InvalidBlockStorage, MessageCodec, PBBlockSpec, PeerDatabase, RawBytes}
+import tech.hearth.network.{ExtensionBlocks, MessageCodec, PBBlockSpec, PeerDatabase, RawBytes}
 import tech.hearth.protobuf.transaction.PBTransactions
 import tech.hearth.settings.HearthSettings
 import tech.hearth.state.BlockRewardCalculator.BlockRewardShares
 import tech.hearth.state.BlockchainUpdaterImpl.BlockApplyResult
-import tech.hearth.state.appender.{BlockAppender, ExtensionAppender, MicroblockAppender}
+import tech.hearth.state.appender.{BlockAppender, MicroblockAppender}
 import tech.hearth.state.diffs.{BlockDiffer, ENOUGH_AMT}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
@@ -989,17 +989,7 @@ class BlockChallengeTest
       val originalBlock    = d.createBlock(strictTime = true, stateHash = Some(Some(invalidStateHash)))
       val challengingBlock = d.createChallengingBlock(challengingMiner.signingKey, originalBlock, strictTime = true)
 
-      val extensionAppender =
-        ExtensionAppender(
-          d.blockchain,
-          d.utxPool,
-          d.posSelector,
-          testTime,
-          InvalidBlockStorage.NoOp,
-          PeerDatabase.NoOp,
-          d.settings.synchronizationSettings.maxRollback,
-          appenderScheduler
-        )(null, _)
+      val extensionAppender = d.extensionAppender(testTime, appenderScheduler = appenderScheduler)
 
       testTime.setTime(challengingBlock.header.timestamp)
       extensionAppender(ExtensionBlocks(d.blockchain.score + challengingBlock.blockScore(), Seq(challengingBlock), Map.empty, new EmbeddedChannel()))

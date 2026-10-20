@@ -3,10 +3,9 @@ package tech.hearth.finalization
 import tech.hearth.block.Block
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
-import tech.hearth.network.{ExtensionBlocks, InvalidBlockStorage, PeerDatabase}
+import tech.hearth.network.ExtensionBlocks
 import tech.hearth.network.RxExtensionLoader.ApplyExtensionResult
 import tech.hearth.state.{GeneratorIndex, Height}
-import tech.hearth.state.appender.ExtensionAppender
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.TxHelpers
 import io.netty.channel.embedded.EmbeddedChannel
@@ -24,19 +23,7 @@ class ExtensionAfterFinalizationSpec extends BaseFinalizationSpec {
     .configure(_.copy(generationPeriodLength = 3))
 
   private def appendExtension(d: Domain, blocks: Block*): ApplyExtensionResult =
-    ExtensionAppender(
-      d.blockchain,
-      d.utxPool,
-      d.posSelector,
-      d.testTime,
-      InvalidBlockStorage.NoOp,
-      PeerDatabase.NoOp,
-      d.settings.synchronizationSettings.maxRollback,
-      global
-    )(
-      new EmbeddedChannel(),
-      ExtensionBlocks(d.blockchain.score + 1, blocks, Map.empty, new EmbeddedChannel())
-    ).runSyncUnsafe(60.seconds)
+    d.extensionAppender()(ExtensionBlocks(d.blockchain.score + 1, blocks, Map.empty, new EmbeddedChannel())).runSyncUnsafe(60.seconds)
 
   /** Finalizes height 3 at height 5, returning a competing block built while the tip was at `forkAt`, 2 or 3. */
   private def finalizeHeight3(d: Domain, forkAt: Int): Block = {
