@@ -95,6 +95,10 @@ class EndorsementStorageSpec extends FreeSpec with EitherValues {
           "Invalid endorser index"
         )
 
+        "an index below -1, which a peer can send as any int32" in Seq(-2, Int.MinValue).foreach { index =>
+          test(EndorseBlock(index, expectedFinalizedId, expectedFinalizedHeight, expectedEndorsedId, ByteStr.empty), "Invalid endorser index")
+        }
+
         "an unexpected endorser" in test(
           EndorseBlock.from(mk(committedGenerator, GeneratorIndex(2))),
           "There are only"
