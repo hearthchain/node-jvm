@@ -4,12 +4,16 @@ import cats.syntax.traverse.*
 import com.google.common.primitives.Ints
 import tech.hearth.account.Address
 import tech.hearth.block.Block.BlockId
-import tech.hearth.block.BlockEndorsement
+import tech.hearth.block.{BlockEndorsement, FinalizationVoting}
 import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.bls.BlsKeyPair
 import tech.hearth.network.EndorseBlock
 import tech.hearth.test.{FreeSpec, NumericExt, produce}
 import tech.hearth.transaction.TxHelpers
+import io.netty.channel.Channel
+import io.netty.channel.embedded.EmbeddedChannel
+import monix.execution.schedulers.TestScheduler
+import monix.reactive.subjects.PublishSubject
 import org.scalactic.source.Position
 import org.scalatest.EitherValues
 import tech.hearth.crypto.Crypto
@@ -39,6 +43,30 @@ class EndorsementStorageSpec extends FreeSpec with EitherValues {
   }
 
   private val defaultGenerators: IndexedSeq[TestGenerator] = mkGeneratorSet(4)
+
+  "process" - {
+    "keeps processing after tryAdd throws" in {
+      given scheduler: TestScheduler = TestScheduler()
+      val endorsements               = PublishSubject[(Channel, EndorseBlock)]()
+      val first, second              = EndorseBlock(1, expectedFinalizedId, expectedFinalizedHeight, expectedEndorsedId, ByteStr.empty)
+      val throwing = new EndorsementStorage {
+        override def tryAdd(msg: EndorseBlock): Either[String, Boolean] =
+          if (msg eq first) throw new IllegalStateException("broken") else Right(true)
+        override def startVoting(filter: EndorsementFilter): Boolean                     = false
+        override def tryCollectAndClear(endorsedId: BlockId): Option[FinalizationVoting] = None
+      }
+      val relayed = Seq.newBuilder[EndorseBlock]
+
+      EndorsementStorage.process(throwing, endorsements, (_, x) => relayed += x)
+      scheduler.tick()
+      Seq(first, second).foreach { x =>
+        endorsements.onNext((new EmbeddedChannel(), x))
+        scheduler.tick()
+      }
+
+      relayed.result() shouldBe Seq(second)
+    }
+  }
 
   "tryAddVote" - {
     def mk(
