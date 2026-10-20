@@ -47,3 +47,7 @@ It now answers with `BlockNotFound(id)`. On the wire that is the block message c
 `RxExtensionLoader` keeps only the requested ids before the missing one: blocks after it cannot attach to anything we hold. If nothing precedes it, it asks for block ids again without blacklisting. Otherwise it applies that prefix once the prefix is complete, waiting for blocks still in flight if necessary. The prefix is marked `truncated`, so the score-mismatch check in `onExtensionApplied` does not compare it against the peer's declared score, which it cannot reach. A `BlockNotFound` that matches no pending request is ignored.
 
 Microblock and snapshot requests (`MicroBlockRequest`, `GetSnapshot`, `MicroSnapshotRequest`) still go unanswered on a miss.
+
+## Sync never rolls back past finality; `removeAfter` does
+
+`lastBlockIds` advertises ids only down to `finalizedHeightOrFallback(maxRollback)`, but that bounds nothing on its own: the fork point is the first new block's `header.reference`, which a peer chooses freely and the loader never compares with the ids it sent. So `ExtensionAppender` checks the common block against that same bound before it calls `removeAfter`, and a fork below it is a `Left` that blacklists the peer. The bound is inclusive: a fork whose parent is the finalized block itself is legitimate. `removeAfter` carries no finality check on purpose, since `/debug/rollback` and the importer need to cross it; `doRollback` rewinds `finalizedHeight` for exactly that case. `ExtensionAfterFinalizationSpec` pins all three.

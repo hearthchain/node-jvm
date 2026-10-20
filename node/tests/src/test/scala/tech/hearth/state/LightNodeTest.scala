@@ -116,7 +116,9 @@ class LightNodeTest extends PropSpec with WithDomain {
         DomainPresets.TransactionStateSnapshot.copy(enableLightMode = isLightMode),
         AddrWithBalance.enoughBalances(sender, TxHelpers.defaultSigner)
       ) { d =>
-        val chainSize = 3
+        // Finality trails the tip by two blocks here, and sync never forks below it, so the competing branch must
+        // replace at most two blocks
+        val chainSize = 2
         val genesisId = d.lastBlockId
         val betterBlocks = (1 to chainSize).map { idx =>
           val txs =
@@ -152,6 +154,7 @@ class LightNodeTest extends PropSpec with WithDomain {
             TestTime(extensionBlocks.blocks.last.header.timestamp),
             InvalidBlockStorage.NoOp,
             PeerDatabase.NoOp,
+            d.settings.synchronizationSettings.maxRollback,
             Scheduler.global
           )(
             new EmbeddedChannel(),

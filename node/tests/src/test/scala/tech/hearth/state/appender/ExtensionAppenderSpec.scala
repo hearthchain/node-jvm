@@ -19,7 +19,16 @@ class ExtensionAppenderSpec extends FlatSpec with WithDomain {
       val utx  = new UtxPoolImpl(SystemTime, d.blockchain, d.settings.utxSettings, d.settings.minerSettings.enable)
       val time = TestTime()
       val extensionAppender =
-        ExtensionAppender(d.blockchain, utx, d.posSelector, time, InvalidBlockStorage.NoOp, PeerDatabase.NoOp, global)(new EmbeddedChannel(), _)
+        ExtensionAppender(
+          d.blockchain,
+          utx,
+          d.posSelector,
+          time,
+          InvalidBlockStorage.NoOp,
+          PeerDatabase.NoOp,
+          d.settings.synchronizationSettings.maxRollback,
+          global
+        )(new EmbeddedChannel(), _)
 
       // The transfer is sent by someone other than the miner: a block's minimum valid timestamp depends on the
       // generating balance, so spending from the miner between building this block and validating it would push the

@@ -186,7 +186,16 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
       BlockAppender(blockchainUpdater, time, utxStorage, pos, allChannels, peerDatabase, blockChallenger, blockEndorser, appenderScheduler)
 
     val processFork =
-      ExtensionAppender(blockchainUpdater, utxStorage, pos, time, knownInvalidBlocks, peerDatabase, appenderScheduler)
+      ExtensionAppender(
+        blockchainUpdater,
+        utxStorage,
+        pos,
+        time,
+        knownInvalidBlocks,
+        peerDatabase,
+        settings.synchronizationSettings.maxRollback,
+        appenderScheduler
+      )
     val processMicroBlock =
       MicroblockAppender(blockchainUpdater, utxStorage, allChannels, peerDatabase, blockChallenger, appenderScheduler)
 

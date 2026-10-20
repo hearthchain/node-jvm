@@ -1,5 +1,6 @@
 package tech.hearth.state.appender
 
+import cats.syntax.either.*
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.consensus.PoSSelector
 import tech.hearth.lang.ValidationError
@@ -29,6 +30,7 @@ object ExtensionAppender extends ScorexLogging {
       time: Time,
       invalidBlocks: InvalidBlockStorage,
       peerDatabase: PeerDatabase,
+      maxRollback: Int,
       scheduler: Scheduler
   )(ch: Channel, extensionBlocks: ExtensionBlocks): Task[ApplyExtensionResult] = {
     def appendExtension(extension: ExtensionBlocks): ApplyExtensionResult =
@@ -54,6 +56,13 @@ object ExtensionAppender extends ScorexLogging {
 
                 val droppedBlocksEi = for {
                   commonBlockHeight <- blockchainUpdater.heightOf(lastCommonBlockId).toRight(GenericError("Fork contains no common parent"))
+                  // The same bound lastBlockIds advertises; removeAfter itself stays unbounded for manual rollbacks
+                  syncBoundary = blockchainUpdater.finalizedHeightOrFallback(maxRollback)
+                  _ <- Either.raiseWhen(commonBlockHeight < syncBoundary.toInt)(
+                    GenericError(
+                      s"Fork from $lastCommonBlockId at $commonBlockHeight is below the sync boundary $syncBoundary (finalized height or max-rollback)"
+                    )
+                  )
                   droppedBlocks <- {
                     if (commonBlockHeight < initialHeight)
                       blockchainUpdater.removeAfter(lastCommonBlockId)
