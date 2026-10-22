@@ -189,16 +189,9 @@ case class UtxPoolImpl(
     val diffEi = {
       def calculateSnapshot(): TracedResult[ValidationError, StateSnapshot] = {
         if (forceValidate)
-          TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime())(
-            blockchain,
-            tx
-          )
+          TransactionDiffer.forceValidate(blockchain, tx)
         else
-          TransactionDiffer.limitedExecution(
-            blockchain.lastBlockTimestamp,
-            time.correctedTime(),
-            verify
-          )(
+          TransactionDiffer.limitedExecution(verify)(
             blockchain,
             tx
           )
@@ -244,7 +237,7 @@ case class UtxPoolImpl(
       strategy: PackStrategy,
       cancelled: () => Boolean
   ): (Option[Seq[Transaction]], MultiDimensionalMiningConstraint, Option[ByteStr]) =
-    pack(TransactionDiffer(blockchain.lastBlockTimestamp, time.correctedTime()))(
+    pack(TransactionDiffer())(
       initialConstraint,
       strategy,
       prevStateHash,
@@ -262,15 +255,9 @@ case class UtxPoolImpl(
           TxStateActions.removeExpired(tx)
         } else {
           val differ = if (!isMiningEnabled && utxSettings.forceValidateInCleanup) {
-            TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime())(
-              blockchain,
-              _
-            )
+            TransactionDiffer.forceValidate(blockchain, _)
           } else {
-            TransactionDiffer.limitedExecution(
-              blockchain.lastBlockTimestamp,
-              time.correctedTime()
-            )(
+            TransactionDiffer.limitedExecution()(
               blockchain,
               _
             )

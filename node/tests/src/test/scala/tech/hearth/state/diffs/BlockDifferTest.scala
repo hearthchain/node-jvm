@@ -11,7 +11,7 @@ import tech.hearth.lagonaki.mocks.TestBlock
 import tech.hearth.mining.MiningConstraint
 import tech.hearth.history.{DefaultBlockchainSettings, settings, withFlatReward}
 import tech.hearth.state.diffs.BlockDiffer.Result
-import tech.hearth.state.{Blockchain, SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
+import tech.hearth.state.{SnapshotBlockchain, StateSnapshot, TxStateSnapshotHashBuilder}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.{TransactionStateSnapshot}
 import tech.hearth.test.node.*
@@ -122,8 +122,6 @@ class BlockDifferTest extends FreeSpec with WithDomain {
               initStateHash,
               initSnapshot,
               signer,
-              d.blockchain.lastBlockTimestamp,
-              blockTs,
               isChallenging = false,
               blockchain
             )
@@ -163,8 +161,6 @@ class BlockDifferTest extends FreeSpec with WithDomain {
                     genesis.header.stateHash.get,
                     StateSnapshot.empty,
                     signer,
-                    d.blockchain.lastBlockTimestamp,
-                    blockTs,
                     isChallenging = false,
                     blockchain
                   )
@@ -176,7 +172,6 @@ class BlockDifferTest extends FreeSpec with WithDomain {
             )
           BlockDiffer.fromMicroBlock(
             blockchain,
-            blockchain.lastBlockTimestamp,
             genesis.header.stateHash.get,
             correctMicroblock,
             None,
@@ -186,7 +181,6 @@ class BlockDifferTest extends FreeSpec with WithDomain {
           val incorrectMicroblock = d.createMicroBlock(Some(ByteStr.fill(DigestLength)(1)))(txs*)
           BlockDiffer.fromMicroBlock(
             blockchain,
-            blockchain.lastBlockTimestamp,
             genesis.header.stateHash.get,
             incorrectMicroblock,
             None,

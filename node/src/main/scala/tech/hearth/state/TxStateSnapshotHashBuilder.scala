@@ -143,12 +143,10 @@ object TxStateSnapshotHashBuilder {
       initStateHash: ByteStr,
       initSnapshot: StateSnapshot,
       signer: SigningKey,
-      prevBlockTimestamp: Option[Long],
-      currentBlockTimestamp: Long,
       isChallenging: Boolean,
       blockchain: Blockchain
   ): TracedResult[ValidationError, ByteStr] = {
-    val txDiffer = TransactionDiffer(prevBlockTimestamp, currentBlockTimestamp)
+    val txDiffer = TransactionDiffer()
 
     txs
       .foldLeft[TracedResult[ValidationError, (ByteStr, StateSnapshot)]](TracedResult.wrapValue(initStateHash -> initSnapshot)) {

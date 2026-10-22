@@ -538,7 +538,6 @@ class BlockchainUpdaterImpl(
               )
               blockDifferResult <- BlockDiffer.fromMicroBlock(
                 this,
-                rocksdb.lastBlockTimestamp,
                 liquid.data.liquidStateHash,
                 microBlock,
                 snapshot,

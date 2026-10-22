@@ -133,7 +133,6 @@ object BlockDiffer {
           apply(
             blockchainWithNewBlock,
             constraint,
-            maybePrevBlock.map(_.header.timestamp),
             prevStateHash,
             initSnapshot,
             hasChallenge,
@@ -217,7 +216,6 @@ object BlockDiffer {
 
   def fromMicroBlock(
       blockchain: Blockchain,
-      prevBlockTimestamp: Option[Long],
       prevStateHash: ByteStr,
       micro: MicroBlock,
       snapshot: Option[MicroBlockSnapshot],
@@ -227,7 +225,6 @@ object BlockDiffer {
   ): Either[ValidationError, Result] =
     fromMicroBlockTraced(
       blockchain,
-      prevBlockTimestamp,
       prevStateHash,
       micro,
       snapshot,
@@ -238,7 +235,6 @@ object BlockDiffer {
 
   private def fromMicroBlockTraced(
       blockchain: Blockchain,
-      prevBlockTimestamp: Option[Long],
       prevStateHash: ByteStr,
       micro: MicroBlock,
       snapshot: Option[MicroBlockSnapshot],
@@ -255,7 +251,6 @@ object BlockDiffer {
           apply(
             blockchain,
             constraint,
-            prevBlockTimestamp,
             prevStateHash,
             StateSnapshot.empty,
             hasChallenge = false,
@@ -319,7 +314,6 @@ object BlockDiffer {
   private def apply(
       blockchain: Blockchain,
       initConstraint: MiningConstraint,
-      prevBlockTimestamp: Option[Long],
       prevStateHash: ByteStr,
       initSnapshot: StateSnapshot,
       hasChallenge: Boolean,
@@ -328,10 +322,9 @@ object BlockDiffer {
       verify: Boolean,
       txSignParCheck: Boolean
   ): TracedResult[ValidationError, Result] = {
-    val timestamp      = blockchain.lastBlockTimestamp.get
     val blockGenerator = blockchain.lastBlockHeader.get.header.generator.toAddress
 
-    val txDiffer = TransactionDiffer(prevBlockTimestamp, timestamp, verify)
+    val txDiffer = TransactionDiffer(verify)
 
     if (verify && txSignParCheck)
       ParSignatureChecker.checkTxSignatures(txs)

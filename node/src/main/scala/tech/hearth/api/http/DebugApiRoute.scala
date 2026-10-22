@@ -182,7 +182,7 @@ case class DebugApiRoute(
 
       val tracedSnapshot = for {
         tx   <- TracedResult(parsedTransaction)
-        diff <- TransactionDiffer.forceValidate(blockchain.lastBlockTimestamp, time.correctedTime())(blockchain, tx)
+        diff <- TransactionDiffer.forceValidate(blockchain, tx)
       } yield (tx, diff)
 
       val error = tracedSnapshot.resultE match {

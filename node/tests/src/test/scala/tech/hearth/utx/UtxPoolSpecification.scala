@@ -549,7 +549,7 @@ class UtxPoolSpecification extends FreeSpec, WithDomain, EitherValues, Eventuall
               utxPool.addTransaction(tx, verify = false)
             }
 
-            val differ = TransactionDiffer(d.blockchainUpdater.lastBlockTimestamp, System.currentTimeMillis(), verify = false)(
+            val differ = TransactionDiffer(verify = false)(
               d.blockchainUpdater,
               _: Transaction
             ).resultE.explicitGet()

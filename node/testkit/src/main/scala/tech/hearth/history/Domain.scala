@@ -76,10 +76,10 @@ case class Domain(
   }
 
   val transactionDiffer: Transaction => TracedResult[ValidationError, StateSnapshot] =
-    TransactionDiffer(blockchain.lastBlockTimestamp, System.currentTimeMillis())(blockchain, _)
+    TransactionDiffer()(blockchain, _)
 
   val transactionDifferWithLog: Transaction => TracedResult[ValidationError, StateSnapshot] =
-    TransactionDiffer(blockchain.lastBlockTimestamp, System.currentTimeMillis())(blockchain, _)
+    TransactionDiffer()(blockchain, _)
 
   def createDiffE(tx: Transaction): Either[ValidationError, StateSnapshot] = transactionDiffer(tx).resultE
   def createDiff(tx: Transaction): StateSnapshot                           = createDiffE(tx).explicitGet()
@@ -345,8 +345,6 @@ case class Domain(
               lastBlock.header.stateHash.get,
               StateSnapshot.empty,
               blockSigner,
-              rocksDBWriter.lastBlockTimestamp,
-              blockchain.lastBlockTimestamp.get,
               isChallenging = false,
               blockchain
             )
@@ -513,8 +511,6 @@ case class Domain(
                   initStateHash,
                   initSnapshot,
                   generator,
-                  blockchain.lastBlockTimestamp,
-                  blockWithoutStateHash.header.timestamp,
                   challengedHeader.nonEmpty,
                   blockchainWithNewBlock
                 )

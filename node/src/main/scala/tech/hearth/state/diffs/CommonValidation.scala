@@ -102,19 +102,20 @@ object CommonValidation {
       GenericError(s"Transaction from another network, expected: ${currentNetworkId.value}, actual: ${tx.networkId.value}")
     )
 
-  def disallowTxFromFuture[T <: Transaction](settings: FunctionalitySettings, time: Long, tx: T): Either[ValidationError, T] = {
-    if (tx.timestamp - time > settings.maxTransactionTimeForwardOffset.toMillis)
-      Left(
-        Mistiming(
-          s"""Transaction timestamp ${tx.timestamp}
-             |is more than ${settings.maxTransactionTimeForwardOffset.toMillis}ms in the future
-             |relative to block timestamp $time""".stripMargin
-            .replaceAll("\n", " ")
-            .replaceAll("\r", "")
+  def disallowTxFromFuture[T <: Transaction](settings: FunctionalitySettings, blockTime: Option[Long], tx: T): Either[ValidationError, T] =
+    blockTime match {
+      case Some(time) if tx.timestamp - time > settings.maxTransactionTimeForwardOffset.toMillis =>
+        Left(
+          Mistiming(
+            s"""Transaction timestamp ${tx.timestamp}
+               |is more than ${settings.maxTransactionTimeForwardOffset.toMillis}ms in the future
+               |relative to block timestamp $time""".stripMargin
+              .replaceAll("\n", " ")
+              .replaceAll("\r", "")
+          )
         )
-      )
-    else Right(tx)
-  }
+      case _ => Right(tx)
+    }
 
   def disallowTxFromPast[T <: Transaction](settings: FunctionalitySettings, prevBlockTime: Option[Long], tx: T): Either[ValidationError, T] =
     prevBlockTime match {
