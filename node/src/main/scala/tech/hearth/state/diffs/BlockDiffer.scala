@@ -211,7 +211,10 @@ object BlockDiffer {
       // asset. Reading the volume through `combined` makes the two mints compose instead of one overwriting the
       // other, since StateSnapshot.assetVolumes carries a resulting total rather than a delta.
       payout <- StakingPayout.atPeriodBoundary(SnapshotBlockchain(blockchain, combined), Height(newBlockHeight))
-    } yield combined |+| payout
+      // After the staking payout for the same reason: both credit balances, and StateSnapshot.balances carries
+      // resulting totals, so a client paid Cred by both has to see the first credit before the second is added
+      withdrawals <- WithdrawalPayout.atPeriodBoundary(SnapshotBlockchain(blockchain, combined |+| payout), Height(newBlockHeight))
+    } yield combined |+| payout |+| withdrawals
   }
 
   def fromMicroBlock(
