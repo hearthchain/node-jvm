@@ -18,7 +18,7 @@ class MerkleRootTestSuite extends BaseFreeSpec with ActivationStatusRequest with
   override protected def nodeConfigs: Seq[Config] = Configs
 
   "not able to get merkle proof before activation" in {
-    // minimal-block-generation-offset (30s) alone is close to waitForHeight's 50s default timeout.
+    // Two blocks at the 20s min-block-time floor plus the PoS term is close to waitForHeight's 50s default timeout.
     miner.waitForHeight(ActivationHeight - 1, 2.minutes)
     val txId = miner.broadcastTransfer(miner.keyPair, miner.address, transferAmount, minFee, None, None).id
     assertApiError(
@@ -115,18 +115,24 @@ object MerkleRootTestSuite {
   val FairPosActivationHeight    = 0
   val ActivationHeight           = Height(3)
 
+  // A ~20s block with a 10s min-micro-block-age keeps the first half of each block's microblocks and moves the rest to
+  // the next one. The spacing must come from min-block-time: minimal-block-generation-offset only delays forging, the
+  // block is still stamped refTs + PoS delay, so after one block the timestamps lag and blocks resume the ~5s pace.
   val Config: Config = ConfigFactory.parseString(
     s"""
        |hearth {
+       |   blockchain.custom {
+       |      functionality.min-block-time = 20s
+       |      genesis.average-block-delay = 20s
+       |   }
        |   miner {
        |      quorum = 0
        |      min-micro-block-age = 10s
-       |      minimal-block-generation-offset = 30s
        |   }
        |}""".stripMargin
   )
 
-  // Miners.last (the highest-balance miner-eligible account): a low-balance miner's PoS delay for its very first
-  // block, on top of the 30s minimal-block-generation-offset above, can exceed waitForHeight's 50s default timeout.
+  // Miners.last (the highest-balance miner-eligible account): a low-balance miner's PoS delay on top of the 20s
+  // min-block-time above would make the block pace unpredictable.
   val Configs: Seq[Config] = Seq(Config.withFallback(Miners.last))
 }
