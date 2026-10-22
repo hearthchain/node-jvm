@@ -10,28 +10,29 @@ import tech.hearth.transaction.UpdateCollateralTransaction
 /** UpdateCollateralTransaction semantics: verify whichever fields are set (see DcapCollateral) and merge the
   * result into the snapshot.
   *
-  * atTime for every expiry/freshness check is the transaction's own (consensus-agreed, bounded-drift) timestamp,
-  * not wall-clock time - block timestamp would also work, but isn't threaded through TransactionDiffer today and
-  * both are equally deterministic for this purpose.
+  * atTime for every expiry/freshness check is the block's timestamp (DcapCollateral.validityTime): the transaction's
+  * is equally deterministic, but its sender picks it and may backdate it by up to max-transaction-time-back-offset,
+  * which would let collateral that just expired through.
   */
 object UpdateCollateralTransactionDiff {
   def apply(blockchain: Blockchain)(tx: UpdateCollateralTransaction): Either[ValidationError, StateSnapshot] = {
     val sender = tx.sender.toAddress
 
     for {
-      rootCaCrl <- tx.rootCaCrl.traverse(p => DcapCollateral.verifyRootCaCrl(p, blockchain, tx.timestamp).leftMap(GenericError(_)))
+      blockTimestamp <- DcapCollateral.validityTime(blockchain).leftMap(GenericError(_))
+      rootCaCrl      <- tx.rootCaCrl.traverse(p => DcapCollateral.verifyRootCaCrl(p, blockchain, blockTimestamp).leftMap(GenericError(_)))
       pckCaIssuerChain <- tx.pckCaIssuerChain.traverse(p =>
-        DcapCollateral.verifyPckCaIssuerChain(p, blockchain, tx.timestamp).leftMap(GenericError(_))
+        DcapCollateral.verifyPckCaIssuerChain(p, blockchain, blockTimestamp).leftMap(GenericError(_))
       )
-      pckCrl <- tx.pckCrl.traverse(p => DcapCollateral.verifyPckCrl(p, tx.pckCaIssuerChain, blockchain, tx.timestamp).leftMap(GenericError(_)))
+      pckCrl <- tx.pckCrl.traverse(p => DcapCollateral.verifyPckCrl(p, tx.pckCaIssuerChain, blockchain, blockTimestamp).leftMap(GenericError(_)))
       tcbSigningIssuerChain <- tx.tcbSigningIssuerChain.traverse(p =>
-        DcapCollateral.verifyTcbSigningIssuerChain(p, blockchain, tx.timestamp).leftMap(GenericError(_))
+        DcapCollateral.verifyTcbSigningIssuerChain(p, blockchain, blockTimestamp).leftMap(GenericError(_))
       )
       tcbInfo <- tx.tcbInfo.traverse(p =>
-        DcapCollateral.verifyTcbInfo(p, tx.tcbSigningIssuerChain, blockchain, tx.timestamp).leftMap(GenericError(_))
+        DcapCollateral.verifyTcbInfo(p, tx.tcbSigningIssuerChain, blockchain, blockTimestamp).leftMap(GenericError(_))
       )
       qeIdentity <- tx.qeIdentity.traverse(p =>
-        DcapCollateral.verifyQeIdentity(p, tx.tcbSigningIssuerChain, blockchain, tx.timestamp).leftMap(GenericError(_))
+        DcapCollateral.verifyQeIdentity(p, tx.tcbSigningIssuerChain, blockchain, blockTimestamp).leftMap(GenericError(_))
       )
       snapshot <- StateSnapshot.build(
         blockchain,

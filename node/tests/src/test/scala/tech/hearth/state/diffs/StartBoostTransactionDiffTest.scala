@@ -361,10 +361,16 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
           produce("TCB status Revoked is not accepted")
       }
 
-      "rejects TCB Info expired by the transaction's timestamp" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
-        val tx      = startBoost(d)
-        val expired = testnetTcbInfo.replace("2099-01-01T00:00:00Z", "2000-01-01T00:00:00Z")
-        StartBoostTransactionDiff(withCollateral(d.blockchain, tcbInfo = expired))(tx) should produce("TCB Info for FMSPC b0c06f000000 expired")
+      "judges collateral expiry by the block's timestamp, not a backdated transaction's" in withDomain(
+        DeterministicFinality,
+        AddrWithBalance.enoughBalances(sender)
+      ) { d =>
+        val tx         = startBoost(d)
+        val blockTime  = d.blockchain.lastBlockTimestamp.get
+        val backdated  = TxHelpers.startBoost(sender, validator, tx.tdxQuote, tx.generationPeriodStart, timestamp = blockTime - 5 * 60000)
+        val expiredNow = testnetTcbInfo.replace("2099-01-01T00:00:00Z", Instant.ofEpochMilli(blockTime - 60000).toString)
+        StartBoostTransactionDiff(withCollateral(d.blockchain, tcbInfo = expiredNow))(backdated) should
+          produce("TCB Info for FMSPC b0c06f000000 expired")
       }
 
       "rejects a quote while no QE Identity is on chain" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>

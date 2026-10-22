@@ -21,6 +21,13 @@ import scala.util.Try
   */
 object DcapCollateral {
 
+  /** The time a transaction checks collateral validity windows at: its block's timestamp. A transaction in a
+    * microblock reads its key block's, and so does the UTX pool packing one, its chain topped by that same key block,
+    * which is why this comes from the chain rather than TransactionDiffer's current-time estimate.
+    */
+  def validityTime(blockchain: Blockchain): Either[String, Long] =
+    blockchain.lastBlockTimestamp.toRight("No block to check collateral validity at")
+
   /** Root CA CRL is self-issued by the pinned Intel Root CA directly - no issuer chain needed, unlike every other
     * field below.
     */

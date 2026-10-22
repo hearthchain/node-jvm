@@ -70,10 +70,15 @@ object StartBoostTransactionDiff {
 
   private val SoftwareHardeningStatuses = Set(TcbStatus.SWHardeningNeeded, TcbStatus.ConfigurationAndSWHardeningNeeded)
 
+  /** Every collateral and certificate validity window is checked at the block's timestamp (validityTime), which its
+    * generator sets within consensus bounds, rather than the transaction's, which its sender picks and may backdate by
+    * up to max-transaction-time-back-offset to stretch an expired one.
+    */
   def apply(blockchain: Blockchain)(tx: StartBoostTransaction): Either[ValidationError, StateSnapshot] =
     for {
-      quote <- DcapQuote.parse(tx.tdxQuote.arr).leftMap(e => GenericError(s"Invalid quote: $e"))
-      _     <- Either.raiseUnless(quote.header.teeType == DcapQuote.TdxTeeType)(GenericError("SGX quotes are not accepted"))
+      blockTimestamp <- DcapCollateral.validityTime(blockchain).leftMap(GenericError(_))
+      quote          <- DcapQuote.parse(tx.tdxQuote.arr).leftMap(e => GenericError(s"Invalid quote: $e"))
+      _              <- Either.raiseUnless(quote.header.teeType == DcapQuote.TdxTeeType)(GenericError("SGX quotes are not accepted"))
       tdReport <- quote.body match {
         case DcapQuote.Td10QuoteBody(body) => Right(body)
         case DcapQuote.Td15QuoteBody(body) => Right(body.td10)
@@ -94,8 +99,8 @@ object StartBoostTransactionDiff {
         GenericError(s"Enclave $enclaveKey is already registered for period $next")
       }
       _ <- verifyMeasurement(blockchain, tdReport).leftMap(GenericError(_))
-      _ <- verifyTcbStatus(blockchain, tx, quote).leftMap(GenericError(_))
-      _ <- verifyQuoteSignatures(blockchain, tx, quote).leftMap(GenericError(_))
+      _ <- verifyTcbStatus(blockchain, blockTimestamp, quote).leftMap(GenericError(_))
+      _ <- verifyQuoteSignatures(blockchain, blockTimestamp, quote).leftMap(GenericError(_))
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = Map(tx.sender.toAddress -> Portfolio(balance = -tx.fee.value)),
@@ -173,7 +178,7 @@ object StartBoostTransactionDiff {
     * user_report_data (checked by DcapQuote's own invariant, re-verified here) proves the QE vouches for this
     * specific attestation key; that attestation key finally verifies isvSignature.
     */
-  private def verifyQuoteSignatures(blockchain: Blockchain, tx: StartBoostTransaction, quote: DcapQuote.Quote): Either[String, Unit] =
+  private def verifyQuoteSignatures(blockchain: Blockchain, atTime: Long, quote: DcapQuote.Quote): Either[String, Unit] =
     for {
       _ <- Either.raiseUnless(quote.signature.certData.isPckCertChain) {
         s"Quote's cert data is not a PCK certificate chain (type ${quote.signature.certData.certKeyType})"
@@ -183,7 +188,7 @@ object StartBoostTransactionDiff {
         "Root CA CRL must be set (via UpdateCollateral) before a StartBoost quote can be verified"
       )
       pckLeafKey <- IntelPki
-        .verifyIssuerChain(quote.signature.certData.certData.arr, tx.timestamp, crls = Seq(pckCrl.arr, rootCaCrl.arr))
+        .verifyIssuerChain(quote.signature.certData.certData.arr, atTime, crls = Seq(pckCrl.arr, rootCaCrl.arr))
         .leftMap(e => s"Invalid PCK certificate chain: $e")
       _ <- P256Curve
         .verify(quote.signature.qeReportBodyMessage.arr, quote.signature.qeReportSignature.arr, P256Curve.publicKeyToBytes(pckLeafKey))
@@ -214,7 +219,7 @@ object StartBoostTransactionDiff {
   /** Checked before the signatures, like the measurement, because it is cheaper: it rejects a quote by what the
     * still-unverified quote claims, and only the signatures verifying makes a passing quote mean anything.
     */
-  private def verifyTcbStatus(blockchain: Blockchain, tx: StartBoostTransaction, quote: DcapQuote.Quote): Either[String, Unit] =
+  private def verifyTcbStatus(blockchain: Blockchain, atTime: Long, quote: DcapQuote.Quote): Either[String, Unit] =
     for {
       pck <- IntelPki.pckTcb(quote.signature.certData.certData.arr)
       storedTcbInfo <- blockchain.dcapTcbInfo(pck.fmspc).toRight {
@@ -225,7 +230,7 @@ object StartBoostTransactionDiff {
       )
       tcbInfo    <- TdxTcbInfo.parse(storedTcbInfo.arr)
       qeIdentity <- QeIdentity.parse(storedQeIdentity.arr)
-      _          <- checkTcb(tcbInfo, qeIdentity, pck, quote, blockchain.settings.functionalitySettings.acceptedTcbStatuses, tx.timestamp)
+      _          <- checkTcb(tcbInfo, qeIdentity, pck, quote, blockchain.settings.functionalitySettings.acceptedTcbStatuses, atTime)
     } yield ()
 
   /** Expired collateral is rejected rather than evaluated: it can't show a TCB level Intel has since downgraded. */
