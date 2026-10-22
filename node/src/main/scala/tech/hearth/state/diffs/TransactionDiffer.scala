@@ -21,32 +21,16 @@ import tech.hearth.transaction.transfer.TransferTransaction
 import play.api.libs.json.Json
 
 object TransactionDiffer {
-  def apply(prevBlockTs: Option[Long], currentBlockTs: Long, verify: Boolean = true)(
-      blockchain: Blockchain,
-      tx: Transaction
-  ): TracedResult[ValidationError, StateSnapshot] =
-    validate(prevBlockTs, currentBlockTs, verify)(blockchain, tx)
+  // The block a transaction goes into is the one on top of `blockchain`: the block being applied, or, for the UTX pool,
+  // the key block whose microblocks it would be packed into. Its timestamp and its parent's bound the transaction's.
+  def apply(verify: Boolean = true)(blockchain: Blockchain, tx: Transaction): TracedResult[ValidationError, StateSnapshot] =
+    validate(verify)(blockchain, tx)
 
-  def forceValidate(prevBlockTs: Option[Long], currentBlockTs: Long)(
-      blockchain: Blockchain,
-      tx: Transaction
-  ): TracedResult[ValidationError, StateSnapshot] =
-    validate(prevBlockTs, currentBlockTs, verify = true)(blockchain, tx)
+  def forceValidate(blockchain: Blockchain, tx: Transaction): TracedResult[ValidationError, StateSnapshot] =
+    validate(verify = true)(blockchain, tx)
 
-  def limitedExecution(
-      prevBlockTimestamp: Option[Long],
-      currentBlockTimestamp: Long,
-      verify: Boolean = true
-  )(
-      blockchain: Blockchain,
-      tx: Transaction
-  ): TracedResult[ValidationError, StateSnapshot] = {
-    validate(
-      prevBlockTimestamp,
-      currentBlockTimestamp,
-      verify = verify
-    )(blockchain, tx)
-  }
+  def limitedExecution(verify: Boolean = true)(blockchain: Blockchain, tx: Transaction): TracedResult[ValidationError, StateSnapshot] =
+    validate(verify)(blockchain, tx)
 
   /** Validates transaction.
     * @param limitedExecution
@@ -55,15 +39,13 @@ object TransactionDiffer {
     *   validate common checks, proofs and asset scripts execution. If `skipFailing` is true asset scripts will not be executed
     */
   private def validate(
-      prevBlockTimestamp: Option[Long],
-      currentBlockTimestamp: Long,
       verify: Boolean
   )(
       blockchain: Blockchain,
       tx: Transaction
   ): TracedResult[ValidationError, StateSnapshot] = {
     val result = for {
-      _                   <- validateCommon(blockchain, tx, prevBlockTimestamp, currentBlockTimestamp, verify).traced
+      _                   <- validateCommon(blockchain, tx, verify).traced
       _                   <- validateFunds(blockchain, tx).traced
       verifierSnapshot    <- TracedResult.wrapValue(StateSnapshot.empty)
       transactionSnapshot <- transactionSnapshot(blockchain, tx, verifierSnapshot)
@@ -73,12 +55,14 @@ object TransactionDiffer {
     result.leftMap(TransactionValidationError(_, tx))
   }
 
+  // The database's current block whenever the chain has a block in progress on top, so cached rather than read
+  private def parentBlockTimestamp(blockchain: Blockchain): Option[Long] =
+    Option.when(blockchain.height > 1)(blockchain.blockHeader(blockchain.height - 1)).flatten.map(_.header.timestamp)
+
   // validation related
   private def validateCommon(
       blockchain: Blockchain,
       tx: Transaction,
-      prevBlockTs: Option[Long],
-      currentBlockTs: Long,
       verify: Boolean
   ): Either[ValidationError, Unit] =
     if (verify)
@@ -89,8 +73,8 @@ object TransactionDiffer {
             // and there is no point doing blockchain lookups for a transaction that is not genuine.
             _ <- CommonValidation.disallowInvalidProofs(tx)
             _ <- CommonValidation.disallowFromAnotherNetwork(tx, NetworkId.current)
-            _ <- CommonValidation.disallowTxFromFuture(blockchain.settings.functionalitySettings, currentBlockTs, tx)
-            _ <- CommonValidation.disallowTxFromPast(blockchain.settings.functionalitySettings, prevBlockTs, tx)
+            _ <- CommonValidation.disallowTxFromFuture(blockchain.settings.functionalitySettings, blockchain.lastBlockTimestamp, tx)
+            _ <- CommonValidation.disallowTxFromPast(blockchain.settings.functionalitySettings, parentBlockTimestamp(blockchain), tx)
             _ <- CommonValidation.disallowDuplicateIds(blockchain, tx)
             _ <- CommonValidation.disallowSendingGreaterThanBalance(blockchain, tx)
             _ <- FeeValidation(blockchain, tx)

@@ -3,6 +3,7 @@ package tech.hearth.settings
 import com.typesafe.config.ConfigFactory
 import tech.hearth.account.NetworkId
 import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto.dcap.TdxTcbInfo.TcbStatus
 import tech.hearth.state.EmissionCurve
 import tech.hearth.transaction.AssetIdLength
 import tech.hearth.transaction.Asset.IssuedAsset
@@ -35,6 +36,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
           |        max-transaction-time-forward-offset = 12d
           |        lease-expiration = 1000000
           |        light-node-block-fields-absence-interval = 123
+          |        accepted-tcb-statuses = [UpToDate, OutOfDate]
           |      }
           |      rewards {
           |        c-emit = 9500000000000000
@@ -78,6 +80,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.functionalitySettings.preActivatedFeatures should be(Map(19 -> 100, 20 -> 200))
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(55.seconds)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(12.days)
+    settings.functionalitySettings.acceptedTcbStatuses should be(Set(TcbStatus.UpToDate, TcbStatus.OutOfDate))
     settings.rewardsSettings.cEmit should be(9500000000000000L)
     settings.rewardsSettings.initialReward should be(600000000L)
     settings.rewardsSettings.decayRatioFixed should be(BigInt("340282322045415694657836056900309514630"))
@@ -129,6 +132,7 @@ class BlockchainSettingsSpecification extends FlatSpec {
     settings.networkId should be(NetworkId.Testnet)
     settings.functionalitySettings.maxTransactionTimeBackOffset should be(120.minutes)
     settings.functionalitySettings.maxTransactionTimeForwardOffset should be(90.minutes)
+    settings.functionalitySettings.acceptedTcbStatuses should be(Set(TcbStatus.UpToDate, TcbStatus.SWHardeningNeeded, TcbStatus.OutOfDate))
     settings.rewardsSettings.cEmit should be(9500000000000000L)
     settings.rewardsSettings.initialReward should be(12528336897L)
     settings.rewardsSettings.decayRatioFixed should be(BigInt("340281918165977088157076486680406733895"))
@@ -209,6 +213,11 @@ class BlockchainSettingsSpecification extends FlatSpec {
         PredefinedSnapshotSettings.STAGENET
       )
     stagenet.hardCap should be(100_000_000L * Constants.UnitsInHearth + RewardsSettings.STAGENET.cEmit)
+  }
+
+  it should "accept only current and software-hardened TCBs by default" in {
+    FunctionalitySettings().acceptedTcbStatuses should be(Set(TcbStatus.UpToDate, TcbStatus.SWHardeningNeeded))
+    FunctionalitySettings.MAINNET.acceptedTcbStatuses should be(Set(TcbStatus.UpToDate, TcbStatus.SWHardeningNeeded))
   }
 
   it should "parse cred-asset, and reject a malformed one at construction rather than at the first payout" in {

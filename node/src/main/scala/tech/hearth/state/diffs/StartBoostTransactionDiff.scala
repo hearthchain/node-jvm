@@ -4,23 +4,23 @@ import cats.syntax.either.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.crypto.P256Curve
-import tech.hearth.crypto.dcap.{DcapQuote, IntelPki}
+import tech.hearth.crypto.dcap.{DcapQuote, IntelPki, QeIdentity, TdxTcbInfo}
+import tech.hearth.crypto.dcap.TdxTcbInfo.TcbStatus
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.transaction.StartBoostTransaction
 import tech.hearth.transaction.TxValidationError.{ActivationError, GenericError}
 
 import java.nio.{ByteBuffer, ByteOrder}
+import java.time.Instant
 
 /** StartBoostTransaction semantics: verify a TDX quote end to end and register its enclave for the next generation
   * period (see the StartBoost consensus plan). `StartBoostTxValidator` already rejected a malformed or SGX quote
   * before this ever runs, but re-parses here too since nothing carries the parsed value across from validation.
   *
-  * Deliberately out of scope for this pass, both flagged rather than silently skipped: the on-chain tcbInfo for the
-  * quote's FMSPC is only checked for *presence*, not for its TCB status (UpToDate/OutOfDate/Revoked, S6.2.2 of
-  * Intel's DCAP spec) or re-checked for freshness at StartBoost time (only at the UpdateCollateral submission that
-  * put it on chain) - a TEE running under a since-downgraded TCB is not yet rejected. Neither has a settled design
-  * yet; don't guess at either from this comment without checking whether one has landed since.
+  * The quote's platform, TDX module and Quoting Enclave are rated against the on-chain tcbInfo for its FMSPC and the
+  * QE Identity (TdxTcbInfo.evaluate, QeIdentity.evaluate), and have to come out with a status the network accepts
+  * (FunctionalitySettings.acceptedTcbStatuses).
   *
   * TD measurements are pinned in consensus (PinnedMeasurements) rather than in a governance-updatable registry, #40.
   */
@@ -60,10 +60,25 @@ object StartBoostTransactionDiff {
     )
   )
 
+  /** Advisories the pinned images are known to mitigate, for a TCB status that leaves them to the TD's software
+    * (SWHardeningNeeded, ConfigurationAndSWHardeningNeeded): the platform is as patched as Intel can make it.
+    * Empty, since testnet's platform rates UpToDate (see SOURCE.md's testnet tcbInfo); an advisory goes in with
+    * the image that mitigates it. Other statuses' advisories need microcode or firmware no image can supply, so
+    * FunctionalitySettings.acceptedTcbStatuses alone decides those.
+    */
+  val MitigatedAdvisories: Set[String] = Set.empty
+
+  private val SoftwareHardeningStatuses = Set(TcbStatus.SWHardeningNeeded, TcbStatus.ConfigurationAndSWHardeningNeeded)
+
+  /** Every collateral and certificate validity window is checked at the block's timestamp (validityTime), which its
+    * generator sets within consensus bounds, rather than the transaction's, which its sender picks and may backdate by
+    * up to max-transaction-time-back-offset to stretch an expired one.
+    */
   def apply(blockchain: Blockchain)(tx: StartBoostTransaction): Either[ValidationError, StateSnapshot] =
     for {
-      quote <- DcapQuote.parse(tx.tdxQuote.arr).leftMap(e => GenericError(s"Invalid quote: $e"))
-      _     <- Either.raiseUnless(quote.header.teeType == DcapQuote.TdxTeeType)(GenericError("SGX quotes are not accepted"))
+      blockTimestamp <- DcapCollateral.validityTime(blockchain).leftMap(GenericError(_))
+      quote          <- DcapQuote.parse(tx.tdxQuote.arr).leftMap(e => GenericError(s"Invalid quote: $e"))
+      _              <- Either.raiseUnless(quote.header.teeType == DcapQuote.TdxTeeType)(GenericError("SGX quotes are not accepted"))
       tdReport <- quote.body match {
         case DcapQuote.Td10QuoteBody(body) => Right(body)
         case DcapQuote.Td15QuoteBody(body) => Right(body.td10)
@@ -84,8 +99,8 @@ object StartBoostTransactionDiff {
         GenericError(s"Enclave $enclaveKey is already registered for period $next")
       }
       _ <- verifyMeasurement(blockchain, tdReport).leftMap(GenericError(_))
-      _ <- verifyQuoteSignatures(blockchain, tx, quote).leftMap(GenericError(_))
-      _ <- verifyTcbStatus(blockchain, quote).leftMap(GenericError(_))
+      _ <- verifyTcbStatus(blockchain, blockTimestamp, quote).leftMap(GenericError(_))
+      _ <- verifyQuoteSignatures(blockchain, blockTimestamp, quote).leftMap(GenericError(_))
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = Map(tx.sender.toAddress -> Portfolio(balance = -tx.fee.value)),
@@ -163,7 +178,7 @@ object StartBoostTransactionDiff {
     * user_report_data (checked by DcapQuote's own invariant, re-verified here) proves the QE vouches for this
     * specific attestation key; that attestation key finally verifies isvSignature.
     */
-  private def verifyQuoteSignatures(blockchain: Blockchain, tx: StartBoostTransaction, quote: DcapQuote.Quote): Either[String, Unit] =
+  private def verifyQuoteSignatures(blockchain: Blockchain, atTime: Long, quote: DcapQuote.Quote): Either[String, Unit] =
     for {
       _ <- Either.raiseUnless(quote.signature.certData.isPckCertChain) {
         s"Quote's cert data is not a PCK certificate chain (type ${quote.signature.certData.certKeyType})"
@@ -173,7 +188,7 @@ object StartBoostTransactionDiff {
         "Root CA CRL must be set (via UpdateCollateral) before a StartBoost quote can be verified"
       )
       pckLeafKey <- IntelPki
-        .verifyIssuerChain(quote.signature.certData.certData.arr, tx.timestamp, crls = Seq(pckCrl.arr, rootCaCrl.arr))
+        .verifyIssuerChain(quote.signature.certData.certData.arr, atTime, crls = Seq(pckCrl.arr, rootCaCrl.arr))
         .leftMap(e => s"Invalid PCK certificate chain: $e")
       _ <- P256Curve
         .verify(quote.signature.qeReportBodyMessage.arr, quote.signature.qeReportSignature.arr, P256Curve.publicKeyToBytes(pckLeafKey))
@@ -201,11 +216,47 @@ object StartBoostTransactionDiff {
     }
   }
 
-  private def verifyTcbStatus(blockchain: Blockchain, quote: DcapQuote.Quote): Either[String, Unit] =
+  /** Checked before the signatures, like the measurement, because it is cheaper: it rejects a quote by what the
+    * still-unverified quote claims, and only the signatures verifying makes a passing quote mean anything.
+    */
+  private def verifyTcbStatus(blockchain: Blockchain, atTime: Long, quote: DcapQuote.Quote): Either[String, Unit] =
     for {
-      fmspc <- IntelPki.pckLeafFmspc(quote.signature.certData.certData.arr)
-      _ <- Either.raiseUnless(blockchain.dcapTcbInfo(ByteStr(fmspc)).isDefined) {
-        s"No on-chain TCB Info for FMSPC ${ByteStr(fmspc)}; submit one via UpdateCollateral first"
+      pck <- IntelPki.pckTcb(quote.signature.certData.certData.arr)
+      storedTcbInfo <- blockchain.dcapTcbInfo(pck.fmspc).toRight {
+        s"No on-chain TCB Info for FMSPC ${pck.fmspc}; submit one via UpdateCollateral first"
+      }
+      storedQeIdentity <- blockchain.dcapQeIdentity.toRight(
+        "QE Identity must be set (via UpdateCollateral) before a StartBoost quote can be verified"
+      )
+      tcbInfo    <- TdxTcbInfo.parse(storedTcbInfo.arr)
+      qeIdentity <- QeIdentity.parse(storedQeIdentity.arr)
+      _          <- checkTcb(tcbInfo, qeIdentity, pck, quote, blockchain.settings.functionalitySettings.acceptedTcbStatuses, atTime)
+    } yield ()
+
+  /** Expired collateral is rejected rather than evaluated: it can't show a TCB level Intel has since downgraded. */
+  private[diffs] def checkTcb(
+      tcbInfo: TdxTcbInfo,
+      qeIdentity: QeIdentity,
+      pck: IntelPki.PckTcb,
+      quote: DcapQuote.Quote,
+      accepted: Set[TcbStatus],
+      atTime: Long
+  ): Either[String, Unit] = {
+    val at = Instant.ofEpochMilli(atTime)
+    for {
+      _ <- Either.raiseWhen(at.isAfter(tcbInfo.nextUpdate)) {
+        s"On-chain TCB Info for FMSPC ${pck.fmspc} expired at ${tcbInfo.nextUpdate}; submit a fresh one via UpdateCollateral"
+      }
+      _ <- Either.raiseWhen(at.isAfter(qeIdentity.nextUpdate)) {
+        s"On-chain QE Identity expired at ${qeIdentity.nextUpdate}; submit a fresh one via UpdateCollateral"
+      }
+      qe    <- qeIdentity.evaluate(quote.signature.qeReportBody)
+      level <- tcbInfo.evaluate(pck, quote, qe)
+      _     <- Either.raiseUnless(accepted.contains(level.status))(s"TCB status ${level.status} is not accepted")
+      unmitigated = if (SoftwareHardeningStatuses.contains(level.status)) level.advisoryIds.filterNot(MitigatedAdvisories) else Seq.empty
+      _ <- Either.raiseWhen(unmitigated.nonEmpty) {
+        s"TCB status ${level.status} needs mitigations for ${unmitigated.mkString(", ")}, which the pinned images are not known to have"
       }
     } yield ()
+  }
 }

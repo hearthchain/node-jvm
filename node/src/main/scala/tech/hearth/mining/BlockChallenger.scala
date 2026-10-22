@@ -221,8 +221,6 @@ class BlockChallengerImpl(
           TxStateSnapshotHashBuilder.createHashFromSnapshot(initialBlockSnapshot, None).createHash(prevStateHash),
           initialBlockSnapshot,
           sk,
-          Some(prevBlockHeader.timestamp),
-          blockTime,
           isChallenging = true,
           blockchainWithNewBlock
         )

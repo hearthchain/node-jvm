@@ -1,6 +1,8 @@
 package tech.hearth.crypto.dcap
 
 import cats.syntax.either.*
+import cats.syntax.traverse.*
+import tech.hearth.common.state.ByteStr
 import tech.hearth.crypto.P256Curve
 
 import java.io.ByteArrayInputStream
@@ -136,41 +138,63 @@ object IntelPki {
   }
 
   private val SgxExtensionOid = "1.2.840.113741.1.13.1"
+  private val TcbOid          = "1.2.840.113741.1.13.1.2"
+  private val PceIdOid        = "1.2.840.113741.1.13.1.3"
   private val FmspcOid        = "1.2.840.113741.1.13.1.4"
+  private val PceSvnOid       = s"$TcbOid.17"
+  private val CpuSvnCount     = 16
 
-  /** Reads the FMSPC (platform model id, 6 bytes) out of a PCK leaf certificate's SGX extension - the field that
-    * selects which on-chain tcbInfo entry a quote's PCK chain has to be checked against (see DcapCollateral).
-    * `chainPem` is a quote's own embedded PCK cert chain (leaf first, matching Intel PCS's own order); only the
-    * leaf carries the SGX extension, so the rest of the chain is parsed but otherwise unused here.
+  /** What a PCK leaf certificate's SGX extension says about the platform: the FMSPC (platform model id, 6 bytes)
+    * selecting which on-chain tcbInfo applies, the PCE ID it must name too, and the SGX TCB components and PCESVN
+    * TdxTcbInfo matches against its levels.
     */
-  def pckLeafFmspc(chainPem: Array[Byte]): Either[String, Array[Byte]] =
+  case class PckTcb(fmspc: ByteStr, pceId: ByteStr, cpuSvn: Seq[Int], pceSvn: Int)
+
+  /** `chainPem` is a quote's own embedded PCK cert chain (leaf first, matching Intel PCS's own order); only the leaf
+    * carries the SGX extension, so the rest of the chain is parsed but otherwise unused here.
+    */
+  def pckTcb(chainPem: Array[Byte]): Either[String, PckTcb] =
     try {
       val leaf = certificateFactory.generateCertificates(new ByteArrayInputStream(chainPem)).asScala.headOption.collect { case c: X509Certificate =>
         c
       }
-      leaf.toRight("empty PCK certificate chain").flatMap(fmspcOf)
+      leaf.toRight("empty PCK certificate chain").flatMap(pckTcbOf)
     } catch {
       case NonFatal(e) => Left(s"failed to parse PCK certificate chain: ${e.getMessage}")
     }
 
-  private def fmspcOf(cert: X509Certificate): Either[String, Array[Byte]] =
+  private def pckTcbOf(cert: X509Certificate): Either[String, PckTcb] =
     try {
-      val sgxExtension = Option(cert.getExtensionValue(SgxExtensionOid)).toRight("PCK certificate has no SGX extension")
-      sgxExtension.flatMap { raw =>
+      Option(cert.getExtensionValue(SgxExtensionOid)).toRight("PCK certificate has no SGX extension").flatMap { raw =>
         // Same double DER-encoding as crlNumber below: an OCTET STRING wrapping the SGX extension's own SEQUENCE
-        // of SEQUENCE{OID, value} entries (RFC 5280-style extension list, Intel's own private OID tree).
-        val entries = org.bouncycastle.asn1.ASN1Sequence.getInstance(
-          org.bouncycastle.asn1.ASN1OctetString.getInstance(raw).getOctets
-        )
-        (0 until entries.size())
-          .map(i => org.bouncycastle.asn1.ASN1Sequence.getInstance(entries.getObjectAt(i)))
-          .find(entry => org.bouncycastle.asn1.ASN1ObjectIdentifier.getInstance(entry.getObjectAt(0)).getId == FmspcOid)
-          .map(entry => org.bouncycastle.asn1.ASN1OctetString.getInstance(entry.getObjectAt(1)).getOctets)
-          .toRight("SGX extension has no FMSPC field")
+        // of SEQUENCE{OID, value} entries (RFC 5280-style extension list, Intel's own private OID tree). The TCB
+        // entry nests one more such list, of the CPU SVN components and PCESVN.
+        val entries = sgxEntries(org.bouncycastle.asn1.ASN1Sequence.getInstance(org.bouncycastle.asn1.ASN1OctetString.getInstance(raw).getOctets))
+        def integer(entries: Map[String, org.bouncycastle.asn1.ASN1Encodable], oid: String) =
+          entries.get(oid).map(org.bouncycastle.asn1.ASN1Integer.getInstance(_).intValueExact()).toRight(s"SGX extension has no $oid field")
+        for {
+          fmspc <- entries
+            .get(FmspcOid)
+            .map(v => ByteStr(org.bouncycastle.asn1.ASN1OctetString.getInstance(v).getOctets))
+            .toRight("SGX extension has no FMSPC field")
+          pceId <- entries
+            .get(PceIdOid)
+            .map(v => ByteStr(org.bouncycastle.asn1.ASN1OctetString.getInstance(v).getOctets))
+            .toRight("SGX extension has no PCE ID field")
+          tcb <- entries.get(TcbOid).map(v => sgxEntries(org.bouncycastle.asn1.ASN1Sequence.getInstance(v))).toRight("SGX extension has no TCB field")
+          cpuSvn <- (1 to CpuSvnCount).toList.traverse(i => integer(tcb, s"$TcbOid.$i"))
+          pceSvn <- integer(tcb, PceSvnOid)
+        } yield PckTcb(fmspc, pceId, cpuSvn, pceSvn)
       }
     } catch {
-      case NonFatal(e) => Left(s"failed to read FMSPC from PCK certificate: ${e.getMessage}")
+      case NonFatal(e) => Left(s"failed to read the TCB from PCK certificate: ${e.getMessage}")
     }
+
+  private def sgxEntries(entries: org.bouncycastle.asn1.ASN1Sequence): Map[String, org.bouncycastle.asn1.ASN1Encodable] =
+    (0 until entries.size()).map { i =>
+      val entry = org.bouncycastle.asn1.ASN1Sequence.getInstance(entries.getObjectAt(i))
+      org.bouncycastle.asn1.ASN1ObjectIdentifier.getInstance(entry.getObjectAt(0)).getId -> entry.getObjectAt(1)
+    }.toMap
 
   private def crlNumber(crl: X509CRL): Option[BigInt] =
     Option(crl.getExtensionValue("2.5.29.20")).map { raw =>

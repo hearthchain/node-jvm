@@ -1,5 +1,6 @@
 package tech.hearth.crypto.dcap
 
+import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.test.FreeSpec
 import org.bouncycastle.asn1.x509.{CRLNumber, Extension}
@@ -80,20 +81,35 @@ class IntelPkiTest extends FreeSpec {
       IntelPki.verifyRawSignature(raw, signature, IntelPki.rootCaPublicKey) shouldBe a[Left[?, ?]]
     }
 
-    "pckLeafFmspc reads the real FMSPC out of a quote's embedded PCK cert chain" in {
+    "pckTcb reads the real FMSPC out of a quote's embedded PCK cert chain" in {
       val quoteBytes = tech.hearth.common.utils.Base16.decode(new String(resourceBytes("quotev3.hex")).trim)
       val quote      = tech.hearth.crypto.dcap.DcapQuote.parse(quoteBytes).explicitGet()
       quote.signature.certData.isPckCertChain shouldBe true
 
-      val fmspc = IntelPki.pckLeafFmspc(quote.signature.certData.certData.arr).explicitGet()
+      val fmspc = IntelPki.pckTcb(quote.signature.certData.certData.arr).explicitGet().fmspc
       // Cross-checked independently: `openssl x509 -text` on the leaf cert's SGX extension (OID
       // 1.2.840.113741.1.13.1), sub-field 1.2.840.113741.1.13.1.4 (FMSPC), before this test was written.
-      fmspc shouldBe tech.hearth.common.utils.Base16.decode("00606a000000")
+      fmspc shouldBe ByteStr(tech.hearth.common.utils.Base16.decode("00606a000000"))
     }
 
-    "pckLeafFmspc rejects a chain with no SGX extension" in {
+    "pckTcb reads the platform's TCB components out of a quote's embedded PCK cert chain" in {
+      val quoteBytes = tech.hearth.common.utils.Base16.decode(new String(resourceBytes("testnet-startboost-51018.hex")).trim)
+      val quote      = tech.hearth.crypto.dcap.DcapQuote.parse(quoteBytes).explicitGet()
+
+      val tcb = IntelPki.pckTcb(quote.signature.certData.certData.arr).explicitGet()
+      // Cross-checked with `openssl asn1parse -strparse` on the leaf's SGX extension: 1.13.1.4 (FMSPC), 1.13.1.3 (PCE ID), 1.13.1.2.1-16
+      // (CPU SVN components) and 1.13.1.2.17 (PCESVN).
+      tcb shouldBe IntelPki.PckTcb(
+        ByteStr(tech.hearth.common.utils.Base16.decode("b0c06f000000")),
+        ByteStr(tech.hearth.common.utils.Base16.decode("0000")),
+        Seq(4, 4, 2, 2, 4, 1, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0),
+        11
+      )
+    }
+
+    "pckTcb rejects a chain with no SGX extension" in {
       val chainPem = derToPem(resourceBytes("signing.der")) ++ derToPem(resourceBytes("root.der"))
-      IntelPki.pckLeafFmspc(chainPem) shouldBe a[Left[?, ?]]
+      IntelPki.pckTcb(chainPem) shouldBe a[Left[?, ?]]
     }
   }
 

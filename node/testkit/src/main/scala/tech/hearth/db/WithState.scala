@@ -591,8 +591,6 @@ object WithState {
             initStateHash,
             initSnapshot,
             signer,
-            blockchain.lastBlockTimestamp,
-            blockWithoutStateHash.header.timestamp,
             blockWithoutStateHash.header.challengedHeader.isDefined,
             compBlockchain
           )

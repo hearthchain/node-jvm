@@ -83,7 +83,7 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
       AddrWithBalance.enoughBalances(sender)
     ) { d =>
       d.blockchain.dcapRootCaCrl shouldBe None
-      d.appendBlock(TxHelpers.updateCollateral(sender, rootCaCrl = Some(rootCaCrl), timestamp = fixtureTime + 60000))
+      d.appendBlockAt(fixtureTime + 60000)(TxHelpers.updateCollateral(sender, rootCaCrl = Some(rootCaCrl), timestamp = fixtureTime + 60000))
       d.blockchain.dcapRootCaCrl shouldBe Some(rootCaCrl)
     }
 
@@ -91,7 +91,9 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
       settingsAtGenesis(dcapRootCaCrl = Some(rootCaCrl)),
       AddrWithBalance.enoughBalances(sender)
     ) { d =>
-      d.appendBlockE(TxHelpers.updateCollateral(sender, rootCaCrl = Some(rootCaCrl), timestamp = fixtureTime + 60000)) shouldBe Symbol("right")
+      d.appendBlockAtE(fixtureTime + 60000)(
+        TxHelpers.updateCollateral(sender, rootCaCrl = Some(rootCaCrl), timestamp = fixtureTime + 60000)
+      ) shouldBe Symbol("right")
       d.blockchain.dcapRootCaCrl shouldBe Some(rootCaCrl)
     }
 
@@ -99,16 +101,30 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
       val heightBeforeUpdate = d.blockchain.height
       d.blockchain.dcapRootCaCrl shouldBe None
 
-      d.appendBlock(TxHelpers.updateCollateral(sender, rootCaCrl = Some(rootCaCrl), timestamp = fixtureTime + 60000))
+      d.appendBlockAt(fixtureTime + 60000)(TxHelpers.updateCollateral(sender, rootCaCrl = Some(rootCaCrl), timestamp = fixtureTime + 60000))
       d.blockchain.dcapRootCaCrl shouldBe Some(rootCaCrl)
 
       d.rollbackTo(heightBeforeUpdate)
       d.blockchain.dcapRootCaCrl shouldBe None
     }
 
+    // A sender picks its transaction's timestamp, up to max-transaction-time-back-offset before the previous block
+    "judges expiry by the block's timestamp, not a backdated transaction's" in withDomain(
+      settingsAtGenesis(),
+      AddrWithBalance.enoughBalances(sender)
+    ) { d =>
+      val rootCaCrlExpiry = Instant.parse("2025-04-03T19:19:30Z").toEpochMilli
+      d.appendBlockAt(rootCaCrlExpiry - 10 * 60000)()
+      d.appendBlockAtE(rootCaCrlExpiry + 60000)(
+        TxHelpers.updateCollateral(sender, rootCaCrl = Some(rootCaCrl), timestamp = rootCaCrlExpiry - 5 * 60000)
+      ) should produce("expired")
+    }
+
     "rejects a CRL not signed by the Intel Root CA" in withDomain(settingsAtGenesis(), AddrWithBalance.enoughBalances(sender)) { d =>
       val garbage = ByteStr(Array.fill(64)(1.toByte))
-      d.appendBlockE(TxHelpers.updateCollateral(sender, rootCaCrl = Some(garbage), timestamp = fixtureTime + 60000)) should produce(
+      d.appendBlockAtE(fixtureTime + 60000)(
+        TxHelpers.updateCollateral(sender, rootCaCrl = Some(garbage), timestamp = fixtureTime + 60000)
+      ) should produce(
         "failed to verify CRL"
       )
     }
@@ -116,7 +132,9 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
     "rejects a PCK CA issuer chain when Root CA CRL isn't set yet" in withDomain(settingsAtGenesis(), AddrWithBalance.enoughBalances(sender)) { d =>
       d.blockchain.dcapRootCaCrl shouldBe None
       val someChain = ByteStr(Array.fill(64)(1.toByte))
-      d.appendBlockE(TxHelpers.updateCollateral(sender, pckCaIssuerChain = Some(someChain), timestamp = fixtureTime + 60000)) should produce(
+      d.appendBlockAtE(fixtureTime + 60000)(
+        TxHelpers.updateCollateral(sender, pckCaIssuerChain = Some(someChain), timestamp = fixtureTime + 60000)
+      ) should produce(
         "Root CA CRL must be set"
       )
     }
@@ -143,7 +161,7 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
       d.blockchain.dcapTcbInfo(tcbInfoFmspc) shouldBe None
       d.blockchain.dcapQeIdentity shouldBe None
 
-      d.appendBlock(
+      d.appendBlockAt(jsonFixtureTime + 60000)(
         TxHelpers.updateCollateral(sender, tcbInfo = Some(tcbInfo), qeIdentity = Some(qeIdentity), timestamp = jsonFixtureTime + 60000)
       )
 
@@ -158,7 +176,7 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
       val heightBeforeUpdate = d.blockchain.height
       d.blockchain.dcapTcbInfo(tcbInfoFmspc) shouldBe None
 
-      d.appendBlock(TxHelpers.updateCollateral(sender, tcbInfo = Some(tcbInfo), timestamp = jsonFixtureTime + 60000))
+      d.appendBlockAt(jsonFixtureTime + 60000)(TxHelpers.updateCollateral(sender, tcbInfo = Some(tcbInfo), timestamp = jsonFixtureTime + 60000))
       d.blockchain.dcapTcbInfo(tcbInfoFmspc) shouldBe Some(tcbInfo)
 
       d.rollbackTo(heightBeforeUpdate)
@@ -169,7 +187,9 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
       settingsAtGenesis(dcapRootCaCrl = Some(rootCaCrl), timestamp = jsonFixtureTime),
       AddrWithBalance.enoughBalances(sender)
     ) { d =>
-      d.appendBlockE(TxHelpers.updateCollateral(sender, tcbInfo = Some(tcbInfo), timestamp = jsonFixtureTime + 60000)) should produce(
+      d.appendBlockAtE(jsonFixtureTime + 60000)(
+        TxHelpers.updateCollateral(sender, tcbInfo = Some(tcbInfo), timestamp = jsonFixtureTime + 60000)
+      ) should produce(
         "no issuer chain submitted or already on chain"
       )
     }
@@ -184,7 +204,7 @@ class UpdateCollateralTransactionDiffTest extends FreeSpec with WithDomain {
         .replace("\"tcbEvaluationDataNumber\":16", "\"tcbEvaluationDataNumber\":17")
       val tamperedPayload = ByteStr(tampered.getBytes(java.nio.charset.StandardCharsets.UTF_8))
 
-      d.appendBlockE(
+      d.appendBlockAtE(jsonFixtureTime + 60000)(
         TxHelpers.updateCollateral(sender, tcbInfo = Some(tamperedPayload), timestamp = jsonFixtureTime + 60000)
       ) should produce("signature verification failed")
     }

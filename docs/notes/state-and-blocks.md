@@ -179,3 +179,6 @@ always-empty `Blockchain` to build the height-1 snapshot against, independent of
 runs unconditionally on every startup, including against an already-populated chain, to verify the persisted genesis
 block still matches).
 
+## Transaction time bounds
+
+`TransactionDiffer` takes no timestamps: the block a transaction goes into is the one on top of the chain it is given, so `disallowTxFromFuture` bounds it by that block's timestamp and `disallowTxFromPast` by its parent's (`parentBlockTimestamp`, the database's current block, so cached). That holds on every path: `BlockDiffer` diffs against a chain with the new block on top, a microblock against one topped by its key block, the challenger and the state-hash builders against `blockchainWithNewBlock`. The UTX pool's chain is topped by the liquid key block, so admission, cleanup and packing now apply the same bounds a microblock will be applied with, where they used to take the node's clock and the key block itself as "previous". Every caller already passed exactly these values when applying a block, so no consensus outcome changed.

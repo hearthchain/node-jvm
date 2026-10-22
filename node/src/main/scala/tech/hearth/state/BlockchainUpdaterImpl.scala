@@ -517,27 +517,28 @@ class BlockchainUpdaterImpl(
             Left(MicroBlockAppendError("It doesn't reference last known microBlock(which exists)", microBlock))
           case _ =>
             for {
-              _ <- microBlock.signaturesValid()
-              (totalBlock, referencedComputedStateHash) <- ng
-                .liquidBlockOf(microBlock.reference)
-                .toRight(GenericError(s"No referenced block exists: $microBlock"))
-                .map { liquid =>
-                  Block.create(
-                    liquid.block,
-                    liquid.block.transactionData ++ microBlock.transactionData,
-                    microBlock.wholeBlockSignature,
-                    microBlock.stateHash,
-                    FinalizationVoting.combine(liquid.block.header.finalizationVoting, microBlock.finalizationVoting)
-                  ) -> liquid.data.liquidStateHash
-                }
+              _      <- microBlock.signaturesValid()
+              liquid <- ng.liquidBlockOf(microBlock.reference).toRight(GenericError(s"No referenced block exists: $microBlock"))
+              accepted = liquid.block.header.finalizationVoting
+              totalBlock = Block.create(
+                liquid.block,
+                liquid.block.transactionData ++ microBlock.transactionData,
+                microBlock.wholeBlockSignature,
+                microBlock.stateHash,
+                FinalizationVoting.combine(accepted, microBlock.finalizationVoting)
+              )
               _ <- Either.raiseUnless(totalBlock.signatureValid()) {
                 MicroBlockAppendError("Invalid total block signature", microBlock)
               }
-              b <- appender.validateFinalizationVoting(totalBlock, rocksdb, ng.finalizationState.generatorSet)
+              b <- appender.validateFinalizationVoting(
+                totalBlock,
+                rocksdb,
+                ng.finalizationState.generatorSet,
+                accepted.fold(Set.empty)(_.conflictingEndorsers)
+              )
               blockDifferResult <- BlockDiffer.fromMicroBlock(
                 this,
-                rocksdb.lastBlockTimestamp,
-                referencedComputedStateHash,
+                liquid.data.liquidStateHash,
                 microBlock,
                 snapshot,
                 restTotalConstraint,

@@ -329,13 +329,9 @@ class Application(val actorSystem: ActorSystem, val settings: HearthSettings, co
       microblockSynchronizerScheduler
     )
 
-    messageObserver.endorseBlocks.foreach { case (ch, x) =>
-      endorsementStorage.tryAdd(x) match {
-        case Left(err)   => log.trace(s"Unexpected $x: $err")
-        case Right(true) => allChannels.broadcast(x, Some(ch))
-        case _           =>
-      }
-    }(using endorseBlockSynchronizerScheduler)
+    EndorsementStorage.process(endorsementStorage, messageObserver.endorseBlocks, (ch, x) => allChannels.broadcast(x, Some(ch)))(using
+      endorseBlockSynchronizerScheduler
+    )
 
     val (newBlocksWithSnapshot, extLoaderState, _) = RxExtensionLoader(
       settings.synchronizationSettings.synchronizationTimeout,
