@@ -29,3 +29,5 @@ parse path. These are quote structure fixtures only, not verified end-to-end aga
 DCAP quote signature verification exists in this repo yet, only structural parsing - see `DcapQuote`).
 
 `testnet-startboost-51018.hex` is the `tdxQuote` of testnet's StartBoost `180fe83a3d929fbd...` at height 51018 (sender `thrth1hjaq9lencvjt799vwq3evaznu3gv93m7j9kgqz`), copied unmodified from the chain; `StartBoostTransactionDiffTest` checks its measurement is in `StartBoostTransactionDiff.PinnedMeasurements`, so a typo in the pinned hex can't go unnoticed.
+
+`testnet-tcb-info-b0c06f000000.json` is the `tcbInfo` of testnet's UpdateCollateral `b8b2e7bef0b3c242...` at height 49277, copied unmodified from the chain: Intel's TDX TCB Info V3 for fmspc `b0c06f000000`, the platform `testnet-startboost-51018.hex` runs on, valid 2026-10-14 to 2026-11-13 (tcbEvaluationDataNumber 20). `TdxTcbInfoTest` evaluates the testnet quote against it.

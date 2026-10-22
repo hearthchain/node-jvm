@@ -5,15 +5,19 @@ import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
-import tech.hearth.crypto.dcap.DcapQuote
+import tech.hearth.crypto.dcap.{DcapQuote, IntelPki, TdxTcbInfo}
+import tech.hearth.crypto.dcap.TdxTcbInfo.{TcbLevel, TcbStatus}
 import tech.hearth.crypto.dcap.IntelPki.MaxCollateralFieldSize
 import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
+import tech.hearth.settings.FunctionalitySettings
 import tech.hearth.state.*
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.{Proofs, StartBoostTransaction, TxHelpers}
+
+import java.time.Instant
 
 /** No real, currently-valid PCK CRL fixture is available to vendor (Intel's DCAP PKI has no static "PCK CRL for
   * this specific PCK CA" sample the way a Root CA CRL/TCB Signing CA chain does - even upstream dcap-rs's own test
@@ -160,6 +164,41 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       val quote                           = DcapQuote.parse(hexResource("testnet-startboost-51018.hex")).explicitGet()
       val DcapQuote.Td10QuoteBody(report) = quote.body: @unchecked
       StartBoostTransactionDiff.PinnedMeasurements should contain(StartBoostTransactionDiff.TdMeasurement(report))
+    }
+
+    "TCB policy" - {
+      val quote                           = DcapQuote.parse(hexResource("testnet-startboost-51018.hex")).explicitGet()
+      val DcapQuote.Td10QuoteBody(report) = quote.body: @unchecked
+      val pck                             = IntelPki.pckTcb(quote.signature.certData.certData.arr).explicitGet()
+      val tcbInfo = TdxTcbInfo.parse(getClass.getResourceAsStream("/dcap/testnet-tcb-info-b0c06f000000.json").readAllBytes()).explicitGet()
+      val validAt = Instant.parse("2026-10-20T00:00:00Z").toEpochMilli
+      val default = FunctionalitySettings().acceptedTcbStatuses
+
+      def rated(status: TcbStatus, advisories: String*) =
+        tcbInfo.copy(tcbLevels = tcbInfo.tcbLevels.map(l => l.copy(level = TcbLevel(status, advisories))))
+
+      "accepts testnet's platform against the TCB Info testnet held" in {
+        StartBoostTransactionDiff.checkTcb(tcbInfo, pck, report, default, validAt) shouldBe Right(())
+      }
+
+      "rejects TCB Info past its nextUpdate, which can no longer show a recent revocation" in {
+        StartBoostTransactionDiff.checkTcb(tcbInfo, pck, report, default, tcbInfo.nextUpdate.plusMillis(1).toEpochMilli) should matchPattern {
+          case Left(e: String) if e.contains("expired") =>
+        }
+      }
+
+      "rejects a status the network does not accept, and accepts it where it does" in {
+        val outOfDate = rated(TcbStatus.OutOfDate)
+        StartBoostTransactionDiff.checkTcb(outOfDate, pck, report, default, validAt) shouldBe Left("TCB status OutOfDate is not accepted")
+        StartBoostTransactionDiff.checkTcb(outOfDate, pck, report, FunctionalitySettings.TESTNET.acceptedTcbStatuses, validAt) shouldBe Right(())
+      }
+
+      "accepts a software-hardening status only when the pinned image mitigates every advisory" in {
+        StartBoostTransactionDiff.checkTcb(rated(TcbStatus.SWHardeningNeeded), pck, report, default, validAt) shouldBe Right(())
+        StartBoostTransactionDiff.checkTcb(rated(TcbStatus.SWHardeningNeeded, "INTEL-SA-00334"), pck, report, default, validAt) shouldBe Left(
+          "TCB status SWHardeningNeeded needs mitigations for INTEL-SA-00334, which the pinned images are not known to have"
+        )
+      }
     }
 
     "rejects a quote whose MRTD is not pinned" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>

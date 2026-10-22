@@ -5,10 +5,12 @@ import cats.syntax.traverse.*
 import com.typesafe.config.Config
 import tech.hearth.account.{Address, NetworkId}
 import tech.hearth.common.state.ByteStr
+import tech.hearth.crypto.dcap.TdxTcbInfo.TcbStatus
 import tech.hearth.state.{EmissionCurve, GenesisBlockHeight, Height}
 import tech.hearth.transaction.AssetIdLength
 import tech.hearth.transaction.Asset.IssuedAsset
 import pureconfig.*
+import pureconfig.error.CannotConvert
 import pureconfig.generic.semiauto.deriveReader
 
 import scala.concurrent.duration.*
@@ -96,7 +98,10 @@ case class FunctionalitySettings(
     strictTxValidationHeight: Int = 0,
     // First height splitting a settlement exactly (SettleTransactionDiff.share). Below it each delta is truncated to
     // tens first, which testnet history carries; every other network splits exactly from genesis.
-    exactSettleSplitHeight: Int = 0
+    exactSettleSplitHeight: Int = 0,
+    // The TCB statuses a StartBoost quote's platform may have (TdxTcbInfo.evaluate). SWHardeningNeeded passes only
+    // with advisories StartBoostTransactionDiff.MitigatedAdvisories covers.
+    acceptedTcbStatuses: Set[TcbStatus] = Set(TcbStatus.UpToDate, TcbStatus.SWHardeningNeeded)
 ) {
   lazy val daoAddressParsed: Either[String, Option[Address]] =
     daoAddress.traverse(Address.fromString).leftMap(_ => "Incorrect dao-address")
@@ -132,6 +137,8 @@ case class FunctionalitySettings(
 }
 
 object FunctionalitySettings {
+  given ConfigReader[TcbStatus] = ConfigReader.fromString(s => TcbStatus.parse(s).leftMap(CannotConvert(s, "TcbStatus", _)))
+
   // This given is required for default args to work.
   // Details: https://github.com/pureconfig/pureconfig/issues/1673
   // Note: the proposed approach with `extension` doesn't work.
@@ -157,7 +164,9 @@ object FunctionalitySettings {
     credAsset = Some(PredefinedSnapshotSettings.TestnetORCRED),
     strictTxValidationHeight = 8395,
     // Right after the last settlement applied truncated (49294); none landed between it and the tip at rollout.
-    exactSettleSplitHeight = 49295
+    exactSettleSplitHeight = 49295,
+    // Testnet hosts may lag a TCB recovery
+    acceptedTcbStatuses = Set(TcbStatus.UpToDate, TcbStatus.SWHardeningNeeded, TcbStatus.OutOfDate)
   )
 
   val STAGENET: FunctionalitySettings = apply(

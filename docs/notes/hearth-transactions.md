@@ -4,6 +4,10 @@ purpose: Implementation notes for hearth transactions (DCAP collateral registry,
 
 # Hearth transaction lifecycle: DCAP, StartBoost, Reserve, BindApiKey, Settle, workBoost
 
+## Testnet history
+
+A consensus change has to replay testnet's history unchanged, or carry a height gate in `FunctionalitySettings` (`strictTxValidationHeight`, `exactSettleSplitHeight`). Testnet's public REST API is http://testnet-htz-nbg1-1.wavesnodes.com:5520; `/blocks/seq/{from}/{to}` (100 blocks per request) is how the StartBoost (type 6) and UpdateCollateral (11) history in this note was collected. `/debug/*` needs the API key.
+
 ## DCAP collateral registry
 
 The first real semantics landed for one of the five stub transaction types from "Transaction schema" in `docs/notes/keys-and-signatures.md`: `UpdateCollateralTransaction`, a
@@ -133,10 +137,7 @@ planned). The diff:
   `isvSignedMessage`/`QuoteSignatureData.qeReportBodyMessage` as the original wire-byte slices these two signatures
   cover, not re-serialized from the parsed fields, so a signature check can never diverge from what was actually
   signed due to a re-encoding bug in the parser;
-- checks the quote's FMSPC (read from the PCK leaf's SGX certificate extension, OID `1.2.840.113741.1.13.1` nesting
-  `1.2.840.113741.1.13.1.4`, parsed the same ASN.1-`OCTET STRING`-wrapping-a-`SEQUENCE` way `IntelPki`'s existing
-  CRL Number extraction does) has a TCB Info entry on chain - existence only, not full TCB status evaluation (see
-  the deferred-scope note below);
+- rates the quote's platform against the on-chain TCB Info for its FMSPC and requires a status the network accepts (see "TCB status" below);
 - registers the enclave: `RegisteredEnclave(enclavePublicKey, validator, operator)`, keyed by the enclave's own
   ephemeral public key (raw Ed25519, 32 bytes, from `report_data[32:64]` above) rather than by address or by
   `mrEnclave` - unlike a generator's identity, an enclave's identity changes on every restart (a fresh boot mints a
@@ -154,13 +155,13 @@ Storage mirrors `committedGenerators`/`GenerationPeriod` exactly, including the 
 cached" restriction, the same rollback-on-discard handling, and the same `Caches`/`RocksDBWriter`/`Blockchain`
 three-layer wiring - `RegisteredEnclave` is the DCAP analogue of `CommittedGenerator`.
 
-**Deliberately deferred, both flagged in `StartBoostTransactionDiff`'s own doc comment rather than silently
-skipped:** the on-chain TCB Info for a quote's FMSPC is checked for *presence* only, not for its TCB status
-(UpToDate/OutOfDate/Revoked, Intel DCAP spec S6.2.2 - a real evaluation needs matching `sgxtcbcomponents`/`pcesvn`
-against a sorted `tcbLevels` list and picking the first match, a nontrivial algorithm on its own) or re-checked for
-freshness at StartBoost time (only at the `UpdateCollateral` submission that put it on chain) - a TEE running under
-a since-downgraded TCB is not yet rejected. Neither has a settled design yet; don't guess at either without
-checking whether one has landed since.
+### TCB status
+
+A valid PCK certificate proves the platform is genuine, not that it is patched: Intel revokes a vulnerable microcode level by downgrading its TCB level in TCB Info, not by revoking certificates, so the PCK CRL check alone keeps accepting a platform Intel has since rated OutOfDate or Revoked. `IntelPki.pckTcb` reads what the PCK leaf's SGX extension (OID `1.2.840.113741.1.13.1`) says about the platform: the FMSPC (`.4`), selecting the on-chain TCB Info, and the 16 CPU SVN components (`.2.1`-`.2.16`) and PCESVN (`.2.17`). `crypto/dcap/TdxTcbInfo` parses TDX TCB Info V3 (an SGX one is rejected) and evaluates it as Intel's Quote Verification Library does: `TEE_TCB_SVN[1]` is the TDX module's version, and above 0 it selects the module identity `TDX_%02X`, whose levels rate the module's SVN (`TEE_TCB_SVN[0]`); the report's MRSIGNERSEAM and masked SEAM attributes must match that identity (or the top-level `tdxModule` at version 0); the platform's status is the first `tcbLevels` entry whose SGX components, PCESVN and TDX components the platform meets, the TDX components compared from index 2 when a module identity rated bytes 0 and 1. An OutOfDate module makes an UpToDate or SWHardeningNeeded platform OutOfDate, and a ConfigurationNeeded one OutOfDateConfigurationNeeded; a Revoked module makes it Revoked. The level's advisories are the union of both.
+
+`StartBoostTransactionDiff.checkTcb` then applies the policy. TCB Info past its `nextUpdate` (against the transaction timestamp) is rejected outright, since it can't show a downgrade Intel published since; `UpdateCollateral` only checked the window when it was submitted. The status must be in `FunctionalitySettings.acceptedTcbStatuses` (`UpToDate` and `SWHardeningNeeded` by default, plus `OutOfDate` on TESTNET, whose hosts may lag a TCB recovery). A software-hardening status (`SWHardeningNeeded`, `ConfigurationAndSWHardeningNeeded`) means the platform is as patched as Intel can make it and the remaining advisories are the TD software's to mitigate, so it passes only when every advisory is in `MitigatedAdvisories`, pinned next to `PinnedMeasurements` because whether an advisory is mitigated is a property of the pinned image. It is empty: testnet's platform rates UpToDate, so no advisory has needed it. Other statuses' advisories need microcode or firmware no image can supply, which is why the allowlist doesn't apply to them and the accepted-status setting alone decides.
+
+There is no activation height. Every testnet StartBoost (heights 5028 to 60011, all from FMSPC `b0c06f000000`) rates UpToDate, platform and module, against the TCB Info that was on chain at its height (UpdateCollateral at 5028 and 49277, both `tcbEvaluationDataNumber` 20), and none came after that TCB Info's `nextUpdate`, so history replays unchanged. `TdxTcbInfoTest` and the "TCB policy" group of `StartBoostTransactionDiffTest` run on the vendored testnet quote and TCB Info. The wiring in `verifyTcbStatus` runs after the quote's signatures, so, like them, no unit test reaches it (see the testing gap below). The QE Identity (`dcapQeIdentity`) is still stored but not evaluated: the QE's own MRSIGNER, ISVPRODID and ISVSVN are not checked against it. A TD 1.5 quote is rated on its TD 1.0 fields; its `TEE_TCB_SVN2` (the SVN after a TD-preserving module update) is not considered, which needs checking against Intel's QVL before a TD 1.5 host matters. Testnet's quotes are all TD 1.0 (v4).
 
 **Testing gap, also flagged rather than silently accepted:** no real, currently-valid PCK CRL fixture exists to vendor - Intel's DCAP PKI has no static "PCK CRL for this specific PCK CA" sample the way a Root CA CRL or TCB Signing CA chain does, and even upstream `dcap-rs`'s own test suite fetches this collateral live from Intel PCS at test time rather than vendoring it, which this repo's tests never do (see "Cross-language test vectors"/real-fixture convention in `docs/notes/economics.md`). `StartBoostTransactionDiffTest`'s deepest deterministically-reachable reject path is therefore "PCK CRL not set" - the accept path, and the PCK-chain/QE/ISV signature verification beyond it, are exercised only indirectly: `IntelPkiTest`'s synthetic-fixture groups cover `verifyIssuerChain`/`verifyCrl` in isolation with an injectable trust anchor, and `DcapQuoteTest` confirms `isvSignedMessage`/`qeReportBodyMessage` slice the exact expected byte ranges against real quote fixtures - but nothing currently exercises `StartBoostTransactionDiff`'s full signature-chain wiring end to end against a quote that actually verifies. A future pass wanting to close this would need either a live Intel PCS fetch (a new kind of test dependency this repo doesn't have) or threading an injectable trust anchor through `StartBoostTransactionDiff` itself (mirroring `IntelPki.verifyIssuerChain`'s own `trustAnchor` parameter) so a synthetic PCK chain built in-test with BouncyCastle could stand in for Intel's real one. The accept path has since been exercised end to end, outside the unit tests, against a real Intel-signed quote and live PCS collateral on the docker/private image (see "Live StartBoost on docker/private" in `docs/notes/docker-private.md`); the unit-test gap itself is unchanged.
 

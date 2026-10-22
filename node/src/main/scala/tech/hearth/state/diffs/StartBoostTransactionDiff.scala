@@ -4,23 +4,22 @@ import cats.syntax.either.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.crypto.P256Curve
-import tech.hearth.crypto.dcap.{DcapQuote, IntelPki}
+import tech.hearth.crypto.dcap.{DcapQuote, IntelPki, TdxTcbInfo}
+import tech.hearth.crypto.dcap.TdxTcbInfo.TcbStatus
 import tech.hearth.lang.ValidationError
 import tech.hearth.state.*
 import tech.hearth.transaction.StartBoostTransaction
 import tech.hearth.transaction.TxValidationError.{ActivationError, GenericError}
 
 import java.nio.{ByteBuffer, ByteOrder}
+import java.time.Instant
 
 /** StartBoostTransaction semantics: verify a TDX quote end to end and register its enclave for the next generation
   * period (see the StartBoost consensus plan). `StartBoostTxValidator` already rejected a malformed or SGX quote
   * before this ever runs, but re-parses here too since nothing carries the parsed value across from validation.
   *
-  * Deliberately out of scope for this pass, both flagged rather than silently skipped: the on-chain tcbInfo for the
-  * quote's FMSPC is only checked for *presence*, not for its TCB status (UpToDate/OutOfDate/Revoked, S6.2.2 of
-  * Intel's DCAP spec) or re-checked for freshness at StartBoost time (only at the UpdateCollateral submission that
-  * put it on chain) - a TEE running under a since-downgraded TCB is not yet rejected. Neither has a settled design
-  * yet; don't guess at either from this comment without checking whether one has landed since.
+  * The quote's platform is rated against the on-chain tcbInfo for its FMSPC (TdxTcbInfo.evaluate) and has to have a
+  * status the network accepts (FunctionalitySettings.acceptedTcbStatuses); the QE Identity is not evaluated yet.
   *
   * TD measurements are pinned in consensus (PinnedMeasurements) rather than in a governance-updatable registry, #40.
   */
@@ -60,6 +59,16 @@ object StartBoostTransactionDiff {
     )
   )
 
+  /** Advisories the pinned images are known to mitigate, for a TCB status that leaves them to the TD's software
+    * (SWHardeningNeeded, ConfigurationAndSWHardeningNeeded): the platform is as patched as Intel can make it.
+    * Empty, since testnet's platform rates UpToDate (see SOURCE.md's testnet tcbInfo); an advisory goes in with
+    * the image that mitigates it. Other statuses' advisories need microcode or firmware no image can supply, so
+    * FunctionalitySettings.acceptedTcbStatuses alone decides those.
+    */
+  val MitigatedAdvisories: Set[String] = Set.empty
+
+  private val SoftwareHardeningStatuses = Set(TcbStatus.SWHardeningNeeded, TcbStatus.ConfigurationAndSWHardeningNeeded)
+
   def apply(blockchain: Blockchain)(tx: StartBoostTransaction): Either[ValidationError, StateSnapshot] =
     for {
       quote <- DcapQuote.parse(tx.tdxQuote.arr).leftMap(e => GenericError(s"Invalid quote: $e"))
@@ -85,7 +94,7 @@ object StartBoostTransactionDiff {
       }
       _ <- verifyMeasurement(blockchain, tdReport).leftMap(GenericError(_))
       _ <- verifyQuoteSignatures(blockchain, tx, quote).leftMap(GenericError(_))
-      _ <- verifyTcbStatus(blockchain, quote).leftMap(GenericError(_))
+      _ <- verifyTcbStatus(blockchain, tx, quote, tdReport).leftMap(GenericError(_))
       snapshot <- StateSnapshot.build(
         blockchain,
         portfolios = Map(tx.sender.toAddress -> Portfolio(balance = -tx.fee.value)),
@@ -201,11 +210,38 @@ object StartBoostTransactionDiff {
     }
   }
 
-  private def verifyTcbStatus(blockchain: Blockchain, quote: DcapQuote.Quote): Either[String, Unit] =
+  private def verifyTcbStatus(
+      blockchain: Blockchain,
+      tx: StartBoostTransaction,
+      quote: DcapQuote.Quote,
+      report: DcapQuote.Td10ReportBody
+  ): Either[String, Unit] =
     for {
-      fmspc <- IntelPki.pckLeafFmspc(quote.signature.certData.certData.arr)
-      _ <- Either.raiseUnless(blockchain.dcapTcbInfo(ByteStr(fmspc)).isDefined) {
-        s"No on-chain TCB Info for FMSPC ${ByteStr(fmspc)}; submit one via UpdateCollateral first"
+      pck <- IntelPki.pckTcb(quote.signature.certData.certData.arr)
+      stored <- blockchain.dcapTcbInfo(pck.fmspc).toRight {
+        s"No on-chain TCB Info for FMSPC ${pck.fmspc}; submit one via UpdateCollateral first"
+      }
+      tcbInfo <- TdxTcbInfo.parse(stored.arr)
+      _       <- checkTcb(tcbInfo, pck, report, blockchain.settings.functionalitySettings.acceptedTcbStatuses, tx.timestamp)
+    } yield ()
+
+  /** An expired tcbInfo is rejected rather than evaluated: it can't show a TCB level Intel has since downgraded. */
+  private[diffs] def checkTcb(
+      tcbInfo: TdxTcbInfo,
+      pck: IntelPki.PckTcb,
+      report: DcapQuote.Td10ReportBody,
+      accepted: Set[TcbStatus],
+      atTime: Long
+  ): Either[String, Unit] =
+    for {
+      _ <- Either.raiseWhen(Instant.ofEpochMilli(atTime).isAfter(tcbInfo.nextUpdate)) {
+        s"On-chain TCB Info for FMSPC ${pck.fmspc} expired at ${tcbInfo.nextUpdate}; submit a fresh one via UpdateCollateral"
+      }
+      level <- tcbInfo.evaluate(pck, report)
+      _     <- Either.raiseUnless(accepted.contains(level.status))(s"TCB status ${level.status} is not accepted")
+      unmitigated = if (SoftwareHardeningStatuses.contains(level.status)) level.advisoryIds.filterNot(MitigatedAdvisories) else Seq.empty
+      _ <- Either.raiseWhen(unmitigated.nonEmpty) {
+        s"TCB status ${level.status} needs mitigations for ${unmitigated.mkString(", ")}, which the pinned images are not known to have"
       }
     } yield ()
 }
