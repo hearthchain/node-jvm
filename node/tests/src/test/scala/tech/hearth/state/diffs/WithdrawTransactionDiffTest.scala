@@ -1,6 +1,7 @@
 package tech.hearth.state.diffs
 
 import tech.hearth.TestValues
+import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.EitherExt2.*
 import tech.hearth.db.WithDomain
@@ -11,7 +12,7 @@ import tech.hearth.state.{Blockchain, PendingWithdrawal, SnapshotBlockchain, Sta
 import tech.hearth.test.*
 import tech.hearth.test.StakingFixtures.*
 import tech.hearth.transaction.Asset.{Hearth, IssuedAsset}
-import tech.hearth.transaction.TxHelpers
+import tech.hearth.transaction.{Proofs, TxHelpers, WithdrawTransaction}
 
 /** The request half of a withdrawal: what a WithdrawTransaction records and what it rejects. The payout half, at the
   * period boundary, is WithdrawalPayoutTest's.
@@ -88,6 +89,21 @@ class WithdrawTransactionDiffTest extends FreeSpec with WithDomain {
       snapshot.balances((client.toAddress, Hearth)) shouldBe hearthBefore - tx.fee.value
       snapshot.balances.contains((client.toAddress, asset)) shouldBe false
       snapshot.withdrawnAmounts shouldBe empty
+    }
+  }
+
+  "WithdrawTransaction.create" - {
+    "rejects an assetId that is not exactly 32 bytes" in {
+      WithdrawTransaction.create(
+        PublicKey(client.publicKey()),
+        miner,
+        IssuedAsset(ByteStr.fill(10)(1)),
+        1L,
+        Hearth,
+        TestValues.fee,
+        TxHelpers.timestamp,
+        Proofs.empty
+      ) should produce("assetId must be 32 bytes")
     }
   }
 }
