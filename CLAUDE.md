@@ -71,7 +71,7 @@ Hearth chain node: a Scala 3 fork of the Waves node (consensus, state, REST/gRPC
 
 Hard-won implementation knowledge lives in `docs/notes/`, one file per subsystem; the matching file MUST be read before working in its area. New learnings go into the matching topic file plus one trigger line here, never as new always-loaded text in CLAUDE.md.
 
-- Touching StartBoost, Reserve, BindApiKey, Settle, workBoost, the DCAP collateral registry (UpdateCollateral), or transaction signing outside a running node (`hearth util transaction sign`, `sign-commit-to-generation.sh`): read `docs/notes/hearth-transactions.md` first.
+- Touching StartBoost, Reserve, BindApiKey, Settle, Withdraw (WithdrawalPayout), workBoost, the DCAP collateral registry (UpdateCollateral), or transaction signing outside a running node (`hearth util transaction sign`, `sign-commit-to-generation.sh`): read `docs/notes/hearth-transactions.md` first.
 - Touching keys or addresses (SigningKey, VrfKey, BLS, bech32), transaction JSON, the protobuf transaction schema, or proof verification: read `docs/notes/keys-and-signatures.md` first.
 - Touching fees, the carry, BlockRewardCalculator, EmissionCurve, RewardsSettings, or RewardApiRoute: read `docs/notes/economics.md` first.
 - Touching StakeTransaction, StakingPayout, the stake ledger (stored as a balance), `FunctionalitySettings.credAsset`, or the staking payout API (StakingApiRoute, CommonStakingApi): read `docs/notes/cred-economy.md` first.
