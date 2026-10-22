@@ -1085,8 +1085,10 @@ paths:
       summary: Settlement counters
       description: >-
         Get how much of an asset a client has reserved against a miner
-        (Reserve transactions) and how much of that has already been retired
-        (Settle transactions)
+        (Reserve transactions), how much of that has already been retired
+        (Settle transactions) or returned (Withdraw transactions), and the
+        Withdraw still waiting for its payout, if any. A miner should stop
+        serving a client what a pending withdrawal will take back.
       operationId: getSettlement
       parameters:
         - name: client
@@ -1105,13 +1107,15 @@ paths:
       responses:
         '200':
           description: >-
-            successful operation. Both counters are 0 for an unknown triple.
+            successful operation. Every counter is 0 for an unknown triple.
           content:
             application/json:
               schema:
                 required:
                   - reserved
                   - settled
+                  - withdrawn
+                  - pendingWithdrawal
                 type: object
                 properties:
                   reserved:
@@ -1122,6 +1126,31 @@ paths:
                     type: integer
                     format: int64
                     description: Cumulative amount already settled
+                  withdrawn:
+                    type: integer
+                    format: int64
+                    description: Cumulative amount already returned to the client
+                  pendingWithdrawal:
+                    type: object
+                    nullable: true
+                    description: >-
+                      The Withdraw waiting for its payout, null when there is
+                      none. Settle may still draw on the whole reservation until
+                      then, and the payout returns at most what is unsettled.
+                    required:
+                      - amount
+                      - payoutAt
+                    properties:
+                      amount:
+                        type: integer
+                        format: int64
+                        description: Amount the client asked for
+                      payoutAt:
+                        allOf:
+                          - $ref: '#/components/schemas/Height'
+                        description: >-
+                          First block of the period after the one following the
+                          Withdraw's own period
   '/blockchain/staking/{address}':
     get:
       tags:
@@ -4027,18 +4056,25 @@ components:
     WithdrawTransaction:
       title: WithdrawTransaction
       description: >-
-        Type 10. Wire format only: it has no validation or state semantics yet,
-        is rejected with `UnsupportedTransactionType` before any state change,
-        and cannot be signed through `/transactions/sign`.
+        Asks for an amount of what the sender reserved with a miner back. Paid
+        at the first block of the period after next, as much of it as the
+        miner has not settled by then; until that block the miner may still
+        settle against the whole reservation. One pending request per client,
+        miner and asset. Type 10.
       type: object
       required:
         - fromMiner
+        - assetId
         - amount
       properties:
         fromMiner:
-          $ref: '#/components/schemas/Address'
+          allOf:
+            - $ref: '#/components/schemas/Address'
+          description: TEE miner the funds were reserved with
         assetId:
-          $ref: '#/components/schemas/HearthOrAssetId'
+          allOf:
+            - $ref: '#/components/schemas/AssetId'
+          description: HRTH is not reservable, so this is always an issued asset
         amount:
           $ref: '#/components/schemas/Amount'
     WithdrawTransactionLSF:

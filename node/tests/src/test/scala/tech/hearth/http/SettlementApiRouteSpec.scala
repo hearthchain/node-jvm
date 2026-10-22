@@ -4,7 +4,7 @@ import tech.hearth.api.http.SettlementApiRoute
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.db.WithDomain
-import tech.hearth.state.{SnapshotBlockchain, StateSnapshot}
+import tech.hearth.state.{Height, PendingWithdrawal, SnapshotBlockchain, StateSnapshot}
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.TxHelpers
@@ -52,7 +52,24 @@ class SettlementApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
       )
       Get(routePath(s"/settlement/${client.toBech32}/${miner.toBech32}/$assetSegment")) ~> routeWith(snapshot)(d) ~> check {
         status shouldBe OK
-        responseAs[JsObject] shouldBe Json.obj("reserved" -> 800000, "settled" -> 240000)
+        responseAs[JsObject] shouldBe Json.obj("reserved" -> 800000, "settled" -> 240000, "withdrawn" -> 0, "pendingWithdrawal" -> JsNull)
+      }
+    }
+
+    "reports what was withdrawn and the request still waiting for its payout" in withDomain(DeterministicFinality) { d =>
+      val snapshot = StateSnapshot(
+        reservedAmounts = Map((client, miner, asset) -> 800000L),
+        withdrawnAmounts = Map((client, miner, asset) -> 100000L),
+        pendingWithdrawals = Map((client, miner, asset) -> Some(PendingWithdrawal(50000L, Height(9))))
+      )
+      Get(routePath(s"/settlement/${client.toBech32}/${miner.toBech32}/$assetSegment")) ~> routeWith(snapshot)(d) ~> check {
+        status shouldBe OK
+        responseAs[JsObject] shouldBe Json.obj(
+          "reserved"          -> 800000,
+          "settled"           -> 0,
+          "withdrawn"         -> 100000,
+          "pendingWithdrawal" -> Json.obj("amount" -> 50000, "payoutAt" -> 9)
+        )
       }
     }
 
@@ -61,14 +78,14 @@ class SettlementApiRouteSpec extends RouteSpec("/blockchain") with WithDomain {
       val otherAsset = Base16.encode(ByteStr.fill(32)(4).arr)
       Get(routePath(s"/settlement/${client.toBech32}/${miner.toBech32}/$otherAsset")) ~> routeWith(snapshot)(d) ~> check {
         status shouldBe OK
-        responseAs[JsObject] shouldBe Json.obj("reserved" -> 0, "settled" -> 0)
+        responseAs[JsObject] shouldBe Json.obj("reserved" -> 0, "settled" -> 0, "withdrawn" -> 0, "pendingWithdrawal" -> JsNull)
       }
     }
 
     "reports zeros for a pair that never reserved" in withDomain(DeterministicFinality) { d =>
       Get(routePath(s"/settlement/${miner.toBech32}/${client.toBech32}/$assetSegment")) ~> routeWith(StateSnapshot())(d) ~> check {
         status shouldBe OK
-        responseAs[JsObject] shouldBe Json.obj("reserved" -> 0, "settled" -> 0)
+        responseAs[JsObject] shouldBe Json.obj("reserved" -> 0, "settled" -> 0, "withdrawn" -> 0, "pendingWithdrawal" -> JsNull)
       }
     }
   }
