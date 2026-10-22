@@ -441,10 +441,6 @@ object TxHelpers {
       .map(_.signWith(sender))
       .explicitGet()
 
-  // Withdraw has no implemented semantics yet (see TransactionDiffer); its helper below only exercises the
-  // wire-format (protobuf/JSON) plumbing. BindApiKey/Reserve/Settle are implemented - see
-  // BindApiKeyTransactionDiff/ReserveTransactionDiff/SettleTransactionDiff.
-
   def bindApiKey(
       sender: SigningKey = defaultSigner,
       enclavePublicKey: ByteStr = ByteStr.empty,
@@ -492,7 +488,7 @@ object TxHelpers {
   def withdraw(
       sender: SigningKey = defaultSigner,
       fromMiner: Address = secondAddress,
-      asset: Asset = Hearth,
+      asset: IssuedAsset,
       amount: Long = 1.hearth,
       feeAsset: Asset = Hearth,
       fee: Long = FeeConstants(TransactionType.Withdraw) * FeeUnit,

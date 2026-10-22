@@ -110,6 +110,18 @@ trait Blockchain {
   // see "workBoost" in CLAUDE.md. Same history mechanism as reservedAmount/settledAmount above.
   def workDone(validator: Address, period: GenerationPeriod): Long
 
+  // What WithdrawalPayout has returned to the client over the reservation's lifetime - same history mechanism as
+  // settledAmount. settledAmount + withdrawnAmount never exceeds reservedAmount for the same triple.
+  def withdrawnAmount(client: Address, miner: Address, asset: IssuedAsset): Long
+
+  // The client's Withdraw still waiting for its payout, if any - see PendingWithdrawal.
+  def pendingWithdrawal(client: Address, miner: Address, asset: IssuedAsset): Option[PendingWithdrawal]
+
+  // Every (client, miner, asset) a Withdraw scheduled for payout at `payoutAt`, the set WithdrawalPayout walks at
+  // that period start. May include requests already rolled back or paid, so each is resolved through
+  // pendingWithdrawal before anything is paid.
+  def withdrawalsDue(payoutAt: Height): Seq[(Address, Address, IssuedAsset)]
+
   // Every HRTH stake in force for one generation period - the set StakingPayout walks at that period's end, and
   // the source of both the spending lock and the forging-weight charge. Period-keyed like committedGenerators
   // rather than a per-address current value, because a stake is always a stake *for a period*.

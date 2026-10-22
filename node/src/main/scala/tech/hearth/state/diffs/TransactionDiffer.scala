@@ -126,6 +126,7 @@ object TransactionDiffer {
           case batx: BindApiKeyTransaction         => BindApiKeyTransactionDiff(blockchain)(batx).traced
           case sttx: SettleTransaction             => SettleTransactionDiff(blockchain)(sttx).traced
           case sktx: StakeTransaction              => StakeTransactionDiff(blockchain)(sktx).traced
+          case wtx: WithdrawTransaction            => WithdrawTransactionDiff(blockchain)(wtx).traced
           case _                                   => UnsupportedTransactionType.asLeft.traced
         }
       }

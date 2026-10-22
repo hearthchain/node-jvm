@@ -287,6 +287,23 @@ class TxStateSnapshotHashSpec extends PropSpec {
     List(reserved, settled, bound, enclaveReg, work).distinct.length shouldBe 5
   }
 
+  property("withdrawal entries are hashed, distinct from settlements and by every field a request carries") {
+    def hashOf(s: StateSnapshot): ByteStr =
+      TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)
+
+    val key                                            = (signer101.toAddress, signer102.toAddress, IssuedAsset(ByteStr.fill(32)(7)))
+    def pending(p: Option[PendingWithdrawal]): ByteStr = hashOf(StateSnapshot(pendingWithdrawals = Map(key -> p)))
+
+    val base      = hashOf(StateSnapshot())
+    val settled   = hashOf(StateSnapshot(settledAmounts = Map(key -> 5L)))
+    val withdrawn = hashOf(StateSnapshot(withdrawnAmounts = Map(key -> 5L)))
+    val requested = pending(Some(PendingWithdrawal(5L, Height(9))))
+
+    List(base, settled, withdrawn, requested, pending(None)).distinct.length shouldBe 5
+    requested should not equal pending(Some(PendingWithdrawal(6L, Height(9))))
+    requested should not equal pending(Some(PendingWithdrawal(5L, Height(13))))
+  }
+
   property("stake entries are hashed, and a stake is distinguished by every field it declares") {
     def hashOf(s: StateSnapshot): ByteStr =
       TxStateSnapshotHashBuilder.createHashFromSnapshot(s, None).createHash(TxStateSnapshotHashBuilder.InitStateHash)

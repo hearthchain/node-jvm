@@ -3,19 +3,23 @@ package tech.hearth.transaction
 import tech.hearth.account.*
 import tech.hearth.common.state.ByteStr
 import tech.hearth.lang.ValidationError
+import tech.hearth.transaction.Asset.IssuedAsset
 import tech.hearth.transaction.serialization.impl.WithdrawTxSerializer
 import tech.hearth.transaction.validation.TxValidator
 import tech.hearth.transaction.validation.impl.WithdrawTxValidator
 import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
-/** Not yet semantically implemented: see TransactionDiffer, which has no case for this type yet and so rejects it
-  * with UnsupportedTransactionType. Only wire-format (protobuf/JSON) plumbing exists so far.
+/** Asks for `amount` of what the sender reserved with `fromMiner` (ReserveTransaction) back. See
+  * WithdrawTransactionDiff: the request is recorded here and paid out two period boundaries later, by
+  * WithdrawalPayout, so that the miner can still settle work it accepted before it saw the request.
+  *
+  * `assetId` is an IssuedAsset for the same reason ReserveTransaction's is: Hearth is not reservable.
   */
 final case class WithdrawTransaction(
     sender: PublicKey,
     fromMiner: Address,
-    assetId: Asset,
+    assetId: IssuedAsset,
     amount: TxPositiveAmount,
     feeAssetId: Asset,
     fee: TxPositiveAmount,
@@ -39,7 +43,7 @@ object WithdrawTransaction {
   def create(
       sender: PublicKey,
       fromMiner: Address,
-      assetId: Asset,
+      assetId: IssuedAsset,
       amount: Long,
       feeAssetId: Asset,
       fee: Long,
@@ -48,7 +52,7 @@ object WithdrawTransaction {
       networkId: NetworkId = NetworkId.current
   ): Either[ValidationError, WithdrawTransaction] =
     for {
-      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, assetId.maybeBase16Repr.getOrElse("hearth")))
+      amount <- TxPositiveAmount(amount)(TxValidationError.NonPositiveAmount(amount, assetId.id.toString))
       fee    <- TxPositiveAmount(fee)(TxValidationError.InsufficientFee)
       tx     <- WithdrawTransaction(sender, fromMiner, assetId, amount, feeAssetId, fee, timestamp, proofs, networkId).validatedEither
     } yield tx

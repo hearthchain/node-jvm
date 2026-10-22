@@ -98,6 +98,12 @@ trait EmptyBlockchain extends Blockchain {
 
   override def workDone(validator: Address, period: GenerationPeriod): Long = 0L
 
+  override def withdrawnAmount(client: Address, miner: Address, asset: IssuedAsset): Long = 0L
+
+  override def pendingWithdrawal(client: Address, miner: Address, asset: IssuedAsset): Option[PendingWithdrawal] = None
+
+  override def withdrawalsDue(payoutAt: Height): Seq[(Address, Address, IssuedAsset)] = Seq.empty
+
   override def stakeAt(address: Address, at: GenerationPeriod): Long = 0L
 
   override def stakes(at: GenerationPeriod): Seq[Stake] = Seq.empty
