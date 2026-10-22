@@ -18,7 +18,9 @@ import tech.hearth.transaction.TxValidationError.GenericError
   *   - "counter non-decreasing": the new cumulative value can't be lower than what's already recorded in
   *     Blockchain.settledAmount (checked against the running total within this same batch too, in case a client
   *     appears more than once);
-  *   - "counter within the total ever reserved": the new cumulative value can't exceed Blockchain.reservedAmount.
+  *   - "counter within the total ever reserved": the new cumulative value can't exceed Blockchain.reservedAmount,
+  *     less what WithdrawalPayout has returned to the client (Blockchain.withdrawnAmount). A withdrawal still pending
+  *     takes nothing off: the miner may settle in full until the payout (see WithdrawTransactionDiff).
   *
   * "Settled Cred is retired" (the gist's term for destruction) needs no extra bookkeeping for the bulk of it: the
   * reserved amount was already debited from the client's spendable balance at Reserve time and credited nowhere
@@ -85,8 +87,10 @@ object SettleTransactionDiff {
       accumulated <- tx.settlements.foldLeft(SettleAccumulator.empty(blockchain.workDone(registered.validator, period)).asRight[ValidationError]) {
         (acc, settlement) =>
           acc.flatMap { case SettleAccumulator(settledSoFar, nodeCreditSoFar, workDoneSoFar) =>
-            val key               = (settlement.client, sender, settlement.assetId)
-            val reserved          = blockchain.reservedAmount(settlement.client, sender, settlement.assetId)
+            val key      = (settlement.client, sender, settlement.assetId)
+            val reserved = blockchain.reservedAmount(settlement.client, sender, settlement.assetId)
+            // What a withdrawal returned is no longer the enclave's to spend; a pending one has returned nothing yet
+            val settleable        = reserved - blockchain.withdrawnAmount(settlement.client, sender, settlement.assetId)
             val previouslySettled = settledSoFar.getOrElse(key, blockchain.settledAmount(settlement.client, sender, settlement.assetId))
             val newCumulative     = settlement.cumulativeSpent.value
             for {
@@ -103,10 +107,10 @@ object SettleTransactionDiff {
                     s"$previouslySettled to $newCumulative"
                 )
               }
-              _ <- Either.raiseUnless(newCumulative <= reserved) {
+              _ <- Either.raiseUnless(newCumulative <= settleable) {
                 GenericError(
                   s"Settlement counter $newCumulative for ${settlement.client} with $sender for ${settlement.assetId} " +
-                    s"exceeds total reserved $reserved"
+                    s"exceeds the $settleable reserved and not withdrawn"
                 )
               }
               // newCumulative >= previouslySettled is already established above, and floorOf is monotonic, so neither
