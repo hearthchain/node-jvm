@@ -95,6 +95,26 @@ class TransactionFactorySpec extends FreeSpec {
       reserve.assetId shouldBe asset
     }
 
+    "builds a WithdrawTransaction from a well-formed request" in forAll(accountGen, accountGen) { (sender, minerKey) =>
+      val miner = minerKey.toAddress
+      val asset = IssuedAsset(ByteStr.fill(32)(3))
+      val json = Json.obj(
+        "type"            -> TransactionType.Withdraw.id,
+        "senderPublicKey" -> PublicKey(sender.publicKey()).toString,
+        "fromMiner"       -> miner.toString,
+        "assetId"         -> asset.id.toString,
+        "amount"          -> 100000000,
+        "fee"             -> 100000
+      )
+
+      val tx = TransactionFactory.parseRequest(json).explicitGet()
+      tx shouldBe a[WithdrawTransaction]
+      val withdraw = tx.asInstanceOf[WithdrawTransaction]
+      withdraw.fromMiner shouldBe miner
+      withdraw.amount.value shouldBe 100000000
+      withdraw.assetId shouldBe asset
+    }
+
     "builds a StakeTransaction from a well-formed request" in forAll(accountGen) { sender =>
       val json = Json.obj(
         "type"            -> TransactionType.Stake.id,
