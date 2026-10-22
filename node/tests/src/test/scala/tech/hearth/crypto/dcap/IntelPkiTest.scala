@@ -97,10 +97,11 @@ class IntelPkiTest extends FreeSpec {
       val quote      = tech.hearth.crypto.dcap.DcapQuote.parse(quoteBytes).explicitGet()
 
       val tcb = IntelPki.pckTcb(quote.signature.certData.certData.arr).explicitGet()
-      // Cross-checked with `openssl asn1parse -strparse` on the leaf's SGX extension: 1.13.1.4 (FMSPC), 1.13.1.2.1-16
+      // Cross-checked with `openssl asn1parse -strparse` on the leaf's SGX extension: 1.13.1.4 (FMSPC), 1.13.1.3 (PCE ID), 1.13.1.2.1-16
       // (CPU SVN components) and 1.13.1.2.17 (PCESVN).
       tcb shouldBe IntelPki.PckTcb(
         ByteStr(tech.hearth.common.utils.Base16.decode("b0c06f000000")),
+        ByteStr(tech.hearth.common.utils.Base16.decode("0000")),
         Seq(4, 4, 2, 2, 4, 1, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0),
         11
       )

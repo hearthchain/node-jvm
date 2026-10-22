@@ -139,15 +139,16 @@ object IntelPki {
 
   private val SgxExtensionOid = "1.2.840.113741.1.13.1"
   private val TcbOid          = "1.2.840.113741.1.13.1.2"
+  private val PceIdOid        = "1.2.840.113741.1.13.1.3"
   private val FmspcOid        = "1.2.840.113741.1.13.1.4"
   private val PceSvnOid       = s"$TcbOid.17"
   private val CpuSvnCount     = 16
 
   /** What a PCK leaf certificate's SGX extension says about the platform: the FMSPC (platform model id, 6 bytes)
-    * selecting which on-chain tcbInfo applies, and the SGX TCB components and PCESVN TdxTcbInfo matches against
-    * its levels.
+    * selecting which on-chain tcbInfo applies, the PCE ID it must name too, and the SGX TCB components and PCESVN
+    * TdxTcbInfo matches against its levels.
     */
-  case class PckTcb(fmspc: ByteStr, cpuSvn: Seq[Int], pceSvn: Int)
+  case class PckTcb(fmspc: ByteStr, pceId: ByteStr, cpuSvn: Seq[Int], pceSvn: Int)
 
   /** `chainPem` is a quote's own embedded PCK cert chain (leaf first, matching Intel PCS's own order); only the leaf
     * carries the SGX extension, so the rest of the chain is parsed but otherwise unused here.
@@ -176,10 +177,14 @@ object IntelPki {
             .get(FmspcOid)
             .map(v => ByteStr(org.bouncycastle.asn1.ASN1OctetString.getInstance(v).getOctets))
             .toRight("SGX extension has no FMSPC field")
+          pceId <- entries
+            .get(PceIdOid)
+            .map(v => ByteStr(org.bouncycastle.asn1.ASN1OctetString.getInstance(v).getOctets))
+            .toRight("SGX extension has no PCE ID field")
           tcb <- entries.get(TcbOid).map(v => sgxEntries(org.bouncycastle.asn1.ASN1Sequence.getInstance(v))).toRight("SGX extension has no TCB field")
           cpuSvn <- (1 to CpuSvnCount).toList.traverse(i => integer(tcb, s"$TcbOid.$i"))
           pceSvn <- integer(tcb, PceSvnOid)
-        } yield PckTcb(fmspc, cpuSvn, pceSvn)
+        } yield PckTcb(fmspc, pceId, cpuSvn, pceSvn)
       }
     } catch {
       case NonFatal(e) => Left(s"failed to read the TCB from PCK certificate: ${e.getMessage}")

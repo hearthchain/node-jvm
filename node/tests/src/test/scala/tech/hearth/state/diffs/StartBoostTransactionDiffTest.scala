@@ -5,7 +5,7 @@ import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.common.utils.Base16
 import tech.hearth.common.utils.EitherExt2.*
-import tech.hearth.crypto.dcap.{DcapQuote, IntelPki, TdxTcbInfo}
+import tech.hearth.crypto.dcap.{DcapQuote, IntelPki, QeIdentity, TdxTcbInfo}
 import tech.hearth.crypto.dcap.TdxTcbInfo.{TcbLevel, TcbStatus}
 import tech.hearth.crypto.dcap.IntelPki.MaxCollateralFieldSize
 import tech.hearth.db.WithDomain
@@ -25,10 +25,12 @@ import java.time.Instant
   * tests never do, see SOURCE.md). So the deepest deterministically-reachable reject path here is "PCK CRL not
   * set" - the accept path, and the PCK-chain/QE/ISV signature checks beyond it, aren't covered by this suite;
   * IntelPkiTest's synthetic-fixture groups already cover that verification logic in isolation, with an injectable
-  * trust anchor.
+  * trust anchor. Getting that far takes TCB collateral, which is checked before the signatures: those tests inject
+  * testnet's (withCollateral) instead of putting it on chain, which would need its Intel signatures to verify.
   *
-  * The real TDX quote fixtures (quotev4.hex, quotev5.dat) are only used to get a *structurally valid* quote to
-  * mutate report_data and measurements on - none of these tests reach a point where the quote's own signatures need to verify.
+  * The real TDX quote fixtures (quotev4.hex, testnet-startboost-51018.hex) are only used to get a *structurally
+  * valid* quote to mutate report_data and measurements on - none of these tests reach a point where the quote's own
+  * signatures need to verify.
   */
 class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
   private val sender    = TxHelpers.defaultSigner
@@ -37,7 +39,21 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
   private def hexResource(name: String): Array[Byte] =
     Base16.decode(new String(getClass.getResourceAsStream(s"/dcap/$name").readAllBytes()).trim)
 
-  private val baseQuote = hexResource("quotev4.hex")
+  private val baseQuote    = hexResource("quotev4.hex")
+  private val testnetQuote = hexResource("testnet-startboost-51018.hex")
+
+  private def textResource(name: String): String = new String(getClass.getResourceAsStream(s"/dcap/$name").readAllBytes())
+
+  // Moved far out, so these tests outlive the real collateral's validity: nothing re-verifies an injected payload
+  private val testnetTcbInfo    = textResource("testnet-tcb-info-b0c06f000000.json").replace("2026-11-13T05:08:51Z", "2099-01-01T00:00:00Z")
+  private val testnetQeIdentity = textResource("testnet-qe-identity.json").replace("2026-11-13T04:33:08Z", "2099-01-01T00:00:00Z")
+
+  private def withCollateral(blockchain: Blockchain, tcbInfo: String = testnetTcbInfo, qeIdentity: Option[String] = Some(testnetQeIdentity)) =
+    new Blockchain {
+      export blockchain.{dcapTcbInfo as _, dcapQeIdentity as _, *}
+      override def dcapTcbInfo(fmspc: ByteStr): Option[ByteStr] = Some(ByteStr(tcbInfo.getBytes))
+      override def dcapQeIdentity: Option[ByteStr]              = qeIdentity.map(q => ByteStr(q.getBytes))
+    }
 
   // Offsets into a v4 quote: header(48) + the TD1.0 report body's fields before each one (see DcapQuote).
   private val TdAttributesOffset = 48 + 120
@@ -50,10 +66,11 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
   private def quoteWithReportData(
       reportData: Array[Byte],
       measurement: StartBoostTransactionDiff.TdMeasurement = pinned,
-      tdAttributes: Array[Byte] = Base16.decode("0000001000000000")
+      tdAttributes: Array[Byte] = Base16.decode("0000001000000000"),
+      base: Array[Byte] = baseQuote
   ): ByteStr = {
     require(reportData.length == 64)
-    val mutated = baseQuote.clone()
+    val mutated = base.clone()
     System.arraycopy(tdAttributes, 0, mutated, TdAttributesOffset, 8)
     System.arraycopy(measurement.mrTd.arr, 0, mutated, MrTdOffset, 48)
     measurement.rtmrs.zipWithIndex.foreach { case (rtmr, i) => System.arraycopy(rtmr.arr, 0, mutated, Rtmr0Offset + 48 * i, 48) }
@@ -151,13 +168,13 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
       d.appendKeyBlock()
 
-      // Past the freshness check, the next one to fail is the missing PCK CRL.
+      // Past the freshness check, the next one to fail is the missing TCB Info.
       d.appendMicroBlockE(
         TxHelpers.startBoost(sender, validator, quoteWithReportData(freshReportData(d)), nextPeriodStart)
-      ) should produce("PCK CRL must be set")
+      ) should produce("No on-chain TCB Info")
       d.appendMicroBlockE(
         TxHelpers.startBoost(sender, validator, quoteWithReportData(Array.fill(32)(1.toByte) ++ enclaveKey.arr), nextPeriodStart)
-      ) should produce("PCK CRL must be set")
+      ) should produce("No on-chain TCB Info")
     }
 
     "pins the measurement of testnet's TEE miner image" in {
@@ -167,35 +184,61 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
     }
 
     "TCB policy" - {
-      val quote                           = DcapQuote.parse(hexResource("testnet-startboost-51018.hex")).explicitGet()
-      val DcapQuote.Td10QuoteBody(report) = quote.body: @unchecked
-      val pck                             = IntelPki.pckTcb(quote.signature.certData.certData.arr).explicitGet()
-      val tcbInfo = TdxTcbInfo.parse(getClass.getResourceAsStream("/dcap/testnet-tcb-info-b0c06f000000.json").readAllBytes()).explicitGet()
-      val validAt = Instant.parse("2026-10-20T00:00:00Z").toEpochMilli
-      val default = FunctionalitySettings().acceptedTcbStatuses
+      val quote      = DcapQuote.parse(testnetQuote).explicitGet()
+      val pck        = IntelPki.pckTcb(quote.signature.certData.certData.arr).explicitGet()
+      val tcbInfo    = TdxTcbInfo.parse(textResource("testnet-tcb-info-b0c06f000000.json").getBytes).explicitGet()
+      val qeIdentity = QeIdentity.parse(textResource("testnet-qe-identity.json").getBytes).explicitGet()
+      val validAt    = Instant.parse("2026-10-20T00:00:00Z").toEpochMilli
+      val default    = FunctionalitySettings().acceptedTcbStatuses
 
       def rated(status: TcbStatus, advisories: String*) =
         tcbInfo.copy(tcbLevels = tcbInfo.tcbLevels.map(l => l.copy(level = TcbLevel(status, advisories))))
 
       "accepts testnet's platform against the TCB Info testnet held" in {
-        StartBoostTransactionDiff.checkTcb(tcbInfo, pck, report, default, validAt) shouldBe Right(())
+        StartBoostTransactionDiff.checkTcb(tcbInfo, qeIdentity, pck, quote, default, validAt) shouldBe Right(())
       }
 
       "rejects TCB Info past its nextUpdate, which can no longer show a recent revocation" in {
-        StartBoostTransactionDiff.checkTcb(tcbInfo, pck, report, default, tcbInfo.nextUpdate.plusMillis(1).toEpochMilli) should matchPattern {
+        StartBoostTransactionDiff.checkTcb(
+          tcbInfo,
+          qeIdentity,
+          pck,
+          quote,
+          default,
+          tcbInfo.nextUpdate.plusMillis(1).toEpochMilli
+        ) should matchPattern {
           case Left(e: String) if e.contains("expired") =>
         }
       }
 
+      "rejects a QE Identity past its nextUpdate" in {
+        StartBoostTransactionDiff.checkTcb(tcbInfo, qeIdentity, pck, quote, default, qeIdentity.nextUpdate.plusMillis(1).toEpochMilli) shouldBe
+          Left(s"On-chain QE Identity expired at ${qeIdentity.nextUpdate}; submit a fresh one via UpdateCollateral")
+      }
+
       "rejects a status the network does not accept, and accepts it where it does" in {
         val outOfDate = rated(TcbStatus.OutOfDate)
-        StartBoostTransactionDiff.checkTcb(outOfDate, pck, report, default, validAt) shouldBe Left("TCB status OutOfDate is not accepted")
-        StartBoostTransactionDiff.checkTcb(outOfDate, pck, report, FunctionalitySettings.TESTNET.acceptedTcbStatuses, validAt) shouldBe Right(())
+        StartBoostTransactionDiff.checkTcb(outOfDate, qeIdentity, pck, quote, default, validAt) shouldBe Left("TCB status OutOfDate is not accepted")
+        StartBoostTransactionDiff.checkTcb(
+          outOfDate,
+          qeIdentity,
+          pck,
+          quote,
+          FunctionalitySettings.TESTNET.acceptedTcbStatuses,
+          validAt
+        ) shouldBe Right(())
       }
 
       "accepts a software-hardening status only when the pinned image mitigates every advisory" in {
-        StartBoostTransactionDiff.checkTcb(rated(TcbStatus.SWHardeningNeeded), pck, report, default, validAt) shouldBe Right(())
-        StartBoostTransactionDiff.checkTcb(rated(TcbStatus.SWHardeningNeeded, "INTEL-SA-00334"), pck, report, default, validAt) shouldBe Left(
+        StartBoostTransactionDiff.checkTcb(rated(TcbStatus.SWHardeningNeeded), qeIdentity, pck, quote, default, validAt) shouldBe Right(())
+        StartBoostTransactionDiff.checkTcb(
+          rated(TcbStatus.SWHardeningNeeded, "INTEL-SA-00334"),
+          qeIdentity,
+          pck,
+          quote,
+          default,
+          validAt
+        ) shouldBe Left(
           "TCB status SWHardeningNeeded needs mitigations for INTEL-SA-00334, which the pinned images are not known to have"
         )
       }
@@ -264,7 +307,7 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
 
       val quote = quoteWithReportData(freshReportData(d), tdAttributes = Base16.decode("000000d000000080"))
-      d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("PCK CRL must be set")
+      d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("No on-chain TCB Info")
     }
 
     "below strictTxValidationHeight, lets through a quote with unpinned measurements" in withDomain(
@@ -275,7 +318,7 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
 
       val quote = quoteWithReportData(freshReportData(d), pinned.copy(mrTd = flipFirstByte(pinned.mrTd)))
-      d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("PCK CRL must be set")
+      d.appendBlockE(TxHelpers.startBoost(sender, validator, quote, nextPeriodStart)) should produce("No on-chain TCB Info")
     }
 
     "rejects a quote whose report data carries an all-zero enclave key" in withDomain(
@@ -291,14 +334,52 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       ) should produce("all-zero enclave key")
     }
 
-    "rejects when the PCK CRL has not been set on chain yet" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
-      val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
-      d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
+    "with TCB collateral" - {
+      def startBoost(d: Domain) = {
+        val nextPeriodStart = d.blockchain.currentGenerationPeriod.get.next.start
+        d.appendBlock(TxHelpers.commitToGeneration(nextPeriodStart, sender))
+        // The diff runs at the current height here, not a block above it as an append would, so quote the one before
+        val previousBlockId = d.blockchain.blockId(d.blockchain.height - 1).get
+        TxHelpers.startBoost(sender, validator, quoteWithReportData(previousBlockId.arr ++ enclaveKey.arr, base = testnetQuote), nextPeriodStart)
+      }
 
-      d.blockchain.dcapPckCrl shouldBe None
-      d.appendBlockE(
-        TxHelpers.startBoost(sender, validator, quoteWithReportData(freshReportData(d)), nextPeriodStart)
-      ) should produce("PCK CRL must be set")
+      "rejects when the PCK CRL has not been set on chain yet, after a current platform passes its TCB check" in withDomain(
+        DeterministicFinality,
+        AddrWithBalance.enoughBalances(sender)
+      ) { d =>
+        val tx = startBoost(d)
+        d.blockchain.dcapPckCrl shouldBe None
+        StartBoostTransactionDiff(withCollateral(d.blockchain))(tx) should produce("PCK CRL must be set")
+      }
+
+      "rejects a quote whose platform's TCB status the network does not accept" in withDomain(
+        DeterministicFinality,
+        AddrWithBalance.enoughBalances(sender)
+      ) { d =>
+        val tx = startBoost(d)
+        StartBoostTransactionDiff(withCollateral(d.blockchain, tcbInfo = testnetTcbInfo.replace("\"UpToDate\"", "\"Revoked\"")))(tx) should
+          produce("TCB status Revoked is not accepted")
+      }
+
+      "rejects TCB Info expired by the transaction's timestamp" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+        val tx      = startBoost(d)
+        val expired = testnetTcbInfo.replace("2099-01-01T00:00:00Z", "2000-01-01T00:00:00Z")
+        StartBoostTransactionDiff(withCollateral(d.blockchain, tcbInfo = expired))(tx) should produce("TCB Info for FMSPC b0c06f000000 expired")
+      }
+
+      "rejects a quote while no QE Identity is on chain" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
+        val tx = startBoost(d)
+        StartBoostTransactionDiff(withCollateral(d.blockchain, qeIdentity = None))(tx) should produce("QE Identity must be set")
+      }
+
+      "rejects a quote whose Quoting Enclave the QE Identity does not vouch for" in withDomain(
+        DeterministicFinality,
+        AddrWithBalance.enoughBalances(sender)
+      ) { d =>
+        val tx        = startBoost(d)
+        val foreignQe = testnetQeIdentity.replaceFirst("\"mrsigner\":\"[0-9A-Fa-f]{2}", "\"mrsigner\":\"00")
+        StartBoostTransactionDiff(withCollateral(d.blockchain, qeIdentity = Some(foreignQe)))(tx) should produce("QE signer")
+      }
     }
   }
 }
