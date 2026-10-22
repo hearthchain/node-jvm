@@ -1,8 +1,8 @@
 ---
-purpose: Implementation notes for hearth transactions (DCAP collateral registry, StartBoost, Reserve, BindApiKey, Settle, workBoost, offline signing with hearth util)
+purpose: Implementation notes for hearth transactions (DCAP collateral registry, StartBoost, Reserve, BindApiKey, Settle, Withdraw, workBoost, offline signing with hearth util)
 ---
 
-# Hearth transaction lifecycle: DCAP, StartBoost, Reserve, BindApiKey, Settle, workBoost
+# Hearth transaction lifecycle: DCAP, StartBoost, Reserve, BindApiKey, Settle, Withdraw, workBoost
 
 ## Testnet history
 
@@ -180,10 +180,9 @@ There is no activation height. Every testnet StartBoost (heights 5028 to 60011, 
 ### REST: signing and broadcasting
 
 `StartBoostTransaction`/`UpdateCollateralTransaction`/`ReserveTransaction`/`BindApiKeyTransaction`/
-`SettleTransaction` are the five stub types from "Transaction schema" in `docs/notes/keys-and-signatures.md` that are actually signable through
-`/transactions/sign`/`/transactions/broadcast` now, via `StartBoostRequest`/`UpdateCollateralRequest`/
-`ReserveRequest`/`BindApiKeyRequest`/`SettleRequest` (`api/http/requests/`) wired into
-`TransactionFactory.parseRequest` - only `Withdraw` still falls through to `UnsupportedTransactionType`, unchanged.
+`SettleTransaction`/`WithdrawTransaction` are signable through `/transactions/sign`/`/transactions/broadcast`, via
+`StartBoostRequest`/`UpdateCollateralRequest`/`ReserveRequest`/`BindApiKeyRequest`/`SettleRequest`/`WithdrawRequest`
+(`api/http/requests/`) wired into `TransactionFactory.parseRequest`.
 
 Both `StartBoostRequest`/`UpdateCollateralRequest` hit the same real bug once tested against realistically-sized
 payloads (a fixture-derived TCB Info blob or an actual TDX quote, not a 3-byte placeholder): `ByteStr`'s default
@@ -244,11 +243,9 @@ doesn't re-check it) and that `miner` is registered, then debits `amount` (from 
 `feeAssetId`) from the sender's portfolio and accumulates the total into a new `(sender, miner, asset) -> Long`
 ledger, `Blockchain.reservedAmount`. Multiple `Reserve` transactions to the same triple keep adding to the same
 total - **accumulate-only, by design**: `reservedAmount` is never decremented, it is only ever compared against
-(see "Settle: retiring reserved funds" below - `SettleTransaction` reads it as a ceiling, `WithdrawTransaction` is
-still an unimplemented stub). The debited amount is credited nowhere else - not to the miner, not to any pool -
-only recorded in `reservedAmounts`; until `Withdraw` exists, whatever a client reserves and never spends (i.e.
-never covered by a `Settle`) is **unspendable and unrecoverable**. This is a real, currently-open fund-safety gap,
-not an oversight: it is not yet safe to expose `Reserve` on a network carrying real value.
+(see "Settle: retiring reserved funds" and "Withdraw: returning the unsettled rest" below). The debited amount is
+credited nowhere else - not to the miner, not to any pool - only recorded in `reservedAmounts`, until a `Settle`
+retires it or a `Withdraw` returns the rest to the client.
 
 **`BindApiKeyTransaction`** (`sender, enclavePublicKey, encryptedApiKey, fee, timestamp, proofs, networkId`) binds an
 HPKE-sealed API key envelope to a registered enclave's public key. `state/diffs/
@@ -422,6 +419,28 @@ the trigger to extract it once, as `WithDomain.blockchainWithRegisteredEnclave(b
 `TxHelpers.settle` defaults to a distinct enclave signer (`signer(9)`) from its `sender` (`defaultSigner`) -
 reusing the same key for both would hide a bug where the wrong key ends up signing the settlement message, since
 in production the two are always unrelated keys.
+
+## Withdraw: returning the unsettled rest
+
+`WithdrawTransaction` (`sender, fromMiner, assetId, amount, feeAssetId, fee, timestamp, proofs, networkId`) asks for `amount` of what the sender reserved with `fromMiner` back. `assetId` is `IssuedAsset`, like `Reserve`'s, and `WithdrawTxValidator` rejects an id that isn't 32 bytes the same way.
+
+**It is two-phase, because of one race.** A client can post a request to the miner and withdraw right after; the enclave has already counted the work, but the miner has not settled it yet. If the Withdraw paid out at once, that work would never be paid for. So `WithdrawTransactionDiff` only records a `PendingWithdrawal(amount, payoutAt)`, charging the fee and nothing else, and `WithdrawalPayout` pays it at `payoutAt`: the first block of the period after the one following the period the Withdraw landed in (`period.next.next.start`). Until then `Settle` may still draw on the whole reservation, and the payout returns `min(amount, reserved - settled - withdrawn)`, so whatever the miner settled in the meantime comes off first. P+2 rather than P+1 guarantees the miner a whole period: a Withdraw in the last block of P would otherwise leave it no time at all. The miner's side of the contract is off-chain: once a request is visible it should stop serving the client beyond `reserved - settled - pending`, and settle everything it already counted before `payoutAt`. `/blockchain/settlement/{client}/{miner}/{assetId}` reports `withdrawn` and `pendingWithdrawal` for exactly that.
+
+The diff rejects a client with no reservation with that miner, a request above `reserved - settled - withdrawn`, and a second request while one is pending (it would move the first one's payout or need its own, and a single request for the larger amount does the same). It does **not** require the miner to be registered: a miner that stopped attesting can no longer settle, and must not keep its clients' funds locked either.
+
+**Three lifetime ledgers, one invariant: `settled + withdrawn <= reserved`.** `withdrawnAmount(client, miner, asset)` is a third cumulative counter next to `reservedAmount`/`settledAmount`, written only by the payout. `Settle`'s ceiling is `reserved - withdrawn` (a pending request takes nothing off), the Withdraw's own check keeps a request within the unsettled rest, and the payout is capped by it, so no subtraction on these paths can go negative. All three only grow, which keeps resubmitting an old `Settle` batch a no-op.
+
+**The payout runs in `BlockDiffer.mkInitialSnapshot`, after `StakingPayout`, over a blockchain carrying it.** Both credit balances, and `StateSnapshot.balances` holds resulting totals, so a client paid Cred by both must see the first credit before the second is added, or one overwrites the other. A request with nothing left to pay is still cleared; a payout of 0 writes no balance or `withdrawnAmounts` entry, keeping no-op writes out of the state hash.
+
+**Storage.** `withdrawnAmount` and `pendingWithdrawal` use the history-keyed `writeKeyed`/`rollbackKeyed` families like `settledAmount`; a cleared request is stored as an empty value so history resolves to `None`. The boundary block finds what is due through `Keys.withdrawalDue(payoutAt, suffix)`, one prefix scan per period start. The request writes its entry and the payout deletes it, so nothing outlives a paid request. Rolling back either block undoes its write, read off the ledger itself: a request block's value carries its `payoutAt`, and a cleared (`None`) value can only have been written by the payout at its own payout height, so that height is the one to restore. Both are read before `rollbackKeyed` deletes the value. `WithdrawalPayout` still resolves every entry through `pendingWithdrawal` and skips one whose `payoutAt` differs, so a stray entry could never pay twice.
+
+Shared arithmetic lives in `BlockchainExt`: `settleableAmount` (`reserved - withdrawn`, Settle's ceiling) and `unsettledAmount` (that less `settled`, what a Withdraw may ask for and the payout returns). Anything else that draws on a reservation goes through them too, or nodes computing the same block can disagree. Both ledgers are hashed in `TxStateSnapshotHashBuilder`; a cleared request hashes as its key alone, distinct from never having been written.
+
+No activation height: every Withdraw used to be rejected, so no chain holds one, and `withdrawnAmount` is 0 throughout history, so `Settle`'s new ceiling replays unchanged. A node without this change still rejects a block carrying a Withdraw, though, so none should be broadcast until every node of the network runs it.
+
+**Gaps, same as the other ledgers of this fork:** neither ledger is mirrored onto BlockchainUpdates (the payout's balance credits are; `ReserveUpdate`/`SettleUpdate` have no Withdraw counterpart, which needs a `protobuf-schemas` change), and neither is carried in the light-node snapshot wire format (see "Stakes are not mirrored" in `docs/notes/cred-economy.md`).
+
+**Testing.** `WithdrawTransactionDiffTest` and `WithdrawalPayoutTest` seed the ledgers through `SnapshotBlockchain` and call the diff or the payout directly. `WithdrawalStorageTest` goes through the real append path: a real `Reserve`, `Withdraw` and `Settle`, the boundary payout, and rollbacks of both. That needs a registered miner, which no fixture can get through a real StartBoost, so `withDomain(enclaves = ...)` (through `TestStorageFactory`) makes the domain's `RocksDBWriter` report injected `RegisteredEnclave`s for every period, the way `work = ...` injects `workDone`. Prefer it over Blockchain wrappers for anything that needs a real Reserve or Settle on chain.
 
 ## workBoost: boosting a validator's generating balance
 

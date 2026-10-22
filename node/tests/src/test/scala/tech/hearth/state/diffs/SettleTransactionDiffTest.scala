@@ -9,7 +9,16 @@ import tech.hearth.db.WithDomain
 import tech.hearth.db.WithState.AddrWithBalance
 import tech.hearth.history.Domain
 import tech.hearth.settings.{GenesisAssetSettings, HearthSettings}
-import tech.hearth.state.{Blockchain, CommittedGenerator, GenerationPeriod, RegisteredEnclave, SnapshotBlockchain, StateSnapshot}
+import tech.hearth.state.{
+  Blockchain,
+  CommittedGenerator,
+  GenerationPeriod,
+  Height,
+  PendingWithdrawal,
+  RegisteredEnclave,
+  SnapshotBlockchain,
+  StateSnapshot
+}
 import tech.hearth.test.*
 import tech.hearth.test.DomainPresets.*
 import tech.hearth.transaction.*
@@ -132,7 +141,26 @@ class SettleTransactionDiffTest extends FreeSpec with WithDomain {
 
     "rejects a cumulative counter exceeding the total reserved" in withSettleDomain { d =>
       val blockchain = withReservation(withRegisteredEnclave(d.blockchain), 100L)
-      SettleTransactionDiff(blockchain)(settleTx(101L)) should produce("exceeds total reserved")
+      SettleTransactionDiff(blockchain)(settleTx(101L)) should produce("exceeds the 100 reserved and not withdrawn")
+    }
+
+    "rejects a cumulative counter exceeding what was reserved less what was withdrawn" in withSettleDomain { d =>
+      val withdrawn  = StateSnapshot.build(d.blockchain, withdrawnAmounts = Map((client, miner, asset) -> 30L)).explicitGet()
+      val blockchain = withReservation(withRegisteredEnclave(SnapshotBlockchain(d.blockchain, withdrawn)), 100L)
+
+      SettleTransactionDiff(blockchain)(settleTx(71L)) should produce("exceeds the 70 reserved and not withdrawn")
+      SettleTransactionDiff(blockchain)(settleTx(70L)).explicitGet().settledAmounts((client, miner, asset)) shouldBe 70L
+    }
+
+    // A pending request has not returned anything yet, so work the enclave accepted before the miner saw it is
+    // still covered in full
+    "keeps the whole reservation settleable while a withdrawal is pending" in withSettleDomain { d =>
+      val pending = StateSnapshot
+        .build(d.blockchain, pendingWithdrawals = Map((client, miner, asset) -> Some(PendingWithdrawal(100L, Height(9)))))
+        .explicitGet()
+      val blockchain = withReservation(withRegisteredEnclave(SnapshotBlockchain(d.blockchain, pending)), 100L)
+
+      SettleTransactionDiff(blockchain)(settleTx(100L)).explicitGet().settledAmounts((client, miner, asset)) shouldBe 100L
     }
 
     "accepts a settlement within the total reserved, crediting the miner its fee-debited balance plus the node's share" in withSettleDomain { d =>

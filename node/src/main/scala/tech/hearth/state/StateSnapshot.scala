@@ -48,6 +48,11 @@ case class StateSnapshot(
     // burned share - see Keys.workDoneSuffix. Same "Diff reads current value, writes the final accumulated total"
     // convention as reservedAmounts/settledAmounts above, not a delta.
     workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
+    // What WithdrawalPayout has returned to each (client, miner, asset) over the reservation's lifetime - the final
+    // total, like settledAmounts above, not a delta.
+    withdrawnAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
+    // WithdrawTransaction's request per (client, miner, asset); None is the payout clearing it.
+    pendingWithdrawals: Map[(Address, Address, IssuedAsset), Option[PendingWithdrawal]] = Map.empty,
     // StakeTransaction's own fields, and StakingPayout's carry-forward of them into the next period. Appended
     // rather than keyed, exactly like nextCommittedGenerators above: the period each one names is what the storage
     // layer files it under, and a later entry for the same address in the same period wins.
@@ -98,6 +103,8 @@ object StateSnapshot {
       apiKeyBindings: Map[(ByteStr, Address), ByteStr] = Map.empty,
       settledAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
       workDone: Map[(Address, GenerationPeriod), Long] = Map.empty,
+      withdrawnAmounts: Map[(Address, Address, IssuedAsset), Long] = Map.empty,
+      pendingWithdrawals: Map[(Address, Address, IssuedAsset), Option[PendingWithdrawal]] = Map.empty,
       nextStakes: Seq[StakeCommitment] = Seq.empty
   ): Either[ValidationError, StateSnapshot] = {
     val r =
@@ -127,6 +134,8 @@ object StateSnapshot {
         apiKeyBindings,
         settledAmounts,
         workDone,
+        withdrawnAmounts,
+        pendingWithdrawals,
         nextStakes
       )
     r.leftMap(GenericError(_))
@@ -232,6 +241,8 @@ object StateSnapshot {
         s1.apiKeyBindings ++ s2.apiKeyBindings,
         s1.settledAmounts ++ s2.settledAmounts,
         s1.workDone ++ s2.workDone,
+        s1.withdrawnAmounts ++ s2.withdrawnAmounts,
+        s1.pendingWithdrawals ++ s2.pendingWithdrawals,
         s1.nextStakes ++ s2.nextStakes,
         s2.stakingPayout.orElse(s1.stakingPayout)
       )

@@ -576,6 +576,23 @@ class RocksDBWriter(
         Keys.workDoneHistory,
         Keys.workDoneKeysAt
       )
+      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.withdrawnAmounts)(
+        { case (client, miner, asset) => Keys.withdrawalSuffix(client, miner, asset) },
+        Keys.withdrawnAmount,
+        Keys.withdrawnAmountHistory,
+        Keys.withdrawnAmountKeysAt
+      )
+      expiredKeys ++= writeKeyed(rw, height, threshold, snapshot.pendingWithdrawals)(
+        { case (client, miner, asset) => Keys.withdrawalSuffix(client, miner, asset) },
+        Keys.pendingWithdrawal,
+        Keys.pendingWithdrawalHistory,
+        Keys.pendingWithdrawalKeysAt
+      )
+      snapshot.pendingWithdrawals.foreach {
+        case ((client, miner, asset), Some(pending)) => rw.put(Keys.withdrawalDue(pending.payoutAt, Keys.withdrawalSuffix(client, miner, asset)), ())
+        // Only the payout clears a request, and only at its own payout height
+        case ((client, miner, asset), None) => rw.delete(Keys.withdrawalDue(Height(height), Keys.withdrawalSuffix(client, miner, asset)))
+      }
 
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
         log.trace(s"Rotating filter at $height, prev ts = $TxFilterResetTs, new ts = ${blockMeta.getHeader.timestamp}, interval = ${Duration
@@ -936,6 +953,15 @@ class RocksDBWriter(
           rollbackKeyed(rw, currentHeight, Keys.apiKeyBindingKeysAt, Keys.apiKeyBinding, Keys.apiKeyBindingHistory)
           rollbackKeyed(rw, currentHeight, Keys.settledAmountKeysAt, Keys.settledAmount, Keys.settledAmountHistory)
           rollbackKeyed(rw, currentHeight, Keys.workDoneKeysAt, Keys.workDone, Keys.workDoneHistory)
+          rollbackKeyed(rw, currentHeight, Keys.withdrawnAmountKeysAt, Keys.withdrawnAmount, Keys.withdrawnAmountHistory)
+          // Before the request itself is rolled back below, while its payout height can still be read
+          rw.get(Keys.pendingWithdrawalKeysAt(currentHeight)).foreach { suffix =>
+            rw.get(Keys.pendingWithdrawal(suffix)(currentHeight)) match {
+              case Some(p) => rw.delete(Keys.withdrawalDue(p.payoutAt, suffix))
+              case None    => rw.put(Keys.withdrawalDue(currentHeight, suffix), ())
+            }
+          }
+          rollbackKeyed(rw, currentHeight, Keys.pendingWithdrawalKeysAt, Keys.pendingWithdrawal, Keys.pendingWithdrawalHistory)
 
           val blockTxs = loadTransactions(currentHeight, rdb)
           blockTxs.view.zipWithIndex.foreach { case ((_, tx), idx) =>
@@ -1258,6 +1284,22 @@ class RocksDBWriter(
   override def workDone(validator: Address, period: GenerationPeriod): Long = {
     val suffix = Keys.workDoneSuffix(validator, period)
     readOnly(_.fromHistory(Keys.workDoneHistory(suffix), Keys.workDone(suffix))).getOrElse(0L)
+  }
+
+  override def withdrawnAmount(client: Address, miner: Address, asset: IssuedAsset): Long = {
+    val suffix = Keys.withdrawalSuffix(client, miner, asset)
+    readOnly(_.fromHistory(Keys.withdrawnAmountHistory(suffix), Keys.withdrawnAmount(suffix))).getOrElse(0L)
+  }
+
+  override def pendingWithdrawal(client: Address, miner: Address, asset: IssuedAsset): Option[PendingWithdrawal] = {
+    val suffix = Keys.withdrawalSuffix(client, miner, asset)
+    readOnly(_.fromHistory(Keys.pendingWithdrawalHistory(suffix), Keys.pendingWithdrawal(suffix))).flatten
+  }
+
+  override def withdrawalsDue(payoutAt: Height): Seq[(Address, Address, IssuedAsset)] = {
+    val due = ArrayBuffer.empty[(Address, Address, IssuedAsset)]
+    rdb.db.readOnly(_.iterateOver(Keys.withdrawalDuePrefix(payoutAt))(e => due += Keys.parseWithdrawalDue(e.getKey, payoutAt)))
+    due.toSeq
   }
 
   // These caches are used exclusively for balance snapshots and stake history. They are not used for portfolios, because there aren't

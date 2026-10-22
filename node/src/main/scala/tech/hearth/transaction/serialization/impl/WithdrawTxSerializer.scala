@@ -8,7 +8,7 @@ object WithdrawTxSerializer {
     import tx.*
     BaseTxJson.toJson(tx) ++ Json.obj(
       "fromMiner" -> fromMiner.toString,
-      "assetId"   -> assetId.maybeBase16Repr,
+      "assetId"   -> assetId.id.toString,
       "amount"    -> amount.value
     )
   }

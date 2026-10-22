@@ -53,7 +53,13 @@ object LeaseBalanceNode {
 
 object Keys {
   import KeyHelpers.*
-  import KeyTag.{AddressId as AddressIdTag, EthereumTransactionMeta as EthereumTransactionMetaTag, LeaseDetails as LeaseDetailsTag, *}
+  import KeyTag.{
+    AddressId as AddressIdTag,
+    EthereumTransactionMeta as EthereumTransactionMetaTag,
+    LeaseDetails as LeaseDetailsTag,
+    PendingWithdrawal as PendingWithdrawalTag,
+    *
+  }
 
   val version: Key[Int]   = intKey(Version, default = 1)
   val height: Key[Height] = heightKey(Height)
@@ -307,6 +313,12 @@ object Keys {
   private def addressPairAssetSuffix(a: Address, b: Address, asset: IssuedAsset): ByteStr =
     ByteStr(a.toBytes ++ b.toBytes ++ asset.id.arr)
 
+  private def parseAddressPairAsset(suffix: Array[Byte]): (Address, Address, IssuedAsset) = {
+    val (a, rest) = suffix.splitAt(Address.HASH_LEN)
+    val (b, id)   = rest.splitAt(Address.HASH_LEN)
+    (Address.fromBytes(a).get(), Address.fromBytes(b).get(), IssuedAsset(ByteStr(id)))
+  }
+
   // ReserveTransaction's accumulated total, keyed by (sender, miner, asset) - not tied to a generation period, so
   // it reuses the DCAP-collateral-style "single current value, resolved through history" mechanism (see
   // dcapCollateralValue above) rather than committedGenerators/registeredEnclaves' period-keyed one.
@@ -365,6 +377,46 @@ object Keys {
   // without an unbounded scan - the same role reservedAmountKeysAt plays for reservedAmountHistory.
   def workDoneKeysAt(height: Height): Key[Seq[ByteStr]] =
     Key(WorkDoneKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // What WithdrawalPayout returned over a reservation's lifetime, and the Withdraw waiting for its payout: both keyed
+  // by (client, miner, asset) like settledAmount, with the same history mechanism.
+  def withdrawalSuffix(client: Address, miner: Address, asset: IssuedAsset): ByteStr =
+    addressPairAssetSuffix(client, miner, asset)
+
+  def withdrawnAmountHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(WithdrawnAmountHistory, suffix.arr)
+  def withdrawnAmount(suffix: ByteStr)(height: Height): Key[Long] =
+    Key(WithdrawnAmount, hBytes(suffix.arr, height), Longs.fromByteArray, Longs.toByteArray)
+
+  def withdrawnAmountKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(WithdrawnAmountKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  // None is the payout clearing the request, stored as an empty value so that history still resolves to it
+  def pendingWithdrawalHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(PendingWithdrawalHistory, suffix.arr)
+  def pendingWithdrawal(suffix: ByteStr)(height: Height): Key[Option[PendingWithdrawal]] =
+    Key(
+      PendingWithdrawalTag,
+      hBytes(suffix.arr, height),
+      // Height is also a KeyTag here, hence the qualified name
+      bs =>
+        Option(bs)
+          .filter(_.nonEmpty)
+          .map(bs => PendingWithdrawal(Longs.fromByteArray(bs), tech.hearth.state.Height(Ints.fromByteArray(bs.drop(Longs.BYTES))))),
+      _.fold(Array.emptyByteArray)(p => Longs.toByteArray(p.amount) ++ h(p.payoutAt))
+    )
+
+  def pendingWithdrawalKeysAt(height: Height): Key[Seq[ByteStr]] =
+    Key(PendingWithdrawalKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
+
+  /** The withdrawals scheduled for payout at `payoutAt`, so the boundary block finds them with one prefix scan. Written
+    * with the request and deleted by the payout; a rollback of either block undoes its write.
+    */
+  def withdrawalDue(payoutAt: Height, suffix: ByteStr): Key[Unit] =
+    Key(WithdrawalDue, h(payoutAt) ++ suffix.arr, _ => (), _ => Array.emptyByteArray)
+
+  def withdrawalDuePrefix(payoutAt: Height): Array[Byte] = withdrawalDue(payoutAt, ByteStr.empty).keyBytes
+
+  def parseWithdrawalDue(key: Array[Byte], payoutAt: Height): (Address, Address, IssuedAsset) =
+    parseAddressPairAsset(key.drop(withdrawalDuePrefix(payoutAt).length))
 
   /** A stake is stored exactly like a HRTH balance: the current amount plus the height it was set at, and a
     * prevHeight-linked node per change so a rollback can restore the previous one. The height is what makes the

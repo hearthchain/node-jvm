@@ -211,10 +211,11 @@ object PBTransactions {
       case Data.Withdraw(WithdrawTransactionData(Some(fromMiner), Some(amount), feeAssetId, `empty`)) =>
         for {
           fromMinerAddress <- fromMiner.toAddress
+          assetId          <- issuedAsset(amount.vanillaAssetId)
           tx <- vt.WithdrawTransaction.create(
             sender.toPublicKey,
             fromMinerAddress,
-            amount.vanillaAssetId,
+            assetId,
             amount.longAmount,
             PBAmounts.toVanillaAssetId(feeAssetId),
             feeAmount,

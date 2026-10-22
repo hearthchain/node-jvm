@@ -99,7 +99,14 @@ enum KeyTag {
     ActiveStake,
     StakingPayout,
     AddressStakingPayout,
-    ImplicitGenerators
+    ImplicitGenerators,
+    WithdrawnAmountHistory,
+    WithdrawnAmount,
+    WithdrawnAmountKeysAtHeight,
+    PendingWithdrawalHistory,
+    PendingWithdrawal,
+    PendingWithdrawalKeysAtHeight,
+    WithdrawalDue
 
   def prefixBytes: Array[Byte] = Shorts.toByteArray(ordinal.toShort)
 }

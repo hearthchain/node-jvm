@@ -175,23 +175,7 @@ nothing about their domain classes needed to change, only `PBTransactions`' wire
 `PBTransactions.create`/`vanilla` no longer take/return a top-level `feeAssetId` — each `Data.*` case reads/writes
 its own `fee_asset_id` field (Transfer/Reserve/Withdraw) or has none (everything else, implicitly HRTH).
 
-**Five new transaction types - plumbing only, no semantics, except StartBoost/Reserve/BindApiKey/Settle (see
-`docs/notes/hearth-transactions.md`).** `ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` (all directly in
-`tech.hearth.transaction`, alongside `CommitToGenerationTransaction`, not in a subpackage) exist as domain case
-classes with working protobuf/JSON round-trip and `TxHelpers` constructors (`TxHelpers.reserve`/`.bindApiKey`/
-`.settle`/`.withdraw`). Of these, `WithdrawTransaction` still has **no validation or state-diff logic**: its
-`TxValidator` is `Valid(tx) // Semantics not implemented yet` (the pattern every one of these five started from),
-`TransactionDiffer.transactionSnapshot` has no `case` for it, so it falls through to `UnsupportedTransactionType` -
-a broadcast one reaches the mempool/JSON layer fine but is rejected before any state change - and
-`TransactionFactory.parseRequest`'s REST `/transactions/sign` path stubs it the same way `Genesis` always was
-(`UnsupportedTransactionType`, no `TxBroadcastRequest` subclass exists for it). A field-name-driven best guess at
-what it's for (not verified against any spec beyond the gist "settle" analysis linked in `docs/notes/hearth-transactions.md`, which only covers
-`Settle`): it looks like the counterpart that would credit a `Reserve`d amount back to the sender, but that hasn't
-been designed - don't guess at this from field names again without checking whether a spec has since landed in
-`hearth-specs`/`hearth-tokenomics-spec`. `StartBoostTransaction`, `ReserveTransaction`, `BindApiKeyTransaction` and
-`SettleTransaction` are no longer in this bucket - see "StartBoost: TDX quote verification and enclave
-registration", "Reserve and BindApiKey: locking funds and binding enclave-sealed API keys" and "Settle: retiring
-reserved funds" in `docs/notes/hearth-transactions.md`.
+**Five new transaction types, all with semantics now.** `ReserveTransaction`, `BindApiKeyTransaction`, `SettleTransaction`, `WithdrawTransaction` and `StartBoostTransaction` (all directly in `tech.hearth.transaction`, alongside `CommitToGenerationTransaction`, not in a subpackage) started as plumbing only: domain case classes with protobuf/JSON round-trip and `TxHelpers` constructors, a `TxValidator` of `Valid(tx)`, and no `case` in `TransactionDiffer.transactionSnapshot`, so they fell through to `UnsupportedTransactionType`. `Withdraw` was the last; it was designed around one race (a client posting a request to the miner and withdrawing right after), not inferred from its field names. See "StartBoost: TDX quote verification and enclave registration", "Reserve and BindApiKey: locking funds and binding enclave-sealed API keys", "Settle: retiring reserved funds" and "Withdraw: returning the unsettled rest" in `docs/notes/hearth-transactions.md`.
 
 ## Transaction signatures
 

@@ -724,6 +724,18 @@ class BlockchainUpdaterImpl(
     snapshotBlockchain.workDone(validator, period)
   }
 
+  override def withdrawnAmount(client: Address, miner: Address, asset: IssuedAsset): Long = readLock {
+    snapshotBlockchain.withdrawnAmount(client, miner, asset)
+  }
+
+  override def pendingWithdrawal(client: Address, miner: Address, asset: IssuedAsset): Option[PendingWithdrawal] = readLock {
+    snapshotBlockchain.pendingWithdrawal(client, miner, asset)
+  }
+
+  override def withdrawalsDue(payoutAt: Height): Seq[(Address, Address, IssuedAsset)] = readLock {
+    snapshotBlockchain.withdrawalsDue(payoutAt)
+  }
+
   override def stakes(at: GenerationPeriod): Seq[Stake] = readLock {
     snapshotBlockchain.stakes(at)
   }

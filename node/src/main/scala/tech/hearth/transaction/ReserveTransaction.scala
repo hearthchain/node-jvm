@@ -11,8 +11,8 @@ import monix.eval.Coeval
 import play.api.libs.json.JsObject
 
 /** See ReserveTransactionDiff for the real semantics: locking `amount` of `assetId` against a registered miner,
-  * accumulating into Blockchain.reservedAmount(sender, miner, assetId). Accumulate-only for now - there is no
-  * unreserve transaction yet (SettleTransaction only ever compares against the reserved total).
+  * accumulating into Blockchain.reservedAmount(sender, miner, assetId). Accumulate-only: SettleTransaction retires
+  * it and WithdrawTransaction returns the unsettled rest, both tracked in ledgers of their own.
   *
   * `assetId` is an IssuedAsset, not an Asset: Hearth is not reservable, matching SettleTransaction.Settlement,
   * which is the only way a reservation is ever drawn down. `feeAssetId` is unconstrained - a fee is payable in
