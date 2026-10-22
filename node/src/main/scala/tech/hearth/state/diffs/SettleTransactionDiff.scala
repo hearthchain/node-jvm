@@ -87,10 +87,9 @@ object SettleTransactionDiff {
       accumulated <- tx.settlements.foldLeft(SettleAccumulator.empty(blockchain.workDone(registered.validator, period)).asRight[ValidationError]) {
         (acc, settlement) =>
           acc.flatMap { case SettleAccumulator(settledSoFar, nodeCreditSoFar, workDoneSoFar) =>
-            val key      = (settlement.client, sender, settlement.assetId)
-            val reserved = blockchain.reservedAmount(settlement.client, sender, settlement.assetId)
-            // What a withdrawal returned is no longer the enclave's to spend; a pending one has returned nothing yet
-            val settleable        = reserved - blockchain.withdrawnAmount(settlement.client, sender, settlement.assetId)
+            val key               = (settlement.client, sender, settlement.assetId)
+            val reserved          = blockchain.reservedAmount(settlement.client, sender, settlement.assetId)
+            val settleable        = blockchain.settleableAmount(settlement.client, sender, settlement.assetId)
             val previouslySettled = settledSoFar.getOrElse(key, blockchain.settledAmount(settlement.client, sender, settlement.assetId))
             val newCumulative     = settlement.cumulativeSpent.value
             for {

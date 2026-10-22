@@ -590,7 +590,8 @@ class RocksDBWriter(
       )
       snapshot.pendingWithdrawals.foreach {
         case ((client, miner, asset), Some(pending)) => rw.put(Keys.withdrawalDue(pending.payoutAt, Keys.withdrawalSuffix(client, miner, asset)), ())
-        case _                                       => ()
+        // Only the payout clears a request, and only at its own payout height
+        case ((client, miner, asset), None) => rw.delete(Keys.withdrawalDue(Height(height), Keys.withdrawalSuffix(client, miner, asset)))
       }
 
       if (blockMeta.getHeader.timestamp - TxFilterResetTs > settings.functionalitySettings.maxTransactionTimeBackOffset.toMillis * 2) {
@@ -955,7 +956,10 @@ class RocksDBWriter(
           rollbackKeyed(rw, currentHeight, Keys.withdrawnAmountKeysAt, Keys.withdrawnAmount, Keys.withdrawnAmountHistory)
           // Before the request itself is rolled back below, while its payout height can still be read
           rw.get(Keys.pendingWithdrawalKeysAt(currentHeight)).foreach { suffix =>
-            rw.get(Keys.pendingWithdrawal(suffix)(currentHeight)).foreach(p => rw.delete(Keys.withdrawalDue(p.payoutAt, suffix)))
+            rw.get(Keys.pendingWithdrawal(suffix)(currentHeight)) match {
+              case Some(p) => rw.delete(Keys.withdrawalDue(p.payoutAt, suffix))
+              case None    => rw.put(Keys.withdrawalDue(currentHeight, suffix), ())
+            }
           }
           rollbackKeyed(rw, currentHeight, Keys.pendingWithdrawalKeysAt, Keys.pendingWithdrawal, Keys.pendingWithdrawalHistory)
 

@@ -27,8 +27,7 @@ object WithdrawTransactionDiff {
       _ <- blockchain.pendingWithdrawal(client, tx.fromMiner, tx.assetId).toLeft(()).leftMap { p =>
         GenericError(s"$client already has a withdrawal pending from ${tx.fromMiner} for ${tx.assetId}, paid out at ${p.payoutAt}")
       }
-      // Settle keeps settled within reserved - withdrawn, so this is never negative
-      unsettled = reserved - blockchain.settledAmount(client, tx.fromMiner, tx.assetId) - blockchain.withdrawnAmount(client, tx.fromMiner, tx.assetId)
+      unsettled = blockchain.unsettledAmount(client, tx.fromMiner, tx.assetId)
       _ <- Either.raiseUnless(tx.amount.value <= unsettled) {
         GenericError(s"Withdrawal of ${tx.amount.value} from ${tx.fromMiner} for ${tx.assetId} exceeds the $unsettled still unsettled")
       }

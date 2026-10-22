@@ -69,6 +69,26 @@ class WithdrawalStorageTest extends FreeSpec with WithDomain {
       d.blockchain.pendingWithdrawal(client.toAddress, miner.toAddress, asset) shouldBe None
     }
 
+    "lets the client top up while a withdrawal is pending, paying out against the larger reservation" in withWithdrawalDomain { d =>
+      reserveAndWithdraw(d)
+      crossPeriodBoundary(d, miner)
+      d.appendBlock(TxHelpers.reserve(client, asset, amount = 50L, miner = miner.toAddress), settle(d, 120L))
+
+      crossPeriodBoundary(d, miner)
+      // The request was for 100, but only 150 - 120 is left unsettled
+      clientAsset(d) shouldBe quantity - 150L + 30L
+      d.blockchain.withdrawnAmount(client.toAddress, miner.toAddress, asset) shouldBe 30L
+    }
+
+    "drops the payout from the due index once its block is persisted" in withWithdrawalDomain { d =>
+      reserveAndWithdraw(d)
+      crossPeriodBoundary(d, miner)
+      crossPeriodBoundary(d, miner)
+      d.appendBlock()
+
+      d.blockchain.withdrawalsDue(Height(9)) shouldBe empty
+    }
+
     "restores the request and the client's balance on rollback of a persisted payout block" in withWithdrawalDomain { d =>
       reserveAndWithdraw(d)
       crossPeriodBoundary(d, miner)

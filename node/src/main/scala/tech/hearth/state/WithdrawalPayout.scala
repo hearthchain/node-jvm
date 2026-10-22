@@ -1,6 +1,7 @@
 package tech.hearth.state
 
 import cats.syntax.either.*
+import cats.syntax.foldable.*
 import tech.hearth.account.Address
 import tech.hearth.lang.ValidationError
 import tech.hearth.transaction.TxValidationError.GenericError
@@ -32,15 +33,13 @@ object WithdrawalPayout {
     if (due.isEmpty) Right(StateSnapshot.empty)
     else {
       val paid = due.map { case (key @ (client, miner, asset), pending) =>
-        val withdrawn = blockchain.withdrawnAmount(client, miner, asset)
-        // Settle keeps settled + withdrawn within reserved, so this is never negative, and neither sum can overflow
-        val unsettled = blockchain.reservedAmount(client, miner, asset) - blockchain.settledAmount(client, miner, asset) - withdrawn
-        (key, withdrawn, math.min(pending.amount, unsettled))
+        // withdrawn + what is paid stays within reserved, so the new total can't overflow
+        (key, blockchain.withdrawnAmount(client, miner, asset), math.min(pending.amount, blockchain.unsettledAmount(client, miner, asset)))
       }
       for {
         portfolios <- paid
           .collect { case ((client, _, asset), _, amount) if amount > 0 => Map(client -> Portfolio.build(asset, amount)) }
-          .foldLeft(Map.empty[Address, Portfolio].asRight[String])((acc, p) => acc.flatMap(Portfolio.combine(_, p)))
+          .foldM(Map.empty[Address, Portfolio])(Portfolio.combine)
           .leftMap(GenericError(_))
         snapshot <- StateSnapshot.build(
           blockchain,

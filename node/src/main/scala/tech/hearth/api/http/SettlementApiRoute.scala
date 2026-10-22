@@ -7,8 +7,7 @@ import tech.hearth.utils.byteStrFormat
 
 /** Point reads the TEE miner needs to build a settlement batch: the HPKE api-key envelope a client bound to its
   * enclave key (BindApiKey), and the reserved/settled/withdrawn counters and any pending Withdraw for a (client,
-  * miner) pair. Kept out of
-  * FinalityApiRoute because these read the Reserve/Settle ledger, not finalization state.
+  * miner) pair. Kept out of FinalityApiRoute because these read the Reserve/Settle ledger, not finalization state.
   */
 case class SettlementApiRoute(blockchain: Blockchain) extends ApiRoute {
   override def route: Route = pathPrefix("blockchain") {

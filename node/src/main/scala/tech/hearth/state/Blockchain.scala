@@ -118,8 +118,7 @@ trait Blockchain {
   def pendingWithdrawal(client: Address, miner: Address, asset: IssuedAsset): Option[PendingWithdrawal]
 
   // Every (client, miner, asset) a Withdraw scheduled for payout at `payoutAt`, the set WithdrawalPayout walks at
-  // that period start. May include requests already rolled back or paid, so each is resolved through
-  // pendingWithdrawal before anything is paid.
+  // that period start. Each is still resolved through pendingWithdrawal before anything is paid.
   def withdrawalsDue(payoutAt: Height): Seq[(Address, Address, IssuedAsset)]
 
   // Every HRTH stake in force for one generation period - the set StakingPayout walks at that period's end, and
@@ -304,6 +303,16 @@ object Blockchain {
       currentGenerationPeriod.flatMap { current =>
         blockchain.registeredEnclaves(current).find(p).orElse(blockchain.registeredEnclaves(current.next).find(p))
       }
+
+    /** What Settle may still draw on: returned funds are no longer the enclave's to spend, a pending withdrawal
+      * takes nothing off. The one place `settled + withdrawn <= reserved` is spelled out for Settle and Withdraw.
+      */
+    def settleableAmount(client: Address, miner: Address, asset: IssuedAsset): Long =
+      blockchain.reservedAmount(client, miner, asset) - blockchain.withdrawnAmount(client, miner, asset)
+
+    // What a Withdraw may ask for and its payout returns; never negative, since Settle stays within settleableAmount
+    def unsettledAmount(client: Address, miner: Address, asset: IssuedAsset): Long =
+      settleableAmount(client, miner, asset) - blockchain.settledAmount(client, miner, asset)
 
     /** An address counts as a "registered miner" (for ReserveTransaction/BindApiKeyTransaction) as long as it has
       * at least one enclave registered via StartBoostTransaction for the current or the next generation period.

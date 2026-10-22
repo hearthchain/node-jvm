@@ -109,7 +109,8 @@ case class SnapshotBlockchain(
     snapshot.pendingWithdrawals.getOrElse((client, miner, asset), inner.pendingWithdrawal(client, miner, asset))
 
   override def withdrawalsDue(payoutAt: Height): Seq[(Address, Address, IssuedAsset)] =
-    (inner.withdrawalsDue(payoutAt) ++ snapshot.pendingWithdrawals.collect { case (key, Some(p)) if p.payoutAt == payoutAt => key }).distinct
+    (inner.withdrawalsDue(payoutAt).filterNot(snapshot.pendingWithdrawals.get(_).contains(None)) ++
+      snapshot.pendingWithdrawals.collect { case (key, Some(p)) if p.payoutAt == payoutAt => key }).distinct
 
   // A commitment in this snapshot is in force for `at` when `at` starts at or after the period it named. Since a
   // StakeTransaction can only ever name the next period, that is "this snapshot wins for the next period onward".

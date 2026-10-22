@@ -53,7 +53,13 @@ object LeaseBalanceNode {
 
 object Keys {
   import KeyHelpers.*
-  import KeyTag.{AddressId as AddressIdTag, EthereumTransactionMeta as EthereumTransactionMetaTag, LeaseDetails as LeaseDetailsTag, *}
+  import KeyTag.{
+    AddressId as AddressIdTag,
+    EthereumTransactionMeta as EthereumTransactionMetaTag,
+    LeaseDetails as LeaseDetailsTag,
+    PendingWithdrawal as PendingWithdrawalTag,
+    *
+  }
 
   val version: Key[Int]   = intKey(Version, default = 1)
   val height: Key[Height] = heightKey(Height)
@@ -388,13 +394,13 @@ object Keys {
   def pendingWithdrawalHistory(suffix: ByteStr): Key[Seq[Height]] = historyKey(PendingWithdrawalHistory, suffix.arr)
   def pendingWithdrawal(suffix: ByteStr)(height: Height): Key[Option[PendingWithdrawal]] =
     Key(
-      PendingWithdrawal,
+      PendingWithdrawalTag,
       hBytes(suffix.arr, height),
+      // Height is also a KeyTag here, hence the qualified name
       bs =>
-        Option(bs).filter(_.nonEmpty).map { bs =>
-          tech.hearth.state
-            .PendingWithdrawal(Longs.fromByteArray(bs.take(Longs.BYTES)), tech.hearth.state.Height(Ints.fromByteArray(bs.drop(Longs.BYTES))))
-        },
+        Option(bs)
+          .filter(_.nonEmpty)
+          .map(bs => PendingWithdrawal(Longs.fromByteArray(bs), tech.hearth.state.Height(Ints.fromByteArray(bs.drop(Longs.BYTES))))),
       _.fold(Array.emptyByteArray)(p => Longs.toByteArray(p.amount) ++ h(p.payoutAt))
     )
 
@@ -402,8 +408,7 @@ object Keys {
     Key(PendingWithdrawalKeysAtHeight, h(height), readByteStrSeq, writeByteStrSeq)
 
   /** The withdrawals scheduled for payout at `payoutAt`, so the boundary block finds them with one prefix scan. Written
-    * with the request and removed only when the request's own block is rolled back: an entry whose request has
-    * since been paid is never scanned again, since its payout height is in the past.
+    * with the request and deleted by the payout; a rollback of either block undoes its write.
     */
   def withdrawalDue(payoutAt: Height, suffix: ByteStr): Key[Unit] =
     Key(WithdrawalDue, h(payoutAt) ++ suffix.arr, _ => (), _ => Array.emptyByteArray)
