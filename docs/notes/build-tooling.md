@@ -19,7 +19,7 @@ This repo's BLS scheme did not match what `tech.hearth.crypto.BlsKey` shipped wi
 `fastAggregateVerify` hardcode the eth2 proof-of-possession ciphersuite DST (`..._POP_`); this repo signs block
 endorsements and generation commitments under the Basic (unaugmented, `..._NUL_`) DST instead, and implements its
 own period-bound proof of possession at commit time (`CommitToGenerationTransaction.mkPopMessage`, `pubkey ++
-periodStart`, checked with the same signing primitive as everything else) rather than the library's dedicated PoP
+periodStart ++ senderPublicKey`, checked with the same signing primitive as everything else) rather than the library's dedicated PoP
 DST. `BlsKey` had no way to pick a DST, so a straight swap would have silently changed the on-chain BLS scheme.
 Fixed by patching the crypto library itself (sibling repo, `../hearth-chain/java`) to add a second, explicitly
 named Basic ciphersuite alongside the POP one: `signBasic`/`verifyBasic`/`fastAggregateVerifyBasic`, plus

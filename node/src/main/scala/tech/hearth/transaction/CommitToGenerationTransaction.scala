@@ -54,9 +54,13 @@ final case class CommitToGenerationTransaction(
       )
     )
 
-  lazy val popMessage: Array[Byte] = CommitToGenerationTransaction.mkPopMessage(endorserPublicKey, generationPeriodStart)
+  def popMessage(senderBound: Boolean): Array[Byte] =
+    CommitToGenerationTransaction.mkPopMessage(endorserPublicKey, generationPeriodStart, popSender(senderBound))
 
-  lazy val vrfPopMessage: Array[Byte] = CommitToGenerationTransaction.mkVrfPopMessage(vrfPublicKey, generationPeriodStart)
+  def vrfPopMessage(senderBound: Boolean): Array[Byte] =
+    CommitToGenerationTransaction.mkVrfPopMessage(vrfPublicKey, generationPeriodStart, popSender(senderBound))
+
+  private def popSender(senderBound: Boolean): Option[PublicKey] = Option.when(senderBound)(sender)
 }
 
 object CommitToGenerationTransaction {
@@ -67,18 +71,23 @@ object CommitToGenerationTransaction {
   implicit def signed(tx: CommitToGenerationTransaction, privateKey: PrivateKey): CommitToGenerationTransaction =
     tx.copy(proofs = Proofs(crypto.sign(privateKey, tx.bodyBytes())))
 
-  def mkPopSignature(blsKeyPair: BlsKeyPair, generationPeriodStart: Height): BlsSignature =
-    blsKeyPair.sign(mkPopMessage(blsKeyPair.publicKey, generationPeriodStart))
+  def mkPopSignature(blsKeyPair: BlsKeyPair, generationPeriodStart: Height, sender: Option[PublicKey]): BlsSignature =
+    blsKeyPair.sign(mkPopMessage(blsKeyPair.publicKey, generationPeriodStart, sender))
 
-  def mkPopMessage(blsPublicKey: BlsPublicKey, generationPeriodStart: Height): Array[Byte] =
-    blsPublicKey.arr ++ generationPeriodStart.toByteArray
+  /** @param sender None only for testnet's unbound proofs, see "Sender-bound proofs of possession" in hearth-transactions.md */
+  def mkPopMessage(blsPublicKey: BlsPublicKey, generationPeriodStart: Height, sender: Option[PublicKey]): Array[Byte] =
+    popPayload(blsPublicKey.arr, generationPeriodStart, sender)
 
   /** The VRF proof of possession: an ECVRF proof over the key being registered, verifiable with that key alone. */
-  def mkVrfPopSignature(vrfKey: VrfKey, generationPeriodStart: Height): ByteStr =
-    ByteStr(Ecvrf.prove(vrfKey, mkVrfPopMessage(ByteStr(vrfKey.publicKey()), generationPeriodStart)).proof().bytes())
+  def mkVrfPopSignature(vrfKey: VrfKey, generationPeriodStart: Height, sender: Option[PublicKey]): ByteStr =
+    ByteStr(Ecvrf.prove(vrfKey, mkVrfPopMessage(ByteStr(vrfKey.publicKey()), generationPeriodStart, sender)).proof().bytes())
 
-  def mkVrfPopMessage(vrfPublicKey: ByteStr, generationPeriodStart: Height): Array[Byte] =
-    vrfPublicKey.arr ++ generationPeriodStart.toByteArray
+  /** @param sender See [[mkPopMessage]] */
+  def mkVrfPopMessage(vrfPublicKey: ByteStr, generationPeriodStart: Height, sender: Option[PublicKey]): Array[Byte] =
+    popPayload(vrfPublicKey.arr, generationPeriodStart, sender)
+
+  private def popPayload(key: Array[Byte], generationPeriodStart: Height, sender: Option[PublicKey]): Array[Byte] =
+    key ++ generationPeriodStart.toByteArray ++ sender.fold(Array.emptyByteArray)(_.arr)
 
   def create(
       sender: PublicKey,

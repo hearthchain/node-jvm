@@ -99,6 +99,9 @@ case class FunctionalitySettings(
     // First height splitting a settlement exactly (SettleTransactionDiff.share). Below it each delta is truncated to
     // tens first, which testnet history carries; every other network splits exactly from genesis.
     exactSettleSplitHeight: Int = 0,
+    // First height whose CommitToGenerations must bind their proofs of possession to the sender, see "Sender-bound
+    // proofs of possession" in docs/notes/hearth-transactions.md. Testnet carries unbound ones below it.
+    senderBoundPopHeight: Int = 0,
     // The TCB statuses a StartBoost quote's platform may have (TdxTcbInfo.evaluate). SWHardeningNeeded passes only
     // with advisories StartBoostTransactionDiff.MitigatedAdvisories covers.
     acceptedTcbStatuses: Set[TcbStatus] = Set(TcbStatus.UpToDate, TcbStatus.SWHardeningNeeded)
@@ -165,6 +168,8 @@ object FunctionalitySettings {
     strictTxValidationHeight = 8395,
     // Right after the last settlement applied truncated (49294); none landed between it and the tip at rollout.
     exactSettleSplitHeight = 49295,
+    // Generators for 63001-66000 are already committed with unbound proofs; commitments for 66001 on are bound.
+    senderBoundPopHeight = 63001,
     // Testnet hosts may lag a TCB recovery
     acceptedTcbStatuses = Set(TcbStatus.UpToDate, TcbStatus.SWHardeningNeeded, TcbStatus.OutOfDate)
   )

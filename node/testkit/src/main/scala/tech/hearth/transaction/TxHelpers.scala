@@ -376,9 +376,10 @@ object TxHelpers {
       fee: Long = TestValues.commitToGenerationFee,
       networkId: NetworkId = NetworkId.current,
       // Defaults to the sender's own derived key, see vrfKeyOf
-      vrfKey: Option[VrfKey] = None
+      vrfKey: Option[VrfKey] = None,
+      senderBoundPop: Boolean = true
   ): CommitToGenerationTransaction =
-    commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, networkId, vrfKey)
+    commitToGenerationWithEndorserKey(generationPeriodStart, blsKeyOf(sender), sender, timestamp, fee, networkId, vrfKey, senderBoundPop)
 
   /** A generator's BLS key, derived per sender for the same reason as its VRF key. */
   def blsSeedOf(sender: SigningKey): Array[Byte] = Crypto.defaultBackend().sha256(sender.publicKey())
@@ -407,19 +408,23 @@ object TxHelpers {
       fee: Long = TestValues.commitToGenerationFee,
       networkId: NetworkId = NetworkId.current,
       // Defaults to the sender's own derived key, see vrfKeyOf
-      vrfKeyOpt: Option[VrfKey] = None
+      vrfKeyOpt: Option[VrfKey] = None,
+      // False signs the unbound proofs of possession testnet carries below FunctionalitySettings.senderBoundPopHeight
+      senderBoundPop: Boolean = true
   ): CommitToGenerationTransaction = {
-    val vrfKey = vrfKeyOpt.getOrElse(vrfKeyOf(sender))
+    val vrfKey    = vrfKeyOpt.getOrElse(vrfKeyOf(sender))
+    val senderPk  = PublicKey(sender.publicKey())
+    val popSender = Option.when(senderBoundPop)(senderPk)
     CommitToGenerationTransaction
       .create(
-        PublicKey(sender.publicKey()),
+        senderPk,
         endorserKp.publicKey,
         ByteStr(vrfKey.publicKey()),
         generationPeriodStart,
         timestamp,
         fee,
-        CommitToGenerationTransaction.mkPopSignature(endorserKp, generationPeriodStart),
-        CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, generationPeriodStart),
+        CommitToGenerationTransaction.mkPopSignature(endorserKp, generationPeriodStart, popSender),
+        CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, generationPeriodStart, popSender),
         Proofs.empty,
         networkId
       )
