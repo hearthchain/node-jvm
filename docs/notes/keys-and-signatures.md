@@ -15,7 +15,8 @@ from one seed by `KeyTree` at an account nonce:
 - `VrfKey` (`KeyTree.vrfKey`) — ECVRF. Produces only the PoS hit source (`Ecvrf.prove`, verified by
   `crypto.verifyVRF`). It is *not* derived from the signing key, so its public key is a plain `ByteStr`, never a
   `PublicKey`. A generator commits to it on-chain via `CommitToGenerationTransaction.vrfPublicKey` plus a
-  proof-of-possession (`mkVrfPopSignature`); blocks signed by a generator whose committed VRF key doesn't match the one
+  proof-of-possession (`mkVrfPopSignature`, see "Sender-bound proofs of possession" in
+  `docs/notes/hearth-transactions.md`); blocks signed by a generator whose committed VRF key doesn't match the one
   that produced the proof fail with `Invalid VRF proof` (or, from inside sodium,
   `crypto_scalarmult_ed25519_base_noclamp failed`).
 - A BLS key (`KeyTree.blsSecretKey` → `BlsKeyPair`, `crypto/bls/`) — signs block endorsements for finality.

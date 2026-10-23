@@ -6,7 +6,7 @@ purpose: Implementation notes for hearth transactions (DCAP collateral registry,
 
 ## Testnet history
 
-A consensus change has to replay testnet's history unchanged, or carry a height gate in `FunctionalitySettings` (`strictTxValidationHeight`, `exactSettleSplitHeight`). Testnet's public REST API is http://testnet-htz-nbg1-1.wavesnodes.com:5520; `/blocks/seq/{from}/{to}` (100 blocks per request) is how the StartBoost (type 6) and UpdateCollateral (11) history in this note was collected. `/debug/*` needs the API key.
+A consensus change has to replay testnet's history unchanged, or carry a height gate in `FunctionalitySettings` (`strictTxValidationHeight`, `exactSettleSplitHeight`, `senderBoundPopHeight`). Testnet's public REST API is http://testnet-htz-nbg1-1.wavesnodes.com:5520; `/blocks/seq/{from}/{to}` (100 blocks per request) is how the StartBoost (type 6) and UpdateCollateral (11) history in this note was collected. `/debug/*` needs the API key.
 
 ## DCAP collateral registry
 
@@ -197,6 +197,12 @@ every other request type keeps the small default unchanged. `BindApiKeyRequest.e
 same way pre-emptively, even though a real HPKE-sealed envelope is well under 280 hex chars - see "Reserve and
 BindApiKey" below. A future request class with its own large-blob field should reuse `largeByteStrFormat` the same
 way rather than growing the shared default limit, which stays deliberately small for the common case.
+
+### Sender-bound proofs of possession
+
+Both proofs a CommitToGeneration carries (the BLS `commitmentSignature` and the ECVRF `vrfCommitmentSignature`) sign `key ++ generationPeriodStart ++ senderPublicKey` (`mkPopMessage`/`mkVrfPopMessage`). Without the sender, a proof only shows that *someone* holds the key, so anyone could copy a pending commitment's keys and proofs into their own transaction and, landing first, make the original fail the diff's duplicate-key check: the generator loses its slot for the period. Both proofs need the binding, since either duplicate check (BLS or VRF key) is enough to block the original.
+
+Testnet committed with the unbound `key ++ generationPeriodStart` up to and including the period starting at 63001, so the diff gates on `FunctionalitySettings.senderBoundPopHeight` (63001 on TESTNET, 0 elsewhere): a commitment landing at or above it must be bound, one below it must be unbound. Only validation keeps the unbound format, for replaying history: signers (`GeneratorKeys.commitment`, hence `POST /transactions/sign` and `hearth util transaction sign`) always bind, since every generator for 63001-66000 had committed before the change shipped and no commitment after that can land below 63001.
 
 ### Signing a commitment offline: `hearth util transaction sign`
 

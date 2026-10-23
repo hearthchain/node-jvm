@@ -114,11 +114,12 @@ object GeneratorKeys {
 
     override def commitment(address: Address, generationPeriodStart: Height): Option[Commitment] =
       byAddress.get(address).map { account =>
+        val sender = Some(account.publicKey)
         Commitment(
           endorserPublicKey = account.blsKey.publicKey,
-          commitmentSignature = CommitToGenerationTransaction.mkPopSignature(account.blsKey, generationPeriodStart),
+          commitmentSignature = CommitToGenerationTransaction.mkPopSignature(account.blsKey, generationPeriodStart, sender),
           vrfPublicKey = ByteStr(account.vrfKey.publicKey()),
-          vrfCommitmentSignature = CommitToGenerationTransaction.mkVrfPopSignature(account.vrfKey, generationPeriodStart)
+          vrfCommitmentSignature = CommitToGenerationTransaction.mkVrfPopSignature(account.vrfKey, generationPeriodStart, sender)
         )
       }
 

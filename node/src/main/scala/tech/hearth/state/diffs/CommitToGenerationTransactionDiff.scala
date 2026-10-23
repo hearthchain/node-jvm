@@ -10,7 +10,8 @@ import tech.hearth.transaction.TxValidationError.{ActivationError, GenericError}
 
 object CommitToGenerationTransactionDiff {
   def apply(blockchain: Blockchain)(tx: CommitToGenerationTransaction): Either[ValidationError, StateSnapshot] = {
-    val sender = tx.sender.toAddress
+    val sender      = tx.sender.toAddress
+    val senderBound = blockchain.height >= blockchain.settings.functionalitySettings.senderBoundPopHeight
 
     for {
       current <- blockchain.currentGenerationPeriod.toRight(ActivationError("DeterministicFinality is not yet activated"))
@@ -20,13 +21,13 @@ object CommitToGenerationTransactionDiff {
       }
       _ <- tx.endorserPublicKey.validated.leftMap(e => GenericError(s"Invalid endorser public key: $e"))
       _ <- tx.commitmentSignature
-        .verifyBasic(tx.popMessage, tx.endorserPublicKey)
+        .verifyBasic(tx.popMessage(senderBound), tx.endorserPublicKey)
         .leftMap(e => GenericError(s"Invalid commitment signature: $e"))
       _ <- GeneratorEligibility.checkVrfPublicKeyLength(tx.vrfPublicKey).leftMap(GenericError(_))
       // Proves the sender holds the VRF key it registers, so that a mistyped key fails here rather than silently
       // leaving a generator unable to produce a verifiable block for the whole period
       _ <- crypto
-        .verifyVRF(tx.vrfCommitmentSignature, tx.vrfPopMessage, tx.vrfPublicKey)
+        .verifyVRF(tx.vrfCommitmentSignature, tx.vrfPopMessage(senderBound), tx.vrfPublicKey)
         .leftMap(e => GenericError(s"Invalid VRF commitment signature: $e"))
       _ <- blockchain.committedGenerators(next).foldLeft(Either.unit[GenericError]) {
         case (r @ Left(_), _) => r

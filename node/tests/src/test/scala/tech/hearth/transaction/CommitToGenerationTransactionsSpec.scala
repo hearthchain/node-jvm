@@ -16,14 +16,15 @@ import play.api.libs.json.Json
 import scala.util.{Failure, Success}
 
 class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
+  private val sender = PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet()
   private val blsKp  = BlsKeyPair.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(0)))
-  private val sig    = CommitToGenerationTransaction.mkPopSignature(blsKp, Height(3000))
+  private val sig    = CommitToGenerationTransaction.mkPopSignature(blsKp, Height(3000), Some(sender))
   private val vrfKey = VrfKey.fromSeed(Crypto.defaultBackend().sha256(Ints.toByteArray(0)))
   private val vrfPk  = ByteStr(vrfKey.publicKey())
-  private val vrfSig = CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, Height(3000))
+  private val vrfSig = CommitToGenerationTransaction.mkVrfPopSignature(vrfKey, Height(3000), Some(sender))
 
   private val origTx = CommitToGenerationTransaction(
-    sender = PublicKey.fromBase16String("d528aabec35ca100d87c7b7a128632faf19cd44531819457445113a32a21ef22").explicitGet(),
+    sender = sender,
     endorserPublicKey =
       BlsPublicKey(Base16.decode("8dbf77df79479e11e99011f5ebc66b0d160ceddf2fcecfade325f07e96213f0d5d47a9af5a7ce3314f532e6aa03a33db")).explicitGet(),
     generationPeriodStart = Height(3000),
@@ -44,7 +45,7 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
 
   "JSON parsing" in {
     val js = Json.parse(s"""{
-      "id": "a86a11189e58104e702a2c06444127c89cf46b4cecf52b37a53165e804b15636",
+      "id": "ee3247b3ef4cde2e0da5b68ca6917ace1cccdbdeb84586041624be2f2fe3c9a8",
       "type": 5,
       "fee": 100000000,
       "feeAssetId": null,
@@ -82,7 +83,9 @@ class CommitToGenerationTransactionsSpec extends FreeSpec with WithDomain {
     val blsKp = BlsKeyPair.fromSeed(seed.arr)
     blsKp.publicKey.byteStr.base64Raw shouldBe "jrugi0W0es2WxuHoptQtchqwactZsldOGucYObZrEIOpxbWmhL8dodvpnzA+2qUf"
 
-    CommitToGenerationTransaction.mkPopSignature(blsKp, Height(1001)).byteStr.base64Raw shouldBe
+    CommitToGenerationTransaction.mkPopSignature(blsKp, Height(1001), None).byteStr.base64Raw shouldBe
       "sOlLZL2RZZ3c98PmUvKSN960aj+VJwyVGEUygI78mGDwGJflJWLHCwuqiYk1fRG7FOCJKOtKbKOG7tBykQ5iTcRu+7eLWhiodJw47YEfDOZHNwkl8dQwgxAam8+3BEvX"
+    CommitToGenerationTransaction.mkPopSignature(blsKp, Height(1001), Some(sender)).byteStr.base64Raw shouldBe
+      "tFPZOgX099GHyVjOZRxmb9FyPSMbLV6eSUMXxou130H9qCzkQHaTaux1pBam+WPHCi+e1oJPWcFFeRXrQE9I5ezzjFWs76VK/RcwLDhEbpmUOy2QloryYwvCWzaqxndf"
   }
 }

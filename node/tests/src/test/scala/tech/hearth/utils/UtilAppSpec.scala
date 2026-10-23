@@ -118,8 +118,8 @@ class UtilAppSpec extends FlatSpec {
       .explicitGet()
       .asInstanceOf[CommitToGenerationTransaction]
 
-    tx.commitmentSignature.verifyBasic(tx.popMessage, tx.endorserPublicKey).value
-    crypto.verifyVRF(tx.vrfCommitmentSignature, tx.vrfPopMessage, tx.vrfPublicKey).value
+    tx.commitmentSignature.verifyBasic(tx.popMessage(senderBound = true), tx.endorserPublicKey).value
+    crypto.verifyVRF(tx.vrfCommitmentSignature, tx.vrfPopMessage(senderBound = true), tx.vrfPublicKey).value
     crypto.verify(tx.proofs.head, tx.bodyBytes(), tx.sender) shouldBe true
   }
 

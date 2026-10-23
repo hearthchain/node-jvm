@@ -1,5 +1,6 @@
 package tech.hearth.state.diffs
 
+import tech.hearth.account.PublicKey
 import tech.hearth.common.state.ByteStr
 import tech.hearth.consensus.GeneratingBalanceProvider
 import tech.hearth.crypto.bls.{BlsKeyPair, BlsPublicKey}
@@ -51,6 +52,22 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
     d.blockchain.hearthPortfolio(sender.toAddress).generationDeposit shouldBe CommitToGenerationTransaction.DepositInEmbers
   }
 
+  "Proofs of possession are bound to the sender from senderBoundPopHeight" in withDomain(
+    DeterministicFinality.configure(_.copy(generationPeriodLength = 2, senderBoundPopHeight = 3)), // Periods: [1, 2], [3, 4], [5, 6]
+    AddrWithBalance.enoughBalances(sender)
+  ) { d =>
+    log.info("Before it, only unbound")
+    d.appendBlockE(TxHelpers.commitToGeneration(Height(3), sender)) should produce("Invalid commitment signature")
+    d.appendBlock(TxHelpers.commitToGeneration(Height(3), sender, senderBoundPop = false))
+    d.blockchain.height shouldBe 2
+
+    log.info("From it, only bound")
+    d.appendBlock()
+    d.blockchain.height shouldBe 3
+    d.appendBlockE(TxHelpers.commitToGeneration(Height(5), sender, senderBoundPop = false)) should produce("Invalid commitment signature")
+    d.appendBlock(TxHelpers.commitToGeneration(Height(5), sender))
+  }
+
   "Can't commit" - {
     "with wrong next period start height" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
       d.appendBlockE(TxHelpers.commitToGeneration(Height(1), sender)) should produce("Expected the next period start height")
@@ -79,12 +96,33 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
         val periodStart = Height(3001)
         val unsignedTx = TxHelpers
           .commitToGeneration(periodStart, newGenerator)
-          .copy(commitmentSignature = CommitToGenerationTransaction.mkPopSignature(otherGeneratorKp, periodStart))
+          .copy(commitmentSignature =
+            CommitToGenerationTransaction.mkPopSignature(otherGeneratorKp, periodStart, Some(PublicKey(newGenerator.publicKey())))
+          )
         val signedTx = unsignedTx.copy(proofs = Proofs(ByteStr(newGenerator.sign(unsignedTx.bodyBytes()))))
 
         d.appendBlockE(unsignedTx) should produce("Proof doesn't validate as signature")
         d.appendBlockE(signedTx) should produce("Invalid commitment signature")
       }
+    }
+
+    "with keys and proofs copied from another sender's pending commitment" in withDomain(
+      DeterministicFinality,
+      AddrWithBalance.enoughBalances(sender, TxHelpers.secondSigner)
+    ) { d =>
+      val victims = TxHelpers.commitToGeneration(Height(3001), TxHelpers.secondSigner)
+      def frontRun(copied: CommitToGenerationTransaction => CommitToGenerationTransaction): CommitToGenerationTransaction = {
+        val unsignedTx = copied(TxHelpers.commitToGeneration(Height(3001), sender))
+        unsignedTx.copy(proofs = Proofs(ByteStr(sender.sign(unsignedTx.bodyBytes()))))
+      }
+
+      d.appendBlockE(
+        frontRun(_.copy(endorserPublicKey = victims.endorserPublicKey, commitmentSignature = victims.commitmentSignature))
+      ) should produce("Invalid commitment signature")
+      d.appendBlockE(
+        frontRun(_.copy(vrfPublicKey = victims.vrfPublicKey, vrfCommitmentSignature = victims.vrfCommitmentSignature))
+      ) should produce("Invalid VRF commitment signature")
+      d.appendBlock(victims)
     }
 
     "with a VRF public key that isn't 32 bytes" in withDomain(DeterministicFinality, AddrWithBalance.enoughBalances(sender)) { d =>
@@ -110,7 +148,7 @@ class CommitToGenerationTransactionDiffTest extends FreeSpec with WithDomain {
         val baseTx = TxHelpers.commitToGeneration(Height(3001), sender)
         val withPop = baseTx.copy(
           endorserPublicKey = blsKp.publicKey,
-          commitmentSignature = CommitToGenerationTransaction.mkPopSignature(blsKp, baseTx.generationPeriodStart)
+          commitmentSignature = CommitToGenerationTransaction.mkPopSignature(blsKp, baseTx.generationPeriodStart, Some(baseTx.sender))
         )
 
         withPop.copy(proofs = Proofs(ByteStr(sender.sign(withPop.bodyBytes()))))
