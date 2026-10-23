@@ -53,9 +53,20 @@ lazy val `hearth-node` = (project in file("."))
     benchmark
   )
 
+// play-json 3.0.6 macros inline Predef.ArrowAssoc, deprecated in Scala 3.10 (fixed upstream in playframework/play-json#1410,
+// unreleased). src= matches the inlined-from file; origin= is empty for these. The require fails the build on any
+// play-json bump, so the suppression can't outlive the bug.
+val playJsonArrowAssocWconf = {
+  require(
+    Dependencies.playJson.revision == "3.0.6",
+    "play-json bumped: drop playJsonArrowAssocWconf if the new version has play-json#1410, else update the pinned revision"
+  )
+  "-Wconf:cat=deprecation&src=.*JsMacroImpl.*:s"
+}
+
 inScope(Global)(
   Seq(
-    scalaVersion         := "3.9.0",
+    scalaVersion         := "3.10.0",
     organization         := "tech.hearth",
     organizationName     := "Hearth Chain",
     organizationHomepage := Some(uri("https://hearth.tech")),
@@ -69,7 +80,8 @@ inScope(Global)(
       "-language:implicitConversions",
       "-language:postfixOps",
       "-Wunused:all",
-      "-Wconf:src=src_managed/.*:s"
+      "-Wconf:src=src_managed/.*:s",
+      playJsonArrowAssocWconf
     ),
     crossPaths        := false,
     cancelable        := true,

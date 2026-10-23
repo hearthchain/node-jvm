@@ -101,6 +101,8 @@ The configured `average-block-delay` does not set the block pace; `initial-base-
 
 `initial-base-target = 500000` puts every subset between ~5.2s (all nine, near the 5s `min-block-time` floor) and ~11s (node01 alone), inside FairPoS's stable window, so the base target stays put for the whole run. It cut `PreActivatedFeaturesTestSuite` from 9m53s to 3m12s locally. A suite that is slow because it waits for heights should get its pace from here, not from a longer timeout.
 
+To slow blocks down, raise `functionality.min-block-time` (plus `genesis.average-block-delay`, which must be >= it), not `miner.minimal-block-generation-offset`. The offset only delays when the miner forges; the block is still stamped `refTs + PoS delay` (up to a minute in the past), so after the first delayed block the timestamps lag real time and blocks resume the PoS pace. `MerkleRootTestSuite` ran at ~5s/block with a 30s offset, which made every key block drop all of the previous block's microblocks.
+
 The REST API's block JSON moved the consensus fields out of the old nested `"nxt-consensus": {"generation-signature":
 ..., "base-target": ...}` object into flat top-level `"generationSignature"`/`"baseTarget"` fields
 (`BlockHeaderSerializer.toJson`); `node-it`'s own `api/model.scala` `Block`/`BlockHeader` readers still expected the
