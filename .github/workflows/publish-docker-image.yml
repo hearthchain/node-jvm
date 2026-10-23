@@ -1,5 +1,5 @@
 name: Publish Docker image
-run-name: Publish ref ${{ github.ref_name }}
+run-name: Publish branch ${{ github.ref_name }} to tags ${{ inputs.docker-tags }}
 
 on:
   workflow_dispatch:
@@ -52,7 +52,7 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
       - uses: regclient/actions/regctl-installer@dd58ad94f76adb73d8ac1bf75ed25f01545d5b32 # v0.2.0
-      - uses: proudust/gh-describe@dd2f6c0686ced8bcf7513d29ff61a7802f8e2fd2 # v2.2.1
+      - uses: proudust/gh-describe@9b42731dd866e3cd8165a65f94cc58613def3114 # v2.2.2
         id: ghd
         with:
           commit-ish: ${{ inputs.ref || github.sha}}

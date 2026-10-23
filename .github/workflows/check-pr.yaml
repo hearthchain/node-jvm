@@ -33,7 +33,7 @@ jobs:
           gpg-private-key: ${{ secrets.OSSRH_GPG_KEY }}
           gpg-passphrase: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
       - uses: sbt/setup-sbt@ecad189dd245444b9ae0a0cd5922fd938b88906f # v1.5.12
-      - uses: proudust/gh-describe@dd2f6c0686ced8bcf7513d29ff61a7802f8e2fd2 # v2.2.1
+      - uses: proudust/gh-describe@9b42731dd866e3cd8165a65f94cc58613def3114 # v2.2.2
         id: ghd
         with:
           default: v1.0.0

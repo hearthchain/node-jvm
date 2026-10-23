@@ -29,7 +29,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: proudust/gh-describe@dd2f6c0686ced8bcf7513d29ff61a7802f8e2fd2 # v2.2.1
+      - uses: proudust/gh-describe@9b42731dd866e3cd8165a65f94cc58613def3114 # v2.2.2
         id: ghd
         with:
           default: v1.0.0
