@@ -92,8 +92,8 @@ object Dependencies {
     logback,
     "org.scalatestplus" %% s"scalacheck-1-$scalaCheckMinor" % "3.2.20.0",
     "org.scalacheck"    %% "scalacheck"                     % s"1.$scalaCheckMinor.0",
-    "org.scalamock"     %% "scalamock"                      % "7.6.0",
-    "org.scalamock"     %% "scalamock-scalatest"            % "7.6.0",
+    "org.scalamock"     %% "scalamock"                      % "7.6.1",
+    "org.scalamock"     %% "scalamock-scalatest"            % "7.6.1",
     "org.bouncycastle"   % "bcpkix-jdk18on"                 % "1.86"
   ).map(_ % Test)
 
