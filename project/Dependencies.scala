@@ -14,7 +14,7 @@ object Dependencies {
       // Either.raiseWhen/raiseUnless (added in cats 2.10.0). Force the version used by `lang`.
       "org.typelevel"            %% "cats-core"    % "2.13.0",
       "org.typelevel"            %% "cats-kernel"  % "2.13.0",
-      "com.google.code.gson"      % "gson"         % "2.14.0",
+      "com.google.code.gson"      % "gson"         % "2.15.0",
       "com.squareup.okio"         % "okio-jvm"     % "3.18.2",
       "org.apache.httpcomponents" % "httpclient"   % "4.5.14",
       "org.slf4j"                 % "slf4j-api"    % "2.0.20",
