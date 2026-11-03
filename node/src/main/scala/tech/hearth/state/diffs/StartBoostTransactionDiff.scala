@@ -47,8 +47,12 @@ object StartBoostTransactionDiff {
   }
 
   /** The TEE miner images a StartBoost quote may run, fixed in consensus until a governance-updatable registry
-    * replaces it (#40). Collected from every StartBoost on testnet: the image in use since height 8394. The two
-    * earlier RTMR3 values (heights 5028-8359) only pass below strictTxValidationHeight.
+    * replaces it (#40). Collected from testnet's StartBoosts: the first entry is the image in use from height 8394
+    * on the host the miner ran on until October 2026 (the two earlier RTMR3 values, heights 5028-8359, only pass
+    * below strictTxValidationHeight); the second is the miner on its dstack host (Phala Cloud, dstack-0.6.1,
+    * tdx.medium) as deployed on 2026-11-03, compose-hash f2a46336... The dstack guest folds the CVM's instance-id
+    * into RTMR3 next to the compose-hash, so this pin names one CVM instance, not just one release: a re-created
+    * CVM needs a new entry until the verifier replays the RTMR3 event log instead of comparing the register.
     */
   val PinnedMeasurements: Set[TdMeasurement] = Set(
     TdMeasurement.hex(
@@ -57,6 +61,13 @@ object StartBoostTransactionDiff {
       "a7fabeb3d8e66993a5317851812ae8e0bdbe323069c15a08cf6a2a9d50d6dc8a68c31c84d203b8592f02cc2ed32d3c34",
       "7f78757985a18b275a41eef903c8a796510298eb2b616046b62b8eff0790987c69deea773f13974420726d9ef1a08946",
       "8cbb141233f31f5e76b569e4bf31246fffca005506cd24c902a191533c9be7e2bcdc9a72dfab34e7cf9a5b2b35dbd6e8"
+    ),
+    TdMeasurement.hex(
+      "2a674327c50218dba880066b349b8d559d749ed68dce33fd651c184a877d084b07a9e583767a7ad5da13ed91deec2b70",
+      "027b610ab0555482f8a3868524093bdf3cdbe2539f81dfeeb886864654cb2fe3422f7fc36d4bab6fa46683aad11d1ba7",
+      "89ef86c5125b986c325f0a94acfa87718a4ef3a4d4f237dbb72dda3cf777fd2c054555fb4407eb53338d7d67329a7333",
+      "e9000e338f33233e8f51b7fd031e1c158bdcf8572eab041c0bc8eb7fef48b23259a6a556e6c8e2af99999fc39c793179",
+      "bb13499d7b9f3ca84746ab8d3d61a26f673a9030d1f18217163aecb93dfbb7532a9319608e745f58b4c87fce5e481025"
     )
   )
 

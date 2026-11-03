@@ -177,10 +177,14 @@ class StartBoostTransactionDiffTest extends FreeSpec with WithDomain {
       ) should produce("No on-chain TCB Info")
     }
 
-    "pins the measurement of testnet's TEE miner image" in {
-      val quote                           = DcapQuote.parse(hexResource("testnet-startboost-51018.hex")).explicitGet()
-      val DcapQuote.Td10QuoteBody(report) = quote.body: @unchecked
-      StartBoostTransactionDiff.PinnedMeasurements should contain(StartBoostTransactionDiff.TdMeasurement(report))
+    "pins the measurement of testnet's TEE miner images" in {
+      for (fixture <- Seq("testnet-startboost-51018.hex", "testnet-phala-miner-quote.hex")) {
+        val quote                           = DcapQuote.parse(hexResource(fixture)).explicitGet()
+        val DcapQuote.Td10QuoteBody(report) = quote.body: @unchecked
+        withClue(fixture) {
+          StartBoostTransactionDiff.PinnedMeasurements should contain(StartBoostTransactionDiff.TdMeasurement(report))
+        }
+      }
     }
 
     "TCB policy" - {
